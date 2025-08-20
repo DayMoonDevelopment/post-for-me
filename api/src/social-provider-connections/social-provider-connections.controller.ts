@@ -84,7 +84,7 @@ export class SocialAccountsController {
   })
   @ApiResponse({
     status: 500,
-    description: 'Internal server error when fetching the post result.',
+    description: 'Internal server error when fetching the social account.',
   })
   @ApiOperation({ summary: 'Get social account by ID' })
   @ApiParam({
@@ -295,7 +295,7 @@ export class SocialAccountsController {
 
   @ApiResponse({
     status: 200,
-    description: 'Post created successfully.',
+    description: 'Social Account created successfully.',
     type: SocialAccountDto,
   })
   @ApiResponse({
