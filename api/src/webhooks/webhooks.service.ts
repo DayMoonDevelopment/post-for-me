@@ -70,7 +70,7 @@ export class WebhooksService {
     const transformedData: WebhookDto[] = webhooks.map((raw) => ({
       id: raw.id,
       url: raw.url,
-      secret: raw.secret_key as string,
+      secret: raw.secret_key,
       event_types: raw.webhook_subscribed_event_types.map((x) => x.type),
     }));
 
@@ -105,7 +105,7 @@ export class WebhooksService {
     return {
       id: data.id,
       url: data.url,
-      secret: data.secret_key as string,
+      secret: data.secret_key,
       event_types: data.webhook_subscribed_event_types.map((x) => x.type),
     };
   }
@@ -150,16 +150,10 @@ export class WebhooksService {
       throw createdEventTypes.error;
     }
 
-    const transformedWebhook = await this.getWebhookById({
+    return this.getWebhookById({
       id: createdWebhook.data.id,
       projectId,
     });
-
-    if (!transformedWebhook) {
-      return null;
-    }
-
-    return { ...transformedWebhook, secret: webhookSecret };
   }
 
   async updateWebhook({

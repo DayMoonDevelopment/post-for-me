@@ -101,7 +101,7 @@ CREATE POLICY "Users can delete their own project's webhook subscribed  events" 
 CREATE TYPE webhook_event_status AS enum(
     'pending',
     'processing',
-    'succeded',
+    'completed',
     'failed'
 );
 
@@ -110,9 +110,9 @@ CREATE TABLE public.webhook_events(
     id text PRIMARY KEY DEFAULT nanoid('wbhe'),
     webhook_id text NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
     type webhook_event_type NOT NULL,
-    event jsonb NOT NULL,
+    data jsonb NOT NULL,
     status webhook_event_status NOT NULL,
-    details jsonb NULL,
+    response jsonb NULL,
     created_at timestamp with time zone DEFAULT NOW(),
     updated_at timestamp with time zone DEFAULT NOW()
 );

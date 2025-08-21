@@ -804,9 +804,9 @@ export type Database = {
       webhook_events: {
         Row: {
           created_at: string | null
-          details: Json | null
-          event: Json
+          data: Json
           id: string
+          response: Json | null
           status: Database["public"]["Enums"]["webhook_event_status"]
           type: Database["public"]["Enums"]["webhook_event_type"]
           updated_at: string | null
@@ -814,9 +814,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          details?: Json | null
-          event: Json
+          data: Json
           id?: string
+          response?: Json | null
           status: Database["public"]["Enums"]["webhook_event_status"]
           type: Database["public"]["Enums"]["webhook_event_type"]
           updated_at?: string | null
@@ -824,9 +824,9 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          details?: Json | null
-          event?: Json
+          data?: Json
           id?: string
+          response?: Json | null
           status?: Database["public"]["Enums"]["webhook_event_status"]
           type?: Database["public"]["Enums"]["webhook_event_type"]
           updated_at?: string | null
@@ -999,7 +999,7 @@ export type Database = {
         | "threads"
         | "tiktok_business"
       subscription_addon: "managed_system_credentials"
-      webhook_event_status: "pending" | "processing" | "succeded" | "failed"
+      webhook_event_status: "pending" | "processing" | "completed" | "failed"
       webhook_event_type:
         | "social.post.created"
         | "social.post.updated"
@@ -1150,7 +1150,7 @@ export const Constants = {
         "tiktok_business",
       ],
       subscription_addon: ["managed_system_credentials"],
-      webhook_event_status: ["pending", "processing", "succeded", "failed"],
+      webhook_event_status: ["pending", "processing", "completed", "failed"],
       webhook_event_type: [
         "social.post.created",
         "social.post.updated",
