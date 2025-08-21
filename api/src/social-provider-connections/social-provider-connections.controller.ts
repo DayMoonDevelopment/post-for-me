@@ -38,6 +38,8 @@ import { SocialProviderAppCredentialsDto } from '../social-provider-app-credenti
 import { createAuthUrlDescription } from './docs/create-auth-url.md';
 import { UpdateSocialAccountDto } from './dto/update-social-account.dto';
 import { CreateSocialAccountDto } from './dto/create-social-account.dto';
+import { tasks } from '@trigger.dev/sdk';
+import { PROCESS_WEBHOOK_TASK } from 'src/constants/string.constants';
 
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
@@ -219,6 +221,12 @@ export class SocialAccountsController {
           updateData,
         });
 
+      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+        projectId: user.projectId,
+        eventType: 'social.account.updated',
+        eventData: updatedAccount,
+      });
+
       return updatedAccount;
     } catch (error) {
       console.error(`Error updating social account ${id}:`, error);
@@ -273,8 +281,21 @@ export class SocialAccountsController {
         user.projectId,
       );
 
+      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+        projectId: user.projectId,
+        eventType: 'social.account.updated',
+        eventData: {
+          ...account,
+          access_token: '',
+          refresh_token: '',
+          status: 'disconnected',
+        },
+      });
+
       return {
         ...account,
+        access_token: '',
+        refresh_token: '',
         status: 'disconnected',
       };
     } catch (error) {
@@ -313,17 +334,23 @@ export class SocialAccountsController {
     @User() user: RequestUser,
   ): Promise<SocialAccountDto> {
     try {
-      const creatSocialAccount =
+      const createdSocialAccount =
         await this.socialAccountsService.createSocialAccount({
           projectId: user.projectId,
           socialAccount,
         });
 
-      if (!creatSocialAccount) {
+      if (!createdSocialAccount) {
         throw new Error('Unable to create post');
       }
 
-      return creatSocialAccount;
+      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+        projectId: user.projectId,
+        eventType: 'social.account.created',
+        eventData: createdSocialAccount,
+      });
+
+      return createdSocialAccount;
     } catch (error) {
       console.error(error);
       throw new HttpException('Internal Server Error', 500);

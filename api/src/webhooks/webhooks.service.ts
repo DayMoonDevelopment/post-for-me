@@ -23,7 +23,7 @@ export class WebhooksService {
   }): Promise<{ data: WebhookDto[]; count: number }> {
     const { offset, limit, url, event_type, id } = queryParams;
 
-    let webhookQuery = this.supabaseService.supabaseClient
+    const webhookQuery = this.supabaseService.supabaseClient
       .from('webhooks')
       .select('*, webhook_subscribed_event_types!inner(type)', {
         count: 'exact',
@@ -58,8 +58,6 @@ export class WebhooksService {
         webhookQuery.in('id', id);
       }
     }
-
-    webhookQuery = webhookQuery.order('created_at', { ascending: false });
 
     const { data: webhooks, error, count } = await webhookQuery;
 

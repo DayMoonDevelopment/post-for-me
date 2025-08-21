@@ -170,6 +170,12 @@ export class WebhooksController {
   @ApiOperation({
     summary: 'Update Webhook',
   })
+  @ApiParam({
+    name: 'id',
+    description: 'Webhook ID',
+    type: String,
+    required: true,
+  })
   @Patch(':id')
   async updateWebhook(
     @Body() webhookUpdate: UpdateWebhookDto,

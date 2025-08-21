@@ -33,6 +33,8 @@ import { RequestUser } from '../auth/user.interface';
 import { SocialPostQueryDto } from './dto/post-query.dto';
 import { DeleteEntityResponseDto } from '../lib/global.dto';
 import { SupabaseService } from 'src/supabase/supabase.service';
+import { tasks } from '@trigger.dev/sdk';
+import { PROCESS_WEBHOOK_TASK } from 'src/constants/string.constants';
 
 @Controller('social-posts')
 @ApiTags('Social Posts')
@@ -166,6 +168,11 @@ export class SocialPostsController {
         throw new Error('Unable to create post');
       }
 
+      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+        projectId: user.projectId,
+        eventType: 'social.post.created',
+        eventData: createPosts,
+      });
       return createPosts;
     } catch (error) {
       console.error('[createPosts] Error:', error);
@@ -262,6 +269,11 @@ export class SocialPostsController {
       throw new HttpException('Post not found', 404);
     }
 
+    await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+      projectId: user.projectId,
+      eventType: 'social.post.updated',
+      eventData: post,
+    });
     return post;
   }
 
@@ -308,6 +320,12 @@ export class SocialPostsController {
       const deleteResponse = await this.postsService.deletePost({
         postId: params.id,
         projectId: user.projectId,
+      });
+
+      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+        projectId: user.projectId,
+        eventType: 'social.post.deleted',
+        eventData: post,
       });
       return deleteResponse;
     } catch (error) {

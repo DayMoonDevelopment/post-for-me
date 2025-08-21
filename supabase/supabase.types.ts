@@ -870,21 +870,27 @@ export type Database = {
       }
       webhooks: {
         Row: {
+          created_at: string | null
           id: string
           project_id: string
           secret_key: string
+          updated_at: string | null
           url: string
         }
         Insert: {
+          created_at?: string | null
           id?: string
           project_id: string
           secret_key: string
+          updated_at?: string | null
           url: string
         }
         Update: {
+          created_at?: string | null
           id?: string
           project_id?: string
           secret_key?: string
+          updated_at?: string | null
           url?: string
         }
         Relationships: [
@@ -1007,8 +1013,6 @@ export type Database = {
         | "social.post.result.created"
         | "social.account.created"
         | "social.account.updated"
-        | "media.created"
-        | "media.deleted"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1158,8 +1162,6 @@ export const Constants = {
         "social.post.result.created",
         "social.account.created",
         "social.account.updated",
-        "media.created",
-        "media.deleted",
       ],
     },
   },

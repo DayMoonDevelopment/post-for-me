@@ -19,6 +19,7 @@ import { getPinterestSocialProviderConnection } from "./providers/pinterest.soci
 import { getBlueskySocialProviderConnection } from "./providers/bluesky.social-account";
 import { getThreadsSocialProviderConnection } from "./providers/threads.social-account";
 import { getTikTokBusinessSocialProviderConnection } from "./providers/tiktok-business.social-account";
+import { tasks } from "@trigger.dev/sdk";
 
 export async function addSocialAccountConnections({
   projectId,
@@ -84,6 +85,13 @@ export async function addSocialAccountConnections({
         onConflict: "provider,project_id,social_provider_user_id",
       })
       .select();
+
+  await tasks.batchTrigger(
+    "process-webhooks",
+    connectionsToInsert.map((c) => ({
+      payload: { projectId, eventType: "social.account.created", eventData: c },
+    }))
+  );
 
   if (connectionsError) {
     console.error(connectionsError);

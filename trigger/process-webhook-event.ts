@@ -75,7 +75,11 @@ export const processWebhooks = task({
     } finally {
       const updateEvent = await supabaseClient
         .from("webhook_events")
-        .update({ status, response: details })
+        .update({
+          status,
+          response: details,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", id);
 
       if (updateEvent.error) {

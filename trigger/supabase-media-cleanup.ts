@@ -1,6 +1,6 @@
 import { Database } from "@post-for-me/db";
 import { createClient } from "@supabase/supabase-js";
-import { logger, schedules } from "@trigger.dev/sdk";
+import { logger, schedules, tasks } from "@trigger.dev/sdk";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,

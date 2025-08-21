@@ -6,9 +6,7 @@ CREATE TYPE webhook_event_type AS enum(
     'social.post.deleted',
     'social.post.result.created',
     'social.account.created',
-    'social.account.updated',
-    'media.created',
-    'media.deleted'
+    'social.account.updated'
 );
 
 --
@@ -17,7 +15,9 @@ CREATE TABLE public.webhooks(
     id text PRIMARY KEY DEFAULT nanoid('wbh'),
     project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     secret_key text NOT NULL,
-    url text NOT NULL
+    url text NOT NULL,
+    created_at timestamp with time zone DEFAULT NOW(),
+    updated_at timestamp with time zone DEFAULT NOW()
 );
 
 ALTER TABLE public.webhooks
@@ -118,6 +118,8 @@ CREATE TABLE public.webhook_events(
 );
 
 CREATE INDEX idx_webhook_event_webhook_id ON public.webhook_events(webhook_id);
+
+ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
 
 --
 -- Webhook event policies

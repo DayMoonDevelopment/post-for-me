@@ -44,7 +44,7 @@ export const processWebhooks = task({
       throw webhooks.error;
     }
 
-    if (!webhooks.data) {
+    if (!webhooks.data || webhooks.count == 0) {
       logger.info("No webhooks found");
       return;
     }
