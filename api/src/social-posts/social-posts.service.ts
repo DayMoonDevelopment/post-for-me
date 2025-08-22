@@ -173,7 +173,6 @@ export class SocialPostsService {
       postToInsert.id = postId;
     }
 
-    console.log(postToInsert);
 
     const { data, error } = await this.supabaseService.supabaseClient
       .from('social_posts')
