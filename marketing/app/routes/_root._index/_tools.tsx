@@ -68,7 +68,6 @@ const tools = [
   {
     icon: PaymentIcon,
     title: "Webhook",
-    comingSoon: true,
     content: (
       <CardDescription>
         Real-time account connections and post status.

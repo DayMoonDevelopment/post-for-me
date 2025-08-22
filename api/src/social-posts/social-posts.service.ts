@@ -173,7 +173,6 @@ export class SocialPostsService {
       postToInsert.id = postId;
     }
 
-
     const { data, error } = await this.supabaseService.supabaseClient
       .from('social_posts')
       .insert(postToInsert)
