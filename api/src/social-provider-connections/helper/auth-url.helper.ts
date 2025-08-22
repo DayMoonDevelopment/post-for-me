@@ -9,14 +9,23 @@ import type { Database } from '@post-for-me/db';
 
 type SocialProviderEnum = Database['public']['Enums']['social_provider'];
 
-export async function generateAuthUrl(
-  projectId: string,
-  isSystem: boolean,
-  appCredentials: SocialProviderAppCredentialsDto,
-  configService: ConfigService,
-  supabaseService: SupabaseService,
-  providerData: AuthUrlProviderData | null | undefined,
-): Promise<string | undefined> {
+export async function generateAuthUrl({
+  projectId,
+  isSystem,
+  appCredentials,
+  configService,
+  supabaseService,
+  providerData,
+  externalId,
+}: {
+  projectId: string;
+  isSystem: boolean;
+  appCredentials: SocialProviderAppCredentialsDto;
+  configService: ConfigService;
+  supabaseService: SupabaseService;
+  providerData: AuthUrlProviderData | null | undefined;
+  externalId: string | undefined;
+}): Promise<string | undefined> {
   const { appId, appSecret } = appCredentials;
 
   const appUrl = configService.get<string>('DASHBOARD_APP_URL');
@@ -25,21 +34,34 @@ export async function generateAuthUrl(
 
   const authState = generateOAuthState();
 
+  const oauthData: {
+    project_id: string;
+    provider: SocialProviderEnum;
+    key: string;
+    key_id: string;
+    value: string;
+  }[] = [];
+
   if (isSystem) {
-    await supabaseService.supabaseClient
-      .from('social_provider_connection_oauth_data')
-      .upsert(
-        {
-          project_id: projectId,
-          provider: appCredentials.provider as SocialProviderEnum,
-          key: 'project',
-          key_id: authState,
-          value: projectId,
-        },
-        { onConflict: 'project_id, provider, key, key_id' },
-      );
+    oauthData.push({
+      project_id: projectId,
+      provider: appCredentials.provider as SocialProviderEnum,
+      key: 'project',
+      key_id: authState,
+      value: projectId,
+    });
 
     callbackUrl = `${appUrl}/callback/${appCredentials.provider}/account`;
+  }
+
+  if (externalId) {
+    oauthData.push({
+      project_id: projectId,
+      provider: appCredentials.provider as SocialProviderEnum,
+      key: 'external_id',
+      key_id: authState,
+      value: externalId,
+    });
   }
 
   let authUrl: string | undefined = undefined;
@@ -99,21 +121,23 @@ export async function generateAuthUrl(
 
       authUrl = authLink.url;
 
-      const oauthData: {
-        project_id: string;
-        provider: SocialProviderEnum;
-        key: string;
-        key_id: string;
-        value: string;
-      }[] = [
-        {
+      oauthData.push({
+        project_id: projectId,
+        provider: 'x',
+        key: 'oauth_token',
+        key_id: authLink.oauth_token,
+        value: authLink.oauth_token_secret,
+      });
+
+      if (externalId) {
+        oauthData.push({
           project_id: projectId,
           provider: 'x',
-          key: 'oauth_token',
+          key: 'external_id',
           key_id: authLink.oauth_token,
-          value: authLink.oauth_token_secret,
-        },
-      ];
+          value: externalId,
+        });
+      }
 
       if (isSystem) {
         oauthData.push({
@@ -124,10 +148,6 @@ export async function generateAuthUrl(
           value: projectId,
         });
       }
-
-      await supabaseService.supabaseClient
-        .from('social_provider_connection_oauth_data')
-        .upsert(oauthData, { onConflict: 'project_id, provider, key, key_id' });
 
       break;
     }
@@ -266,18 +286,13 @@ export async function generateAuthUrl(
         .replace(/[^\w.-]/g, '')
         .trim();
 
-      await supabaseService.supabaseClient
-        .from('social_provider_connection_oauth_data')
-        .upsert(
-          {
-            project_id: projectId,
-            provider: 'bluesky',
-            key: 'app_password',
-            key_id: handle,
-            value: providerData.bluesky.app_password,
-          },
-          { onConflict: 'project_id, provider, key, key_id' },
-        );
+      oauthData.push({
+        project_id: projectId,
+        provider: 'bluesky',
+        key: 'app_password',
+        key_id: handle,
+        value: providerData.bluesky.app_password,
+      });
 
       authUrl = `${callbackUrl}?handle=${encodeURIComponent(handle)}&state=${authState}`;
       break;
@@ -296,6 +311,12 @@ export async function generateAuthUrl(
 
       break;
     }
+  }
+
+  if (oauthData.length > 0) {
+    await supabaseService.supabaseClient
+      .from('social_provider_connection_oauth_data')
+      .upsert(oauthData, { onConflict: 'project_id, provider, key, key_id' });
   }
 
   return authUrl;

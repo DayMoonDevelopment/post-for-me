@@ -10,7 +10,7 @@ export const loader = withSupabase(async function ({
 }) {
   const user = await supabase.auth.getUser();
   const isLoggedIn = !user.error && user.data != null;
-
+  const url = new URL(request.url);
   const { projectId, provider } = params;
 
   if (!projectId || !provider) {
@@ -49,6 +49,23 @@ export const loader = withSupabase(async function ({
     });
   }
 
+  const key =
+    provider?.toLowerCase() === "x"
+      ? (url.searchParams.get("oauth_token") as string)
+      : (url.searchParams.get("state") as string);
+
+  const oauthData = await supabaseServiceRole
+    .from("social_provider_connection_oauth_data")
+    .select("*")
+    .eq("key_id", key)
+    .eq("key", "external_id")
+    .eq("project_id", projectId)
+    .eq("provider", provider as SocialProviderEnum);
+
+  const externalId = oauthData.data?.find(
+    (d) => d.key === "external_id"
+  )?.value;
+
   const providerAppCredentials = project.social_provider_app_credentials.find(
     (appCredential) => appCredential.provider === provider
   );
@@ -76,6 +93,7 @@ export const loader = withSupabase(async function ({
       appId: providerAppCredentials?.app_id,
       appSecret: providerAppCredentials?.app_secret,
     },
+    externalId,
   });
 
   if (!accounts || accounts.length === 0) {

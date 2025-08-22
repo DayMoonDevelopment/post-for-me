@@ -43,4 +43,10 @@ export class CreateSocialAccountProviderAuthUrlDto {
     type: AuthUrlProviderData,
   })
   platform_data?: AuthUrlProviderData | null;
+
+  @ApiProperty({
+    description: 'Your unique identifier for the social account',
+    required: false,
+  })
+  external_id?: string;
 }

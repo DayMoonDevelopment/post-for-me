@@ -32,13 +32,18 @@ export const loader = withSupabase(async function ({
 
   const oauthData = await supabaseServiceRole
     .from("social_provider_connection_oauth_data")
-    .select("project_id")
-    .eq("key", "project")
+    .select("*")
+    .in("key", ["project", "external_id"])
     .eq("key_id", key)
-    .eq("provider", provider as SocialProviderEnum)
-    .maybeSingle();
+    .eq("provider", provider as SocialProviderEnum);
 
-  const projectId = oauthData.data?.project_id;
+  const projectId = oauthData.data?.find(
+    (d) => d.key === "project"
+  )?.project_id;
+
+  const externalId = oauthData.data?.find(
+    (d) => d.key === "external_id"
+  )?.value;
 
   if (!projectId || !provider) {
     return createResponse({
@@ -103,6 +108,7 @@ export const loader = withSupabase(async function ({
       appId: providerAppCredentials?.app_id,
       appSecret: providerAppCredentials?.app_secret,
     },
+    externalId,
   });
 
   if (!accounts || accounts.length === 0) {
