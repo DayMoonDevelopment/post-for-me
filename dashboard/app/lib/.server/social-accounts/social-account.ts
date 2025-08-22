@@ -86,12 +86,29 @@ export async function addSocialAccountConnections({
       })
       .select();
 
-  await tasks.batchTrigger(
-    "process-webhooks",
-    connectionsToInsert.map((c) => ({
-      payload: { projectId, eventType: "social.account.created", eventData: c },
-    }))
-  );
+  if (insertedConnections && insertedConnections.length > 0) {
+    const events = insertedConnections.map((c) => ({
+      payload: {
+        projectId,
+        eventType: "social.account.created",
+        eventData: {
+          id: c.id,
+          platform: c.provider || "",
+          username: c.social_provider_user_name || "",
+          user_id: c.social_provider_user_id || "",
+          status: c.access_token ? "connected" : "disconnected",
+          external_id: c.external_id,
+          access_token: c.access_token || "",
+          refresh_token: c.refresh_token || "",
+          access_token_expires_at:
+            c.access_token_expires_at || new Date().toISOString(),
+          refresh_token_expires_at: c.refresh_token_expires_at,
+          metadata: c.social_provider_metadata,
+        },
+      },
+    }));
+    await tasks.batchTrigger("process-webhooks", events);
+  }
 
   if (connectionsError) {
     console.error(connectionsError);
