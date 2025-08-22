@@ -15,7 +15,6 @@ import {
   CardHeader,
   CardSeparator,
 } from "~/ui/card";
-import { Badge } from "~/ui/badge";
 
 const tools = [
   {
@@ -68,7 +67,6 @@ const tools = [
   {
     icon: PaymentIcon,
     title: "Webhook",
-    comingSoon: true,
     content: (
       <CardDescription>
         Real-time account connections and post status.
@@ -92,11 +90,6 @@ export function Tools() {
               <CardTitle className="flex items-center gap-1">
                 <tool.icon className="size-6 text-muted-foreground" />
                 {tool.title}
-                {tool.comingSoon ? (
-                  <Badge variant="secondary" className="ml-auto">
-                    Coming Soon
-                  </Badge>
-                ) : null}
               </CardTitle>
             </CardHeader>
 

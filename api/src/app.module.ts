@@ -11,6 +11,7 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { AuthGuard } from './auth/auth.guard';
 import { UnkeyModule } from './unkey/unkey.module';
 import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-p
     UnkeyModule,
     SocialAccountsModule,
     SocialPostPreviewsModule,
+    WebhooksModule,
   ],
   controllers: [],
   providers: [AuthGuard],

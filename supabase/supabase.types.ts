@@ -801,6 +801,108 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_events: {
+        Row: {
+          created_at: string | null
+          data: Json
+          id: string
+          response: Json | null
+          status: Database["public"]["Enums"]["webhook_event_status"]
+          type: Database["public"]["Enums"]["webhook_event_type"]
+          updated_at: string | null
+          webhook_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          data: Json
+          id?: string
+          response?: Json | null
+          status: Database["public"]["Enums"]["webhook_event_status"]
+          type: Database["public"]["Enums"]["webhook_event_type"]
+          updated_at?: string | null
+          webhook_id: string
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json
+          id?: string
+          response?: Json | null
+          status?: Database["public"]["Enums"]["webhook_event_status"]
+          type?: Database["public"]["Enums"]["webhook_event_type"]
+          updated_at?: string | null
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_events_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhook_subscribed_event_types: {
+        Row: {
+          id: string
+          type: Database["public"]["Enums"]["webhook_event_type"]
+          webhook_id: string
+        }
+        Insert: {
+          id?: string
+          type: Database["public"]["Enums"]["webhook_event_type"]
+          webhook_id: string
+        }
+        Update: {
+          id?: string
+          type?: Database["public"]["Enums"]["webhook_event_type"]
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_subscribed_event_types_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhooks: {
+        Row: {
+          created_at: string | null
+          id: string
+          project_id: string
+          secret_key: string
+          updated_at: string | null
+          url: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          project_id: string
+          secret_key: string
+          updated_at?: string | null
+          url: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          project_id?: string
+          secret_key?: string
+          updated_at?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhooks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       v_tiktok_verification_files: {
@@ -879,6 +981,10 @@ export type Database = {
         Args: { project_id: string }
         Returns: boolean
       }
+      user_has_webhook_access: {
+        Args: { webhook_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       social_post_status:
@@ -899,6 +1005,14 @@ export type Database = {
         | "threads"
         | "tiktok_business"
       subscription_addon: "managed_system_credentials"
+      webhook_event_status: "pending" | "processing" | "completed" | "failed"
+      webhook_event_type:
+        | "social.post.created"
+        | "social.post.updated"
+        | "social.post.deleted"
+        | "social.post.result.created"
+        | "social.account.created"
+        | "social.account.updated"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1040,6 +1154,15 @@ export const Constants = {
         "tiktok_business",
       ],
       subscription_addon: ["managed_system_credentials"],
+      webhook_event_status: ["pending", "processing", "completed", "failed"],
+      webhook_event_type: [
+        "social.post.created",
+        "social.post.updated",
+        "social.post.deleted",
+        "social.post.result.created",
+        "social.account.created",
+        "social.account.updated",
+      ],
     },
   },
 } as const

@@ -136,12 +136,14 @@ export class SocialPostsService {
     teamId,
     apiKey,
     isSystem,
+    postId,
   }: {
     post: CreateSocialPostDto;
     projectId: string;
     apiKey: string;
     teamId: string;
     isSystem: boolean;
+    postId?: string;
   }): Promise<SocialPostDto | null> {
     let status: string;
     if (post.isDraft !== undefined && post.isDraft) {
@@ -150,16 +152,30 @@ export class SocialPostsService {
       status = post.scheduled_at ? 'scheduled' : 'processing';
     }
 
+    const postToInsert: {
+      caption: any;
+      post_at: any;
+      project_id: string;
+      status: 'draft' | 'scheduled' | 'processing';
+      external_id: any;
+      api_key: string;
+      id?: string;
+    } = {
+      caption: post.caption,
+      post_at: post.scheduled_at?.toISOString(),
+      project_id: projectId,
+      status: status as 'draft' | 'scheduled' | 'processing',
+      external_id: post.external_id,
+      api_key: apiKey,
+    };
+
+    if (postId) {
+      postToInsert.id = postId;
+    }
+
     const { data, error } = await this.supabaseService.supabaseClient
       .from('social_posts')
-      .insert({
-        caption: post.caption,
-        post_at: post.scheduled_at?.toISOString(),
-        project_id: projectId,
-        status: status as 'draft' | 'scheduled' | 'processing',
-        external_id: post.external_id,
-        api_key: apiKey,
-      })
+      .insert(postToInsert)
       .select('*')
       .single();
 
@@ -541,6 +557,7 @@ export class SocialPostsService {
     }
 
     return this.createPost({
+      postId,
       post,
       projectId,
       apiKey,
