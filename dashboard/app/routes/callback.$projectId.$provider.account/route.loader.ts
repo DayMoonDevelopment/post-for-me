@@ -1,6 +1,9 @@
+import type { Database } from "@post-for-me/db";
 import { redirect } from "react-router";
 import { addSocialAccountConnections } from "~/lib/.server/social-accounts/social-account";
 import { withSupabase } from "~/lib/.server/supabase";
+
+type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 
 export const loader = withSupabase(async function ({
   supabase,
