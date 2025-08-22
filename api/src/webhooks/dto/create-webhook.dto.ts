@@ -1,16 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { Database } from '@post-for-me/db';
 
-export enum WebhookEventType {
+export type EventType = Database['public']['Enums']['webhook_event_type'];
+
+export const eventValues: EventType[] = [
   'social.post.created',
   'social.post.updated',
   'social.post.deleted',
   'social.post.result.created',
   'social.account.created',
   'social.account.updated',
-  'media.created',
-  'media.deleted',
-}
+];
 
 export class CreateWebhookDto {
   @ApiProperty({
@@ -23,8 +23,7 @@ export class CreateWebhookDto {
     description: 'List of events the webhook will recieve',
     required: true,
     type: 'array',
-    items: { type: 'string', enum: Object.values(WebhookEventType) },
+    items: { type: 'string', enum: eventValues },
   })
-  @IsEnum(WebhookEventType, { each: true })
   event_types: string[];
 }
