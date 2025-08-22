@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { WebhookEventType } from './create-webhook.dto';
+import { IsOptional } from 'class-validator';
+import { eventValues } from './create-webhook.dto';
 
 export class UpdateWebhookDto {
   @ApiProperty({
@@ -14,9 +14,8 @@ export class UpdateWebhookDto {
     description: 'List of events the webhook will recieve',
     required: false,
     type: 'array',
-    items: { type: 'string', enum: Object.values(WebhookEventType) },
+    items: { type: 'string', enum: eventValues },
   })
-  @IsEnum(WebhookEventType, { each: true })
   @IsOptional()
   event_types?: string[];
 }
