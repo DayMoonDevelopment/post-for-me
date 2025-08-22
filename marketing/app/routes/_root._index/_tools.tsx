@@ -15,7 +15,6 @@ import {
   CardHeader,
   CardSeparator,
 } from "~/ui/card";
-import { Badge } from "~/ui/badge";
 
 const tools = [
   {
