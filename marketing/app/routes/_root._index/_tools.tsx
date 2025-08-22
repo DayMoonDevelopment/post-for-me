@@ -91,11 +91,6 @@ export function Tools() {
               <CardTitle className="flex items-center gap-1">
                 <tool.icon className="size-6 text-muted-foreground" />
                 {tool.title}
-                {tool.comingSoon ? (
-                  <Badge variant="secondary" className="ml-auto">
-                    Coming Soon
-                  </Badge>
-                ) : null}
               </CardTitle>
             </CardHeader>
 
