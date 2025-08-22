@@ -28,6 +28,7 @@ export async function addSocialAccountConnections({
   supabaseServiceRole,
   isSystem,
   appCredentials,
+  externalId,
 }: {
   supabaseServiceRole: SupabaseClient<Database>;
   projectId: string;
@@ -38,6 +39,7 @@ export async function addSocialAccountConnections({
     appId?: string | null;
     appSecret?: string | null;
   };
+  externalId: string | undefined | null;
 }) {
   let redirectUri = `${REDIRECT_APP_URL}/callback/${projectId}/${provider}/account`;
 
@@ -75,6 +77,7 @@ export async function addSocialAccountConnections({
         supabaseServiceRole,
       }),
       social_provider_metadata: connection.social_provider_metadata,
+      external_id: externalId,
     }))
   );
 

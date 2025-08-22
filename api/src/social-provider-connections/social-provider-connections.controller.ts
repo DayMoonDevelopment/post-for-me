@@ -166,6 +166,7 @@ export class SocialAccountsController {
       projectId: user.projectId,
       appCredentials: socialProviderAppCredentials,
       providerData: createAuthUrlInput.platform_data,
+      externalId: createAuthUrlInput.external_id,
     });
 
     return {

@@ -153,10 +153,12 @@ export class SocialAccountsService {
     projectId,
     appCredentials,
     providerData,
+    externalId,
   }: {
     projectId: string;
     appCredentials: SocialProviderAppCredentialsDto;
     providerData: AuthUrlProviderData | null | undefined;
+    externalId: string | undefined;
   }): Promise<string | undefined> {
     const project = await this.supabaseService.supabaseClient
       .from('projects')
@@ -165,14 +167,15 @@ export class SocialAccountsService {
       .single();
 
     const isSystem = project.data?.is_system || false;
-    const authUrl = await generateAuthUrl(
+    const authUrl = await generateAuthUrl({
       projectId,
       isSystem,
       appCredentials,
-      this.configService,
-      this.supabaseService,
+      configService: this.configService,
+      supabaseService: this.supabaseService,
       providerData,
-    );
+      externalId,
+    });
 
     return authUrl;
   }
