@@ -33,30 +33,63 @@ export class WebhooksService {
       .range(offset, offset + limit - 1);
 
     if (url) {
-      if (typeof url === 'string') {
-        webhookQuery.eq('url', url);
-      } else if (Array.isArray(url)) {
-        webhookQuery.in('url', url);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof url === 'string': {
+          values.push(...(url as string).split(','));
+          break;
+        }
+        case Array.isArray(url):
+          values.push(...url);
+          break;
+        default:
+          values.push(url);
+          break;
       }
+
+      webhookQuery.in('url', values);
     }
 
     if (event_type) {
-      if (typeof event_type === 'string') {
-        webhookQuery.in('webhook_subscribed_event_types.type', [event_type]);
-      } else if (Array.isArray(event_type)) {
-        webhookQuery.in(
-          'webhook_subscribed_event_types.type',
-          event_type as WebhookEventType[],
-        );
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof event_type === 'string': {
+          values.push(...(event_type as string).split(','));
+          break;
+        }
+        case Array.isArray(event_type):
+          values.push(...event_type);
+          break;
+        default:
+          values.push(event_type);
+          break;
       }
+
+      webhookQuery.in(
+        'webhook_subscribed_event_types.type',
+        values as WebhookEventType[],
+      );
     }
 
     if (id) {
-      if (typeof id === 'string') {
-        webhookQuery.eq('id', id);
-      } else if (Array.isArray(id)) {
-        webhookQuery.in('id', id);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof id === 'string': {
+          values.push(...(id as string).split(','));
+          break;
+        }
+        case Array.isArray(id):
+          values.push(...id);
+          break;
+        default:
+          values.push(id);
+          break;
       }
+
+      webhookQuery.in('id', values);
     }
 
     const { data: webhooks, error, count } = await webhookQuery;

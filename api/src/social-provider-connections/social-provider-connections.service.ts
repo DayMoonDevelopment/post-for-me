@@ -14,6 +14,9 @@ import {
   CreateSocialAccountDto,
   SocialAccountMetadata,
 } from './dto/create-social-account.dto';
+import { Database } from '@post-for-me/db';
+
+type ProviderEnum = Database['public']['Enums']['social_provider'];
 
 @Injectable()
 export class SocialAccountsService {
@@ -35,50 +38,80 @@ export class SocialAccountsService {
       .range(offset, offset + limit - 1);
 
     if (platform) {
-      if (typeof platform === 'string') {
-        query.eq('provider', platform);
-      } else if (Array.isArray(platform)) {
-        query.in(
-          'provider',
-          platform.map(
-            (provider) =>
-              provider as
-                | 'facebook'
-                | 'instagram'
-                | 'x'
-                | 'tiktok'
-                | 'youtube'
-                | 'pinterest'
-                | 'linkedin'
-                | 'bluesky'
-                | 'threads',
-          ),
-        );
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof platform === 'string': {
+          values.push(...(platform as string).split(','));
+          break;
+        }
+        case Array.isArray(platform):
+          values.push(...platform);
+          break;
+        default:
+          values.push(platform);
+          break;
       }
+
+      query.in(
+        'provider',
+        values.map((provider) => provider as ProviderEnum),
+      );
     }
 
     if (external_id) {
-      if (typeof external_id === 'string') {
-        query.eq('external_id', external_id);
-      } else if (Array.isArray(external_id)) {
-        query.in('external_id', external_id);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof external_id === 'string': {
+          values.push(...(external_id as string).split(','));
+          break;
+        }
+        case Array.isArray(external_id):
+          values.push(...external_id);
+          break;
+        default:
+          values.push(external_id);
+          break;
       }
+
+      query.in('external_id', values);
     }
 
     if (id) {
-      if (typeof id === 'string') {
-        query.eq('id', id);
-      } else if (Array.isArray(id)) {
-        query.in('id', id);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof id === 'string': {
+          values.push(...(id as string).split(','));
+          break;
+        }
+        case Array.isArray(id):
+          values.push(...id);
+          break;
+        default:
+          values.push(id);
+          break;
       }
+      query.in('id', values);
     }
 
     if (username) {
-      if (typeof username === 'string') {
-        query.eq('username', username);
-      } else if (Array.isArray(username)) {
-        query.in('username', username);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof username === 'string': {
+          values.push(...(username as string).split(','));
+          break;
+        }
+        case Array.isArray(username):
+          values.push(...username);
+          break;
+        default:
+          values.push(username);
+          break;
       }
+      query.in('username', values);
     }
 
     query.order('created_at', { ascending: false });
