@@ -45,5 +45,5 @@ export class SocialAccountQueryDto extends BasePaginatedQueryDto {
   })
   @IsString({ each: true })
   @IsOptional()
-  id?: string;
+  id?: string[];
 }

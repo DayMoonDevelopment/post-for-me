@@ -17,6 +17,10 @@ import { Database, Json } from '@post-for-me/db';
 import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from 'src/social-post-meters/social-post-meters.service';
 
+type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
+
+type PostStatusEnum = Database['public']['Enums']['social_post_status'];
+
 @Injectable()
 export class SocialPostsService {
   constructor(
@@ -437,52 +441,66 @@ export class SocialPostsService {
       .range(offset, offset + limit - 1);
 
     if (platform) {
-      if (typeof platform === 'string') {
-        query.eq(
-          'social_post_provider_connections.social_provider_connections.provider',
-          platform as
-            | 'facebook'
-            | 'instagram'
-            | 'x'
-            | 'tiktok'
-            | 'youtube'
-            | 'pinterest'
-            | 'linkedin'
-            | 'bluesky'
-            | 'threads',
-        );
-      } else if (Array.isArray(platform)) {
-        query.in(
-          'social_post_provider_connections.social_provider_connections.provider',
-          platform as (
-            | 'facebook'
-            | 'instagram'
-            | 'x'
-            | 'tiktok'
-            | 'youtube'
-            | 'pinterest'
-            | 'linkedin'
-            | 'bluesky'
-            | 'threads'
-          )[],
-        );
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof platform === 'string': {
+          values.push(...(platform as string).split(','));
+          break;
+        }
+        case Array.isArray(platform):
+          values.push(...platform);
+          break;
+        default:
+          values.push(platform);
+          break;
       }
+
+      query.in(
+        'social_post_provider_connections.social_provider_connections.provider',
+        values.map((v) => v as ProviderTypeEnum),
+      );
     }
 
     if (external_id) {
-      if (typeof external_id === 'string') {
-        query.eq('external_id', external_id);
-      } else if (Array.isArray(external_id)) {
-        query.in('external_id', external_id);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof external_id === 'string': {
+          values.push(...(external_id as string).split(','));
+          break;
+        }
+        case Array.isArray(external_id):
+          values.push(...external_id);
+          break;
+        default:
+          values.push(external_id);
+          break;
       }
+
+      query.in('external_id', values);
     }
 
     if (status) {
-      if (typeof status === 'string') {
-        query.eq('status', status);
-      } else if (Array.isArray(status)) {
-        query.in('status', status);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof status === 'string': {
+          values.push(...(status as string).split(','));
+          break;
+        }
+        case Array.isArray(status):
+          values.push(...status);
+          break;
+        default:
+          values.push(status);
+          break;
       }
+
+      query.in(
+        'status',
+        values.map((v) => v as PostStatusEnum),
+      );
     }
 
     query.order('created_at', { ascending: false });

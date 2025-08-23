@@ -6,6 +6,10 @@ import { SocialPostResultQueryDto } from './dto/post-results.query.dto';
 
 import type { PaginatedRequestQuery } from '../pagination/pagination-request.interface';
 
+import { Database } from '@post-for-me/db';
+
+type ProviderEnum = Database['public']['Enums']['social_provider'];
+
 @Injectable()
 export class PostResultsService {
   constructor(private readonly supabaseService: SupabaseService) {}
@@ -41,34 +45,44 @@ export class PostResultsService {
       .range(offset, offset + limit - 1);
 
     if (post_id) {
-      if (typeof post_id === 'string') {
-        query.eq('post_id', post_id);
-      } else if (Array.isArray(post_id)) {
-        query.in('post_id', post_id);
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof post_id === 'string': {
+          values.push(...(post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(post_id):
+          values.push(...post_id);
+          break;
+        default:
+          values.push(post_id);
+          break;
       }
+
+      query.in('post_id', values);
     }
 
     if (platform) {
-      if (typeof platform === 'string') {
-        query.eq('social_provider_connections.provider', platform);
-      } else if (Array.isArray(platform)) {
-        query.in(
-          'social_provider_connections.provider',
-          platform.map(
-            (provider) =>
-              provider as
-                | 'facebook'
-                | 'instagram'
-                | 'x'
-                | 'tiktok'
-                | 'youtube'
-                | 'pinterest'
-                | 'linkedin'
-                | 'bluesky'
-                | 'threads',
-          ),
-        );
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof platform === 'string': {
+          values.push(...(platform as string).split(','));
+          break;
+        }
+        case Array.isArray(platform):
+          values.push(...platform);
+          break;
+        default:
+          values.push(platform);
+          break;
       }
+
+      query.in(
+        'social_provider_connections.provider',
+        values.map((provider) => provider as ProviderEnum),
+      );
     }
 
     query.order('created_at', { ascending: false });
