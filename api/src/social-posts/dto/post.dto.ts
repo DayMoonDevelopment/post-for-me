@@ -44,6 +44,7 @@ export class SocialPostDto {
   @ApiProperty({
     description: 'Platform-specific configurations for the post',
     nullable: true,
+    type: PlatformConfigurationsDto,
   })
   platform_configurations: PlatformConfigurationsDto | undefined | null;
 
@@ -51,16 +52,23 @@ export class SocialPostDto {
     description: 'Account-specific configurations for the post',
     nullable: true,
     isArray: true,
+    type: AccountConfigurationDto,
   })
   account_configurations: AccountConfigurationDto[] | undefined | null;
 
   @ApiProperty({
     description: 'Array of media URLs associated with the post',
     nullable: true,
+    isArray: true,
+    type: SocialPostMediaDto,
   })
   media: SocialPostMediaDto[] | null;
 
-  @ApiProperty({ description: 'Array of social account IDs for posting' })
+  @ApiProperty({
+    description: 'Array of social account IDs for posting',
+    isArray: true,
+    type: SocialAccountDto,
+  })
   social_accounts: SocialAccountDto[];
 
   @ApiProperty({ description: 'Timestamp when the post was created' })
