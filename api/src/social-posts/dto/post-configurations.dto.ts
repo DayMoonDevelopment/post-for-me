@@ -111,7 +111,7 @@ export class TiktokConfigurationDto extends BaseConfigurationDto {
     description: 'Disclose your brand on TikTok',
     nullable: true,
     required: false,
-    default: true,
+    default: false,
   })
   disclose_your_brand?: boolean;
 
@@ -119,7 +119,7 @@ export class TiktokConfigurationDto extends BaseConfigurationDto {
     description: 'Disclose branded content on TikTok',
     nullable: true,
     required: false,
-    default: true,
+    default: false,
   })
   disclose_branded_content?: boolean;
 
@@ -185,7 +185,7 @@ export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
     description: 'Disclose your brand on TikTok',
     nullable: true,
     required: false,
-    default: true,
+    default: false,
   })
   disclose_your_brand?: boolean;
 
@@ -193,7 +193,7 @@ export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
     description: 'Disclose branded content on TikTok',
     nullable: true,
     required: false,
-    default: true,
+    default: false,
   })
   disclose_branded_content?: boolean;
 }
