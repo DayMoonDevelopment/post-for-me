@@ -61,6 +61,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             __html: `window.$crisp=[];window.CRISP_WEBSITE_ID="4c875ebc-b308-4e5c-ac80-0c86b773f989";(function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();`,
           }}
         />
+        <script
+          type="text/javascript"
+          dangerouslySetInnerHTML={{
+            __html: `function initApollo(){var n=Math.random().toString(36).substring(7),o=document.createElement("script");o.src="https://assets.apollo.io/micro/website-tracker/tracker.iife.js?nocache="+n,o.async=!0,o.defer=!0,o.onload=function(){window.trackingFunctions.onLoad({appId:"68b613a5d28e590015ad2a96"})},document.head.appendChild(o)}initApollo();`,
+          }}
+        />
       </head>
       <body>
         {children}
