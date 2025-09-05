@@ -48,6 +48,8 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const data = useLoaderData<typeof loader>();
+
   return (
     <html lang="en">
       <head>
@@ -55,18 +57,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
-        <script
-          type="text/javascript"
-          dangerouslySetInnerHTML={{
-            __html: `window.$crisp=[];window.CRISP_WEBSITE_ID="4c875ebc-b308-4e5c-ac80-0c86b773f989";(function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();`,
-          }}
-        />
-        <script
-          type="text/javascript"
-          dangerouslySetInnerHTML={{
-            __html: `function initApollo(){var n=Math.random().toString(36).substring(7),o=document.createElement("script");o.src="https://assets.apollo.io/micro/website-tracker/tracker.iife.js?nocache="+n,o.async=!0,o.defer=!0,o.onload=function(){window.trackingFunctions.onLoad({appId:"68b613a5d28e590015ad2a96"})},document.head.appendChild(o)}initApollo();`,
-          }}
-        />
+        {data.crispWebsiteId ? (
+          <script
+            type="text/javascript"
+            dangerouslySetInnerHTML={{
+              __html: `window.$crisp=[];window.CRISP_WEBSITE_ID="${data.crispWebsiteId}";(function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();`,
+            }}
+          />
+        ) : null}
+        {data.apolloAppId ? (
+          <script
+            type="text/javascript"
+            dangerouslySetInnerHTML={{
+              __html: `function initApollo(){var n=Math.random().toString(36).substring(7),o=document.createElement("script");o.src="https://assets.apollo.io/micro/website-tracker/tracker.iife.js?nocache="+n,o.async=!0,o.defer=!0,o.onload=function(){window.trackingFunctions.onLoad({appId:"${data.apolloAppId}"})},document.head.appendChild(o)}initApollo();`,
+            }}
+          />
+        ) : null}
       </head>
       <body>
         {children}
@@ -81,6 +87,8 @@ export const loader = async () => {
   return {
     postHogApiKey: process.env.POST_HOG_API_KEY,
     postHogApiHost: process.env.POST_HOG_API_HOST,
+    crispWebsiteId: process.env.CRISP_WEBSITE_ID,
+    apolloAppId: process.env.APOLLO_APP_ID,
   };
 };
 
