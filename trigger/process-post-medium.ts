@@ -9,13 +9,13 @@ import { v4 as uuidv4 } from "uuid";
 // Single Supabase client instance
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 // Helper function to determine media type
 const getMediaType = (
   contentType: string,
-  fileExtension: string,
+  fileExtension: string
 ): "image" | "video" => {
   const imageTypes = [
     "image/jpeg",
@@ -165,51 +165,67 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
   logger.info(`Streaming download from: ${fileUrl}`);
 
   // First, try a HEAD request to check content type without downloading
-  let headerContentType: string | null = null;
+  let contentType: string | null = null;
   try {
     const headResponse = await fetch(fileUrl, { method: "HEAD" });
-    if (headResponse.ok) {
-      headerContentType = headResponse.headers.get("content-type");
-      logger.info(`Got content type from HEAD request: ${headerContentType}`);
+    if (!headResponse.ok) {
+      throw new Error(`Head Response Not Valid: ${headResponse.statusText}`);
+    }
+    const headerContentType = headResponse.headers.get("content-type");
+    logger.info(`Got content type from HEAD request: ${headerContentType}`);
 
-      // If we have a valid image/video content type from headers, use it
-      if (
-        headerContentType &&
-        headerContentType !== "binary/octet-stream" &&
-        headerContentType !== "application/octet-stream" &&
-        (headerContentType.startsWith("image/") ||
-          headerContentType.startsWith("video/"))
-      ) {
-        logger.info(
-          "Using valid content type from headers, skipping byte detection",
-        );
-      } else {
-        headerContentType = null; // Reset if it's not useful
-      }
+    // If we have a valid image/video content type from headers, use it
+    if (
+      headerContentType &&
+      (headerContentType.startsWith("image/") ||
+        headerContentType.startsWith("video/"))
+    ) {
+      contentType = headerContentType;
+      logger.info(
+        "Using valid content type from headers, skipping byte detection",
+        { contentType }
+      );
     }
   } catch (error) {
-    logger.info("HEAD request failed, will proceed with byte detection");
+    logger.info("HEAD request failed, will proceed with byte detection", {
+      error,
+    });
   }
 
-  // Only do byte detection if we don't have a valid content type from headers
-  let detectedContentType: string | null = null;
-  if (!headerContentType) {
+  if (!contentType) {
     try {
       const partialResponse = await fetch(fileUrl, {
         headers: { Range: "bytes=0-511" },
       });
 
-      if (partialResponse.ok && partialResponse.status === 206) {
-        const partialBuffer = await partialResponse.arrayBuffer();
-        const bytes = new Uint8Array(partialBuffer);
-        detectedContentType = detectContentTypeFromBytes(bytes);
-        logger.info(
-          `Detected content type from file signature: ${detectedContentType}`,
+      if (!partialResponse.ok || partialResponse.status !== 206) {
+        throw new Error(
+          `Partial Response Not Valid: ${partialResponse.statusText}`
         );
       }
+
+      const partialBuffer = await partialResponse.arrayBuffer();
+      const bytes = new Uint8Array(partialBuffer);
+      const detectedContentType = detectContentTypeFromBytes(bytes);
+
+      if (
+        detectedContentType &&
+        (detectedContentType.startsWith("image/") ||
+          detectedContentType.startsWith("video/"))
+      ) {
+        contentType = detectedContentType;
+        logger.info("Detected content type from file signature", {
+          contentType,
+        });
+      }
     } catch (error) {
-      logger.info("Range request failed, will try full download");
+      logger.info("Range request failed", { error });
     }
+  }
+
+  // If we couldn't detect a media type, reject the file
+  if (!contentType) {
+    throw new Error("File type not supported");
   }
 
   const response = await fetch(fileUrl);
@@ -224,36 +240,6 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
     throw new Error("No response body available for streaming");
   }
 
-  let contentType =
-    headerContentType ||
-    detectedContentType ||
-    response.headers.get("content-type") ||
-    "application/octet-stream";
-
-  // Normalize binary/octet-stream to application/octet-stream
-  if (contentType === "binary/octet-stream") {
-    contentType = "application/octet-stream";
-  }
-
-  // If we couldn't detect a media type, reject the file
-  if (
-    (contentType === "application/octet-stream" ||
-      contentType === "binary/octet-stream") &&
-    !detectedContentType
-  ) {
-    throw new Error(
-      "Unable to determine file type - may not be a supported image or video format",
-    );
-  }
-
-  // Validate that the content type is actually image or video
-  const isValidMediaType =
-    contentType.startsWith("image/") || contentType.startsWith("video/");
-  if (!isValidMediaType) {
-    throw new Error(
-      `Unsupported file type: ${contentType}. Only images and videos are allowed.`,
-    );
-  }
   const contentLength = response.headers.get("content-length");
   const fileExtension = getFileExtension(fileUrl, contentType);
   const fileName = `${prefix}_${uuidv4()}`;
@@ -324,7 +310,7 @@ export const processPostMedium = task({
   id: "process-post-medium",
   maxDuration: 800,
   retry: {
-    maxAttempts: 2,
+    maxAttempts: 3,
     outOfMemory: {
       machine: "large-1x",
     },
@@ -372,7 +358,7 @@ export const processPostMedium = task({
       if (thumbnail_url) {
         thumbnailResult = await streamDownloadAndUpload(
           thumbnail_url,
-          "thumbnail",
+          "thumbnail"
         );
       }
 
