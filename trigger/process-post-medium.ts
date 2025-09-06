@@ -164,23 +164,52 @@ const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => {
 const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
   logger.info(`Streaming download from: ${fileUrl}`);
 
-  // First, download just the first 512 bytes to detect file type
-  let detectedContentType: string | null = null;
+  // First, try a HEAD request to check content type without downloading
+  let headerContentType: string | null = null;
   try {
-    const partialResponse = await fetch(fileUrl, {
-      headers: { Range: "bytes=0-511" },
-    });
+    const headResponse = await fetch(fileUrl, { method: "HEAD" });
+    if (headResponse.ok) {
+      headerContentType = headResponse.headers.get("content-type");
+      logger.info(`Got content type from HEAD request: ${headerContentType}`);
 
-    if (partialResponse.ok && partialResponse.status === 206) {
-      const partialBuffer = await partialResponse.arrayBuffer();
-      const bytes = new Uint8Array(partialBuffer);
-      detectedContentType = detectContentTypeFromBytes(bytes);
-      logger.info(
-        `Detected content type from file signature: ${detectedContentType}`,
-      );
+      // If we have a valid image/video content type from headers, use it
+      if (
+        headerContentType &&
+        headerContentType !== "binary/octet-stream" &&
+        headerContentType !== "application/octet-stream" &&
+        (headerContentType.startsWith("image/") ||
+          headerContentType.startsWith("video/"))
+      ) {
+        logger.info(
+          "Using valid content type from headers, skipping byte detection",
+        );
+      } else {
+        headerContentType = null; // Reset if it's not useful
+      }
     }
   } catch (error) {
-    logger.info("Range request failed, will try full download");
+    logger.info("HEAD request failed, will proceed with byte detection");
+  }
+
+  // Only do byte detection if we don't have a valid content type from headers
+  let detectedContentType: string | null = null;
+  if (!headerContentType) {
+    try {
+      const partialResponse = await fetch(fileUrl, {
+        headers: { Range: "bytes=0-511" },
+      });
+
+      if (partialResponse.ok && partialResponse.status === 206) {
+        const partialBuffer = await partialResponse.arrayBuffer();
+        const bytes = new Uint8Array(partialBuffer);
+        detectedContentType = detectContentTypeFromBytes(bytes);
+        logger.info(
+          `Detected content type from file signature: ${detectedContentType}`,
+        );
+      }
+    } catch (error) {
+      logger.info("Range request failed, will try full download");
+    }
   }
 
   const response = await fetch(fileUrl);
@@ -196,6 +225,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
   }
 
   let contentType =
+    headerContentType ||
     detectedContentType ||
     response.headers.get("content-type") ||
     "application/octet-stream";
