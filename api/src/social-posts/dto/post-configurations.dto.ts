@@ -23,9 +23,10 @@ export class BaseConfigurationDto {
 
   @ApiProperty({
     description: 'Overrides the `media` from the post',
-    type: [String],
+    type: SocialPostMediaDto,
     nullable: true,
     required: false,
+    isArray: true,
   })
   media?: SocialPostMediaDto[];
 }
