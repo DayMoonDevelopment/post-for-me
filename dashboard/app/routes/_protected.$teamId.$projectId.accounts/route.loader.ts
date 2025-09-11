@@ -50,7 +50,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
   // Add search filter
   if (search) {
     query = query.or(
-      `social_provider_user_name.ilike.%${search}%,social_provider_user_id.ilike.%${search}%`
+      `social_provider_user_name.ilike.%${search}%,social_provider_user_id.ilike.%${search}%,external_id.ilike.%${search}%`
     );
   }
 
