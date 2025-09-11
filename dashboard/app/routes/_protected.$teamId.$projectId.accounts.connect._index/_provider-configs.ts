@@ -1,4 +1,14 @@
-import type { SocialProviderConfig } from "./_social-auth-form";
+import type { FormField, SocialProviderConfig } from "./_social-auth-form";
+
+const EXTERNAL_ID_FIELD: FormField = {
+  name: "external_id",
+  label: "External ID",
+  type: "text",
+  placeholder: "external identifier",
+  description:
+    "An optional external identifier you would like to use for this account",
+  required: false,
+};
 
 export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
   bluesky: {
@@ -24,6 +34,7 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
           "Generate an app password in your <a href='https://bsky.app/settings/app-passwords'>Bluesky settings</a>",
         required: true,
       },
+      EXTERNAL_ID_FIELD,
     ],
   },
   linkedin: {
@@ -51,7 +62,56 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
           },
         ],
       },
+      EXTERNAL_ID_FIELD,
     ],
+  },
+  facebook: {
+    id: "facebook",
+    name: "Facebook",
+    description: "Connect your Facebook account",
+    fields: [EXTERNAL_ID_FIELD],
+  },
+  instagram: {
+    id: "instagram",
+    name: "Instagram",
+    description: "Connect your Instagram account",
+    fields: [EXTERNAL_ID_FIELD],
+  },
+  x: {
+    id: "x",
+    name: "X (Twitter)",
+    description: "Connect your X account",
+    fields: [EXTERNAL_ID_FIELD],
+  },
+  tiktok: {
+    id: "tiktok",
+    name: "TikTok",
+    description: "Connect your TikTok account",
+    fields: [EXTERNAL_ID_FIELD],
+  },
+  tiktok_business: {
+    id: "tiktok_business",
+    name: "TikTok Business",
+    description: "Connect your TikTok Business account",
+    fields: [EXTERNAL_ID_FIELD],
+  },
+  youtube: {
+    id: "youtube",
+    name: "YouTube",
+    description: "Connect your YouTube account",
+    fields: [EXTERNAL_ID_FIELD],
+  },
+  pinterest: {
+    id: "pinterest",
+    name: "Pinterest",
+    description: "Connect your Pinterest account",
+    fields: [EXTERNAL_ID_FIELD],
+  },
+  threads: {
+    id: "threads",
+    name: "Threads",
+    description: "Connect your Threads account",
+    fields: [EXTERNAL_ID_FIELD],
   },
 };
 

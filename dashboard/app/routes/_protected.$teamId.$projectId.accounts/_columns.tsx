@@ -110,6 +110,19 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
     },
   },
   {
+    label: "External Id",
+    accessorKey: "external_id",
+    header: "External ID",
+    cell: ({ row }) => {
+      const externalId = row.getValue("external_id") as string;
+      return (
+        <div className="font-mono text-sm text-muted-foreground">
+          {externalId || "N/A"}
+        </div>
+      );
+    },
+  },
+  {
     label: "Status",
     accessorKey: "status",
     header: "Status",

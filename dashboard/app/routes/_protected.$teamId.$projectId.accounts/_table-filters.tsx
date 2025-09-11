@@ -43,33 +43,39 @@ export function TableFilters() {
   );
 
   return (
-    <div className="flex items-center gap-4">
-      <Input
-        placeholder="Search by username or user ID..."
-        defaultValue={searchParams.get("search") || ""}
-        onChange={(event) => handleSearch(event.target.value)}
-        className="max-w-sm"
-      />
-      <Select
-        defaultValue={searchParams.get("provider") || "all"}
-        onValueChange={handleProviderFilter}
-      >
-        <SelectTrigger className="w-40">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Providers</SelectItem>
-          <SelectItem value="facebook">Facebook</SelectItem>
-          <SelectItem value="instagram">Instagram</SelectItem>
-          <SelectItem value="x">X (Twitter)</SelectItem>
-          <SelectItem value="tiktok">TikTok</SelectItem>
-          <SelectItem value="youtube">YouTube</SelectItem>
-          <SelectItem value="pinterest">Pinterest</SelectItem>
-          <SelectItem value="linkedin">LinkedIn</SelectItem>
-          <SelectItem value="bluesky">Bluesky</SelectItem>
-          <SelectItem value="threads">Threads</SelectItem>
-        </SelectContent>
-      </Select>
+    <div className="grid grid-row ">
+      <div className="flex items-center gap-4">
+        <div className="max-w-sm">
+          <Input
+            placeholder="Search..."
+            defaultValue={searchParams.get("search") || ""}
+            onChange={(event) => handleSearch(event.target.value)}
+          />
+        </div>
+        <Select
+          defaultValue={searchParams.get("provider") || "all"}
+          onValueChange={handleProviderFilter}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Providers</SelectItem>
+            <SelectItem value="facebook">Facebook</SelectItem>
+            <SelectItem value="instagram">Instagram</SelectItem>
+            <SelectItem value="x">X (Twitter)</SelectItem>
+            <SelectItem value="tiktok">TikTok</SelectItem>
+            <SelectItem value="youtube">YouTube</SelectItem>
+            <SelectItem value="pinterest">Pinterest</SelectItem>
+            <SelectItem value="linkedin">LinkedIn</SelectItem>
+            <SelectItem value="bluesky">Bluesky</SelectItem>
+            <SelectItem value="threads">Threads</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">
+        Search by username, user ID, or external ID
+      </p>
     </div>
   );
 }
