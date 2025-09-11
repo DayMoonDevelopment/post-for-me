@@ -2,7 +2,7 @@ export const faqs = [
   {
     question: "Do I need separate credentials for each social network?",
     answer:
-      "Yes. Bring your own app credentials from the social network so you stay in control of data and limits. Our dashboard guides the setup.",
+      "We offer the use of our credentials as an addon OR you can bring your own app credentials from the social network so you stay in control of data and limits. Our dashboard guides the setup.",
   },
   {
     question: "What happens if a post fails?",
@@ -43,7 +43,7 @@ export const faqs = [
     question:
       "Do I need to go through app approval on TikTok, Facebook, Instagram, etc.?",
     answer:
-      "Yes. For each social platform you add, you'll need to go through the approval process. However we are to help! Contact us any time to walk you through the approval process.",
+      "Nope! You can use our crendetials and skip the verification process. If you use your own app credentials then each app will need to go through approval before going live. We are to help! Contact us any time to walk you through the approval process.",
   },
   {
     question: "Do I need to handle OAuth flows?",
@@ -58,6 +58,6 @@ export const faqs = [
   {
     question: "How do I get started?",
     answer:
-      "Getting started is simple. Signup for an account, plug in your App credentials, create an API key, and then start posting!",
+      "Getting started is simple. Signup for an account, plug in your App credentials OR use ours, create an API key, and then start posting!",
   },
 ];
