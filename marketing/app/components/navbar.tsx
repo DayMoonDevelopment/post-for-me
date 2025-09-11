@@ -1,30 +1,14 @@
 import { Link } from "react-router";
-import {
-  FacebookIcon,
-  PinterestIcon,
-  BlueskyIcon,
-  LinkedInIcon,
-  ThreadsIcon,
-  InstagramIcon,
-  XIcon,
-  YouTubeIcon,
-  TikTokIcon,
-  BarsTwoIcon,
-  CrossSmallIcon,
-  BookIcon,
-  GitHubIcon,
-} from "icons";
+import { BarsTwoIcon, CrossSmallIcon, BookIcon, GitHubIcon } from "icons";
 
 import { API_URL, APP_URL, GITHUB_URL } from "~/lib/constants";
 
 import { Button } from "~/ui/button";
 import {
   NavigationMenu,
-  NavigationMenuContent,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
-  NavigationMenuTrigger,
 } from "~/ui/navigation-menu";
 import {
   Drawer,
@@ -34,63 +18,8 @@ import {
   DrawerHeader,
   DrawerTrigger,
 } from "~/ui/drawer";
-import { Separator } from "~/ui/separator";
-
-const platforms = [
-  {
-    name: "TikTok",
-    slug: "tiktok",
-    icon: TikTokIcon,
-  },
-  {
-    name: "Facebook",
-    slug: "facebook",
-    icon: FacebookIcon,
-  },
-  {
-    name: "Instagram",
-    slug: "instagram",
-    icon: InstagramIcon,
-  },
-  {
-    name: "YouTube",
-    slug: "youtube",
-    icon: YouTubeIcon,
-  },
-  {
-    name: "X (Twitter)",
-    slug: "x",
-    icon: XIcon,
-  },
-  {
-    name: "Pinterest",
-    slug: "pinterest",
-    icon: PinterestIcon,
-  },
-  {
-    name: "Bluesky",
-    slug: "bluesky",
-    icon: BlueskyIcon,
-  },
-  {
-    name: "LinkedIn",
-    slug: "linkedin",
-    icon: LinkedInIcon,
-  },
-  {
-    name: "Threads",
-    slug: "threads",
-    icon: ThreadsIcon,
-  },
-];
 
 export function Navbar() {
-  const gettingStartedLinks = platforms.map(({ name, slug, icon }) => ({
-    href: `/resources/getting-started-with-the-${slug}-api`,
-    icon,
-    name,
-  }));
-
   return (
     <header className="bg-card border rounded-lg px-4 md:px-6">
       <div className="flex h-16 items-center justify-between gap-4">
@@ -111,30 +40,6 @@ export function Navbar() {
               </DrawerHeader>
 
               <div className="flex flex-col flex-1 overflow-y-auto px-4">
-                {/* Getting Started Section */}
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 px-2 py-1.5">
-                    <span className="font-medium text-xs text-muted-foreground">
-                      Getting Started
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    {gettingStartedLinks.map((platform) => (
-                      <DrawerClose key={platform.href} asChild>
-                        <Link
-                          to={platform.href}
-                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-                        >
-                          <platform.icon className="size-4" />
-                          with {platform.name}
-                        </Link>
-                      </DrawerClose>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator className="my-4" />
-
                 {/* API Docs */}
                 <DrawerClose asChild>
                   <Link
@@ -186,27 +91,6 @@ export function Navbar() {
 
           <NavigationMenu className="max-md:hidden">
             <NavigationMenuList>
-              <NavigationMenuItem>
-                <NavigationMenuTrigger>Getting Started</NavigationMenuTrigger>
-                <NavigationMenuContent>
-                  <ul className="grid w-[200px] gap-1">
-                    {gettingStartedLinks.map((platform) => (
-                      <li key={platform.href}>
-                        <NavigationMenuLink asChild>
-                          <Link
-                            to={platform.href}
-                            className="flex flex-row gap-1 items-center"
-                          >
-                            <platform.icon />
-                            with {platform.name}
-                          </Link>
-                        </NavigationMenuLink>
-                      </li>
-                    ))}
-                  </ul>
-                </NavigationMenuContent>
-              </NavigationMenuItem>
-
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
                   <Link to={API_URL} target="_blank">

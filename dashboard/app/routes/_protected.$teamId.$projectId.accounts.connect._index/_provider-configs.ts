@@ -38,7 +38,7 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
         type: "select",
         placeholder: "choose connection type",
         description:
-          "Choose organization if using the Community API, otherwise choose personal",
+          "Choose <strong>organization</strong> if using the <strong>Community API</strong>, otherwise choose personal",
         options: [
           {
             name: "personal",
