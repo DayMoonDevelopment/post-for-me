@@ -24,8 +24,6 @@ export function Component() {
     (projectLoaderData?.project?.is_system &&
       !loaderData?.billing?.creds_addon);
 
-  console.log(connectButtonDisabled);
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
