@@ -65,6 +65,7 @@ export const action = withSupabase(
     const requestBody: {
       platform: string;
       platform_data?: Record<string, unknown>;
+      external_id?: string;
     } = {
       platform: provider.toLowerCase(),
     };
@@ -73,7 +74,9 @@ export const action = withSupabase(
     if (requiresCustomAuth && providerConfig) {
       const providerData: Record<string, unknown> = {};
 
-      for (const field of providerConfig.fields) {
+      for (const field of providerConfig.fields.filter(
+        (f) => f.name !== "external_id"
+      )) {
         const value = formData.get(field.name) as string;
         if (value) {
           // Handle special field transformations if needed
@@ -94,6 +97,12 @@ export const action = withSupabase(
           [provider]: providerData,
         };
       }
+    }
+
+    const externalId = formData.get("external_id") as string;
+
+    if (externalId) {
+      requestBody.external_id = externalId;
     }
 
     const response = await fetch(`${API_URL}/v1/social-accounts/auth-url`, {
