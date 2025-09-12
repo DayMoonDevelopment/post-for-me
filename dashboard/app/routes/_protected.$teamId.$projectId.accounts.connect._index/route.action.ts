@@ -74,7 +74,7 @@ export const action = withSupabase(
     if (requiresCustomAuth && providerConfig) {
       const providerData: Record<string, unknown> = {};
 
-      for (const field of providerConfig.fields.map(
+      for (const field of providerConfig.fields.filter(
         (f) => f.name !== "external_id"
       )) {
         const value = formData.get(field.name) as string;
