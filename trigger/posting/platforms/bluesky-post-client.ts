@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/require-await */
 import { PostClient } from "../post-client";
-import { BlobRef, BskyAgent, RichText } from "@atproto/api";
+import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
 import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
@@ -17,9 +17,13 @@ import {
   SocialAccount,
 } from "../post.types";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
+import ffmpeg from "fluent-ffmpeg";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
 
 export class BlueskyPostClient extends PostClient {
-  #agent: BskyAgent;
+  #agent: AtpAgent;
   #charLimit = 300;
   #maxImages = 4;
   #maxFileSize = 976.56 * 1024;
@@ -31,7 +35,7 @@ export class BlueskyPostClient extends PostClient {
     appCredentials: PlatformAppCredentials
   ) {
     super(supabaseClient, appCredentials);
-    this.#agent = new BskyAgent({
+    this.#agent = new AtpAgent({
       service: "https://bsky.social",
     });
   }
@@ -53,7 +57,7 @@ export class BlueskyPostClient extends PostClient {
       return {
         access_token: account.access_token,
         refresh_token: account.refresh_token,
-        expires_at: account.access_token_expires_at!.toISOString(),
+        expires_at: new Date(account.access_token_expires_at!).toISOString(),
       };
     } catch (error: any) {
       console.error("Failed to resume session", error);
@@ -93,25 +97,55 @@ export class BlueskyPostClient extends PostClient {
 
       let embed = null;
 
-      if (media && media.length > 0) {
-        const processedMedia = await this.#processMedia({
-          caption: trimmedCaption,
-          media,
-        });
-        if (processedMedia.length > 0) {
-          embed = {
-            $type: "app.bsky.embed.images",
-            images: processedMedia,
-          };
-        }
-      } else {
-        // Extract the first URL for embedding
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
-        const matches = [...trimmedCaption.matchAll(urlRegex)];
+      switch (true) {
+        case media.length == 1: {
+          const medium = media[0];
+          if (medium.type == "video") {
+            const processVideo = await this.#processVideo({
+              medium,
+            });
 
-        if (matches.length > 0) {
-          const embedUrl = matches[0][0].replace(/[.,;!?)]+$/, "");
-          embed = await this.#fetchEmbedCard(embedUrl);
+            embed = {
+              $type: "app.bsky.embed.video",
+              ...processVideo,
+            };
+
+            break;
+          }
+          const processedMedia = await this.#processImages({
+            caption: trimmedCaption,
+            media,
+          });
+          if (processedMedia.length > 0) {
+            embed = {
+              $type: "app.bsky.embed.images",
+              images: processedMedia,
+            };
+          }
+          break;
+        }
+        case media.length > 1: {
+          const processedMedia = await this.#processImages({
+            caption: trimmedCaption,
+            media,
+          });
+          if (processedMedia.length > 0) {
+            embed = {
+              $type: "app.bsky.embed.images",
+              images: processedMedia,
+            };
+          }
+          break;
+        }
+        default: {
+          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          const matches = [...trimmedCaption.matchAll(urlRegex)];
+
+          if (matches.length > 0) {
+            const embedUrl = matches[0][0].replace(/[.,;!?)]+$/, "");
+            embed = await this.#fetchEmbedCard(embedUrl);
+          }
+          break;
         }
       }
 
@@ -138,6 +172,14 @@ export class BlueskyPostClient extends PostClient {
                   height: number | undefined;
                 };
               }[];
+            }
+          | {
+              $type: string;
+              video: BlobRef;
+              aspectRatio: {
+                width: number | undefined;
+                height: number | undefined;
+              };
             };
       } = {
         text: rt.text,
@@ -183,7 +225,111 @@ export class BlueskyPostClient extends PostClient {
     }
   }
 
-  async #processMedia({
+  async #processVideo({ medium }: { medium: PostMedia }): Promise<{
+    video: BlobRef;
+    aspectRatio: {
+      width: number | undefined;
+      height: number | undefined;
+    };
+  }> {
+    const { data: serviceAuth } =
+      await this.#agent.com.atproto.server.getServiceAuth({
+        aud: `did:web:${this.#agent.dispatchUrl.host}`,
+        lxm: "com.atproto.repo.uploadBlob",
+        exp: Date.now() / 1000 + 60 * 30, // 30 minutes
+      });
+
+    const token = serviceAuth.token;
+    const file = await this.getFile(medium);
+
+    const tempDir = os.tmpdir();
+
+    const inputPath = path.join(tempDir, file.name);
+    const videoBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(videoBuffer);
+    fs.writeFile(inputPath, buffer);
+
+    const metadata = await new Promise<any>((resolve, reject) => {
+      ffmpeg.ffprobe(inputPath, (err: any, data: any) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
+    });
+
+    const videoStream = metadata.streams.find(
+      (s: any) => s.codec_type === "video"
+    );
+    if (!videoStream) {
+      throw new Error("No video stream found in file");
+    }
+
+    const { width, height } = videoStream;
+
+    const uploadUrl = new URL(
+      "https://video.bsky.app/xrpc/app.bsky.video.uploadVideo"
+    );
+    uploadUrl.searchParams.append("did", this.#agent.session!.did);
+    uploadUrl.searchParams.append("name", file.name);
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "video/mp4",
+        "Content-Length": file.size.toString(),
+      },
+      body: buffer,
+    });
+
+    const uploadResponseData = await uploadResponse.json();
+
+    const jobStatus = uploadResponseData as AppBskyVideoDefs.JobStatus;
+
+    let blob: BlobRef | undefined = jobStatus.blob;
+    let jobFinished: boolean = false;
+    const videoAgent = new AtpAgent({ service: "https://video.bsky.app" });
+
+    while (!jobFinished) {
+      const { data: status } = await videoAgent.app.bsky.video.getJobStatus({
+        jobId: jobStatus.jobId,
+      });
+      console.log(
+        "Status:",
+        status.jobStatus.state,
+        status.jobStatus.progress || ""
+      );
+      if (status.jobStatus.blob) {
+        blob = status.jobStatus.blob;
+        jobFinished = true;
+      }
+
+      if (
+        jobStatus.state == "JOB_STATE_COMPLETED" ||
+        jobStatus.state == "JOB_STATE_FAILED"
+      ) {
+        jobFinished = true;
+      }
+
+      if (!jobFinished) {
+        // wait a second
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    if (!blob) {
+      throw new Error("Failed to process video");
+    }
+
+    return {
+      video: blob,
+      aspectRatio: {
+        width,
+        height,
+      },
+    };
+  }
+
+  async #processImages({
     caption,
     media,
   }: {
