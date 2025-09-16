@@ -119,6 +119,7 @@ export interface TiktokConfiguration {
   disclose_branded_content?: boolean;
   is_ai_generated?: boolean;
   is_draft?: boolean;
+  auto_add_music?: boolean;
 }
 
 export interface TwitterConfiguration {

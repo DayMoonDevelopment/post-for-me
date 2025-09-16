@@ -435,7 +435,10 @@ export class TikTokPostClient extends PostClient {
             platformData.allow_comment === undefined
               ? false
               : !platformData.allow_comment,
-          auto_add_music: true,
+          auto_add_music:
+            platformData.auto_add_music === undefined
+              ? true
+              : platformData.auto_add_music,
           brand_content_toggle:
             platformData.disclose_branded_content === undefined
               ? false

@@ -140,6 +140,14 @@ export class TiktokConfigurationDto extends BaseConfigurationDto {
     default: false,
   })
   is_draft?: boolean;
+
+  @ApiProperty({
+    description: 'Will automatically add music to photo posts',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  auto_add_music?: boolean;
 }
 
 export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
@@ -429,6 +437,14 @@ export class AccountConfigurationDetailsDto {
     default: false,
   })
   is_ai_generated?: boolean;
+
+  @ApiProperty({
+    description: 'Will automatically add music to photo posts on TikTok',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  auto_add_music?: boolean;
 }
 
 export class AccountConfigurationDto {
