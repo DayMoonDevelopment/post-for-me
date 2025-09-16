@@ -247,7 +247,7 @@ export class BlueskyPostClient extends PostClient {
     const inputPath = path.join(tempDir, file.name);
     const videoBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(videoBuffer);
-    fs.writeFile(inputPath, buffer);
+    await fs.writeFile(inputPath, buffer);
 
     const metadata = await new Promise<any>((resolve, reject) => {
       ffmpeg.ffprobe(inputPath, (err: any, data: any) => {
