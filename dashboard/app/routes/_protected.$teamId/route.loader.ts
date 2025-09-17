@@ -2,6 +2,7 @@ import { data } from "react-router";
 
 import { withSupabase } from "~/lib/.server/supabase";
 import { customerHasActiveSubscriptions } from "~/lib/.server/customer-has-active-subscriptions.request";
+import { customerHasSubscriptionSystemCredsAddon } from "~/lib/.server/customer-has-subscription-system-creds-addon.request";
 
 export const loader = withSupabase(async ({ supabase, params }) => {
   const { teamId } = params;
@@ -19,9 +20,7 @@ export const loader = withSupabase(async ({ supabase, params }) => {
   const [teams, projects] = await Promise.all([
     supabase
       .from("team_users")
-      .select(
-        "team:teams!inner(id, name, billing_email, stripe_customer_id, team_addons(addon, expires_at))"
-      )
+      .select("team:teams!inner(id, name, billing_email, stripe_customer_id)")
       .eq("user_id", currentUser.data.user.id),
     supabase.from("projects").select("id, name, team_id").eq("team_id", teamId),
   ]);
@@ -33,17 +32,10 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     return new Response("Team not found", { status: 404 });
   }
 
-  const hasActiveSubscription = await customerHasActiveSubscriptions(
-    team?.stripe_customer_id
-  );
-
-  const systemCredsAddon = team.team_addons?.filter(
-    (t) => t.addon === "managed_system_credentials"
-  )?.[0];
-
-  const hasSystemCredsAddon = !systemCredsAddon
-    ? false
-    : new Date() < new Date(systemCredsAddon.expires_at);
+  const [hasActiveSubscription, hasSystemCredsAddon] = await Promise.all([
+    customerHasActiveSubscriptions(team?.stripe_customer_id),
+    customerHasSubscriptionSystemCredsAddon(team?.stripe_customer_id),
+  ]);
 
   return data({
     team,

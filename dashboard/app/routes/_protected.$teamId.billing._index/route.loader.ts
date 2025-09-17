@@ -20,9 +20,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
 
   const team = await supabase
     .from("teams")
-    .select(
-      "id, name, billing_email, stripe_customer_id, team_addons(expires_at, addon)"
-    )
+    .select("id, name, billing_email, stripe_customer_id")
     .eq("id", teamId)
     .single();
 
@@ -42,12 +40,6 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
   let portalUrl = null;
   let checkoutUrl = null;
 
-  const addon = team.data.team_addons?.filter(
-    (t) => t.addon == "managed_system_credentials"
-  )?.[0];
-
-  hasCredsAccess = !addon ? false : new Date() < new Date(addon.expires_at);
-
   if (team.data.stripe_customer_id) {
     const subscriptions = await stripe.subscriptions.list({
       customer: team.data.stripe_customer_id,
@@ -62,7 +54,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
         (item) => item.price.product === STRIPE_API_PRODUCT_ID
       );
 
-      hasCredsAddon = subscription.items.data.some(
+      hasCredsAccess = subscription.items.data.some(
         (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID
       );
 
@@ -70,9 +62,10 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
         customer: team.data.stripe_customer_id,
       });
 
-      if (schedules.data.filter((s) => s.status === "active").length > 0) {
-        hasCredsAddon = false;
-      }
+      hasCredsAddon =
+        schedules.data.filter((s) => s.status === "active").length > 0
+          ? false
+          : hasCredsAccess;
     }
 
     if (hasActiveSubscription) {

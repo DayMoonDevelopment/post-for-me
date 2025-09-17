@@ -3,6 +3,7 @@ import { UNKEY_API_ID } from "~/lib/.server/unkey.constants";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@post-for-me/db";
+import { customerHasSubscriptionSystemCredsAddon } from "./customer-has-subscription-system-creds-addon.request";
 
 type UpdateAPIKeyAccessParams = {
   stripeCustomerId?: string;
@@ -29,7 +30,7 @@ export async function updateAPIKeyAccess(
   if (params.stripeCustomerId) {
     const _team = await supabaseServiceRole
       .from("teams")
-      .select("id, team_addons(addon, expires_at)")
+      .select("id")
       .eq("stripe_customer_id", params.stripeCustomerId)
       .single();
 
@@ -42,13 +43,9 @@ export async function updateAPIKeyAccess(
     }
     team = _team.data;
 
-    const systemAddon = _team.data.team_addons?.filter(
-      (t) => t.addon === "managed_system_credentials"
-    )?.[0];
-
-    hasSystemCredentialsAddon = !systemAddon
-      ? false
-      : new Date() < new Date(systemAddon.expires_at);
+    hasSystemCredentialsAddon = await customerHasSubscriptionSystemCredsAddon(
+      params.stripeCustomerId
+    );
   } else {
     team = { id: params.teamId };
   }
