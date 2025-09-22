@@ -28,9 +28,14 @@ export async function generateAuthUrl({
 }): Promise<string | undefined> {
   const { appId, appSecret } = appCredentials;
 
+  const provider =
+    appCredentials.provider == 'instagram_w_facebook'
+      ? 'instagram'
+      : appCredentials.provider;
+
   const appUrl = configService.get<string>('DASHBOARD_APP_URL');
 
-  let callbackUrl = `${appUrl}/callback/${projectId}/${appCredentials.provider}/account`;
+  let callbackUrl = `${appUrl}/callback/${projectId}/${provider}/account`;
 
   const authState = generateOAuthState();
 
@@ -45,19 +50,19 @@ export async function generateAuthUrl({
   if (isSystem) {
     oauthData.push({
       project_id: projectId,
-      provider: appCredentials.provider as SocialProviderEnum,
+      provider: provider as SocialProviderEnum,
       key: 'project',
       key_id: authState,
       value: projectId,
     });
 
-    callbackUrl = `${appUrl}/callback/${appCredentials.provider}/account`;
+    callbackUrl = `${appUrl}/callback/${provider}/account`;
   }
 
   if (externalId) {
     oauthData.push({
       project_id: projectId,
-      provider: appCredentials.provider as SocialProviderEnum,
+      provider: provider as SocialProviderEnum,
       key: 'external_id',
       key_id: authState,
       value: externalId,
@@ -88,7 +93,7 @@ export async function generateAuthUrl({
 
       break;
     }
-    case 'instagram': {
+    case 'instagram_w_facebook': {
       const scopes = [
         'instagram_basic',
         'instagram_content_publish',
@@ -107,6 +112,22 @@ export async function generateAuthUrl({
       ]);
 
       authUrl = `https://www.facebook.com/${facebookVersion}/dialog/oauth?${authParams.toString()}`;
+      break;
+    }
+    case 'instagram': {
+      const scopes = ['instagram_basic', 'instagram_content_publish'];
+
+      const authParams = new URLSearchParams([
+        ['client_id', appId],
+        ['redirect_uri', callbackUrl],
+        ['scope', scopes.join(',')],
+        ['response_type', 'code'],
+        ['state', authState],
+        ['force_reauth', 'false'],
+      ]);
+
+      authUrl = `https://www.instagram.com/oauth/authorize?${authParams.toString()}`;
+
       break;
     }
     case 'x': {

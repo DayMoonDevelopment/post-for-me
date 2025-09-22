@@ -24,7 +24,8 @@ export class SocialProviderAppCredentialsService {
           | 'pinterest'
           | 'linkedin'
           | 'bluesky'
-          | 'threads',
+          | 'threads'
+          | 'instagram_w_facebook',
       )
       .eq('project_id', projectId)
       .maybeSingle();
@@ -39,5 +40,43 @@ export class SocialProviderAppCredentialsService {
       appId: data?.app_id || '',
       appSecret: data?.app_secret || '',
     };
+  }
+
+  async getManySocialProviderAppCredentials(
+    providers: string[],
+    projectId: string,
+  ): Promise<SocialProviderAppCredentialsDto[] | null> {
+    const { data, error } = await this.supabaseService.supabaseServiceRole
+      .from('social_provider_app_credentials')
+      .select('*')
+      .in(
+        'provider',
+        providers.map(
+          (p) =>
+            p as
+              | 'facebook'
+              | 'instagram'
+              | 'x'
+              | 'tiktok'
+              | 'youtube'
+              | 'pinterest'
+              | 'linkedin'
+              | 'bluesky'
+              | 'threads'
+              | 'instagram_w_facebook',
+        ),
+      )
+      .eq('project_id', projectId);
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data.map((d) => ({
+      provider: d.provider,
+      projectId: d?.project_id,
+      appId: d?.app_id || '',
+      appSecret: d?.app_secret || '',
+    }));
   }
 }

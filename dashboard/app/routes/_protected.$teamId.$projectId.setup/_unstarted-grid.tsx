@@ -12,6 +12,7 @@ import { useForm } from "~/hooks/use-form";
 const allPlatforms = [
   "facebook",
   "instagram",
+  "instagram_w_facebook",
   "youtube",
   "x",
   "pinterest",

@@ -65,6 +65,7 @@ export const getProviderLabel = (provider: string) => {
     threads: "Threads",
     tiktok: "TikTok",
     tiktok_business: "TikTok Business",
+    instagram_w_facebook: "Instagram (Facebook Login)",
   };
   return labels[provider] || provider;
 };

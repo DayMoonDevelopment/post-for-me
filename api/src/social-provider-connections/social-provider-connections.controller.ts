@@ -142,18 +142,60 @@ export class SocialAccountsController {
     @Body() createAuthUrlInput: CreateSocialAccountProviderAuthUrlDto,
     @User() user: RequestUser,
   ): Promise<SocialAccountProviderAuthUrlDto> {
-    const socialProviderAppCredentials: SocialProviderAppCredentialsDto | null =
-      createAuthUrlInput.platform === 'bluesky'
-        ? {
-            projectId: user.projectId,
-            appId: '',
-            appSecret: '',
-            provider: 'bluesky',
+    let socialProviderAppCredentials: SocialProviderAppCredentialsDto | null =
+      null;
+
+    switch (createAuthUrlInput.platform) {
+      case 'bluesky':
+        socialProviderAppCredentials = {
+          projectId: user.projectId,
+          appId: '',
+          appSecret: '',
+          provider: 'bluesky',
+        };
+        break;
+      case 'instagram':
+        switch (createAuthUrlInput.platform_data?.instagram?.connection_type) {
+          case 'facebook': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                'instagram_w_facebook',
+                user.projectId,
+              );
+            break;
           }
-        : await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+          case 'instagram': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                createAuthUrlInput.platform,
+                user.projectId,
+              );
+            break;
+          }
+          default: {
+            const credentials =
+              await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
+                [createAuthUrlInput.platform, 'instagram_w_facebook'],
+                user.projectId,
+              );
+
+            if (credentials) {
+              socialProviderAppCredentials = credentials[0];
+            }
+
+            break;
+          }
+        }
+
+        break;
+      default:
+        socialProviderAppCredentials =
+          await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
             createAuthUrlInput.platform,
             user.projectId,
           );
+        break;
+    }
 
     if (!socialProviderAppCredentials) {
       throw new HttpException(
