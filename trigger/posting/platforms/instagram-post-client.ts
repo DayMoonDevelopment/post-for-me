@@ -28,6 +28,17 @@ export class InstagramPostClient extends PostClient {
   #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 
+  getApiBaseUrl(account: SocialAccount) {
+    // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
+    if (
+      account.social_provider_metadata.connection_type === "instagram" ||
+      (account.access_token && account.access_token.startsWith("IG"))
+    ) {
+      return "https://graph.instagram.com/v23.0";
+    }
+    return "https://graph.facebook.com/v23.0";
+  }
+
   constructor(
     supabaseClient: SupabaseClient,
     appCredentials: PlatformAppCredentials
@@ -42,41 +53,81 @@ export class InstagramPostClient extends PostClient {
     account: SocialAccount
   ): Promise<RefreshTokenResult> {
     try {
-      const refreshTokenParams = {
-        grant_type: "fb_exchange_token",
-        client_id: this.#appCredentials.app_id,
-        client_secret: this.#appCredentials.app_secret,
-        set_token_expires_in_60_days: true,
-        fb_exchange_token: account.access_token,
-      };
-
-      this.#requests.push({
-        refreshRequest: "https://graph.facebook.com/v20.0/oauth/access_token",
-        params: refreshTokenParams,
-      });
-      const response = await axios.get(
-        `https://graph.facebook.com/v20.0/oauth/access_token`,
-        {
-          params: refreshTokenParams,
-        }
-      );
-
-      this.#responses.push({ refreshResponse: response.data });
-
-      if (response.data && response.data.access_token) {
-        const newAccessToken = response.data.access_token;
-        const expiresIn = response.data.expires_in || 5184000; // Default to 60 days if not provided
-
-        return {
-          access_token: newAccessToken,
-          expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-        };
-      } else {
-        console.error(
-          "Invalid response from Instagram token refresh:",
-          response.data
+      if (account.social_provider_metadata.connection_type == "instagram") {
+        console.log(
+          `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`
         );
-        throw new Error("Failed to refresh Instagram token");
+        this.#requests.push({
+          refreshRequest: "https://graph.instagram.com/refresh_access_token",
+          params: {
+            grant_type: "ig_refresh_token",
+            access_token: account.access_token,
+          },
+        });
+        const response = await axios.get(
+          `https://graph.instagram.com/refresh_access_token`,
+          {
+            params: {
+              grant_type: "ig_refresh_token",
+              access_token: account.access_token,
+            },
+          }
+        );
+
+        this.#responses.push({ refreshResponse: response.data });
+
+        if (response.data && response.data.access_token) {
+          const newAccessToken = response.data.access_token;
+          const expiresIn = response.data.expires_in; // Should be around 5184000 (60 days)
+
+          return {
+            access_token: newAccessToken,
+            expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+          };
+        } else {
+          console.error(
+            "Invalid response from direct Instagram token refresh:",
+            response.data
+          );
+          throw new Error("Failed to refresh Instagram token");
+        }
+      } else {
+        const refreshTokenParams = {
+          grant_type: "fb_exchange_token",
+          client_id: this.#appCredentials.app_id,
+          client_secret: this.#appCredentials.app_secret,
+          set_token_expires_in_60_days: true,
+          fb_exchange_token: account.access_token,
+        };
+
+        this.#requests.push({
+          refreshRequest: "https://graph.facebook.com/v20.0/oauth/access_token",
+          params: refreshTokenParams,
+        });
+        const response = await axios.get(
+          `https://graph.facebook.com/v20.0/oauth/access_token`,
+          {
+            params: refreshTokenParams,
+          }
+        );
+
+        this.#responses.push({ refreshResponse: response.data });
+
+        if (response.data && response.data.access_token) {
+          const newAccessToken = response.data.access_token;
+          const expiresIn = response.data.expires_in || 5184000; // Default to 60 days if not provided
+
+          return {
+            access_token: newAccessToken,
+            expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+          };
+        } else {
+          console.error(
+            "Invalid response from Instagram token refresh:",
+            response.data
+          );
+          throw new Error("Failed to refresh Instagram token");
+        }
       }
     } catch (error) {
       console.error(
@@ -144,7 +195,7 @@ export class InstagramPostClient extends PostClient {
         },
       });
       const publishResponse = await axios.post(
-        `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/media_publish`,
+        `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media_publish`,
         {
           creation_id: containerId,
           access_token: account.access_token,
@@ -284,7 +335,7 @@ export class InstagramPostClient extends PostClient {
 
     this.#requests.push({ createMediaRequest: createMediaParams });
     const createMediaResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/media`,
+      `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
       createMediaParams
     );
 
@@ -309,11 +360,11 @@ export class InstagramPostClient extends PostClient {
 
         this.#requests.push({
           statusRequest: {
-            url: `https://graph.facebook.com/v20.0/${containerId}`,
+            url: `${this.getApiBaseUrl(account)}/${containerId}`,
           },
         });
         const statusResponse = await axios.get(
-          `https://graph.facebook.com/v20.0/${containerId}`,
+          `${this.getApiBaseUrl(account)}/${containerId}`,
           {
             params: {
               fields: "status_code",
@@ -397,7 +448,7 @@ export class InstagramPostClient extends PostClient {
         },
       });
       const itemResponse = await axios.post(
-        `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/media`,
+        `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
         {
           media_type: isVideo ? "VIDEO" : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
@@ -442,7 +493,7 @@ export class InstagramPostClient extends PostClient {
       createCarouselRequest: carouselPayload,
     });
     const carouselResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/media`,
+      `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
       carouselPayload
     );
 
@@ -468,12 +519,12 @@ export class InstagramPostClient extends PostClient {
   }): Promise<string> {
     this.#requests.push({
       getPostUrlRequest: {
-        url: `https://graph.facebook.com/v20.0/${postId}`,
+        url: `${this.getApiBaseUrl(account)}/${postId}`,
       },
     });
     // Fetch the media object to get the permalink
     const mediaResponse = await axios.get(
-      `https://graph.facebook.com/v20.0/${postId}`,
+      `${this.getApiBaseUrl(account)}/${postId}`,
       {
         params: {
           fields: "permalink,media_type",
