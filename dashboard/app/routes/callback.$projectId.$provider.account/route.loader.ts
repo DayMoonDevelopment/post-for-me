@@ -14,7 +14,9 @@ export const loader = withSupabase(async function ({
   const user = await supabase.auth.getUser();
   const isLoggedIn = !user.error && user.data != null;
   const url = new URL(request.url);
-  const { projectId, provider } = params;
+  const { projectId } = params;
+
+  let { provider } = params;
 
   if (!projectId || !provider) {
     return createResponse({
@@ -61,13 +63,24 @@ export const loader = withSupabase(async function ({
     .from("social_provider_connection_oauth_data")
     .select("*")
     .eq("key_id", key)
-    .eq("key", "external_id")
+    .in("key", ["external_id", "connection_type"])
     .eq("project_id", projectId)
     .eq("provider", provider as SocialProviderEnum);
 
   const externalId = oauthData.data?.find(
     (d) => d.key === "external_id"
   )?.value;
+
+  const connectionType = oauthData.data?.find(
+    (d) => d.key === "connection_type"
+  )?.value;
+  if (
+    connectionType &&
+    provider === "instagram" &&
+    connectionType === "facebook"
+  ) {
+    provider = "instagram_w_facebook";
+  }
 
   const providerAppCredentials = project.social_provider_app_credentials.find(
     (appCredential) => appCredential.provider === provider

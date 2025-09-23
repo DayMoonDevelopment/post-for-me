@@ -9,6 +9,7 @@ import type {
   SocialProviderConnection,
   SocialProviderInfo,
 } from "./social-account.types";
+
 import { getTikTokSocialProviderConnection } from "./providers/tiktok.social-account";
 import { getInstagramSocialProviderConnection } from "./providers/instagram.social-account";
 import { getFacebookSocialProviderConnection } from "./providers/facebook.social-account";
@@ -19,6 +20,8 @@ import { getPinterestSocialProviderConnection } from "./providers/pinterest.soci
 import { getBlueskySocialProviderConnection } from "./providers/bluesky.social-account";
 import { getThreadsSocialProviderConnection } from "./providers/threads.social-account";
 import { getTikTokBusinessSocialProviderConnection } from "./providers/tiktok-business.social-account";
+import { getInstagramWFacebookSocialProviderConnection } from "./providers/instagram-w-facebook.social-account";
+
 import { tasks } from "@trigger.dev/sdk";
 
 export async function addSocialAccountConnections({
@@ -58,7 +61,9 @@ export async function addSocialAccountConnections({
 
   const connectionsToInsert = await Promise.all(
     socialProviderConnections.map(async (connection) => ({
-      provider: provider as Provider,
+      provider: (provider == "instagram_w_facebook"
+        ? "instagram"
+        : provider) as Provider,
       project_id: projectId,
       access_token: connection.access_token,
       refresh_token: connection.refresh_token,
@@ -146,6 +151,8 @@ async function getSocialProviderConnections(
         return getThreadsSocialProviderConnection(info);
       case "tiktok_business":
         return getTikTokBusinessSocialProviderConnection(info);
+      case "instagram_w_facebook":
+        return getInstagramWFacebookSocialProviderConnection(info);
       default:
         return [];
     }

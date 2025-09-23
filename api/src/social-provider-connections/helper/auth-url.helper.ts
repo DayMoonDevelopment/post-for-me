@@ -94,6 +94,13 @@ export async function generateAuthUrl({
       break;
     }
     case 'instagram_w_facebook': {
+      oauthData.push({
+        project_id: projectId,
+        provider: provider as SocialProviderEnum,
+        key: 'connection_type',
+        key_id: authState,
+        value: 'facebook',
+      });
       const scopes = [
         'instagram_basic',
         'instagram_content_publish',
@@ -115,7 +122,10 @@ export async function generateAuthUrl({
       break;
     }
     case 'instagram': {
-      const scopes = ['instagram_basic', 'instagram_content_publish'];
+      const scopes = [
+        'instagram_business_basic',
+        'instagram_business_content_publish',
+      ];
 
       const authParams = new URLSearchParams([
         ['client_id', appId],

@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useParams, useLoaderData, useNavigate, Link } from "react-router";
+import { useLoaderData, useNavigate, Link } from "react-router";
 import { useEffect, useState } from "react";
 
 import { useForm as useFormFetcher } from "~/hooks/use-form";
