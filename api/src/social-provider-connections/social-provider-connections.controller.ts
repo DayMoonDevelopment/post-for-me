@@ -180,6 +180,13 @@ export class SocialAccountsController {
               );
 
             if (credentials) {
+              if (credentials.length > 1) {
+                throw new HttpException(
+                  'Instagram connection_type is required',
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+
               socialProviderAppCredentials = credentials[0];
             }
 
