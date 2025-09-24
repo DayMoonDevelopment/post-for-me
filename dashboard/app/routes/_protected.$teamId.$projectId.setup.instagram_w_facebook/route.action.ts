@@ -1,19 +1,11 @@
 import { data } from "react-router";
-import type { Database } from "@post-for-me/db";
 
 import { withSupabase } from "~/lib/.server/supabase";
-
-type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
-
 export const action = withSupabase(async ({ request, supabase, params }) => {
-  const { projectId, provider } = params;
+  const { projectId } = params;
 
   if (!projectId) {
     return data({ success: false, toast_msg: "Project ID is required" });
-  }
-
-  if (!provider) {
-    return data({ success: false, toast_msg: "Provider is required" });
   }
 
   const formData = await request.formData();
@@ -33,7 +25,7 @@ export const action = withSupabase(async ({ request, supabase, params }) => {
     .upsert(
       {
         project_id: projectId,
-        provider: provider as SocialProviderEnum,
+        provider: "instagram_w_facebook",
         app_id: appId,
         app_secret: appSecret,
       },

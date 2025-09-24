@@ -22,6 +22,8 @@ const allPlatforms = [
   "tiktok_business",
 ] as const;
 
+const providersComingSoon = ["instagram"] as const;
+
 export function UnstartedGrid() {
   const { credentials, isSystem } =
     useLoaderData<Route.ComponentProps["loaderData"]>();
@@ -56,7 +58,11 @@ export function UnstartedGrid() {
               action={`system/${provider}`}
               className="self-end"
             >
-              <Button disabled={isSubmitting}>Enable</Button>
+              {providersComingSoon.indexOf(provider) > -1 ? (
+                <Button disabled={true}>Coming Soon</Button>
+              ) : (
+                <Button disabled={isSubmitting}>Enable</Button>
+              )}
             </EnableCredsForm>
           ) : (
             <Link to={`${provider}`} className="self-end">

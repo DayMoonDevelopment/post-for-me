@@ -20,9 +20,9 @@ export function ConnectedGrid() {
   const { credentials, isSystem } =
     useLoaderData<Route.ComponentProps["loaderData"]>();
 
-  const configuredProviders = Object.entries(credentials || {}).filter(
-    ([_, creds]) => creds.appId || creds.appSecret || isSystem,
-  );
+  const configuredProviders = Object.entries(credentials || {})
+    .filter(([_, creds]) => creds.appId || creds.appSecret || isSystem)
+    .sort();
 
   return (
     <div className="@container grid grid-cols-2 xl:grid-cols-4 gap-4">

@@ -182,7 +182,7 @@ export class SocialAccountsController {
             if (credentials) {
               if (credentials.length > 1) {
                 throw new HttpException(
-                  'Instagram connection_type is required',
+                  'Instagram connection_type is required. Use the value "facebook" to use Login with Facebook, use the vaule "instagram" to use Login with Instagram.',
                   HttpStatus.BAD_REQUEST,
                 );
               }
