@@ -58,7 +58,7 @@ export function UnstartedGrid() {
               action={`system/${provider}`}
               className="self-end"
             >
-              {providersComingSoon.indexOf(provider) > -1 ? (
+              {providersComingSoon.find((p) => p === provider) ? (
                 <Button disabled={true}>Coming Soon</Button>
               ) : (
                 <Button disabled={isSubmitting}>Enable</Button>
