@@ -64,6 +64,9 @@ export const loader = withSupabase(async function ({
     provider = "instagram_w_facebook";
   }
 
+  const normalizedProvider =
+    provider === "instagram_w_facebook" ? "instagram" : provider;
+
   const { data: project, error: projectError } = await supabaseServiceRole
     .from("projects")
     .select(
@@ -87,7 +90,7 @@ export const loader = withSupabase(async function ({
       isSuccess: false,
       error: "Something went wrong",
       projectId,
-      provider,
+      provider: normalizedProvider,
       isLoggedIn,
     });
   }
@@ -100,7 +103,7 @@ export const loader = withSupabase(async function ({
     console.error("Provider app credentials not found for project");
     return createResponse({
       projectId,
-      provider,
+      provider: normalizedProvider,
       teamId: project.team_id,
       isSuccess: false,
       error: "No App Credentials set",
@@ -128,7 +131,7 @@ export const loader = withSupabase(async function ({
       error: "Something went wrong",
       teamId: project.team_id,
       projectId,
-      provider,
+      provider: normalizedProvider,
       callbackUrl: project.auth_callback_url,
       isLoggedIn,
     });
@@ -138,7 +141,7 @@ export const loader = withSupabase(async function ({
     isSuccess: true,
     teamId: project.team_id,
     projectId,
-    provider,
+    provider: normalizedProvider,
     accountIds: accounts.map((account) => account.id),
     callbackUrl: project.auth_callback_url,
     isLoggedIn,

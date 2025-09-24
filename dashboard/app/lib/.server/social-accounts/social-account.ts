@@ -44,10 +44,13 @@ export async function addSocialAccountConnections({
   };
   externalId: string | undefined | null;
 }) {
-  let redirectUri = `${REDIRECT_APP_URL}/callback/${projectId}/${provider}/account`;
+  const normalizedProvider =
+    provider === "instagram_w_facebook" ? "instagram" : provider;
+
+  let redirectUri = `${REDIRECT_APP_URL}/callback/${projectId}/${normalizedProvider}/account`;
 
   if (isSystem) {
-    redirectUri = `${REDIRECT_APP_URL}/callback/${provider}/account`;
+    redirectUri = `${REDIRECT_APP_URL}/callback/${normalizedProvider}/account`;
   }
 
   const socialProviderConnections: SocialProviderConnection[] =
@@ -61,9 +64,7 @@ export async function addSocialAccountConnections({
 
   const connectionsToInsert = await Promise.all(
     socialProviderConnections.map(async (connection) => ({
-      provider: (provider == "instagram_w_facebook"
-        ? "instagram"
-        : provider) as Provider,
+      provider: normalizedProvider as Provider,
       project_id: projectId,
       access_token: connection.access_token,
       refresh_token: connection.refresh_token,
