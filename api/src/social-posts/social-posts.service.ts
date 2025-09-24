@@ -716,7 +716,19 @@ export class SocialPostsService {
     data.social_post_configurations
       .filter((config) => config.provider)
       .map((config) => {
-        platformConfigurations[config.provider!] = {
+        platformConfigurations[
+          config.provider! as
+            | 'facebook'
+            | 'instagram'
+            | 'x'
+            | 'tiktok'
+            | 'youtube'
+            | 'pinterest'
+            | 'linkedin'
+            | 'bluesky'
+            | 'threads'
+            | 'tiktok_business'
+        ] = {
           caption: config.caption,
           media: data.social_post_media
             .filter((media) => media.provider_connection_id)

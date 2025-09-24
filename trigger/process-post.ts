@@ -293,15 +293,44 @@ export const processPost = task({
       for (const account of postData.accounts) {
         try {
           logger.info("Getting App Credentials");
-          const appCredentials =
-            account.provider === "bluesky"
-              ? ({
-                  app_id: "blue_sky_app_id",
-                  app_secret: "blue_sky_app_secret",
-                } as PlatformAppCredentials)
-              : (project.social_provider_app_credentials.find(
-                  (credential) => credential.provider === account.provider
-                ) as PlatformAppCredentials);
+
+          let appCredentials: PlatformAppCredentials | null = null;
+          switch (account.provider) {
+            case "bluesky":
+              appCredentials = {
+                app_id: "blue_sky_app_id",
+                app_secret: "blue_sky_app_secret",
+              } as PlatformAppCredentials;
+              break;
+            case "instagram":
+              switch (account.social_provider_metadata?.connection_type) {
+                case "instagram":
+                  appCredentials = project.social_provider_app_credentials.find(
+                    (credential) => credential.provider === "instagram"
+                  ) as PlatformAppCredentials;
+                  break;
+                case "facebook":
+                  appCredentials = project.social_provider_app_credentials.find(
+                    (credential) =>
+                      credential.provider === "instagram_w_facebook"
+                  ) as PlatformAppCredentials;
+                  break;
+                default:
+                  appCredentials = project.social_provider_app_credentials.find(
+                    (credential) =>
+                      credential.provider === account.provider ||
+                      credential.provider === "instagram_w_facebook"
+                  ) as PlatformAppCredentials;
+                  break;
+              }
+
+              break;
+            default:
+              appCredentials = project.social_provider_app_credentials.find(
+                (credential) => credential.provider === account.provider
+              ) as PlatformAppCredentials;
+              break;
+          }
 
           if (!appCredentials) {
             logger.error("No App credentials found for provider", {

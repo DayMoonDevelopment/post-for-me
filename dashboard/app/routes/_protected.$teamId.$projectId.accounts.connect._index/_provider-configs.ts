@@ -75,7 +75,29 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
     id: "instagram",
     name: "Instagram",
     description: "Connect your Instagram account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [
+      {
+        name: "connection_type",
+        required: true,
+        label: "Connection Type",
+        type: "select",
+        placeholder: "choose connection type",
+        description:
+          "Choose <strong>facebook</strong> if using <strong>Instragram With Facebook Login</strong>, otherwise choose <strong>instagram</strong>",
+        options: [
+          {
+            name: "instagram",
+            value: "instagram",
+            selected: true,
+          },
+          {
+            name: "facebook",
+            value: "facebook",
+          },
+        ],
+      },
+      EXTERNAL_ID_FIELD,
+    ],
   },
   x: {
     id: "x",

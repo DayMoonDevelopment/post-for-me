@@ -18,6 +18,16 @@ export class LinkedInUrlProviderData {
   connection_type: 'personal' | 'organization';
 }
 
+export class InstagramProviderData {
+  @ApiProperty({
+    enum: ['instagram', 'facebook'],
+    description:
+      'The type of connection; instagram for using login with instagram, facebook for using login with facebook.',
+    default: 'instagram',
+  })
+  connection_type: 'instagram' | 'facebook';
+}
+
 export class AuthUrlProviderData {
   @ApiProperty({
     description: 'Additional data needed for connecting bluesky accounts',
@@ -25,12 +35,20 @@ export class AuthUrlProviderData {
     type: BluesyAuthUrlProviderData,
   })
   bluesky?: BluesyAuthUrlProviderData;
+
   @ApiProperty({
     description: 'Additional data for connecting linkedin accounts',
     required: false,
     type: LinkedInUrlProviderData,
   })
   linkedin?: LinkedInUrlProviderData;
+
+  @ApiProperty({
+    description: 'Additional data for connecting instagram accounts',
+    required: false,
+    type: InstagramProviderData,
+  })
+  instagram?: InstagramProviderData;
 }
 
 export class CreateSocialAccountProviderAuthUrlDto {

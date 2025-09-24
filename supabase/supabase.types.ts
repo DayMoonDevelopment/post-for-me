@@ -1004,6 +1004,7 @@ export type Database = {
         | "bluesky"
         | "threads"
         | "tiktok_business"
+        | "instagram_w_facebook"
       subscription_addon: "managed_system_credentials"
       webhook_event_status: "pending" | "processing" | "completed" | "failed"
       webhook_event_type:
@@ -1152,6 +1153,7 @@ export const Constants = {
         "bluesky",
         "threads",
         "tiktok_business",
+        "instagram_w_facebook",
       ],
       subscription_addon: ["managed_system_credentials"],
       webhook_event_status: ["pending", "processing", "completed", "failed"],

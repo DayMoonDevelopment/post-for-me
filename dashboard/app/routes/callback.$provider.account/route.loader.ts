@@ -15,7 +15,7 @@ export const loader = withSupabase(async function ({
   const isLoggedIn = !user.error && user.data != null;
   const url = new URL(request.url);
 
-  const { provider } = params;
+  let { provider } = params;
 
   const key =
     provider?.toLowerCase() === "x"
@@ -33,7 +33,7 @@ export const loader = withSupabase(async function ({
   const oauthData = await supabaseServiceRole
     .from("social_provider_connection_oauth_data")
     .select("*")
-    .in("key", ["project", "external_id"])
+    .in("key", ["project", "external_id", "connection_type"])
     .eq("key_id", key)
     .eq("provider", provider as SocialProviderEnum);
 
@@ -51,6 +51,17 @@ export const loader = withSupabase(async function ({
       error: "Something went wrong",
       isLoggedIn,
     });
+  }
+
+  const connectionType = oauthData.data?.find(
+    (d) => d.key === "connection_type"
+  )?.value;
+  if (
+    connectionType &&
+    provider === "instagram" &&
+    connectionType === "facebook"
+  ) {
+    provider = "instagram_w_facebook";
   }
 
   const { data: project, error: projectError } = await supabaseServiceRole

@@ -12,6 +12,7 @@ import { useForm } from "~/hooks/use-form";
 const allPlatforms = [
   "facebook",
   "instagram",
+  "instagram_w_facebook",
   "youtube",
   "x",
   "pinterest",
@@ -20,6 +21,8 @@ const allPlatforms = [
   "tiktok",
   "tiktok_business",
 ] as const;
+
+const providersComingSoon = ["instagram"] as const;
 
 export function UnstartedGrid() {
   const { credentials, isSystem } =
@@ -55,7 +58,11 @@ export function UnstartedGrid() {
               action={`system/${provider}`}
               className="self-end"
             >
-              <Button disabled={isSubmitting}>Enable</Button>
+              {providersComingSoon.find((p) => p === provider) ? (
+                <Button disabled={true}>Coming Soon</Button>
+              ) : (
+                <Button disabled={isSubmitting}>Enable</Button>
+              )}
             </EnableCredsForm>
           ) : (
             <Link to={`${provider}`} className="self-end">
