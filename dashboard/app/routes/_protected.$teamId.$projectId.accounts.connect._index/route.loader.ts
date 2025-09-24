@@ -27,7 +27,12 @@ export const loader = withSupabase(async function loader({
           cred.app_id !== "" &&
           cred.app_secret !== ""
       )
-      ?.map((cred) => cred.provider) || []
+      ?.map((cred) => {
+        if (cred.provider === "instagram_w_facebook") {
+          return "instagram";
+        }
+        return cred.provider;
+      }) || []
   );
 
   // All available social providers
