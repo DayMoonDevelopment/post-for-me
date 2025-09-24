@@ -74,6 +74,7 @@ export const loader = withSupabase(async function ({
   const connectionType = oauthData.data?.find(
     (d) => d.key === "connection_type"
   )?.value;
+
   if (
     connectionType &&
     provider === "instagram" &&
@@ -86,11 +87,14 @@ export const loader = withSupabase(async function ({
     (appCredential) => appCredential.provider === provider
   );
 
+  const normalizedProvider =
+    provider === "instagram_w_facebook" ? "instagram" : provider;
+
   if (!providerAppCredentials && provider !== "bluesky") {
     console.error("Provider app credentials not found for project");
     return createResponse({
       projectId,
-      provider,
+      provider: normalizedProvider,
       teamId: project.team_id,
       isSuccess: false,
       error: "No App Credentials set",
@@ -118,7 +122,7 @@ export const loader = withSupabase(async function ({
       error: "Something went wrong",
       teamId: project.team_id,
       projectId,
-      provider,
+      provider: normalizedProvider,
       callbackUrl: project.auth_callback_url,
       isLoggedIn,
     });
@@ -128,7 +132,7 @@ export const loader = withSupabase(async function ({
     isSuccess: true,
     teamId: project.team_id,
     projectId,
-    provider,
+    provider: normalizedProvider,
     accountIds: accounts.map((account) => account.id),
     callbackUrl: project.auth_callback_url,
     isLoggedIn,

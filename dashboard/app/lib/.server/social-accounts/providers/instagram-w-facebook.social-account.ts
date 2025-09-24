@@ -86,7 +86,7 @@ export async function getInstagramWFacebookSocialProviderConnection({
         social_provider_photo_url:
           page.instagram_business_account.profile_picture_url,
         social_provider_metadata: {
-          connection_type: "instagram",
+          connection_type: "facebook",
         },
       });
     }
