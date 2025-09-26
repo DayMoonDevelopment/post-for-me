@@ -188,29 +188,55 @@ export class InstagramPostClient extends PostClient {
         };
       }
 
-      this.#requests.push({
-        publishRequest: {
-          creation_id: containerId,
-          access_token: account.access_token,
-        },
-      });
-      const publishResponse = await axios.post(
-        `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media_publish`,
-        {
-          creation_id: containerId,
-          access_token: account.access_token,
-        }
-      );
+      let platformId: string | null = null;
+      const maxPublishAttempts = 3;
+      let publishAttempts = 0;
+      while (!platformId && publishAttempts < maxPublishAttempts) {
+        try {
+          console.log(`Publish attempt #${publishAttempts + 1}`);
+          this.#requests.push({
+            publishRequest: {
+              creation_id: containerId,
+              access_token: account.access_token,
+            },
+          });
+          const publishResponse = await axios.post(
+            `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media_publish`,
+            {
+              creation_id: containerId,
+              access_token: account.access_token,
+            }
+          );
+          if (publishResponse.data.error) {
+            throw new Error(
+              `Failed to publish: ${publishResponse.data.error.message}`
+            );
+          }
 
-      if (publishResponse.data.error) {
-        throw new Error(
-          `Failed to publish: ${publishResponse.data.error.message}`
-        );
+          this.#responses.push({ publishResponse: publishResponse.data });
+
+          platformId = publishResponse.data.id;
+        } catch (error) {
+          if (error.response?.status === 400) {
+            console.log(
+              `Bad Request With Error: ${error.response?.data?.error?.message}`
+            );
+            console.log("Waiting 5 secs");
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+            continue;
+          }
+
+          throw error;
+        } finally {
+          publishAttempts++;
+        }
       }
 
-      this.#responses.push({ publishResponse: publishResponse.data });
-
-      const platformId = publishResponse.data.id;
+      if (!platformId) {
+        throw new Error(
+          "Unknown Error: Unable to publish media, please try again."
+        );
+      }
 
       const platformUrl = await this.#getPostUrl({
         account,
