@@ -250,24 +250,37 @@ export class FacebookPostClient extends PostClient {
     account: SocialAccount;
     caption: string;
   }): Promise<string> {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const matches = Array.from(caption.matchAll(urlRegex));
+
+    const postData: {
+      message: string;
+      access_token: string;
+      published: boolean;
+      link?: string;
+    } = {
+      message: caption,
+      access_token: account.access_token,
+      published: true,
+    };
+
+    // If URL found, add it as a link parameter
+    if (matches.length > 0) {
+      // Clean up the URL (remove trailing punctuation)
+      const link = matches[0][0].replace(/[.,;!?)]+$/, "");
+      postData.link = link;
+    }
+
     this.#requests.push({
       createTextRequest: {
         url: `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
-        body: {
-          message: caption,
-          access_token: account.access_token,
-          published: true,
-        },
+        body: postData,
       },
     });
 
     const response = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
-      {
-        message: caption,
-        access_token: account.access_token,
-        published: true,
-      }
+      postData
     );
 
     this.#responses.push({ createTextResponse: response.data });
