@@ -35,6 +35,27 @@ export class UserTagDto {
   y?: number;
 }
 
+export class TwitterPollDto {
+  @ApiProperty({
+    description: 'Duration of the poll in minutes',
+    required: true,
+  })
+  duration_minutes: number;
+
+  @ApiProperty({
+    description: 'The choices of the poll, requiring 2-4 options',
+    required: true,
+  })
+  options: string[];
+
+  @ApiProperty({
+    description: 'Who can reply to the tweet',
+    enum: ['following', 'mentionedUsers', 'subscribers', 'verified'],
+    required: false,
+  })
+  reply_settings: string;
+}
+
 export class InstagramProductTagDto {
   @ApiProperty({
     description: 'Id of the product',
@@ -284,7 +305,37 @@ export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
   disclose_branded_content?: boolean;
 }
 
-export class TwitterConfigurationDto extends BaseConfigurationDto {}
+export class TwitterConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description: 'Poll options for the tweet',
+    required: false,
+    nullable: false,
+    type: TwitterPollDto,
+  })
+  poll?: TwitterPollDto;
+
+  @ApiProperty({
+    description: 'Id of the community to post to',
+    required: false,
+    nullable: false,
+  })
+  community_id?: string;
+
+  @ApiProperty({
+    description: 'Id of the tweet you want to quote',
+    required: false,
+    nullable: false,
+  })
+  quote_tweet_id?: string;
+
+  @ApiProperty({
+    description: 'Who can reply to the tweet',
+    enum: ['following', 'mentionedUsers', 'subscribers', 'verified'],
+    required: false,
+    nullable: true,
+  })
+  reply_settings?: string;
+}
 
 export class YoutubeConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({

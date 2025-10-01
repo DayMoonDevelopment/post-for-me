@@ -20,6 +20,12 @@ export interface InstagramProductTag {
   y?: number;
 }
 
+export interface TwitterPoll {
+  duration_minutes: number;
+  options: string[];
+  reply_settings?: string;
+}
+
 export type Provider =
   | "facebook"
   | "instagram"
@@ -141,6 +147,10 @@ export interface TiktokConfiguration {
 export interface TwitterConfiguration {
   caption?: string;
   media?: PostMedia[];
+  poll?: TwitterPoll;
+  community_id?: string;
+  quote_tweet_id?: string;
+  reply_settings?: string;
 }
 
 export interface YoutubeConfiguration {

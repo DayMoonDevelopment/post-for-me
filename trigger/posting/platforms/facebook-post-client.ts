@@ -370,6 +370,7 @@ export class FacebookPostClient extends PostClient {
     const mediaIds = [];
 
     // Upload each image
+    let index = 0;
     for (const medium of media) {
       const fileUrl = await this.getSignedUrlForFile(medium);
       const payload: {
@@ -385,7 +386,7 @@ export class FacebookPostClient extends PostClient {
         access_token: account.access_token,
       };
 
-      if (platformConfig?.user_tags) {
+      if (platformConfig?.user_tags && index == 0) {
         payload.tags = platformConfig.user_tags.map((u) => ({
           x: u.x,
           y: u.y,
@@ -411,6 +412,7 @@ export class FacebookPostClient extends PostClient {
         );
       }
       mediaIds.push({ media_fbid: photoResponse.data.id });
+      index++;
     }
 
     this.#requests.push({
