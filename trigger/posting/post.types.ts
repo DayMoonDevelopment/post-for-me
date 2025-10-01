@@ -8,6 +8,18 @@ export interface PostResult {
   details?: any;
 }
 
+export interface UserTag {
+  user: string;
+  x?: number;
+  y?: number;
+}
+
+export interface InstagramProductTag {
+  product_id: string;
+  x?: number;
+  y?: number;
+}
+
 export type Provider =
   | "facebook"
   | "instagram"
@@ -105,6 +117,10 @@ export interface InstagramConfiguration {
   placement?: string;
   media?: PostMedia[];
   collaborators?: string[];
+  user_tags?: UserTag[];
+  product_tags?: InstagramProductTag[];
+  share_to_feed?: boolean;
+  location?: string;
 }
 
 export interface TiktokConfiguration {
@@ -137,6 +153,9 @@ export interface FacebookConfiguration {
   caption?: string;
   placement?: string;
   media?: PostMedia[];
+  location?: string;
+  tags?: UserTag[];
+  collaborators?: string[];
 }
 
 export interface LinkedinConfiguration {

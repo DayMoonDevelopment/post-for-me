@@ -258,6 +258,7 @@ export class FacebookPostClient extends PostClient {
       access_token: string;
       published: boolean;
       link?: string;
+      place?: string;
     } = {
       message: caption,
       access_token: account.access_token,

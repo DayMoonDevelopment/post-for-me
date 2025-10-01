@@ -13,6 +13,48 @@ export type PlatformConfiguration =
   | ThreadsConfigurationDto
   | TiktokBusinessConfigurationDto;
 
+export class UserTagDto {
+  @ApiProperty({
+    description: 'Facebook User ID or Instagram Username of the account to tag',
+    required: true,
+  })
+  user: string;
+
+  @ApiProperty({
+    description:
+      'Percentage distance from left edge of the image, Not required for videos or stories',
+    required: false,
+  })
+  x?: number;
+
+  @ApiProperty({
+    description:
+      'Percentage distance from top edge of the image, Not required for videos or stories',
+    required: false,
+  })
+  y?: number;
+}
+
+export class InstagramProductTagDto {
+  @ApiProperty({
+    description: 'Id of the product',
+    required: true,
+  })
+  product_id: string;
+
+  @ApiProperty({
+    description: 'Percentage distance from left edge of the image',
+    required: false,
+  })
+  x?: number;
+
+  @ApiProperty({
+    description: 'Percentage distance from top edge of the image',
+    required: false,
+  })
+  y?: number;
+}
+
 export class BaseConfigurationDto {
   @ApiProperty({
     description: 'Overrides the `caption` from the post',
@@ -66,6 +108,41 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   collaborators?: string[];
+
+  @ApiProperty({
+    description:
+      'Instagram usernames to be tagged in an image, video, or story',
+    type: UserTagDto,
+    nullable: true,
+    required: false,
+    isArray: true,
+  })
+  user_tags?: UserTagDto[];
+
+  @ApiProperty({
+    description: 'Products to be tagged in an image or video',
+    type: InstagramProductTagDto,
+    nullable: true,
+    required: false,
+    isArray: true,
+  })
+  product_tags?: InstagramProductTagDto[];
+
+  @ApiProperty({
+    description: 'If false video posts will only be shown in the Reels tab',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  share_to_feed?: boolean;
+
+  @ApiProperty({
+    description:
+      'Page id with a location that you want to tag the image or video with',
+    nullable: true,
+    required: false,
+  })
+  location?: string;
 }
 
 export class TiktokConfigurationDto extends BaseConfigurationDto {
@@ -226,6 +303,31 @@ export class FacebookConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   placement?: string;
+
+  @ApiProperty({
+    description:
+      'Page id with a location that you want to tag the image or video with',
+    nullable: true,
+    required: false,
+  })
+  location?: string;
+
+  @ApiProperty({
+    description: 'Facebook users to be tagged in an image or video post',
+    nullable: true,
+    required: false,
+    type: UserTagDto,
+    isArray: true,
+  })
+  user_tags?: UserTagDto[];
+
+  @ApiProperty({
+    description: 'List of page ids to invite as collaborators for a Video Reel',
+    nullable: true,
+    required: false,
+    isArray: true,
+  })
+  collaborators?: string[];
 }
 
 export class LinkedinConfigurationDto extends BaseConfigurationDto {}

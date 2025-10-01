@@ -167,15 +167,14 @@ export class InstagramPostClient extends PostClient {
           account,
           media,
           caption: sanitizedCaption,
-          placement: platformConfig?.placement,
-          collaborators,
+          platformConfig,
         });
       } else {
         containerId = await this.#processCarousel({
           account,
           media,
           caption: sanitizedCaption,
-          collaborators,
+          platformConfig,
         });
       }
 
@@ -297,14 +296,12 @@ export class InstagramPostClient extends PostClient {
     account,
     media,
     caption,
-    placement,
-    collaborators,
+    platformConfig,
   }: {
     account: SocialAccount;
     media: PostMedia[];
     caption: string;
-    placement: string | undefined;
-    collaborators: string[] | undefined;
+    platformConfig: InstagramConfiguration;
   }): Promise<string> {
     const medium = media[0];
 
@@ -333,13 +330,17 @@ export class InstagramPostClient extends PostClient {
       image_url?: string;
       cover_url?: string;
       collaborators?: string[];
+      share_to_feed?: boolean;
+      product_tags?: any[];
+      location_id?: string;
+      user_tags?: any[];
     } = {
       [isVideo ? "video_url" : "image_url"]: signedUrl,
       caption: caption,
       access_token: account.access_token,
     };
 
-    switch (placement) {
+    switch (platformConfig?.placement) {
       case "stories":
         createMediaParams.media_type = "STORIES";
         break;
@@ -352,11 +353,37 @@ export class InstagramPostClient extends PostClient {
           createMediaParams.thumb_offset = medium.thumbnail_timestamp_ms;
         }
 
-        if (collaborators && collaborators.length > 0) {
-          createMediaParams.collaborators = collaborators;
+        if (
+          platformConfig?.collaborators &&
+          platformConfig?.collaborators.length > 0
+        ) {
+          createMediaParams.collaborators = platformConfig?.collaborators;
+        }
+
+        if (platformConfig?.product_tags) {
+          createMediaParams.product_tags = platformConfig?.product_tags;
+        }
+
+        if (
+          platformConfig?.share_to_feed !== undefined &&
+          platformConfig?.share_to_feed !== null
+        ) {
+          createMediaParams.share_to_feed = platformConfig?.share_to_feed;
         }
 
         break;
+    }
+
+    if (platformConfig?.user_tags) {
+      createMediaParams.user_tags = platformConfig?.user_tags.map((u) => ({
+        username: u.user,
+        x: u.x,
+        y: u.y,
+      }));
+    }
+
+    if (platformConfig?.location) {
+      createMediaParams.location_id = platformConfig.location;
     }
 
     this.#requests.push({ createMediaRequest: createMediaParams });
@@ -431,12 +458,12 @@ export class InstagramPostClient extends PostClient {
     account,
     media,
     caption,
-    collaborators,
+    platformConfig,
   }: {
     account: SocialAccount;
     media: PostMedia[];
     caption: string;
-    collaborators: string[] | undefined;
+    platformConfig: InstagramConfiguration;
   }): Promise<string> {
     const containerIds = [];
     const allowedMedia = media.slice(0, this.#maxItems);
@@ -465,22 +492,46 @@ export class InstagramPostClient extends PostClient {
         signedUrl = await this.getSignedUrlForFile(medium);
       }
 
+      const itemPayload: {
+        media_type: string;
+        video_url?: string;
+        image_url?: string;
+        is_carousel_item: boolean;
+        access_token: string;
+        product_tags?: any[];
+        location_id?: string;
+        user_tags?: any[];
+      } = {
+        media_type: isVideo ? "VIDEO" : "IMAGE",
+        [isVideo ? "video_url" : "image_url"]: signedUrl,
+        is_carousel_item: true,
+        access_token: account.access_token,
+      };
+
+      if (index == 0) {
+        if (!isVideo && platformConfig?.user_tags) {
+          itemPayload.user_tags = platformConfig?.user_tags.map((u) => ({
+            username: u.user,
+            x: u.x,
+            y: u.y,
+          }));
+        }
+
+        if (platformConfig?.product_tags) {
+          itemPayload.product_tags = platformConfig?.product_tags;
+        }
+
+        if (platformConfig?.location) {
+          itemPayload.location_id = platformConfig.location;
+        }
+      }
+
       this.#requests.push({
-        createCarouselItemRequest: {
-          media_type: isVideo ? "VIDEO" : "IMAGE",
-          [isVideo ? "video_url" : "image_url"]: signedUrl,
-          is_carousel_item: true,
-          access_token: account.access_token,
-        },
+        createCarouselItemRequest: itemPayload,
       });
       const itemResponse = await axios.post(
         `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
-        {
-          media_type: isVideo ? "VIDEO" : "IMAGE",
-          [isVideo ? "video_url" : "image_url"]: signedUrl,
-          is_carousel_item: true,
-          access_token: account.access_token,
-        }
+        itemPayload
       );
 
       this.#responses.push({ createCarouselItemResponse: itemResponse.data });
@@ -511,8 +562,11 @@ export class InstagramPostClient extends PostClient {
       access_token: account.access_token,
     };
 
-    if (collaborators && collaborators.length > 0) {
-      carouselPayload.collaborators = collaborators;
+    if (
+      platformConfig?.collaborators &&
+      platformConfig?.collaborators.length > 0
+    ) {
+      carouselPayload.collaborators = platformConfig?.collaborators;
     }
 
     this.#requests.push({
