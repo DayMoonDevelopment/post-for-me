@@ -154,7 +154,7 @@ export interface FacebookConfiguration {
   placement?: string;
   media?: PostMedia[];
   location?: string;
-  tags?: UserTag[];
+  user_tags?: UserTag[];
   collaborators?: string[];
 }
 

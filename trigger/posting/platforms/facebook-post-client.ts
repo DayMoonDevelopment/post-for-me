@@ -122,6 +122,7 @@ export class FacebookPostClient extends PostClient {
                   account,
                   caption,
                   medium,
+                  platformConfig,
                 });
 
                 platformUrl = `https://www.facebook.com/reel/${platformId}/`;
@@ -156,6 +157,7 @@ export class FacebookPostClient extends PostClient {
                 account,
                 caption,
                 medium,
+                platformConfig,
               });
 
               platformUrl = await this.#getStoryUrl({
@@ -169,6 +171,7 @@ export class FacebookPostClient extends PostClient {
                 account,
                 caption,
                 medium,
+                platformConfig,
               });
               break;
             }
@@ -181,6 +184,7 @@ export class FacebookPostClient extends PostClient {
             account,
             caption,
             media,
+            platformConfig,
           });
           break;
         }
@@ -296,18 +300,39 @@ export class FacebookPostClient extends PostClient {
     account,
     caption,
     medium,
+    platformConfig,
   }: {
     account: SocialAccount;
     caption: string;
     medium: PostMedia;
+    platformConfig: FacebookConfiguration;
   }): Promise<string> {
     const fileUrl = await this.getSignedUrlForFile(medium);
-    const payload = {
+    const payload: {
+      url: string;
+      published: boolean;
+      message: string;
+      access_token: string;
+      tags?: any[];
+      place?: string;
+    } = {
       url: fileUrl,
       published: true,
       message: caption,
       access_token: account.access_token,
     };
+
+    if (platformConfig?.user_tags) {
+      payload.tags = platformConfig.user_tags.map((u) => ({
+        x: u.x,
+        y: u.y,
+        tag_uid: u.user,
+      }));
+    }
+
+    if (platformConfig?.location) {
+      payload.place = platformConfig.location;
+    }
 
     this.#requests.push({
       photoRequest: {
@@ -335,22 +360,38 @@ export class FacebookPostClient extends PostClient {
     account,
     caption,
     media,
+    platformConfig,
   }: {
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
+    platformConfig: FacebookConfiguration;
   }): Promise<string> {
     const mediaIds = [];
 
     // Upload each image
     for (const medium of media) {
       const fileUrl = await this.getSignedUrlForFile(medium);
-      const payload = {
+      const payload: {
+        url: string;
+        message: string;
+        published: boolean;
+        access_token: string;
+        tags?: any[];
+      } = {
         url: fileUrl,
         message: caption,
         published: false,
         access_token: account.access_token,
       };
+
+      if (platformConfig?.user_tags) {
+        payload.tags = platformConfig.user_tags.map((u) => ({
+          x: u.x,
+          y: u.y,
+          tag_uid: u.user,
+        }));
+      }
 
       this.#requests.push({
         photoRequest: {
@@ -383,6 +424,22 @@ export class FacebookPostClient extends PostClient {
       },
     });
 
+    const carouselBody: {
+      message: string;
+      access_token: string;
+      attached_media: {
+        media_fbid: any;
+      }[];
+      place?: string;
+    } = {
+      message: caption,
+      access_token: account.access_token,
+      attached_media: mediaIds,
+    };
+
+    if (platformConfig?.location) {
+      carouselBody.place = platformConfig.location;
+    }
     // Create the carousel post
     const response = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
@@ -639,18 +696,39 @@ export class FacebookPostClient extends PostClient {
     account,
     caption,
     medium,
+    platformConfig,
   }: {
     account: SocialAccount;
     caption: string;
     medium: PostMedia;
+    platformConfig: FacebookConfiguration;
   }): Promise<string> {
     const fileUrl = await this.getSignedUrlForFile(medium);
-    const payload = {
+    const payload: {
+      url: string;
+      message: string;
+      published: boolean;
+      access_token: string;
+      tags?: any[];
+      place?: string;
+    } = {
       url: fileUrl,
       message: caption,
       published: false,
       access_token: account.access_token,
     };
+
+    if (platformConfig?.user_tags) {
+      payload.tags = platformConfig.user_tags.map((u) => ({
+        x: u.x,
+        y: u.y,
+        tag_uid: u.user,
+      }));
+    }
+
+    if (platformConfig?.location) {
+      payload.place = platformConfig.location;
+    }
 
     this.#requests.push({
       photoRequest: {
@@ -715,13 +793,15 @@ export class FacebookPostClient extends PostClient {
     account,
     caption,
     medium,
+    platformConfig,
   }: {
     account: SocialAccount;
     medium: PostMedia;
     caption: string;
+    platformConfig: FacebookConfiguration;
   }) {
     const uploadSessionResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_stories`,
+      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_reels`,
       {
         upload_phase: "start",
         access_token: account.access_token,
@@ -806,15 +886,28 @@ export class FacebookPostClient extends PostClient {
       });
     }
 
+    const reelBody: {
+      video_id: string;
+      upload_phase: string;
+      video_state: string;
+      description: string;
+      access_token: string;
+      place?: string;
+    } = {
+      video_id: createdMediaId,
+      upload_phase: "finish",
+      video_state: "PUBLISHED",
+      description: caption,
+      access_token: account.access_token,
+    };
+
+    if (platformConfig?.location) {
+      reelBody.place = platformConfig.location;
+    }
+
     const reelResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_stories`,
-      {
-        video_id: createdMediaId,
-        upload_phase: "finish",
-        video_state: "PUBLISHED",
-        description: caption,
-        access_token: account.access_token,
-      }
+      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_reels`,
+      reelBody
     );
 
     const reelResponseData = reelResponse.data;
@@ -872,6 +965,27 @@ export class FacebookPostClient extends PostClient {
         ?.map((error: { message?: string }) => error.message)
         .join(", ");
       throw new Error(`Failed to process video ${error}`);
+    }
+
+    if (platformConfig?.collaborators) {
+      logger.info("Adding collaborators");
+      for (const collaborator of platformConfig.collaborators) {
+        try {
+          const collaboratorResponse = await axios.post(
+            `https://graph.facebook.com/v20.0/${createdMediaId}/collaborators`,
+            {
+              target_id: collaborator,
+              access_token: account.access_token,
+            }
+          );
+
+          logger.info("Added collaborator", {
+            data: collaboratorResponse.data,
+          });
+        } catch (err) {
+          logger.error("Error adding collaborator", { error: err });
+        }
+      }
     }
 
     return createdMediaId;
