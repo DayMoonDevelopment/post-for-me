@@ -322,12 +322,14 @@ export class FacebookPostClient extends PostClient {
       access_token: account.access_token,
     };
 
-    if (platformConfig?.user_tags) {
-      payload.tags = platformConfig.user_tags.map((u) => ({
-        x: u.x,
-        y: u.y,
-        tag_uid: u.user,
-      }));
+    if (medium.tags && medium.tags.length > 0) {
+      payload.tags = medium.tags
+        .filter((t) => t.platform === "facebook" && t.type == "user")
+        .map((t) => ({
+          x: t.x,
+          y: t.y,
+          tag_uid: t.id,
+        }));
     }
 
     if (platformConfig?.location) {
@@ -386,12 +388,14 @@ export class FacebookPostClient extends PostClient {
         access_token: account.access_token,
       };
 
-      if (platformConfig?.user_tags && index == 0) {
-        payload.tags = platformConfig.user_tags.map((u) => ({
-          x: u.x,
-          y: u.y,
-          tag_uid: u.user,
-        }));
+      if (medium.tags && medium.tags.length > 0) {
+        payload.tags = medium.tags
+          .filter((t) => t.platform === "facebook" && t.type == "user")
+          .map((t) => ({
+            x: t.x,
+            y: t.y,
+            tag_uid: t.id,
+          }));
       }
 
       this.#requests.push({
@@ -720,12 +724,14 @@ export class FacebookPostClient extends PostClient {
       access_token: account.access_token,
     };
 
-    if (platformConfig?.user_tags) {
-      payload.tags = platformConfig.user_tags.map((u) => ({
-        x: u.x,
-        y: u.y,
-        tag_uid: u.user,
-      }));
+    if (medium.tags && medium.tags.length > 0) {
+      payload.tags = medium.tags
+        .filter((t) => t.platform === "facebook" && t.type == "user")
+        .map((t) => ({
+          x: t.x,
+          y: t.y,
+          tag_uid: t.id,
+        }));
     }
 
     if (platformConfig?.location) {

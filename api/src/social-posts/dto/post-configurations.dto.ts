@@ -13,28 +13,6 @@ export type PlatformConfiguration =
   | ThreadsConfigurationDto
   | TiktokBusinessConfigurationDto;
 
-export class UserTagDto {
-  @ApiProperty({
-    description: 'Facebook User ID or Instagram Username of the account to tag',
-    required: true,
-  })
-  user: string;
-
-  @ApiProperty({
-    description:
-      'Percentage distance from left edge of the image, Not required for videos or stories',
-    required: false,
-  })
-  x?: number;
-
-  @ApiProperty({
-    description:
-      'Percentage distance from top edge of the image, Not required for videos or stories',
-    required: false,
-  })
-  y?: number;
-}
-
 export class TwitterPollDto {
   @ApiProperty({
     description: 'Duration of the poll in minutes',
@@ -129,16 +107,6 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   collaborators?: string[];
-
-  @ApiProperty({
-    description:
-      'Instagram usernames to be tagged in an image, video, or story',
-    type: UserTagDto,
-    nullable: true,
-    required: false,
-    isArray: true,
-  })
-  user_tags?: UserTagDto[];
 
   @ApiProperty({
     description: 'Products to be tagged in an image or video',
@@ -362,15 +330,6 @@ export class FacebookConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   location?: string;
-
-  @ApiProperty({
-    description: 'Facebook users to be tagged in an image or video post',
-    nullable: true,
-    required: false,
-    type: UserTagDto,
-    isArray: true,
-  })
-  user_tags?: UserTagDto[];
 
   @ApiProperty({
     description: 'List of page ids to invite as collaborators for a Video Reel',

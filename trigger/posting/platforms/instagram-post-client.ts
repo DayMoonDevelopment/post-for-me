@@ -360,8 +360,10 @@ export class InstagramPostClient extends PostClient {
           createMediaParams.collaborators = platformConfig?.collaborators;
         }
 
-        if (platformConfig?.product_tags) {
-          createMediaParams.product_tags = platformConfig?.product_tags;
+        if (medium.tags && medium.tags.length > 0) {
+          createMediaParams.product_tags = medium.tags
+            .filter((t) => t.platform == "instagram" && t.type == "product")
+            .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
         }
 
         if (
@@ -374,12 +376,14 @@ export class InstagramPostClient extends PostClient {
         break;
     }
 
-    if (platformConfig?.user_tags) {
-      createMediaParams.user_tags = platformConfig?.user_tags.map((u) => ({
-        username: u.user,
-        x: u.x,
-        y: u.y,
-      }));
+    if (medium.tags && medium.tags.length > 0) {
+      createMediaParams.user_tags = medium.tags
+        .filter((t) => t.platform == "instagram" && t.type == "user")
+        .map((t) => ({
+          username: t.id,
+          x: t.x,
+          y: t.y,
+        }));
     }
 
     if (platformConfig?.location) {
@@ -508,19 +512,23 @@ export class InstagramPostClient extends PostClient {
         access_token: account.access_token,
       };
 
-      if (index == 0) {
-        if (!isVideo && platformConfig?.user_tags) {
-          itemPayload.user_tags = platformConfig?.user_tags.map((u) => ({
-            username: u.user,
-            x: u.x,
-            y: u.y,
+      if (!isVideo && medium.tags && medium.tags.length > 0) {
+        itemPayload.user_tags = medium.tags
+          .filter((t) => t.platform == "instagram" && t.type == "user")
+          .map((t) => ({
+            username: t.id,
+            x: t.x,
+            y: t.y,
           }));
-        }
+      }
 
-        if (platformConfig?.product_tags) {
-          itemPayload.product_tags = platformConfig?.product_tags;
-        }
+      if (medium.tags && medium.tags.length > 0) {
+        itemPayload.product_tags = medium.tags
+          .filter((t) => t.platform == "instagram" && t.type == "product")
+          .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
+      }
 
+      if (index == 0) {
         if (platformConfig?.location) {
           itemPayload.location_id = platformConfig.location;
         }

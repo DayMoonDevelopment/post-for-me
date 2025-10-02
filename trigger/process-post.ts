@@ -9,7 +9,7 @@ import type {
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
 
-import { Database } from "@post-for-me/db";
+import { Database, Json } from "@post-for-me/db";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -44,6 +44,7 @@ const transformPostData = (data: {
     thumbnail_timestamp_ms: number | null;
     provider: string | null;
     provider_connection_id: string | null;
+    tags?: Json;
   }[];
   social_post_configurations: {
     caption: string | null;
@@ -58,6 +59,7 @@ const transformPostData = (data: {
       url: media.url,
       thumbnail_url: media.thumbnail_url,
       thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+      tags: media.tags as any[],
     }));
 
   const accountConfigurations = data.social_post_configurations
@@ -76,6 +78,7 @@ const transformPostData = (data: {
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+              tags: media.tags as any[],
             })),
           ...configData,
         },
@@ -95,6 +98,7 @@ const transformPostData = (data: {
             url: media.url,
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+            tags: media.tags as any[],
           })),
         ...(config.provider_data as PlatformConfiguration),
       };
@@ -484,7 +488,8 @@ export const processPost = task({
           thumbnail_url,
           thumbnail_timestamp_ms,
           provider,
-          provider_connection_id
+          provider_connection_id,
+          tags
         ),
         social_post_configurations (
          caption,

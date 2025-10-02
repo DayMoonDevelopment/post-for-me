@@ -9,13 +9,9 @@ export interface PostResult {
 }
 
 export interface UserTag {
-  user: string;
-  x?: number;
-  y?: number;
-}
-
-export interface InstagramProductTag {
-  product_id: string;
+  id: string;
+  type: string;
+  platform: string;
   x?: number;
   y?: number;
 }
@@ -99,6 +95,7 @@ export interface PostMedia {
   thumbnail_url?: string | null;
   thumbnail_timestamp_ms?: number | null;
   type: string;
+  tags?: UserTag[] | null;
 }
 
 export interface AccountConfiguration {
@@ -123,8 +120,6 @@ export interface InstagramConfiguration {
   placement?: string;
   media?: PostMedia[];
   collaborators?: string[];
-  user_tags?: UserTag[];
-  product_tags?: InstagramProductTag[];
   share_to_feed?: boolean;
   location?: string;
 }
@@ -164,7 +159,6 @@ export interface FacebookConfiguration {
   placement?: string;
   media?: PostMedia[];
   location?: string;
-  user_tags?: UserTag[];
   collaborators?: string[];
 }
 
