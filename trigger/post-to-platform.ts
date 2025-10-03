@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { logger, task } from "@trigger.dev/sdk";
+import { logger, task, tags, tasks } from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -144,76 +144,111 @@ export const postToPlatform = task({
       postId,
       stripeCustomerId,
       appCredentials,
+      projectId,
     } = payload;
+    let postResult: PostResult | null = null;
+    try {
+      await tags.add(`${account.id}`);
 
-    logger.info("Starting post processing", { ...payload });
+      logger.info("Starting post processing", { ...payload });
 
-    logger.info("Creating Post Client");
-    const postClient = createPostClient({
-      supabaseClient: supabaseClient,
-      platformName: platform,
-      appCredentials,
-    });
-
-    if (
-      platformsToAlwaysRefresh.includes(account.provider) ||
-      differenceInDays(
-        account.access_token_expires_at || new Date(),
-        new Date()
-      ) <= 7
-    ) {
-      logger.info("Refreshing Token", {
-        platform: account.provider,
-        account,
-      });
-      const refreshed = await handleTokenRefresh({
-        postClient,
-        account: account as SocialAccount,
+      logger.info("Creating Post Client");
+      const postClient = createPostClient({
+        supabaseClient: supabaseClient,
+        platformName: platform,
+        appCredentials,
       });
 
-      if (!refreshed.success) {
-        logger.error("Failed to refresh token", {
+      if (
+        platformsToAlwaysRefresh.includes(account.provider) ||
+        differenceInDays(
+          account.access_token_expires_at || new Date(),
+          new Date()
+        ) <= 7
+      ) {
+        logger.info("Refreshing Token", {
+          platform: account.provider,
           account,
-          error: refreshed.error,
         });
-        return {
+        const refreshed = await handleTokenRefresh({
+          postClient,
+          account: account as SocialAccount,
+        });
+
+        if (!refreshed.success) {
+          logger.error("Failed to refresh token", {
+            account,
+            error: refreshed.error,
+          });
+          postResult = {
+            provider_connection_id: account.id,
+            post_id: postId,
+            success: false,
+            error_message: refreshed.error,
+          };
+
+          throw new Error("Invalid Token");
+        }
+      }
+
+      postResult = await postClient.post({
+        postId,
+        account,
+        caption,
+        media,
+        platformConfig,
+      });
+
+      if (postResult.success) {
+        try {
+          logger.info("Increasing stripe meter", {
+            meter: STRIPE_METER_EVENT,
+            stripe_customer_id: stripeCustomerId,
+          });
+          const meterEvent = await stripe.billing.meterEvents.create({
+            event_name: STRIPE_METER_EVENT,
+            payload: {
+              stripe_customer_id: stripeCustomerId,
+            },
+          });
+
+          logger.info("Created meter event", { meterEvent });
+        } catch (error) {
+          logger.error("Failed to increase stripe meter", {
+            meter: STRIPE_METER_EVENT,
+            stripe_customer_id: stripeCustomerId,
+            error,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error("Failed Processing Platform Post", { error });
+
+      if (!postResult) {
+        postResult = {
           provider_connection_id: account.id,
-          post_id: postId,
           success: false,
-          error_message: refreshed.error,
+          error_message:
+            "Unexcpted Error: Post Status Unavailable, Please check the social account.",
+          post_id: postId,
+          details: { error: error },
         };
       }
     }
 
-    const postResult = await postClient.post({
-      postId,
-      account,
-      caption,
-      media,
-      platformConfig,
-    });
+    logger.info("Saving Post Result", { postResult });
+    const { error: insertResultError } = await supabaseClient
+      .from("social_post_results")
+      .insert(postResult);
 
-    if (postResult.success) {
-      try {
-        logger.info("Increasing stripe meter", {
-          meter: STRIPE_METER_EVENT,
-          stripe_customer_id: stripeCustomerId,
-        });
-        const meterEvent = await stripe.billing.meterEvents.create({
-          event_name: STRIPE_METER_EVENT,
-          payload: {
-            stripe_customer_id: stripeCustomerId,
-          },
-        });
-
-        logger.info("Created meter event", { meterEvent });
-      } catch (error) {
-        logger.error("Failed to increase stripe meter", {
-          meter: STRIPE_METER_EVENT,
-          stripe_customer_id: stripeCustomerId,
-          error,
-        });
-      }
+    if (insertResultError) {
+      logger.error("Failed to insert post result", { insertResultError });
+    } else {
+      await tasks.trigger("process-webhooks", {
+        projectId: projectId,
+        eventType: "social.post.result.created",
+        eventData: postResult,
+      });
     }
 
     logger.info("Posting complete", { ...postResult });

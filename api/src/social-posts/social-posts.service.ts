@@ -222,6 +222,7 @@ export class SocialPostsService {
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
             post_id: data.id,
+            tags: media.tags,
           };
         }),
       );
@@ -236,6 +237,7 @@ export class SocialPostsService {
               url: string;
               thumbnail_url?: string;
               thumbnail_timestamp_ms?: number;
+              tags: any[];
             }[];
           },
         ]) => {
@@ -245,6 +247,7 @@ export class SocialPostsService {
                 url: media.url,
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+                tags: media.tags,
                 post_id: data.id,
                 provider: provider as Provider,
               })) as Array<{
@@ -252,6 +255,7 @@ export class SocialPostsService {
                 thumbnail_url?: string;
                 thumbnail_timestamp_ms?: number;
                 post_id: string;
+                tags: any[];
                 provider: Provider;
               }>),
             );
@@ -278,6 +282,7 @@ export class SocialPostsService {
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
               post_id: data.id,
               provider_connection_id: accountConfig.social_account_id,
+              tags: media.tags,
             })),
           );
         }
@@ -378,7 +383,8 @@ export class SocialPostsService {
           thumbnail_url,
           thumbnail_timestamp_ms,
           provider,
-          provider_connection_id
+          provider_connection_id,
+          tags
         ),
         social_post_configurations (
          caption,
@@ -426,7 +432,8 @@ export class SocialPostsService {
           thumbnail_url,
           thumbnail_timestamp_ms,
           provider,
-          provider_connection_id
+          provider_connection_id,
+          tags
         ),
         social_post_configurations (
          caption,
@@ -625,7 +632,8 @@ export class SocialPostsService {
               thumbnail_url,
               thumbnail_timestamp_ms,
               provider,
-              provider_connection_id
+              provider_connection_id,
+              tags
             ),
             social_post_configurations (
               caption,
@@ -673,6 +681,7 @@ export class SocialPostsService {
       thumbnail_timestamp_ms: number | null;
       provider: Provider | null;
       provider_connection_id: string | null;
+      tags: Json | undefined | null;
     }[];
     social_post_configurations: {
       caption: string | null;
@@ -687,6 +696,7 @@ export class SocialPostsService {
         url: media.url,
         thumbnail_url: media.thumbnail_url,
         thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+        tags: media.tags as any[],
       }));
 
     const accountConfigurations = data.social_post_configurations
@@ -705,6 +715,7 @@ export class SocialPostsService {
                 url: media.url,
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+                tags: media.tags as any[],
               })),
             ...configData,
           },
@@ -736,6 +747,7 @@ export class SocialPostsService {
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+              tags: media.tags as any[],
             })),
           ...(config.provider_data as PlatformConfiguration),
         };

@@ -1,4 +1,4 @@
-import { logger, task, tasks } from "@trigger.dev/sdk";
+import { logger, task, tasks, tags } from "@trigger.dev/sdk";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -9,7 +9,7 @@ import type {
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
 
-import { Database } from "@post-for-me/db";
+import { Database, Json } from "@post-for-me/db";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -44,6 +44,7 @@ const transformPostData = (data: {
     thumbnail_timestamp_ms: number | null;
     provider: string | null;
     provider_connection_id: string | null;
+    tags?: Json;
   }[];
   social_post_configurations: {
     caption: string | null;
@@ -58,6 +59,7 @@ const transformPostData = (data: {
       url: media.url,
       thumbnail_url: media.thumbnail_url,
       thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+      tags: media.tags as any[],
     }));
 
   const accountConfigurations = data.social_post_configurations
@@ -76,6 +78,7 @@ const transformPostData = (data: {
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+              tags: media.tags as any[],
             })),
           ...configData,
         },
@@ -95,6 +98,7 @@ const transformPostData = (data: {
             url: media.url,
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+            tags: media.tags as any[],
           })),
         ...(config.provider_data as PlatformConfiguration),
       };
@@ -146,6 +150,8 @@ export const processPost = task({
     const { post } = payload;
     logger.info("Starting post processing", { post });
 
+    await tags.add([`${post.id}`, `${post.project_id}`]);
+
     logger.info("Getting post accounts");
     const accounts = post.social_post_provider_connections?.map(
       ({ social_provider_connections: connection }) => ({
@@ -154,6 +160,8 @@ export const processPost = task({
     );
 
     const results: PostResult[] = [];
+
+    const missingAccountResults: PostResult[] = [];
 
     try {
       if (!accounts || accounts.length === 0) {
@@ -209,6 +217,7 @@ export const processPost = task({
         throw new Error("No project found");
       }
 
+      await tags.add(`${project.team_id}`);
       const postMedia: {
         provider?: string | null;
         provider_connection_id?: string | null;
@@ -397,6 +406,7 @@ export const processPost = task({
             caption,
             platformConfig: platformData,
             appCredentials,
+            projectId: post.project_id,
           });
 
           logger.info("Created Indidividual Post Configuration");
@@ -442,7 +452,7 @@ export const processPost = task({
         logger.info("Found Missing Post Results", { missingAccounts });
 
         logger.info("Adding Failed Post Results For Missing Accounts");
-        results.push(
+        missingAccountResults.push(
           ...missingAccounts.map((account) => ({
             provider_connection_id: account.id,
             error_message:
@@ -455,13 +465,24 @@ export const processPost = task({
     } catch (error) {
       logger.error("Unexpected Error", { error });
     } finally {
-      logger.info("Saving Post Results", { results });
-      const { error: insertResultsError } = await supabaseClient
-        .from("social_post_results")
-        .insert(results);
+      if (missingAccountResults && missingAccountResults.length > 0) {
+        logger.info("Saving Post Results", { missingAccountResults });
+        const { error: insertResultsError } = await supabaseClient
+          .from("social_post_results")
+          .insert(missingAccountResults);
 
-      if (insertResultsError) {
-        logger.error("Failed to insert post results", { insertResultsError });
+        if (insertResultsError) {
+          logger.error("Failed to insert post results", { insertResultsError });
+        } else {
+          const webhookEvents = missingAccountResults.map((r) => ({
+            payload: {
+              projectId: post.project_id,
+              eventType: "social.post.result.created",
+              eventData: r,
+            },
+          }));
+          await tasks.batchTrigger("process-webhooks", webhookEvents);
+        }
       }
 
       logger.info("Updating Post Status");
@@ -484,7 +505,8 @@ export const processPost = task({
           thumbnail_url,
           thumbnail_timestamp_ms,
           provider,
-          provider_connection_id
+          provider_connection_id,
+          tags
         ),
         social_post_configurations (
          caption,
@@ -499,15 +521,6 @@ export const processPost = task({
       if (updatePostError) {
         logger.error("Failed to update post status", { updatePostError });
       }
-
-      const webhookEvents = results.map((r) => ({
-        payload: {
-          projectId: post.project_id,
-          eventType: "social.post.result.created",
-          eventData: r,
-        },
-      }));
-      await tasks.batchTrigger("process-webhooks", webhookEvents);
 
       if (updatedPost) {
         await tasks.trigger("process-webhooks", {

@@ -13,6 +13,27 @@ export type PlatformConfiguration =
   | ThreadsConfigurationDto
   | TiktokBusinessConfigurationDto;
 
+export class TwitterPollDto {
+  @ApiProperty({
+    description: 'Duration of the poll in minutes',
+    required: true,
+  })
+  duration_minutes: number;
+
+  @ApiProperty({
+    description: 'The choices of the poll, requiring 2-4 options',
+    required: true,
+  })
+  options: string[];
+
+  @ApiProperty({
+    description: 'Who can reply to the tweet',
+    enum: ['following', 'mentionedUsers', 'subscribers', 'verified'],
+    required: false,
+  })
+  reply_settings: string;
+}
+
 export class BaseConfigurationDto {
   @ApiProperty({
     description: 'Overrides the `caption` from the post',
@@ -66,6 +87,22 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   collaborators?: string[];
+
+  @ApiProperty({
+    description: 'If false video posts will only be shown in the Reels tab',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  share_to_feed?: boolean;
+
+  @ApiProperty({
+    description:
+      'Page id with a location that you want to tag the image or video with',
+    nullable: true,
+    required: false,
+  })
+  location?: string;
 }
 
 export class TiktokConfigurationDto extends BaseConfigurationDto {
@@ -207,7 +244,37 @@ export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
   disclose_branded_content?: boolean;
 }
 
-export class TwitterConfigurationDto extends BaseConfigurationDto {}
+export class TwitterConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description: 'Poll options for the tweet',
+    required: false,
+    nullable: false,
+    type: TwitterPollDto,
+  })
+  poll?: TwitterPollDto;
+
+  @ApiProperty({
+    description: 'Id of the community to post to',
+    required: false,
+    nullable: false,
+  })
+  community_id?: string;
+
+  @ApiProperty({
+    description: 'Id of the tweet you want to quote',
+    required: false,
+    nullable: false,
+  })
+  quote_tweet_id?: string;
+
+  @ApiProperty({
+    description: 'Who can reply to the tweet',
+    enum: ['following', 'mentionedUsers', 'subscribers', 'verified'],
+    required: false,
+    nullable: true,
+  })
+  reply_settings?: string;
+}
 
 export class YoutubeConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
@@ -226,6 +293,22 @@ export class FacebookConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   placement?: string;
+
+  @ApiProperty({
+    description:
+      'Page id with a location that you want to tag the image or video with',
+    nullable: true,
+    required: false,
+  })
+  location?: string;
+
+  @ApiProperty({
+    description: 'List of page ids to invite as collaborators for a Video Reel',
+    nullable: true,
+    required: false,
+    isArray: true,
+  })
+  collaborators?: string[];
 }
 
 export class LinkedinConfigurationDto extends BaseConfigurationDto {}
@@ -445,6 +528,62 @@ export class AccountConfigurationDetailsDto {
     default: true,
   })
   auto_add_music?: boolean;
+
+  @ApiProperty({
+    description: 'Poll options for the twitter',
+    required: false,
+    nullable: false,
+    type: TwitterPollDto,
+  })
+  poll?: TwitterPollDto;
+
+  @ApiProperty({
+    description: 'Id of the twitter community to post to',
+    required: false,
+    nullable: false,
+  })
+  community_id?: string;
+
+  @ApiProperty({
+    description: 'Id of the tweet you want to quote',
+    required: false,
+    nullable: false,
+  })
+  quote_tweet_id?: string;
+
+  @ApiProperty({
+    description: 'Who can reply to the tweet',
+    enum: ['following', 'mentionedUsers', 'subscribers', 'verified'],
+    required: false,
+    nullable: true,
+  })
+  reply_settings?: string;
+
+  @ApiProperty({
+    description:
+      'Page id with a location that you want to tag the image or video with (Instagram and Facebook)',
+    nullable: true,
+    required: false,
+  })
+  location?: string;
+
+  @ApiProperty({
+    description:
+      'List of page ids or users to invite as collaborators for a Video Reel (Instagram and Facebook)',
+    nullable: true,
+    required: false,
+    isArray: true,
+  })
+  collaborators?: string[];
+
+  @ApiProperty({
+    description:
+      'If false Instagram video posts will only be shown in the Reels tab',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  share_to_feed?: boolean;
 }
 
 export class AccountConfigurationDto {

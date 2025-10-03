@@ -16,6 +16,7 @@ import {
   PostMedia,
   RefreshTokenResult,
   SocialAccount,
+  TwitterConfiguration,
 } from "../post.types";
 
 export class TwitterPostClient extends PostClient {
@@ -54,11 +55,13 @@ export class TwitterPostClient extends PostClient {
     account,
     caption,
     media,
+    platformConfig,
   }: {
     postId: string;
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
+    platformConfig: TwitterConfiguration;
   }) {
     try {
       const twitterClient = new TwitterApi({
@@ -89,6 +92,25 @@ export class TwitterPostClient extends PostClient {
             | [string, string, string]
             | [string, string, string, string],
         };
+      }
+
+      if (platformConfig?.poll) {
+        postPayload.poll = {
+          ...platformConfig.poll,
+          options: platformConfig.poll.options.splice(0, 4),
+        };
+      }
+
+      if (platformConfig?.reply_settings) {
+        postPayload.reply_settings = platformConfig.reply_settings;
+      }
+
+      if (platformConfig?.community_id) {
+        postPayload.community_id = platformConfig.community_id;
+      }
+
+      if (platformConfig?.quote_tweet_id) {
+        postPayload.quote_tweet_id = platformConfig.quote_tweet_id;
       }
 
       this.#requests.push({

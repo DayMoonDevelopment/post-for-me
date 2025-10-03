@@ -8,6 +8,20 @@ export interface PostResult {
   details?: any;
 }
 
+export interface UserTag {
+  id: string;
+  type: string;
+  platform: string;
+  x?: number;
+  y?: number;
+}
+
+export interface TwitterPoll {
+  duration_minutes: number;
+  options: string[];
+  reply_settings?: string;
+}
+
 export type Provider =
   | "facebook"
   | "instagram"
@@ -81,6 +95,7 @@ export interface PostMedia {
   thumbnail_url?: string | null;
   thumbnail_timestamp_ms?: number | null;
   type: string;
+  tags?: UserTag[] | null;
 }
 
 export interface AccountConfiguration {
@@ -105,6 +120,8 @@ export interface InstagramConfiguration {
   placement?: string;
   media?: PostMedia[];
   collaborators?: string[];
+  share_to_feed?: boolean;
+  location?: string;
 }
 
 export interface TiktokConfiguration {
@@ -125,6 +142,10 @@ export interface TiktokConfiguration {
 export interface TwitterConfiguration {
   caption?: string;
   media?: PostMedia[];
+  poll?: TwitterPoll;
+  community_id?: string;
+  quote_tweet_id?: string;
+  reply_settings?: string;
 }
 
 export interface YoutubeConfiguration {
@@ -137,6 +158,8 @@ export interface FacebookConfiguration {
   caption?: string;
   placement?: string;
   media?: PostMedia[];
+  location?: string;
+  collaborators?: string[];
 }
 
 export interface LinkedinConfiguration {
@@ -183,6 +206,7 @@ export interface IndividualPostData {
   media: PostMedia[];
   caption: string;
   account: SocialAccount;
+  projectId: string;
   platformConfig: PlatformConfiguration;
   appCredentials: PlatformAppCredentials;
 }
