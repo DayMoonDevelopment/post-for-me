@@ -61,6 +61,8 @@ export class SocialPostMediaDto {
     description: 'List of tags to attach to the media',
     nullable: true,
     required: false,
+    type: UserTagDto,
+    isArray: true,
   })
   tags?: UserTagDto[] | null;
 }
