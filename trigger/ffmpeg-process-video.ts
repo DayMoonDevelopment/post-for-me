@@ -11,6 +11,7 @@ import { Upload } from "tus-js-client";
 const DEFAULT_FRAME_RATE = 24;
 const MIN_FRAME_RATE = 23;
 const MAX_FRAME_RATE = 60;
+const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
 const ASPECT_RATIOS = {
   VERTICAL: { ratio: 9 / 16, maxWidth: 1080, maxHeight: 1920 },
   LANDSCAPE: { ratio: 16 / 9, maxWidth: 1920, maxHeight: 1080 },
@@ -123,6 +124,7 @@ export const ffmpegProcessVideo = task({
 
       logger.info("Writing video to temporary file", { inputPath });
       const buffer = await videoResponse.arrayBuffer();
+      const fileSizeBytes = buffer.byteLength;
       await fs.writeFile(inputPath, Buffer.from(buffer));
 
       logger.info("Probing video metadata");
@@ -144,13 +146,41 @@ export const ffmpegProcessVideo = task({
         throw new Error("No video stream found in file");
       }
 
-      const { width, height } = videoStream;
+      let { width, height } = videoStream;
+
+      const rotation =
+        videoStream.rotation ||
+        videoStream.tags?.rotate ||
+        videoStream.side_data_list?.find(
+          (data: any) => data.side_data_type === "Display Matrix"
+        )?.rotation;
+
+      // If video is rotated 90° or 270°, swap dimensions
+      if (
+        rotation &&
+        (Math.abs(rotation) === 90 || Math.abs(rotation) === 270)
+      ) {
+        logger.info("Video has rotation metadata, swapping dimensions", {
+          originalDimensions: { width, height },
+          rotation,
+        });
+        [width, height] = [height, width];
+      }
+
       const frameCount = videoStream.nb_frames || 0;
       const { duration } = metadata.format;
-      const frameRate =
-        frameCount > 0
-          ? Math.round(parseInt(frameCount) / duration)
-          : DEFAULT_FRAME_RATE;
+      let frameRate = DEFAULT_FRAME_RATE;
+      if (frameCount > 0 && frameCount !== "N/A") {
+        frameRate = Math.round(parseInt(frameCount) / duration);
+      } else if (
+        videoStream.avg_frame_rate &&
+        videoStream.avg_frame_rate !== "0/0"
+      ) {
+        const [num, den] = videoStream.avg_frame_rate.split("/").map(Number);
+        if (den > 0 && num > 0) {
+          frameRate = Math.round(num / den);
+        }
+      }
       const aspectRatio = detectAspectRatio(width, height);
       const hasAudio = !!audioStream;
       const videoCodec = videoStream.codec_name || "";
@@ -173,15 +203,39 @@ export const ffmpegProcessVideo = task({
         isMP4,
       });
 
+      // Check audio - Threads strictly requires 128kbps AAC (enforced since Sept 5, 2025)
+      const audioBitrate = audioStream?.bit_rate
+        ? parseInt(audioStream.bit_rate)
+        : 0;
+      const hasValid128kAudio =
+        audioBitrate >= 126000 && audioBitrate <= 130000; // Allow 126-130kbps
       // Check if the video meets Facebook audio requirements
       const hasValidAudio =
         !hasAudio ||
         (audioStream &&
-          audioStream.sample_rate <= 48000 && // Facebook requires up to 48kHz
-          (audioStream.channels === 1 || audioStream.channels === 2) && // Mono or Stereo
-          audioStream.codec_name === "aac"); // AAC codec
+          audioStream.codec_name === "aac" &&
+          audioStream.channels <= 2 &&
+          audioStream.sample_rate <= 48000 &&
+          hasValid128kAudio); // AAC codec
+
+      if (hasAudio && !hasValid128kAudio) {
+        logger.info(
+          `Audio bitrate must be 128kbps for Threads (got ${Math.round(audioBitrate / 1000)}kbps) - will reprocess`
+        );
+      }
+
+      const isValidVideoCodec =
+        videoCodec === "h264" || videoCodec === "hevc" || videoCodec === "h265";
+
+      if (!isValidVideoCodec) {
+        logger.info("Unsupported video codec detected, forcing processing", {
+          currentCodec: videoCodec,
+          supportedCodecs: ["h264", "hevc", "h265"],
+        });
+      }
 
       const needsProcessingForBitrate = metadata.format.bit_rate > 25000000;
+      const needsProcessingForFileSize = fileSizeBytes > MAX_FILE_SIZE_BYTES;
 
       // Always process non-MP4 files
       if (!isMP4) {
@@ -191,7 +245,9 @@ export const ffmpegProcessVideo = task({
       // Early exit conditions - Only MP4 files that meet all other requirements can skip processing
       if (
         isMP4 &&
+        isValidVideoCodec &&
         !needsProcessingForBitrate &&
+        !needsProcessingForFileSize &&
         frameRate >= MIN_FRAME_RATE &&
         frameRate <= MAX_FRAME_RATE &&
         width <= aspectRatio.maxWidth &&
@@ -227,9 +283,37 @@ export const ffmpegProcessVideo = task({
       const targetHeight =
         scaleRatio < 1 ? Math.round((height * scaleRatio) / 2) * 2 : height;
 
+      const fileSizeMB = fileSizeBytes / (1024 * 1024);
+      const durationSeconds = metadata.format.duration;
+
       let videoEncodingOptions: string[];
 
-      if (needsProcessingForBitrate) {
+      // Check if file size exceeds 300MB limit
+      if (fileSizeMB > 300) {
+        // Calculate target bitrate to achieve ~280MB file size (with safety margin)
+        const targetSizeMB = 280;
+        const targetSizeBytes = targetSizeMB * 1024 * 1024;
+        const targetBitrate = Math.floor(
+          (targetSizeBytes * 8) / durationSeconds
+        );
+        const targetBitrateMbps = Math.min(targetBitrate / 1000000, 15); // Cap at 15Mbps max
+
+        logger.info(
+          "File size exceeds 300MB, applying aggressive compression",
+          {
+            fileSizeMB,
+            targetSizeMB,
+            targetBitrateMbps,
+            durationSeconds,
+          }
+        );
+
+        videoEncodingOptions = [
+          `-b:v ${targetBitrateMbps}M`,
+          `-maxrate ${targetBitrateMbps * 1.1}M`,
+          `-bufsize ${targetBitrateMbps * 2}M`,
+        ];
+      } else if (needsProcessingForBitrate) {
         // Original input bitrate > 25Mbps
         logger.info(
           "Input bitrate > 25Mbps (needsProcessingForBitrate=true), using target bitrate (-b:v 24M) for processing.",
@@ -245,23 +329,30 @@ export const ffmpegProcessVideo = task({
         videoEncodingOptions = ["-crf 23", "-maxrate 25M", "-bufsize 50M"];
       }
 
+      // Force frame rate to be TikTok-compatible
+      const targetFrameRate =
+        frameRate < MIN_FRAME_RATE || frameRate > MAX_FRAME_RATE
+          ? DEFAULT_FRAME_RATE
+          : frameRate;
+
+      // Use faster preset for large files to reduce processing time
+      const presetSpeed = fileSizeMB > 300 ? "superfast" : "ultrafast";
+
       const ffmpegOptions: string[] = [
         "-c:v libx264",
-        "-preset ultrafast",
+        `-preset ${presetSpeed}`,
         ...videoEncodingOptions, // Spread the chosen encoding options
         "-profile:v high",
         "-level 4.0",
         "-pix_fmt yuv420p",
         "-movflags +faststart",
-        ...(frameRate < MIN_FRAME_RATE || frameRate > MAX_FRAME_RATE
-          ? [`-r ${DEFAULT_FRAME_RATE}`, `-vf fps=${DEFAULT_FRAME_RATE}`]
-          : []),
-        `-vf scale=${targetWidth}:${targetHeight}`,
+        `-r ${targetFrameRate}`, // Always set frame rate explicitly
+        `-vf scale=${targetWidth}:${targetHeight},fps=${targetFrameRate}`, // Always set fps filter
       ];
 
       // Audio settings
       if (hasAudio && audioStream) {
-        ffmpegOptions.push("-c:a aac", "-b:a 128k", "-ac 2", "-ar 44100");
+        ffmpegOptions.push("-c:a aac", "-b:a 128k", "-ac 2", "-ar 48000");
       } else {
         ffmpegOptions.push("-an"); // No audio
       }
