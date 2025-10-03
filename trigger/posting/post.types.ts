@@ -206,6 +206,7 @@ export interface IndividualPostData {
   media: PostMedia[];
   caption: string;
   account: SocialAccount;
+  projectId: string;
   platformConfig: PlatformConfiguration;
   appCredentials: PlatformAppCredentials;
 }
