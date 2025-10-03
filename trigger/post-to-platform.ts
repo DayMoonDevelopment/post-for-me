@@ -236,6 +236,8 @@ export const postToPlatform = task({
       }
     }
 
+    await tags.add(`result_${postResult.success ? "success" : "error"}`);
+
     logger.info("Saving Post Result", { postResult });
     const { error: insertResultError } = await supabaseClient
       .from("social_post_results")
