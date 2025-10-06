@@ -97,4 +97,11 @@ Follow the links below for our official libraries:
 
 [Go](https://pkg.go.dev/github.com/DayMoonDevelopment/post-for-me-go)
 
+
+## MCP
+
+We provide an MCP (Model Context Protocol) server that allows AI assistants to interact with Post for Me directly. Currently you must run the MCP server locally to use it with your AI assistant.
+
+[MCP Server Documentation](https://www.npmjs.com/package/post-for-me-mcp)
+
 `;
