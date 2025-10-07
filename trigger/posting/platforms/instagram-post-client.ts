@@ -31,7 +31,7 @@ export class InstagramPostClient extends PostClient {
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
     if (
-      account.social_provider_metadata.connection_type === "instagram" ||
+      account.social_provider_metadata?.connection_type === "instagram" ||
       (account.access_token && account.access_token.startsWith("IG"))
     ) {
       return "https://graph.instagram.com/v23.0";
@@ -53,7 +53,7 @@ export class InstagramPostClient extends PostClient {
     account: SocialAccount
   ): Promise<RefreshTokenResult> {
     try {
-      if (account.social_provider_metadata.connection_type == "instagram") {
+      if (account.social_provider_metadata?.connection_type == "instagram") {
         console.log(
           `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`
         );
@@ -476,85 +476,145 @@ export class InstagramPostClient extends PostClient {
     let firstImageHeight = null;
     let index = 0;
     for (const medium of allowedMedia) {
-      const isVideo = medium.type === "video";
-      let signedUrl: string = "";
-      if (!isVideo) {
-        const transformedImage = await this.#transformImage({
-          medium,
-          options: {
-            firstImage: { width: firstImageWidth, height: firstImageHeight },
-          },
+      try {
+        const isVideo = medium.type === "video";
+        let signedUrl: string = "";
+        if (!isVideo) {
+          const transformedImage = await this.#transformImage({
+            medium,
+            options: {
+              firstImage: { width: firstImageWidth, height: firstImageHeight },
+            },
+          });
+
+          signedUrl = transformedImage.signedUrl!;
+
+          if (index === 0) {
+            firstImageWidth = transformedImage.width;
+            firstImageHeight = transformedImage.height;
+          }
+        } else {
+          signedUrl = await this.getSignedUrlForFile(medium);
+        }
+
+        const itemPayload: {
+          media_type: string;
+          video_url?: string;
+          image_url?: string;
+          is_carousel_item: boolean;
+          access_token: string;
+          product_tags?: any[];
+          location_id?: string;
+          user_tags?: any[];
+        } = {
+          media_type: isVideo ? "VIDEO" : "IMAGE",
+          [isVideo ? "video_url" : "image_url"]: signedUrl,
+          is_carousel_item: true,
+          access_token: account.access_token,
+        };
+
+        if (!isVideo && medium.tags && medium.tags.length > 0) {
+          itemPayload.user_tags = medium.tags
+            .filter((t) => t.platform == "instagram" && t.type == "user")
+            .map((t) => ({
+              username: t.id,
+              x: t.x,
+              y: t.y,
+            }));
+        }
+
+        if (medium.tags && medium.tags.length > 0) {
+          itemPayload.product_tags = medium.tags
+            .filter((t) => t.platform == "instagram" && t.type == "product")
+            .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
+        }
+
+        if (index == 0) {
+          if (platformConfig?.location) {
+            itemPayload.location_id = platformConfig.location;
+          }
+        }
+
+        this.#requests.push({
+          createCarouselItemRequest: itemPayload,
         });
-
-        signedUrl = transformedImage.signedUrl!;
-
-        if (index === 0) {
-          firstImageWidth = transformedImage.width;
-          firstImageHeight = transformedImage.height;
-        }
-      } else {
-        signedUrl = await this.getSignedUrlForFile(medium);
-      }
-
-      const itemPayload: {
-        media_type: string;
-        video_url?: string;
-        image_url?: string;
-        is_carousel_item: boolean;
-        access_token: string;
-        product_tags?: any[];
-        location_id?: string;
-        user_tags?: any[];
-      } = {
-        media_type: isVideo ? "VIDEO" : "IMAGE",
-        [isVideo ? "video_url" : "image_url"]: signedUrl,
-        is_carousel_item: true,
-        access_token: account.access_token,
-      };
-
-      if (!isVideo && medium.tags && medium.tags.length > 0) {
-        itemPayload.user_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "user")
-          .map((t) => ({
-            username: t.id,
-            x: t.x,
-            y: t.y,
-          }));
-      }
-
-      if (medium.tags && medium.tags.length > 0) {
-        itemPayload.product_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "product")
-          .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
-      }
-
-      if (index == 0) {
-        if (platformConfig?.location) {
-          itemPayload.location_id = platformConfig.location;
-        }
-      }
-
-      this.#requests.push({
-        createCarouselItemRequest: itemPayload,
-      });
-      const itemResponse = await axios.post(
-        `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
-        itemPayload
-      );
-
-      this.#responses.push({ createCarouselItemResponse: itemResponse.data });
-
-      if (itemResponse.data.error) {
-        throw new Error(
-          `Failed to create item container: ${itemResponse.data.error.message}`
+        const itemResponse = await axios.post(
+          `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
+          itemPayload
         );
-      }
 
-      const containerId = itemResponse.data.id;
-      containerIds.push(containerId);
-      index++;
-      // Wait for item processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+        this.#responses.push({ createCarouselItemResponse: itemResponse.data });
+
+        if (itemResponse.data.error) {
+          throw new Error(
+            `Failed to create item container: ${itemResponse.data.error.message}`
+          );
+        }
+
+        const containerId = itemResponse.data.id;
+
+        if (isVideo) {
+          let statusData;
+          const maxAttempts = 30;
+          const initialDelay = 5000; // 5 seconds
+          let attempt = 0;
+
+          while (attempt < maxAttempts) {
+            attempt++;
+            console.log(
+              `Checking media status, attempt ${attempt}/${maxAttempts}`
+            );
+
+            this.#requests.push({
+              statusRequest: {
+                url: `${this.getApiBaseUrl(account)}/${containerId}`,
+              },
+            });
+            const statusResponse = await axios.get(
+              `${this.getApiBaseUrl(account)}/${containerId}`,
+              {
+                params: {
+                  fields: "status_code",
+                  access_token: account.access_token,
+                },
+              }
+            );
+
+            this.#responses.push({ statusResponse: statusResponse.data });
+
+            statusData = statusResponse.data;
+            console.log("Media status:", statusData);
+
+            if (statusData.status_code === "FINISHED") {
+              break;
+            } else if (statusData.status_code === "ERROR") {
+              throw new Error(`Upload failed: ${JSON.stringify(statusData)}`);
+            } else {
+              const delay = initialDelay * Math.pow(1.5, attempt - 1); // Exponential backoff
+              console.log(
+                `Media not ready. Waiting for ${
+                  delay / 1000
+                } seconds before retrying...`
+              );
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+          }
+
+          if (statusData.status_code !== "FINISHED") {
+            throw new Error("Max attempts reached. Failed to process media.");
+          }
+        } else {
+          // Wait for item processing
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        containerIds.push(containerId);
+      } catch (error) {
+        console.error(error);
+        continue;
+      } finally {
+        index++;
+      }
     }
 
     const carouselPayload: {

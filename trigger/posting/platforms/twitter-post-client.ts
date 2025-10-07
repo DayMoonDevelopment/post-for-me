@@ -75,7 +75,7 @@ export class TwitterPostClient extends PostClient {
 
       const allowedCaption = caption.slice(
         0,
-        account.social_provider_metadata.has_platform_premium
+        account.social_provider_metadata?.has_platform_premium
           ? this.#PREMIUM_CHARACTER_LIMIT
           : this.#CHARACTER_LIMIT
       );
