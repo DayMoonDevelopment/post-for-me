@@ -31,7 +31,7 @@ export class InstagramPostClient extends PostClient {
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
     if (
-      account.social_provider_metadata.connection_type === "instagram" ||
+      account.social_provider_metadata?.connection_type === "instagram" ||
       (account.access_token && account.access_token.startsWith("IG"))
     ) {
       return "https://graph.instagram.com/v23.0";
@@ -53,7 +53,7 @@ export class InstagramPostClient extends PostClient {
     account: SocialAccount
   ): Promise<RefreshTokenResult> {
     try {
-      if (account.social_provider_metadata.connection_type == "instagram") {
+      if (account.social_provider_metadata?.connection_type == "instagram") {
         console.log(
           `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`
         );
