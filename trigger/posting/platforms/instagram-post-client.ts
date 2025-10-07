@@ -188,7 +188,7 @@ export class InstagramPostClient extends PostClient {
       }
 
       let platformId: string | null = null;
-      const maxPublishAttempts = 3;
+      const maxPublishAttempts = 10;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
         try {
