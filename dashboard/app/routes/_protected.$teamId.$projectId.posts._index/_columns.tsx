@@ -17,15 +17,13 @@ import { format } from "date-fns";
 
 function badgeVariant(status: string) {
   switch (status) {
-    case "processing":
-      return "secondary";
     case "error":
       return "destructive";
     case "posted":
     case "processed":
       return "affirmative";
     default:
-      return "informative";
+      return "secondary";
   }
 }
 
