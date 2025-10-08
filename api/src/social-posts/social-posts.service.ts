@@ -89,7 +89,7 @@ export class SocialPostsService {
 
     if (
       post.scheduled_at &&
-      differenceInMinutes(post.scheduled_at, new Date()) >= 0
+      differenceInMinutes(post.scheduled_at, new Date()) < 0
     ) {
       errors.push('scheduled_at must be in the future');
     }
