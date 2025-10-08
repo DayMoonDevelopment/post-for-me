@@ -89,9 +89,9 @@ export class SocialPostsService {
 
     if (
       post.scheduled_at &&
-      differenceInMinutes(post.scheduled_at, new Date()) < 5
+      differenceInMinutes(post.scheduled_at, new Date()) >= 0
     ) {
-      errors.push('scheduled_at must be at least 5 mins from now');
+      errors.push('scheduled_at must be in the future');
     }
 
     if (isSystem && errors.length === 0) {
