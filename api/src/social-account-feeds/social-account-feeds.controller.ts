@@ -39,7 +39,7 @@ export class SocialAccountFeedsController {
 
   @Get(':social_account_id')
   @ApiOperation({
-    summary: `Get the social account feed`,
+    summary: `Get social account feed`,
     description: `Get a paginated result for the social account based on the applied filters`,
   })
   @ApiOkResponse({
@@ -126,7 +126,7 @@ export class SocialAccountFeedsController {
       'Internal server error when fetching the social account platform.',
   })
   @ApiOperation({
-    summary: 'Get the social account platform post by platform ID',
+    summary: 'Get post by platform ID',
   })
   @ApiParam({
     name: 'social_account_id',
