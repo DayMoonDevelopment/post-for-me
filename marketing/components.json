@@ -17,5 +17,9 @@
     "lib": "~/lib",
     "hooks": "~/hooks"
   },
-  "iconLibrary": "lucide"
+  "iconLibrary": "lucide",
+  "registries": {
+    "@blocks": "https://shadcn-ui-blocks.akashmoradiya.com/r/{name}.json",
+    "@io": "https://www.shadcn.io/registry/{name}.json"
+  }
 }
