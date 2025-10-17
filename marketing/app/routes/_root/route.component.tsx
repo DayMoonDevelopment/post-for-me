@@ -8,7 +8,9 @@ export function Component() {
     <div className="relative">
       <Navbar />
 
-      <Outlet />
+      <div className="pb-12">
+        <Outlet />
+      </div>
 
       <Footer />
     </div>
