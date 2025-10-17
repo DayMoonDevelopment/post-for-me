@@ -1,3 +1,9 @@
+import { Hero } from "./components/hero";
+
 export function Component() {
-  return <div className="flex flex-col"></div>;
+  return (
+    <div className="relative flex flex-col">
+      <Hero />
+    </div>
+  );
 }

@@ -18,6 +18,10 @@ const footerSections = [
         title: "Frequently Asked Questions",
         href: "/faq",
       },
+      {
+        title: "API Documentation",
+        href: "https://api.postforme.dev/docs",
+      },
     ],
   },
   {

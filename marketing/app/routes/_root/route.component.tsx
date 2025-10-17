@@ -5,12 +5,10 @@ import { Footer } from "./components/footer";
 
 export function Component() {
   return (
-    <div className="space-y-8">
+    <div className="relative">
       <Navbar />
 
-      <div className="container p-4 mx-auto">
-        <Outlet />
-      </div>
+      <Outlet />
 
       <Footer />
     </div>

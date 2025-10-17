@@ -1,3 +1,7 @@
+/**
+ * design-note: there is a negative bottom margin so that we retain the sticky properties of the navbar while "indenting" the underlying component underneath the navbar
+ */
+
 import { GithubIcon } from "lucide-react";
 
 import { Button } from "~/ui/button";
@@ -9,7 +13,7 @@ import { Link } from "react-router";
 
 export const Navbar = () => {
   return (
-    <nav className="h-16 bg-background border-b sticky top-0">
+    <nav className="h-16 bg-background border-b sticky top-0 z-100 -mb-16">
       <div className="h-full flex items-center justify-between max-w-(--breakpoint-2xl) mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-8">
           <Logo className="h-6" />
