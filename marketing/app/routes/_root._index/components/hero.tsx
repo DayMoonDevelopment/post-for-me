@@ -39,18 +39,16 @@ export const Hero = () => {
         </Badge>
         <h1 className="mt-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl md:leading-[1.2] font-semibold tracking-tighter">
           <span className="sr-only">
-            {`Power your product, ai content generator, marketing team, social media scheduler, game, or saas with social media posting infrastructure.`}
+            {`Ship social media integrations for your product, ai content generator, marketing team, social media scheduler, game, or saas in hours, not weeks.`}
           </span>
-          <span>
-            Social media posting <br />
-            infrastructure for your
-          </span>
+          <span>Ship social media integrations for your</span>
           <br />
           <RotatingText
             text={rotatingText}
             duration={3000}
             transition={{ duration: 0.5, ease: "easeInOut" }}
           />
+          <span>in hours, not weeks.</span>
         </h1>
         <p className="mt-6 md:text-lg text-balance">
           Quickly integrate social media platforms directly into your product to
