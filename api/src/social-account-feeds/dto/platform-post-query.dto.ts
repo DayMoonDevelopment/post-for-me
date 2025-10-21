@@ -1,8 +1,31 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
-import { BasePaginatedQueryDto } from '../../pagination/base-paginated-query.dto';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class PlatformPostQueryDto extends BasePaginatedQueryDto {
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
+export class PlatformPostQueryDto {
+  @ApiProperty({
+    description: 'Number of items to return',
+    default: DEFAULT_LIMIT,
+    required: false,
+  })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_LIMIT)
+  @IsOptional()
+  @Type(() => Number)
+  limit: number = DEFAULT_LIMIT;
+
+  @ApiProperty({
+    description: 'Cursor identifying next page of results',
+    required: false,
+  })
+  @IsOptional()
+  @Type(() => String)
+  cursor?: string | null;
+
   @ApiProperty({
     description:
       'Filter by Post for Me Social Postexternal ID. Multiple values imply OR logic (e.g., ?external_post_id=xxxxxx&external_post_id=yyyyyy).',
@@ -26,33 +49,12 @@ export class PlatformPostQueryDto extends BasePaginatedQueryDto {
 
   @ApiProperty({
     description:
-      'Filter by Post for Me Social Post Result id(s). Multiple values imply OR logic (e.g., ?social_post_id=spr_xxxxxx&social_post_id=spr_yyyyyy).',
+      "Filter by the platform's id(s). Multiple values imply OR logic (e.g., ?social_post_id=spr_xxxxxx&social_post_id=spr_yyyyyy).",
     required: false,
     type: 'array',
     items: { type: 'string' },
   })
   @IsString({ each: true })
   @IsOptional()
-  social_post_result_id?: string[];
-
-  @ApiProperty({
-    description:
-      'Filter by Post for Me Social Post Account id(s). Multiple values imply OR logic (e.g., ?social_post_id=spc_xxxxxx&social_post_id=spc_yyyyyy).',
-    required: false,
-    type: 'array',
-    items: { type: 'string' },
-  })
-  @IsString({ each: true })
-  @IsOptional()
-  social_account_id?: string[];
-
-  @ApiProperty({
-    description:
-      'Filter by Post for Me Social Postexternal ID. Multiple values imply OR logic (e.g., ?external_account_id=xxxxxx&external_account_id=yyyyyy).',
-    required: false,
-    type: 'array',
-    items: { type: 'string' },
-  })
-  @IsOptional()
-  external_account_id?: string[];
+  platform_post_id?: string[];
 }
