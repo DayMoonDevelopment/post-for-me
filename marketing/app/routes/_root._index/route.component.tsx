@@ -1,6 +1,7 @@
 import { Hero } from "./components/hero";
 import { SocialMediaLogos } from "./components/social-media-logos";
 import { ValueProps } from "./components/value-props";
+import { Developers } from "./components/developers";
 
 export function Component() {
   return (
@@ -12,6 +13,8 @@ export function Component() {
       <SocialMediaLogos />
 
       <ValueProps />
+
+      <Developers />
     </div>
   );
 }

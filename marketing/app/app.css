@@ -158,3 +158,12 @@ h6 {
     @apply bg-background text-foreground;
   }
 }
+
+.scrollbar-hidden {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
