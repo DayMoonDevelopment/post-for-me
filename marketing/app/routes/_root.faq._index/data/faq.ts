@@ -31,7 +31,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
     faq: [
       {
         q: "What are the pricing plans for Post for Me?",
-        a: "We offer tiered pricing to give you a predictable, fixed cost that scales with your usage: $5/month (500 posts), $10/month (1,000 posts), $24/month (2,500 posts), $50/month (5,000 posts), $150/month (20,000 posts), $300/month (40,000 posts), $500/month (100,000 posts), $1,500/month (300,000 posts).",
+        a: "We offer tiered pricing to give you a predictable, fixed cost that scales with your usage, starting at $5/month for 500 total posts.",
       },
       {
         q: "Will I get shut down if I go over my plan’s post limit?",

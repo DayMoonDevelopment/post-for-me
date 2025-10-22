@@ -1,5 +1,7 @@
 import { useLoaderData } from "react-router";
+
 import { FAQ } from "./components/faq";
+import { Contact } from "./components/contact";
 
 import type { Route } from "./+types/route";
 
@@ -8,6 +10,10 @@ export function Component() {
 
   return (
     <div className="relative flex flex-col gap-0 pt-16">
+      <h1 className="mx-auto text-center text-4xl lg:text-6xl leading-[1.15]! font-semibold tracking-tighter my-16">
+        Frequently Asked <br /> Questions
+      </h1>
+
       {faq.map((section, i) => (
         <FAQ
           key={`${section.title}-${i}`}
@@ -15,6 +21,8 @@ export function Component() {
           faq={section.faq}
         />
       ))}
+
+      <Contact />
     </div>
   );
 }
