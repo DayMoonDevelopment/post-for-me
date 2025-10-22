@@ -35,7 +35,7 @@ function generateFAQBreadcrumbs() {
 }
 
 function generateFAQCollectionPages(sections: FAQSection[]) {
-  return sections.map((section, index) => ({
+  return sections.map((section) => ({
     "@type": "CollectionPage",
     name: section.title,
     description: `${section.title.toLowerCase()} for Post for Me social media API.`,
@@ -56,8 +56,8 @@ function generateFAQCollectionPages(sections: FAQSection[]) {
   }));
 }
 
-export const meta: Route.MetaFunction = ({ data }: { data: FAQPageData }) => {
-  const faqSections = data?.faq || [];
+export const meta: Route.MetaFunction = ({ data }) => {
+  const faqSections = (data as FAQPageData | undefined)?.faq || [];
   const totalQuestions = flattenFAQ(faqSections).length;
   const sectionTitles = faqSections.map((section) => section.title).join(", ");
 
