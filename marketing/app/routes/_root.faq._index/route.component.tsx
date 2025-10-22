@@ -1,5 +1,7 @@
 import { useLoaderData } from "react-router";
 
+import { cn } from "~/lib/utils";
+
 import { FAQ } from "./components/faq";
 import { Contact } from "./components/contact";
 
@@ -15,11 +17,12 @@ export function Component() {
       </h1>
 
       {faq.map((section, i) => (
-        <FAQ
+        <div
           key={`${section.title}-${i}`}
-          title={section.title}
-          faq={section.faq}
-        />
+          className={cn(i % 2 === 0 && "bg-muted")}
+        >
+          <FAQ title={section.title} faq={section.faq} />
+        </div>
       ))}
 
       <Contact />
