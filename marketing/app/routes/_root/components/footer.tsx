@@ -1,6 +1,10 @@
-import { Separator } from "~/ui/separator";
 import { Link } from "react-router";
+
 import { Logo } from "~/components/logo";
+
+import { Separator } from "~/ui/separator";
+
+import { GetStarted } from "./get-started";
 
 const footerSections = [
   {
@@ -132,42 +136,46 @@ const footerSections = [
 
 export const Footer = () => {
   return (
-    <footer className="border-t">
-      <div className="max-w-(--breakpoint-2xl) mx-auto">
-        <div className="py-12 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-8 gap-y-10 px-4 sm:px-6 lg:px-8">
-          {footerSections.map(({ title, links }) => (
-            <div key={title}>
-              <h6 className="font-medium">{title}</h6>
-              <ul className="mt-6 space-y-4">
-                {links.map(({ title, href }) => (
-                  <li key={title}>
-                    <Link
-                      to={href}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      {title}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <Separator />
-        <div className="py-8 flex flex-col sm:flex-row items-center justify-between gap-x-2 gap-y-4 px-4 sm:px-6 lg:px-8">
-          {/* Logo */}
-          <Logo className="h-8" />
+    <div className="space-y-12">
+      <GetStarted />
 
-          {/* Copyright */}
-          <span className="text-muted-foreground">
-            &copy; {new Date().getFullYear()}{" "}
-            <Link to="/" target="_blank">
-              Day Moon Development
-            </Link>
-            . All rights reserved.
-          </span>
+      <footer className="border-t">
+        <div className="max-w-(--breakpoint-2xl) mx-auto">
+          <div className="py-12 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-8 gap-y-10 px-4 sm:px-6 lg:px-8">
+            {footerSections.map(({ title, links }) => (
+              <div key={title}>
+                <h6 className="font-medium">{title}</h6>
+                <ul className="mt-6 space-y-4">
+                  {links.map(({ title, href }) => (
+                    <li key={title}>
+                      <Link
+                        to={href}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        {title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <Separator />
+          <div className="py-8 flex flex-col sm:flex-row items-center justify-between gap-x-2 gap-y-4 px-4 sm:px-6 lg:px-8">
+            {/* Logo */}
+            <Logo className="h-8" />
+
+            {/* Copyright */}
+            <span className="text-muted-foreground">
+              &copy; {new Date().getFullYear()}{" "}
+              <Link to="/" target="_blank">
+                Day Moon Development
+              </Link>
+              . All rights reserved.
+            </span>
+          </div>
         </div>
-      </div>
-    </footer>
+      </footer>
+    </div>
   );
 };
