@@ -6,7 +6,7 @@ export const GetStarted = () => {
     <div className="dark flex items-center justify-center">
       <div className="w-full max-w-(--breakpoint-xl) mx-auto text-center bg-card text-card-foreground py-16 px-12 rounded-3xl">
         <h2 className="text-4xl md:text-5xl font-semibold tracking-tighter">
-          Start coding for free
+          Start coding today
         </h2>
         <p className="mt-4 text-xl text-muted-foreground text-balance max-w-xl text-center mx-auto">
           Sign up for an account and start integrating social media posting,

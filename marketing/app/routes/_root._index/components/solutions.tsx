@@ -5,18 +5,11 @@ import {
   AccordionTrigger,
 } from "~/ui/accordion";
 import {
-  BookCheck,
   BotIcon,
   CalendarClockIcon,
-  CalendarIcon,
-  ChartPie,
-  FolderSync,
   GamepadIcon,
-  Goal,
   MonitorSmartphoneIcon,
-  Users,
   WorkflowIcon,
-  Zap,
 } from "lucide-react";
 import { useState } from "react";
 
