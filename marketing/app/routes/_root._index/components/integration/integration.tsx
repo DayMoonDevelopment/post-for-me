@@ -22,7 +22,7 @@ const features = [
   },
 ];
 
-export const Developers = () => {
+export const Integration = () => {
   return (
     <div className="dark flex items-center justify-center px-4">
       <div className="max-w-(--breakpoint-xl) grid lg:grid-cols-2 gap-8 w-full py-7 px-8 bg-card text-card-foreground rounded-4xl">

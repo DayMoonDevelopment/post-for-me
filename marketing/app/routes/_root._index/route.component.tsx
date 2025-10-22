@@ -1,7 +1,8 @@
 import { Hero } from "./components/hero";
 import { SocialMediaLogos } from "./components/social-media-logos";
 import { ValueProps } from "./components/value-props";
-import { Developers } from "./components/developers";
+import { Integration } from "./components/integration";
+import { Solutions } from "./components/solutions";
 
 export function Component() {
   return (
@@ -14,7 +15,9 @@ export function Component() {
 
       <ValueProps />
 
-      <Developers />
+      <Integration />
+
+      <Solutions />
     </div>
   );
 }
