@@ -4,6 +4,7 @@ import { ValueProps } from "./components/value-props";
 import { Integration } from "./components/integration";
 import { Solutions } from "./components/solutions";
 import { FAQ } from "./components/faq";
+import { OpenSource } from "./components/open-source";
 
 export function Component() {
   return (
@@ -21,6 +22,8 @@ export function Component() {
       <Solutions />
 
       <FAQ />
+
+      <OpenSource />
     </div>
   );
 }
