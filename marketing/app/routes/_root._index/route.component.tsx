@@ -3,6 +3,7 @@ import { SocialMediaLogos } from "./components/social-media-logos";
 import { ValueProps } from "./components/value-props";
 import { Integration } from "./components/integration";
 import { Solutions } from "./components/solutions";
+import { FAQ } from "./components/faq";
 
 export function Component() {
   return (
@@ -18,6 +19,8 @@ export function Component() {
       <Integration />
 
       <Solutions />
+
+      <FAQ />
     </div>
   );
 }
