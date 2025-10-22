@@ -5,9 +5,16 @@ import { ChevronDownIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 
 function Accordion({
+  className,
   ...props
 }: React.ComponentProps<typeof AccordionPrimitive.Root>) {
-  return <AccordionPrimitive.Root data-slot="accordion" {...props} />;
+  return (
+    <AccordionPrimitive.Root
+      data-slot="accordion"
+      className={cn("w-full", className)}
+      {...props}
+    />
+  );
 }
 
 function AccordionItem({
@@ -17,7 +24,7 @@ function AccordionItem({
   return (
     <AccordionPrimitive.Item
       data-slot="accordion-item"
-      className={cn("border-b last:border-b-0", className)}
+      className={cn("border-b last:border-b-0 w-full", className)}
       {...props}
     />
   );
@@ -53,10 +60,10 @@ function AccordionContent({
   return (
     <AccordionPrimitive.Content
       data-slot="accordion-content"
-      className="data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden text-sm"
+      className="overflow-hidden text-sm transition-all duration-200 data-[state=closed]:h-0 data-[state=open]:h-auto w-full"
       {...props}
     >
-      <div className={cn("pt-0 pb-4", className)}>{children}</div>
+      <div className={cn("pt-0 pb-4 w-full", className)}>{children}</div>
     </AccordionPrimitive.Content>
   );
 }

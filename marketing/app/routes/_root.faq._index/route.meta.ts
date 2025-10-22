@@ -1,4 +1,9 @@
+import type { FAQType } from "~/lib/global.types";
 import type { Route } from "./+types/route";
+
+function flattenFAQ(obj: { title: string; faq: FAQType[] }[]) {
+  return obj.flatMap((section) => section.faq);
+}
 
 export const meta: Route.MetaFunction = ({ data }) => {
   return [
@@ -59,19 +64,17 @@ export const meta: Route.MetaFunction = ({ data }) => {
         },
         keywords:
           "Social media API, social media posting API, social media scheduling API, developer-friendly social media API, TikTok API, Instagram API, Facebook API, X API, LinkedIn API, YouTube API, Threads API, Pinterest API, Bluesky API, automate social posts, Ayrshare alternative, Hootsuite API alternative, Buffer API alternative",
-        mainEntity: data?.faq
-          ? {
-              "@type": "FAQPage",
-              mainEntity: data.faq.map(({ q, a }) => ({
-                "@type": "Question",
-                name: q,
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: a,
-                },
-              })),
-            }
-          : undefined,
+        mainEntity: {
+          "@type": "FAQPage",
+          mainEntity: flattenFAQ(data?.faq || []).map((faq) => ({
+            "@type": "Question",
+            name: faq.q,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: faq.a,
+            },
+          })),
+        },
       },
     },
   ];
