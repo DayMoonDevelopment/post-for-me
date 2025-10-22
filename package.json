@@ -20,6 +20,7 @@
     "supabase:typegen": "supabase gen types typescript --local > ./supabase/supabase.types.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^9.38.0",
     "@trigger.dev/build": "4.0.0-v4-beta.27",
     "@types/fluent-ffmpeg": "^2.1.27",
     "eslint-plugin-react": "^7.37.5",
