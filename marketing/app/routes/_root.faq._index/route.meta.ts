@@ -1,79 +1,183 @@
 import type { FAQType } from "~/lib/global.types";
 import type { Route } from "./+types/route";
 
-function flattenFAQ(obj: { title: string; faq: FAQType[] }[]) {
-  return obj.flatMap((section) => section.faq);
+interface FAQSection {
+  title: string;
+  faq: FAQType[];
 }
 
-export const meta: Route.MetaFunction = ({ data }) => {
+interface FAQPageData {
+  faq: FAQSection[];
+}
+
+function flattenFAQ(sections: FAQSection[]): FAQType[] {
+  return sections.flatMap((section) => section.faq);
+}
+
+function generateFAQBreadcrumbs() {
+  return {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: "https://www.postforme.dev",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "FAQ",
+        item: "https://www.postforme.dev/faq",
+      },
+    ],
+  };
+}
+
+function generateFAQCollectionPages(sections: FAQSection[]) {
+  return sections.map((section, index) => ({
+    "@type": "CollectionPage",
+    name: section.title,
+    description: `${section.title.toLowerCase()} for Post for Me social media API.`,
+    url: `https://www.postforme.dev/faq#${section.title.toLowerCase().replace(/\s+/g, "-")}`,
+    isPartOf: {
+      "@type": "FAQPage",
+      url: "https://www.postforme.dev/faq",
+    },
+    mainEntity: section.faq.map((faq) => ({
+      "@type": "Question",
+      name: faq.q,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faq.a,
+        dateModified: new Date().toISOString(),
+      },
+    })),
+  }));
+}
+
+export const meta: Route.MetaFunction = ({ data }: { data: FAQPageData }) => {
+  const faqSections = data?.faq || [];
+  const totalQuestions = flattenFAQ(faqSections).length;
+  const sectionTitles = faqSections.map((section) => section.title).join(", ");
+
   return [
     {
-      title:
-        "Post for Me – Unified Social Media Posting API for TikTok, IG, FB, X & More",
+      title: "FAQ - Post for Me | Social Media API Questions & Answers",
     },
     {
       name: "description",
+      content: `Get answers to frequently asked questions about Post for Me's unified social media API. Find help with pricing, integrations, security, media processing, and technical support for TikTok, Instagram, Facebook, X, YouTube, and more platforms. ${totalQuestions} questions answered across ${faqSections.length} categories.`,
+    },
+    {
+      name: "keywords",
       content:
-        "Unified API to schedule and post content on TikTok, Instagram, Facebook, X (Twitter), YouTube, Threads, Pinterest, and Bluesky. Built for developers – automate social media posting, upload images/videos, and integrate scheduling into your app.",
+        "Post for Me FAQ, social media API questions, developer support, API documentation, social media integration help, platform API questions, pricing FAQ, technical support",
     },
     { property: "og:type", content: "website" },
     {
       property: "og:title",
-      content: "Post for Me – Unified Social Media Posting API",
+      content: "Frequently Asked Questions - Post for Me API",
     },
     {
       property: "og:description",
-      content:
-        "Unified API for developers to automate posting and scheduling content across TikTok, Instagram, Facebook, X, YouTube, Threads, Pinterest, and Bluesky.",
+      content: `Comprehensive FAQ covering ${sectionTitles}. Get instant answers about our unified social media API for developers.`,
     },
-    { property: "og:url", content: "https://www.postforme.dev" },
-    { property: "og:image", content: "https://www.postforme.dev/og-image.png" },
+    { property: "og:url", content: "https://www.postforme.dev/faq" },
+    {
+      property: "og:image",
+      content: "https://www.postforme.dev/og-image.png",
+    },
     { name: "twitter:card", content: "summary_large_image" },
     {
       name: "twitter:title",
-      content: "Post for Me – Unified Social Media Posting API",
+      content: "Post for Me API FAQ - Developer Questions Answered",
     },
     {
       name: "twitter:description",
-      content:
-        "Automate social media posting on TikTok, Instagram, Facebook, X, LinkedIn, YouTube, Threads, Pinterest, Bluesky via unified API.",
+      content: `${totalQuestions} frequently asked questions about our unified social media API. Pricing, integrations, security & more.`,
     },
     {
       name: "twitter:image",
       content: "https://www.postforme.dev/twitter-card.png",
     },
+    { name: "robots", content: "index, follow" },
+    { name: "author", content: "Day Moon Development" },
+    { property: "article:section", content: "Support" },
+    {
+      property: "article:tag",
+      content: "FAQ, API Documentation, Developer Support",
+    },
     {
       "script:ld+json": {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        name: "Post for Me",
-        url: "https://www.postforme.dev",
+        "@type": "FAQPage",
+        name: "Post for Me - Frequently Asked Questions",
         description:
-          "A unified API service for developers to schedule and post images, videos, and content across TikTok, Facebook, Instagram, X (Twitter), LinkedIn, YouTube, Threads, Pinterest, and Bluesky.",
-        applicationCategory: "SocialMediaApplication",
-        operatingSystem: "Cloud",
-        provider: {
+          "Comprehensive FAQ for Post for Me's unified social media API platform",
+        url: "https://www.postforme.dev/faq",
+        inLanguage: "en-US",
+        dateModified: new Date().toISOString(),
+        publisher: {
           "@type": "Organization",
           name: "Day Moon Development",
           url: "https://www.daymoon.dev",
-          logo: "https://www.daymoon.dev/logo.png",
+          logo: {
+            "@type": "ImageObject",
+            url: "https://www.daymoon.dev/logo.png",
+            width: 400,
+            height: 400,
+          },
           sameAs: [
             "https://www.linkedin.com/company/day-moon-development",
             "https://twitter.com/daymoondev",
           ],
+          contactPoint: {
+            "@type": "ContactPoint",
+            email: "postforme@daymoon.dev",
+            contactType: "Customer Service",
+            availableLanguage: "English",
+          },
         },
-        keywords:
-          "Social media API, social media posting API, social media scheduling API, developer-friendly social media API, TikTok API, Instagram API, Facebook API, X API, LinkedIn API, YouTube API, Threads API, Pinterest API, Bluesky API, automate social posts, Ayrshare alternative, Hootsuite API alternative, Buffer API alternative",
-        mainEntity: {
-          "@type": "FAQPage",
-          mainEntity: flattenFAQ(data?.faq || []).map((faq) => ({
-            "@type": "Question",
-            name: faq.q,
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: faq.a,
+        about: {
+          "@type": "SoftwareApplication",
+          name: "Post for Me",
+          description: "Unified social media API for developers",
+          applicationCategory: "SocialMediaApplication",
+          operatingSystem: "Cloud",
+          url: "https://www.postforme.dev",
+        },
+        breadcrumb: generateFAQBreadcrumbs(),
+        hasPart: generateFAQCollectionPages(faqSections),
+        mainEntity: flattenFAQ(faqSections).map((faq, index) => ({
+          "@type": "Question",
+          "@id": `https://www.postforme.dev/faq#question-${index + 1}`,
+          name: faq.q,
+          text: faq.q,
+          answerCount: 1,
+          acceptedAnswer: {
+            "@type": "Answer",
+            "@id": `https://www.postforme.dev/faq#answer-${index + 1}`,
+            text: faq.a,
+            author: {
+              "@type": "Organization",
+              name: "Day Moon Development",
             },
-          })),
+            dateCreated: new Date().toISOString(),
+            upvoteCount: 0,
+          },
+          suggestedAnswer: {
+            "@type": "Answer",
+            text: faq.a,
+            author: {
+              "@type": "Organization",
+              name: "Day Moon Development",
+            },
+          },
+        })),
+        speakable: {
+          "@type": "SpeakableSpecification",
+          cssSelector: [".faq-question", ".faq-answer"],
         },
       },
     },
