@@ -10,6 +10,7 @@
     "lint:fix": "eslint . --ext ts,tsx --fix"
   },
   "devDependencies": {
+    "@eslint/js": "^9.38.0",
     "@types/bun": "latest"
   },
   "peerDependencies": {

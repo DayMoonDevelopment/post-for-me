@@ -7,10 +7,10 @@ import { PlatformConfiguration } from '../social-posts/dto/post-configurations.d
 export class SocialPostPreviewsService {
   constructor() {}
 
-  async createPostPreview(
+  createPostPreview(
     createPreviewInput: CreateSocialPostPreviewDto,
-  ): Promise<SocialPostPreviewDto[]> {
-    const previews: SocialPostPreviewDto[] = await Promise.all(
+  ): SocialPostPreviewDto[] {
+    const previews: SocialPostPreviewDto[] =
       createPreviewInput.preview_social_accounts.map((account) => {
         const accountConfig = createPreviewInput.account_configurations
           ?.filter((config) => config.social_account_id == account.id)
@@ -53,8 +53,7 @@ export class SocialPostPreviewsService {
           media,
           configuration,
         };
-      }),
-    );
+      });
 
     return previews;
   }

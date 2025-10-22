@@ -33,9 +33,9 @@ export class SocialPostPreviewsController {
   })
   @ApiOperation({ summary: 'Create Post Previews' })
   @Post()
-  async createPreviews(
+  createPreviews(
     @Body() createPreviewInput: CreateSocialPostPreviewDto,
-  ): Promise<SocialPostPreviewDto[]> {
+  ): SocialPostPreviewDto[] {
     if (!createPreviewInput.preview_social_accounts) {
       throw new HttpException(
         'Preview Social Accounts are required',
@@ -44,7 +44,7 @@ export class SocialPostPreviewsController {
     }
 
     try {
-      return await this.socialPostsPreviewService.createPostPreview(
+      return this.socialPostsPreviewService.createPostPreview(
         createPreviewInput,
       );
     } catch (error) {

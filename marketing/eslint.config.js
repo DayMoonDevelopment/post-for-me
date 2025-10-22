@@ -19,6 +19,15 @@ export default [
   ...tseslint.configs.recommended,
   pluginReact.configs.flat.recommended,
   {
+    languageOptions: {
+      ecmaVersion: 5,
+      sourceType: "module",
+      parserOptions: {
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     settings: { react: { version: "detect" } },
     rules: {
       "react/react-in-jsx-scope": "off",
