@@ -4,6 +4,7 @@ import {
   STRIPE_API_PRODUCT_ID,
   STRIPE_CREDS_ADDON_PRODUCT_ID,
 } from "~/lib/.server/stripe.constants";
+import type Stripe from "stripe";
 
 export const loader = withSupabase(async ({ supabase, params, request }) => {
   const { teamId } = params;
@@ -39,6 +40,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
   let hasCredsAccess = false;
   let portalUrl = null;
   let checkoutUrl = null;
+  let upcomingInvoice: Stripe.Invoice | null = null;
 
   if (team.data.stripe_customer_id) {
     const subscriptions = await stripe.subscriptions.list({
@@ -66,6 +68,10 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
         schedules.data.filter((s) => s.status === "active").length > 0
           ? false
           : hasCredsAccess;
+
+      upcomingInvoice = await stripe.invoices.createPreview({
+        subscription: subscription.id,
+      });
     }
 
     if (hasActiveSubscription) {
@@ -131,5 +137,6 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
     portalUrl,
     checkoutUrl,
     hasCredsAccess,
+    upcomingInvoice,
   };
 });
