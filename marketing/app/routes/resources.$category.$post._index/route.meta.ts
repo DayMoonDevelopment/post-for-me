@@ -1,5 +1,6 @@
 import type { MetaDescriptor } from "react-router";
 import type { Route } from "./+types/route";
+import { buildResourcesBreadcrumbs, generateBreadcrumbStructuredData, mergeMetaArrays } from "~/lib/utils";
 
 /**
  * Simple utility to merge meta arrays.
@@ -15,9 +16,6 @@ export const meta: Route.MetaFunction = ({
   data,
   matches,
 }): MetaDescriptor[] => {
-  console.log("RESOURCE");
-  console.log(matches);
-
   if (!data) return [];
 
   const seo = data.seo_meta ?? {};
@@ -104,6 +102,18 @@ export const meta: Route.MetaFunction = ({
     { "script:ld+json": articleLD } as MetaDescriptor,
   ];
 
+  // Generate breadcrumbs and add structured data
+  const breadcrumbs = buildResourcesBreadcrumbs(
+    data.category?.name,
+    data.category?.slug,
+    title
+  );
+  const breadcrumbStructuredData = generateBreadcrumbStructuredData(breadcrumbs, siteUrl);
+
+  postMeta.push({
+    "script:ld+json": breadcrumbStructuredData
+  } as MetaDescriptor);
+
   // Add author meta if available
   if (data.authors?.[0]) {
     postMeta.push({
@@ -120,8 +130,6 @@ export const meta: Route.MetaFunction = ({
     });
   }
 
-  // Simply concatenate parent and post meta - browser uses last occurrence of duplicates
-  const finalMeta = [...parentMeta, ...postMeta];
-
-  return finalMeta;
+  // Use deep merge to prioritize higher index elements and filter duplicates
+  return mergeMetaArrays(parentMeta, postMeta);
 };

@@ -1,24 +1,22 @@
 import type { MetaDescriptor } from "react-router";
 import type { Route } from "./+types/route";
-import { buildResourcesBreadcrumbs, generateBreadcrumbStructuredData, mergeMetaArrays } from "~/lib/utils";
+import { mergeMetaArrays } from "~/lib/utils";
 
 /**
- * Meta function for category index pages.
+ * Meta function for category pages.
  * Returns category-specific SEO that will layer on top of parent meta.
  */
-export const meta: Route.MetaFunction = ({
-  data,
-  matches,
-}): MetaDescriptor[] => {
+export const meta: Route.MetaFunction = ({ data, matches }): MetaDescriptor[] => {
   if (!data) return [];
 
   const seo = data.seo_meta ?? {};
   const siteUrl = data.siteUrl || "https://postfor.me";
+  const category = data.category;
 
   // Category-specific meta
-  const title = seo.title || data.title || data.category?.name;
-  const description = seo.description || data.summary || data.category?.description;
-  const canonical = `${siteUrl}/resources/${data.slug}`;
+  const title = seo.title || data.title || category?.name || "Category";
+  const description = seo.description || data.summary || category?.description || `Browse all articles in the ${category?.name} category.`;
+  const canonical = `${siteUrl}/resources/${data.slug || category?.slug}`;
 
   // Social images
   const imageBase = `${siteUrl}/og-image`;
@@ -48,13 +46,13 @@ export const meta: Route.MetaFunction = ({
     { name: "twitter:image", content: ogImage },
   ];
 
-  // Generate breadcrumbs and add structured data
-  const breadcrumbs = buildResourcesBreadcrumbs(data.category?.name, data.slug);
-  const breadcrumbStructuredData = generateBreadcrumbStructuredData(breadcrumbs, siteUrl);
-
-  categoryMeta.push({
-    "script:ld+json": breadcrumbStructuredData
-  } as MetaDescriptor);
+  // Add category-specific keywords
+  if (category?.name) {
+    categoryMeta.push({
+      name: "keywords",
+      content: `${category.name}, ${category.name} API, ${category.name} integration, social media API, posting API, scheduling API`
+    });
+  }
 
   // Use deep merge to prioritize higher index elements and filter duplicates
   return mergeMetaArrays(parentMeta, categoryMeta);

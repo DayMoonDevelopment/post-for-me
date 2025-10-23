@@ -2,44 +2,51 @@ import type { MetaDescriptor } from "react-router";
 import type { Route } from "./+types/route";
 
 /**
+ * Breadcrumb item interface
+ */
+interface BreadcrumbItem {
+  title: string;
+  href: string | null;
+}
+
+/**
+ * Type guard to check if data has breadcrumb property
+ */
+function hasBreadcrumb(
+  data: unknown,
+): data is { breadcrumb: BreadcrumbItem | BreadcrumbItem[] } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "breadcrumb" in data &&
+    data.breadcrumb !== null &&
+    typeof data.breadcrumb === "object"
+  );
+}
+
+/**
  * Base meta for all resources pages.
  * Provides site-wide defaults and breadcrumb structured data.
  */
 export const meta: Route.MetaFunction = ({ matches }) => {
-  const siteUrl = "https://postfor.me";
   const siteName = "Post For Me";
 
   // Build breadcrumbs from route matches
-  const breadcrumbs = [{ title: "Resources", href: "/resources" }];
+  const breadcrumbs: BreadcrumbItem[] = [
+    { title: "Resources", href: "/resources" },
+  ];
 
-  // Collect breadcrumbs from child routes
+  // Collect breadcrumbs from child routes with proper typing
   matches.forEach((match) => {
-    if (
-      match &&
-      match.data &&
-      typeof match.data === "object" &&
-      "breadcrumb" in match.data
-    ) {
-      const breadcrumb = (match.data as any).breadcrumb;
+    if (match && hasBreadcrumb(match.data)) {
+      const breadcrumb = match.data.breadcrumb;
       if (Array.isArray(breadcrumb)) {
         breadcrumbs.push(...breadcrumb);
-      } else if (breadcrumb) {
+      } else {
         breadcrumbs.push(breadcrumb);
       }
     }
   });
-
-  // Generate structured data for breadcrumbs
-  const breadcrumbStructuredData = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: breadcrumbs.map((crumb, index) => ({
-      "@type": "ListItem",
-      position: index + 1,
-      name: crumb.title,
-      ...(crumb.href && { item: `${siteUrl}${crumb.href}` }),
-    })),
-  };
 
   return [
     // Base site metadata
@@ -58,8 +65,5 @@ export const meta: Route.MetaFunction = ({ matches }) => {
     // Theme and icons
     { name: "theme-color", content: "#000000" },
     { tagName: "link", rel: "icon", href: "/favicon.ico" },
-
-    // Breadcrumb structured data
-    { "script:ld+json": breadcrumbStructuredData },
   ] as MetaDescriptor[];
 };
