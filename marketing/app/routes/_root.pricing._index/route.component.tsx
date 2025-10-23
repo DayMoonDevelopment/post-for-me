@@ -89,11 +89,11 @@ export function Component() {
               What happens when I go over my plan?
             </h3>
             <p className="text-sm text-muted-foreground">
-              We want you to succeed, and not be afraid of surprise charges. If
+              {`We want you to succeed, and not be afraid of surprise charges. If
               you unexpectedly go over the limits of your plan, we won't shut
               you down automatically, nor will we charge you extra. If your
               usage is consistently exceeding the limits, you should upgrade to
-              the next higher plan.
+              the next higher plan.`}
             </p>
           </div>
         </div>

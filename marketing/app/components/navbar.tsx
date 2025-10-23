@@ -14,9 +14,11 @@ import { Link } from "react-router";
 export const Navbar = () => {
   return (
     <nav className="h-16 bg-background border-b sticky top-0 z-100 -mb-16">
-      <div className="h-full flex items-center justify-between max-w-(--breakpoint-2xl) mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="h-full flex items-center justify-between mx-auto px-4 sm:px-6 lg:px-4">
         <div className="flex items-center gap-8">
-          <Logo className="h-6" />
+          <Link to="/">
+            <Logo className="h-6" />
+          </Link>
 
           {/* Desktop Menu */}
           <NavMenu className="hidden md:block" />
