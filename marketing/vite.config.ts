@@ -8,4 +8,7 @@ export default defineConfig({
   ssr: {
     noExternal: ["posthog-js", "posthog-js/react"],
   },
+  optimizeDeps: {
+    include: ["motion"],
+  },
 });
