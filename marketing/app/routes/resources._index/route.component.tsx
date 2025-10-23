@@ -1,12 +1,22 @@
-import { Link, useLoaderData } from "react-router";
+import { Link, useLoaderData, useOutletContext } from "react-router";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "~/ui/card";
 
 import type { Route } from "./+types/route";
 
+type OutletContext = {
+  categories: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    description?: string;
+  }>;
+};
+
 export function Component() {
-  const { categories, title, summary } =
+  const { title, summary } =
     useLoaderData<Route.ComponentProps["loaderData"]>();
+  const { categories } = useOutletContext<OutletContext>();
 
   return (
     <div className="pt-2">

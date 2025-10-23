@@ -2,13 +2,9 @@ import { data } from "react-router";
 
 import { MarbleCMS } from "~/lib/.server/marble";
 
-export async function loader({
-  params,
-  request,
-}: {
-  params: any;
-  request: Request;
-}) {
+import type { Route } from "./+types/route";
+
+export async function loader({ params, request }: Route.LoaderArgs) {
   const { post } = params;
 
   if (!post) {
@@ -23,10 +19,7 @@ export async function loader({
   }
 
   const { post: marblePost } = postData;
-
-  // Get site name from request host
   const url = new URL(request.url);
-  const siteName = url.hostname;
 
   return data({
     // Post data from Marble CMS
@@ -41,15 +34,13 @@ export async function loader({
     category: marblePost.category,
     tags: marblePost.tags,
     attribution: marblePost.attribution,
+    siteUrl: `${url.protocol}//${url.host}`,
+    siteName: url.hostname,
     seo_meta: {
       title: marblePost.title,
       description: marblePost.description,
       keywords: marblePost.tags.map((tag) => tag.name).join(", "),
     },
-
-    // Site info
-    siteName,
-    siteUrl: `${url.protocol}//${url.host}`,
 
     // Breadcrumb data - return both category and post breadcrumbs
     breadcrumb: [

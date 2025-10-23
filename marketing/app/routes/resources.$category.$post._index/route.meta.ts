@@ -1,163 +1,127 @@
-// import { buildHowToSchema } from "~/lib/.server/schema/build-how-to-schema";
-
-import type { MetaFunction, MetaDescriptor } from "react-router";
-import type { loader } from "./route";
+import type { MetaDescriptor } from "react-router";
+import type { Route } from "./+types/route";
 
 /**
- * SEO & social-meta builder for Resource pages.
- * Keeps titles/descriptions within Google-friendly limits,
- * provides rich JSON-LD, and returns a MetaDescriptor[] for Remix.
+ * Simple utility to merge meta arrays.
+ * Browser automatically uses the last occurrence of duplicate meta tags.
  */
-export const meta: MetaFunction<typeof loader> = ({
+
+/**
+ * Meta function for individual post pages.
+ * Returns post-specific SEO including rich article structured data.
+ * Merges with all parent route meta at the lowest level.
+ */
+export const meta: Route.MetaFunction = ({
   data,
+  matches,
 }): MetaDescriptor[] => {
+  console.log("RESOURCE");
+  console.log(matches);
+
   if (!data) return [];
 
   const seo = data.seo_meta ?? {};
+  const siteUrl = data.siteUrl || "https://postfor.me";
+  const siteName = data.siteName || "Post For Me";
 
-  /* ---------- Title & Description (length-safe) ---------- */
-  const rawTitle = seo.title ?? data.title;
-  const title = rawTitle.length > 60 ? `${rawTitle.slice(0, 57)}…` : rawTitle;
+  // Post-specific meta
+  const title = seo.title || data.title;
+  const description = seo.description || data.summary;
+  const canonical = `${siteUrl}/resources/${data.category?.slug}/${data.slug}`;
+  const keywords =
+    seo.keywords || data.tags?.map((tag) => tag.name).join(", ") || "";
 
-  const rawDesc = seo.description ?? data.summary ?? "";
-  const description =
-    rawDesc.length > 155 ? `${rawDesc.slice(0, 152)}…` : rawDesc;
+  // Social images - prefer post cover image, fallback to default
+  const imageBase = `${siteUrl}/og-image`;
+  const ogImage = data.coverImage || `${imageBase}-16x9.png`;
 
-  /* ---------- Canonical URL ---------- */
-  const canonical = `${data.siteUrl}/resources/${data.slug}`;
-
-  /* ---------- Primary keywords (for on-page use, not meta tag) ---------- */
-  const primaryKeywords = [
-    "social media API",
-    "posting API",
-    "scheduling API",
-    "developer social API",
-    "TikTok API",
-    "Instagram API",
-    "Facebook API",
-    "X API",
-    "LinkedIn API",
-  ].join(", ");
-
-  /* ---------- Social-share image variants ---------- */
-  const imageBase = `${data.siteUrl}/og-image`;
-  const images = [
-    { url: `${imageBase}-16x9.png` }, // 1200×630
-    { url: `${imageBase}-4x3.png` }, // 1200×900
-    { url: `${imageBase}-1x1.png` }, // 1200×1200
-  ];
-
-  /* ---------- Dates ---------- */
-  const publishedISO = data.created_at;
-  const modifiedISO = data.updated_at;
-
-  /* ---------- JSON-LD: Article (rich results eligible) ---------- */
+  // Article structured data
   const articleLD = {
     "@context": "https://schema.org",
     "@type": "Article",
     mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
     headline: title,
     description,
-    datePublished: publishedISO,
-    dateModified: modifiedISO,
+    datePublished: data.created_at,
+    dateModified: data.updated_at,
     inLanguage: "en",
-    image: images, // multiple aspect ratios
-    author: {
-      "@type": "Organization",
-      name: "Day Moon Development",
-      url: "https://www.daymoon.dev",
-      sameAs: [
-        "https://github.com/daymoondev",
-        "https://twitter.com/daymoondev",
-      ],
-    },
+    image: data.coverImage ? [{ url: data.coverImage }] : [{ url: ogImage }],
+    author: data.authors?.[0]
+      ? {
+          "@type": "Person",
+          name: data.authors[0].name,
+        }
+      : {
+          "@type": "Organization",
+          name: "Post For Me",
+          url: siteUrl,
+        },
     publisher: {
       "@type": "Organization",
-      name: data.siteName,
+      name: siteName,
       logo: {
         "@type": "ImageObject",
-        url: "https://www.daymoon.dev/assets/day-moon-logo.png",
+        url: `${siteUrl}/logo.png`,
         width: 512,
         height: 512,
       },
     },
-    keywords: primaryKeywords,
+    ...(keywords && { keywords }),
     isAccessibleForFree: true,
   };
 
-  /* ---------- JSON-LD: Breadcrumbs ---------- */
-  const breadcrumbsLD = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "Resources",
-        item: `${data.siteUrl}/resources`,
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: title,
-        item: canonical,
-      },
-    ],
-  };
+  // Collect all meta from parent routes
+  const parentMeta: MetaDescriptor[] = matches
+    .flatMap((match) => {
+      if (match && match.meta && Array.isArray(match.meta)) {
+        return match.meta;
+      }
+      return [];
+    })
+    .filter((meta): meta is MetaDescriptor => Boolean(meta));
 
-  /* ---------- (Optional) JSON-LD: HowTo ---------- */
-  // if (data.howToSteps?.length) {
-  //   const howToLD = { ...buildHowTo(data) };
-  //   tags.push({ "script:ld+json": howToLD });
-  // }
-
-  /* ---------- MetaDescriptor list ---------- */
-  const tags: MetaDescriptor[] = [
-    /* Core */
+  const postMeta: MetaDescriptor[] = [
     { title },
     { name: "description", content: description },
-
-    /* Canonical & hreflang */
     { tagName: "link", rel: "canonical", href: canonical },
-    {
-      tagName: "link",
-      rel: "alternate",
-      hrefLang: "x-default",
-      href: canonical,
-    },
 
-    /* Robots */
-    { name: "robots", content: "index, follow, max-image-preview:large" },
-    {
-      name: "googlebot",
-      content: "index, follow, max-image-preview:large, max-video-preview:-1",
-    },
-    { name: "bingbot", content: "index, follow" },
-
-    /* Open Graph */
+    // Article-specific meta
     { property: "og:type", content: "article" },
-    { property: "og:site_name", content: data.siteName },
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:url", content: canonical },
-    { property: "og:image", content: images[0].url },
-    { property: "og:image:alt", content: `Illustration – ${title}` },
-    { property: "og:locale", content: "en_US" },
-    { property: "article:published_time", content: publishedISO },
-    { property: "article:modified_time", content: modifiedISO },
-    { property: "article:author", content: "Day Moon Development" },
+    { property: "og:image", content: ogImage },
+    { property: "og:image:alt", content: `${title} - Post For Me` },
+    { property: "article:published_time", content: data.created_at },
+    { property: "article:modified_time", content: data.updated_at },
 
-    /* Twitter */
-    { name: "twitter:card", content: "summary_large_image" },
+    // Twitter meta
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
-    { name: "twitter:image", content: images[0].url },
-    { name: "twitter:site", content: "@daymoondev" },
+    { name: "twitter:image", content: ogImage },
 
-    /* JSON-LD blobs */
-    { "script:ld+json": articleLD },
-    { "script:ld+json": breadcrumbsLD },
+    // Article structured data
+    { "script:ld+json": articleLD } as MetaDescriptor,
   ];
 
-  return tags.filter(Boolean) as MetaDescriptor[];
+  // Add author meta if available
+  if (data.authors?.[0]) {
+    postMeta.push({
+      property: "article:author",
+      content: data.authors[0].name,
+    });
+  }
+
+  // Add keywords if available
+  if (keywords) {
+    postMeta.push({
+      name: "keywords",
+      content: `${keywords}, social media API, posting API, ${data.category?.name} API`,
+    });
+  }
+
+  // Simply concatenate parent and post meta - browser uses last occurrence of duplicates
+  const finalMeta = [...parentMeta, ...postMeta];
+
+  return finalMeta;
 };

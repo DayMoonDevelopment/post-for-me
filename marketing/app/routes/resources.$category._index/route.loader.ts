@@ -1,7 +1,9 @@
 import { data } from "react-router";
 import { MarbleCMS } from "~/lib/.server/marble";
 
-export async function loader({ params, request }: { params: any; request: Request }) {
+import type { Route } from "./+types/route";
+
+export async function loader({ params, request }: Route.LoaderArgs) {
   const { category } = params;
 
   if (!category) {
@@ -27,9 +29,7 @@ export async function loader({ params, request }: { params: any; request: Reques
   // Filter posts for this category
   const categoryPosts = posts.filter(post => post.category.slug === category);
 
-  // Get site name from request host
   const url = new URL(request.url);
-  const siteName = url.hostname;
 
   return data({
     category: currentCategory,
@@ -37,15 +37,14 @@ export async function loader({ params, request }: { params: any; request: Reques
     title: currentCategory.name,
     summary: currentCategory.description || `Browse all articles in the ${currentCategory.name} category.`,
     slug: currentCategory.slug,
+    siteUrl: `${url.protocol}//${url.host}`,
+    siteName: url.hostname,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     seo_meta: {
       title: `${currentCategory.name} - Resources`,
       description: currentCategory.description || `Browse all articles in the ${currentCategory.name} category.`,
-      keywords: `${currentCategory.name}, API, social media, integration`,
     },
-    siteName,
-    siteUrl: `${url.protocol}//${url.host}`,
     breadcrumb: {
       title: currentCategory.name,
       href: null, // This is the current page

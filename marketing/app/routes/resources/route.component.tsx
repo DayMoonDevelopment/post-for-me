@@ -91,7 +91,7 @@ export function Component() {
                 </BreadcrumbList>
               </Breadcrumb>
             ) : null}
-            <Outlet />
+            <Outlet context={{ categories, posts }} />
           </div>
 
           <Footer />
