@@ -6,13 +6,14 @@ import type { Route } from "./+types/route";
 export async function loader(_args: Route.LoaderArgs) {
   const marble = new MarbleCMS();
 
-  const [categoriesResponse, postsResponse] = await Promise.all([
-    marble.getCategories(),
-    marble.getPosts(),
-  ]);
+  // Critical data: Load categories immediately for sidebar navigation
+  const categoriesResponse = await marble.getCategories();
+
+  // Non-critical data: Defer posts loading to speed up initial render
+  const postsPromise = marble.getPosts().then(response => response?.posts || []);
 
   return data({
     categories: categoriesResponse?.categories || [],
-    posts: postsResponse?.posts || [],
+    posts: postsPromise, // Return as promise for deferred loading
   });
 }

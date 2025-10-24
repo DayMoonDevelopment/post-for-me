@@ -11,13 +11,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   }
 
   const marble = new MarbleCMS();
-  const [categoriesResponse, postsResponse] = await Promise.all([
-    marble.getCategories(),
-    marble.getPosts()
-  ]);
 
+  // Get categories first to validate the category exists
+  const categoriesResponse = await marble.getCategories();
   const categories = categoriesResponse?.categories || [];
-  const posts = postsResponse?.posts || [];
 
   // Find the current category
   const currentCategory = categories.find(cat => cat.slug === category);
@@ -26,14 +23,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // Filter posts for this category
-  const categoryPosts = posts.filter(post => post.category.slug === category);
+  // Defer posts loading for faster initial render
+  const postsPromise = marble.getPosts().then(response => {
+    const posts = response?.posts || [];
+    return posts.filter(post => post.category.slug === category);
+  });
 
   const url = new URL(request.url);
 
   return data({
     category: currentCategory,
-    posts: categoryPosts,
+    posts: postsPromise, // Deferred posts
     title: currentCategory.name,
     summary: currentCategory.description || `Browse all articles in the ${currentCategory.name} category.`,
     slug: currentCategory.slug,

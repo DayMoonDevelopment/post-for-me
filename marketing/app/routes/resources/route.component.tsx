@@ -1,4 +1,5 @@
-import { Link, Outlet, useLoaderData, useMatches } from "react-router";
+import { Link, Outlet, useLoaderData, useMatches, Await } from "react-router";
+import { Suspense } from "react";
 
 import {
   Breadcrumb,
@@ -58,11 +59,23 @@ export function Component() {
     <div className="relative">
       <Navbar />
       <SidebarProvider>
-        <ResourcesSidebar
-          className="pt-16"
-          categories={categories}
-          posts={posts}
-        />
+        <Suspense fallback={
+          <ResourcesSidebar
+            className="pt-16"
+            categories={categories}
+            posts={[]}
+          />
+        }>
+          <Await resolve={posts}>
+            {(resolvedPosts) => (
+              <ResourcesSidebar
+                className="pt-16"
+                categories={categories}
+                posts={resolvedPosts}
+              />
+            )}
+          </Await>
+        </Suspense>
         <SidebarInset className="flex flex-col pt-18 relative">
           <SidebarTrigger className="fixed top-20 ml-4 bg-background" />
           <div className="pr-4 pl-16 pb-12">
@@ -91,7 +104,15 @@ export function Component() {
                 </BreadcrumbList>
               </Breadcrumb>
             ) : null}
-            <Outlet context={{ categories, posts }} />
+            <Suspense fallback={
+              <Outlet context={{ categories, posts: [] }} />
+            }>
+              <Await resolve={posts}>
+                {(resolvedPosts) => (
+                  <Outlet context={{ categories, posts: resolvedPosts }} />
+                )}
+              </Await>
+            </Suspense>
           </div>
 
           <Footer />

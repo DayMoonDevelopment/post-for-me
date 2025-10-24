@@ -1,4 +1,5 @@
-import { useLoaderData } from "react-router";
+import { useLoaderData, Await } from "react-router";
+import { Suspense } from "react";
 
 import { RawHtml } from "~/components/raw-html";
 import { Separator } from "~/ui/separator";
@@ -16,9 +17,21 @@ export function Component() {
 
       <Separator className="mt-6 mb-5" />
 
-      <article className="prose max-w-none pt-2.5">
-        <RawHtml html={content} />
-      </article>
+      <Suspense fallback={
+        <article className="prose max-w-none pt-2.5">
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-pulse">Loading content...</div>
+          </div>
+        </article>
+      }>
+        <Await resolve={content}>
+          {(resolvedContent) => (
+            <article className="prose max-w-none pt-2.5">
+              <RawHtml html={resolvedContent} />
+            </article>
+          )}
+        </Await>
+      </Suspense>
     </div>
   );
 }

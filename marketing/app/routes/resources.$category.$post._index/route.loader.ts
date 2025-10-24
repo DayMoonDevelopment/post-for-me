@@ -21,14 +21,16 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const { post: marblePost } = postData;
   const url = new URL(request.url);
 
+  // Defer heavy content parsing for faster initial render
+  const contentPromise = Promise.resolve(marblePost.content);
+
   return data({
-    // Post data from Marble CMS
+    // Critical data: Available immediately for SEO and navigation
     title: marblePost.title,
     summary: marblePost.description,
     slug: marblePost.slug,
     created_at: marblePost.publishedAt,
     updated_at: marblePost.updatedAt,
-    content: marblePost.content, // Content is already HTML from Marble
     coverImage: marblePost.coverImage,
     authors: marblePost.authors,
     category: marblePost.category,
@@ -53,5 +55,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         href: null, // This is the current page
       },
     ],
+
+    // Non-critical data: Defer content loading
+    content: contentPromise,
   });
 }
