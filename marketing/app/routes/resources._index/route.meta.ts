@@ -23,7 +23,7 @@ export const meta: Route.MetaFunction = ({
 
   // Extract posts data from parent loader for ItemList schema
   const parentMatch = matches.find((match) => match?.id === "routes/resources");
-  const parentData = parentMatch?.data as { posts?: any[] } | undefined;
+  const parentData = parentMatch?.data as { posts?: { title?: string; summary?: string; description?: string; slug: string; created_at?: string; category?: { slug: string }; coverImage?: string }[] } | undefined;
   const posts = parentData?.posts || [];
 
   const metadata = new MetadataComposer();
@@ -78,7 +78,7 @@ export const meta: Route.MetaFunction = ({
     const itemListSchema = metadata.createItemListSchema({
       title: "API Integration Guides and Tutorials",
       description: "Step-by-step guides for integrating social media APIs",
-      items: posts.slice(0, 10).map((post: any) => ({
+      items: posts.slice(0, 10).map((post) => ({
         name: post.title || "Untitled Guide",
         description: post.summary || post.description,
         url: `${siteUrl}/resources/${post.category?.slug || "general"}/${post.slug}`,

@@ -1,6 +1,6 @@
 import type { MetaDescriptor } from "react-router";
 import { MetadataComposer } from "~/lib/meta";
-import { buildResourcesBreadcrumbs } from "~/lib/utils";
+// import { buildResourcesBreadcrumbs } from "~/lib/utils";
 import type { Route } from "./+types/route";
 
 /**
@@ -74,7 +74,7 @@ export const meta: Route.MetaFunction = ({ data }): MetaDescriptor[] => {
   const canonical = `${siteUrl}/resources/${data.category?.slug}/${data.slug}`;
 
   // Extract tags for keywords
-  const tags = data.tags?.map((tag: any) => tag.name) || [];
+  const tags = data.tags?.map((tag: { name: string }) => tag.name) || [];
   const categoryName = data.category?.name || "";
 
   // Estimate word count and reading time from content

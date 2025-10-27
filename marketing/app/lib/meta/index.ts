@@ -213,7 +213,7 @@ export class MetadataComposer {
   /**
    * Add custom schema.org structured data
    */
-  addSchema(schemaData: Record<string, any>): this {
+  addSchema(schemaData: Record<string, unknown>): this {
     this.explicitMeta.push({ "script:ld+json": schemaData } as MetaDescriptor);
     return this;
   }
@@ -365,7 +365,7 @@ export class MetadataComposer {
     canonical: string;
     dateModified?: string;
     datePublished?: string;
-    about?: Record<string, any>;
+    about?: Record<string, unknown>;
     hasPart?: Array<{
       "@type": string;
       name: string;
@@ -381,7 +381,7 @@ export class MetadataComposer {
       url: string;
       datePublished?: string;
     }>;
-  }): Record<string, any> {
+  }): Record<string, unknown> {
     return {
       "@context": "https://schema.org",
       "@type": "CollectionPage",
@@ -421,7 +421,7 @@ export class MetadataComposer {
       datePublished?: string;
       image?: string;
     }>;
-  }): Record<string, any> {
+  }): Record<string, unknown> {
     return {
       "@context": "https://schema.org",
       "@type": "ItemList",
@@ -452,7 +452,7 @@ export class MetadataComposer {
       answer: string;
     }>;
     id?: string;
-  }): Record<string, any> {
+  }): Record<string, unknown> {
     return {
       "@context": "https://schema.org",
       "@type": "FAQPage",

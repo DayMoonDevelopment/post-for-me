@@ -71,7 +71,7 @@ export const meta: Route.MetaFunction = ({ data }): MetaDescriptor[] => {
       "name": `${categoryName} Integration Guides`,
       "description": `Step-by-step guides for ${categoryName} API integration`,
       "numberOfItems": posts.length,
-      "itemListElement": posts.map((post: any, index: number) => ({
+      "itemListElement": posts.map((post: { title?: string; summary?: string; description?: string; slug: string; created_at?: string; updated_at?: string; coverImage?: string }, index: number) => ({
         "@type": "ListItem",
         "position": index + 1,
         "item": {

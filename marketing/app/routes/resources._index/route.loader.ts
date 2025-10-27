@@ -2,7 +2,7 @@ import { data } from "react-router";
 
 import type { Route } from "./+types/route";
 
-export async function loader({ request, params }: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const now = new Date().toISOString();
 
