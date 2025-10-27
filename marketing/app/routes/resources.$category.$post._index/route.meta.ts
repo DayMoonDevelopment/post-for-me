@@ -1,135 +1,54 @@
 import type { MetaDescriptor } from "react-router";
 import type { Route } from "./+types/route";
-import { buildResourcesBreadcrumbs, generateBreadcrumbStructuredData, mergeMetaArrays } from "~/lib/utils";
-
-/**
- * Simple utility to merge meta arrays.
- * Browser automatically uses the last occurrence of duplicate meta tags.
- */
+import { MetadataComposer } from "~/lib/meta";
+import { buildResourcesBreadcrumbs } from "~/lib/utils";
 
 /**
  * Meta function for individual post pages.
- * Returns post-specific SEO including rich article structured data.
- * Merges with all parent route meta at the lowest level.
+ * Uses automatic metadata generation including rich article structured data.
  */
-export const meta: Route.MetaFunction = ({
-  data,
-  matches,
-}): MetaDescriptor[] => {
+export const meta: Route.MetaFunction = ({ data }): MetaDescriptor[] => {
   if (!data) return [];
 
   const seo = data.seo_meta ?? {};
   const siteUrl = data.siteUrl || "https://postfor.me";
-  const siteName = data.siteName || "Post For Me";
 
   // Post-specific meta
   const title = seo.title || data.title;
   const description = seo.description || data.summary;
   const canonical = `${siteUrl}/resources/${data.category?.slug}/${data.slug}`;
-  const keywords =
-    seo.keywords || data.tags?.map((tag) => tag.name).join(", ") || "";
+  const keywords = seo.keywords || data.tags?.map((tag) => tag.name).join(", ") || "";
 
-  // Social images - prefer post cover image, fallback to default
-  const imageBase = `${siteUrl}/og-image`;
-  const ogImage = data.coverImage || `${imageBase}-16x9.png`;
+  const metadata = new MetadataComposer();
+  metadata.siteUrl = siteUrl;
+  metadata.title = title;
+  metadata.description = description;
+  metadata.canonical = canonical;
+  metadata.image = data.coverImage;
+  metadata.contentType = "article";
 
-  // Article structured data
-  const articleLD = {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
-    headline: title,
-    description,
-    datePublished: data.created_at,
-    dateModified: data.updated_at,
-    inLanguage: "en",
-    image: data.coverImage ? [{ url: data.coverImage }] : [{ url: ogImage }],
-    author: data.authors?.[0]
-      ? {
-          "@type": "Person",
-          name: data.authors[0].name,
-        }
-      : {
-          "@type": "Organization",
-          name: "Post For Me",
-          url: siteUrl,
-        },
-    publisher: {
-      "@type": "Organization",
-      name: siteName,
-      logo: {
-        "@type": "ImageObject",
-        url: `${siteUrl}/logo.png`,
-        width: 512,
-        height: 512,
-      },
-    },
-    ...(keywords && { keywords }),
-    isAccessibleForFree: true,
-  };
+  // Article-specific properties
+  if (data.created_at) {
+    metadata.publishedTime = new Date(data.created_at).toISOString();
+  }
+  if (data.updated_at) {
+    metadata.modifiedTime = new Date(data.updated_at).toISOString();
+  }
+  if (data.authors?.[0]?.name) {
+    metadata.author = data.authors[0].name;
+  }
 
-  // Collect all meta from parent routes
-  const parentMeta: MetaDescriptor[] = matches
-    .flatMap((match) => {
-      if (match && match.meta && Array.isArray(match.meta)) {
-        return match.meta;
-      }
-      return [];
-    })
-    .filter((meta): meta is MetaDescriptor => Boolean(meta));
+  // Add keywords
+  if (keywords) {
+    metadata.keywords = `${keywords}, social media API, posting API, ${data.category?.name} API`;
+  }
 
-  const postMeta: MetaDescriptor[] = [
-    { title },
-    { name: "description", content: description },
-    { tagName: "link", rel: "canonical", href: canonical },
-
-    // Article-specific meta
-    { property: "og:type", content: "article" },
-    { property: "og:title", content: title },
-    { property: "og:description", content: description },
-    { property: "og:url", content: canonical },
-    { property: "og:image", content: ogImage },
-    { property: "og:image:alt", content: `${title} - Post For Me` },
-    { property: "article:published_time", content: data.created_at },
-    { property: "article:modified_time", content: data.updated_at },
-
-    // Twitter meta
-    { name: "twitter:title", content: title },
-    { name: "twitter:description", content: description },
-    { name: "twitter:image", content: ogImage },
-
-    // Article structured data
-    { "script:ld+json": articleLD } as MetaDescriptor,
-  ];
-
-  // Generate breadcrumbs and add structured data
-  const breadcrumbs = buildResourcesBreadcrumbs(
+  // Set breadcrumbs
+  metadata.setBreadcrumbs(buildResourcesBreadcrumbs(
     data.category?.name,
     data.category?.slug,
     title
-  );
-  const breadcrumbStructuredData = generateBreadcrumbStructuredData(breadcrumbs, siteUrl);
+  ));
 
-  postMeta.push({
-    "script:ld+json": breadcrumbStructuredData
-  } as MetaDescriptor);
-
-  // Add author meta if available
-  if (data.authors?.[0]) {
-    postMeta.push({
-      property: "article:author",
-      content: data.authors[0].name,
-    });
-  }
-
-  // Add keywords if available
-  if (keywords) {
-    postMeta.push({
-      name: "keywords",
-      content: `${keywords}, social media API, posting API, ${data.category?.name} API`,
-    });
-  }
-
-  // Use deep merge to prioritize higher index elements and filter duplicates
-  return mergeMetaArrays(parentMeta, postMeta);
+  return metadata.build();
 };

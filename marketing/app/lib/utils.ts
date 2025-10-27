@@ -25,8 +25,10 @@ export function generateBreadcrumbStructuredData(
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
+    "@id": `${siteUrl}/breadcrumbs`,
     "itemListElement": breadcrumbs.map((crumb, index) => ({
       "@type": "ListItem",
+      "@id": crumb.href ? `${siteUrl}${crumb.href}#breadcrumb` : `${siteUrl}#breadcrumb-${index + 1}`,
       "position": index + 1,
       "name": crumb.title,
       ...(crumb.href && { "item": `${siteUrl}${crumb.href}` })

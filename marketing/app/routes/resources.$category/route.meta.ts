@@ -1,59 +1,32 @@
 import type { MetaDescriptor } from "react-router";
 import type { Route } from "./+types/route";
-import { mergeMetaArrays } from "~/lib/utils";
+import { MetadataComposer } from "~/lib/meta";
+import { buildResourcesBreadcrumbs } from "~/lib/utils";
 
 /**
  * Meta function for category pages.
- * Returns category-specific SEO that will layer on top of parent meta.
+ * Uses automatic metadata generation from shared properties.
  */
-export const meta: Route.MetaFunction = ({ data, matches }): MetaDescriptor[] => {
+export const meta: Route.MetaFunction = ({ data }): MetaDescriptor[] => {
   if (!data) return [];
 
-  const seo = data.seo_meta ?? {};
   const siteUrl = data.siteUrl || "https://postfor.me";
-  const category = data.category;
+  const categorySlug = data.categorySlug;
 
   // Category-specific meta
-  const title = seo.title || data.title || category?.name || "Category";
-  const description = seo.description || data.summary || category?.description || `Browse all articles in the ${category?.name} category.`;
-  const canonical = `${siteUrl}/resources/${data.slug || category?.slug}`;
+  const title = `${categorySlug} - Resources`;
+  const description = `Browse all articles in the ${categorySlug} category.`;
+  const canonical = `${siteUrl}/resources/${categorySlug}`;
 
-  // Social images
-  const imageBase = `${siteUrl}/og-image`;
-  const ogImage = `${imageBase}-16x9.png`;
+  const metadata = new MetadataComposer();
+  metadata.siteUrl = siteUrl;
+  metadata.title = title;
+  metadata.description = description;
+  metadata.canonical = canonical;
+  metadata.contentType = "website";
+  metadata.keywords = `${categorySlug}, ${categorySlug} API, ${categorySlug} integration, social media API, posting API, scheduling API`;
 
-  // Collect all meta from parent routes
-  const parentMeta: MetaDescriptor[] = matches
-    .flatMap((match) => {
-      if (match && match.meta && Array.isArray(match.meta)) {
-        return match.meta;
-      }
-      return [];
-    })
-    .filter((meta): meta is MetaDescriptor => Boolean(meta));
+  metadata.setBreadcrumbs(buildResourcesBreadcrumbs(categorySlug, categorySlug));
 
-  const categoryMeta: MetaDescriptor[] = [
-    { title },
-    { name: "description", content: description },
-    { tagName: "link", rel: "canonical", href: canonical },
-    { property: "og:title", content: title },
-    { property: "og:description", content: description },
-    { property: "og:url", content: canonical },
-    { property: "og:image", content: ogImage },
-    { property: "og:image:alt", content: `${title} - Post For Me` },
-    { name: "twitter:title", content: title },
-    { name: "twitter:description", content: description },
-    { name: "twitter:image", content: ogImage },
-  ];
-
-  // Add category-specific keywords
-  if (category?.name) {
-    categoryMeta.push({
-      name: "keywords",
-      content: `${category.name}, ${category.name} API, ${category.name} integration, social media API, posting API, scheduling API`
-    });
-  }
-
-  // Use deep merge to prioritize higher index elements and filter duplicates
-  return mergeMetaArrays(parentMeta, categoryMeta);
+  return metadata.build();
 };
