@@ -35,7 +35,6 @@ export const meta: Route.MetaFunction = ({
   metadata.keywords =
     "social media API, posting API, scheduling API, developer social API, TikTok API, Instagram API, Facebook API, X API, LinkedIn API, OAuth 2.0, REST API, webhook integration, rate limiting, API authentication, social media SDK, API documentation, integration guides, developer resources";
   metadata.modifiedTime = data.updated_at;
-  metadata.locale = "en_US";
   metadata.imageWidth = 1200;
   metadata.imageHeight = 630;
 

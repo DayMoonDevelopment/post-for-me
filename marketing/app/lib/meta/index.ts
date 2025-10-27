@@ -1,5 +1,8 @@
 import type { MetaDescriptor } from "react-router";
-import { generateBreadcrumbStructuredData, buildResourcesBreadcrumbs, type BreadcrumbItem } from "~/lib/utils";
+import {
+  generateBreadcrumbStructuredData,
+  type BreadcrumbItem,
+} from "~/lib/utils";
 
 export class MetadataComposer {
   private explicitMeta: MetaDescriptor[] = [];
@@ -14,7 +17,7 @@ export class MetadataComposer {
   private _publishedTime?: string;
   private _modifiedTime?: string;
   private _author?: string;
-  private _locale?: string;
+  private _locale: string = "en_US";
   private _imageWidth: number = 1200;
   private _imageHeight: number = 630;
 
@@ -25,7 +28,7 @@ export class MetadataComposer {
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@postforme" },
       { name: "theme-color", content: "#000000" },
-      { tagName: "link", rel: "icon", href: "/favicon.ico" }
+      { tagName: "link", rel: "icon", href: "/favicon.ico" },
     );
   }
 
@@ -145,11 +148,14 @@ export class MetadataComposer {
   set siteName(value: string) {
     this._siteName = value;
     // Update the og:site_name that was added in constructor
-    const siteNameIndex = this.explicitMeta.findIndex(meta =>
-      'property' in meta && meta.property === 'og:site_name'
+    const siteNameIndex = this.explicitMeta.findIndex(
+      (meta) => "property" in meta && meta.property === "og:site_name",
     );
     if (siteNameIndex !== -1) {
-      this.explicitMeta[siteNameIndex] = { property: "og:site_name", content: value };
+      this.explicitMeta[siteNameIndex] = {
+        property: "og:site_name",
+        content: value,
+      };
     }
   }
 
@@ -164,7 +170,7 @@ export class MetadataComposer {
     this._locale = value;
   }
 
-  get locale(): string | undefined {
+  get locale(): string {
     return this._locale;
   }
 
@@ -196,9 +202,11 @@ export class MetadataComposer {
   setBreadcrumbs(breadcrumbs?: BreadcrumbItem[]): this {
     const breadcrumbStructuredData = generateBreadcrumbStructuredData(
       breadcrumbs || [{ title: "Resources", href: "/resources" }],
-      this._siteUrl
+      this._siteUrl,
     );
-    this.explicitMeta.push({ "script:ld+json": breadcrumbStructuredData } as MetaDescriptor);
+    this.explicitMeta.push({
+      "script:ld+json": breadcrumbStructuredData,
+    } as MetaDescriptor);
     return this;
   }
 
@@ -226,7 +234,11 @@ export class MetadataComposer {
     }
 
     if (this._canonical) {
-      autoMeta.push({ tagName: "link", rel: "canonical", href: this._canonical });
+      autoMeta.push({
+        tagName: "link",
+        rel: "canonical",
+        href: this._canonical,
+      });
     }
 
     if (this._keywords) {
@@ -243,14 +255,15 @@ export class MetadataComposer {
         { property: "og:description", content: this._description },
         { property: "og:url", content: this._canonical },
         { property: "og:image", content: ogImage },
-        { property: "og:image:alt", content: `${this._title} - ${this._siteName}` },
+        {
+          property: "og:image:alt",
+          content: this._title,
+        },
         { property: "og:image:width", content: this._imageWidth.toString() },
-        { property: "og:image:height", content: this._imageHeight.toString() }
+        { property: "og:image:height", content: this._imageHeight.toString() },
       );
 
-      if (this._locale) {
-        autoMeta.push({ property: "og:locale", content: this._locale });
-      }
+      autoMeta.push({ property: "og:locale", content: this._locale });
     }
 
     // Twitter metadata (generated automatically)
@@ -262,17 +275,23 @@ export class MetadataComposer {
         { name: "twitter:description", content: this._description },
         { name: "twitter:image", content: twitterImage },
         { name: "twitter:image:width", content: this._imageWidth.toString() },
-        { name: "twitter:image:height", content: this._imageHeight.toString() }
+        { name: "twitter:image:height", content: this._imageHeight.toString() },
       );
     }
 
     // Article-specific metadata
     if (this._contentType === "article") {
       if (this._publishedTime) {
-        autoMeta.push({ property: "article:published_time", content: this._publishedTime });
+        autoMeta.push({
+          property: "article:published_time",
+          content: this._publishedTime,
+        });
       }
       if (this._modifiedTime) {
-        autoMeta.push({ property: "article:modified_time", content: this._modifiedTime });
+        autoMeta.push({
+          property: "article:modified_time",
+          content: this._modifiedTime,
+        });
       }
       if (this._author) {
         autoMeta.push({ property: "article:author", content: this._author });
@@ -289,7 +308,12 @@ export class MetadataComposer {
     const schemas: MetaDescriptor[] = [];
 
     // Auto-generate article schema for articles
-    if (this._contentType === "article" && this._title && this._description && this._canonical) {
+    if (
+      this._contentType === "article" &&
+      this._title &&
+      this._description &&
+      this._canonical
+    ) {
       const articleSchema = {
         "@context": "https://schema.org",
         "@type": "Article",
@@ -299,15 +323,19 @@ export class MetadataComposer {
         datePublished: this._publishedTime,
         dateModified: this._modifiedTime,
         inLanguage: "en",
-        image: this._image ? [{ url: this._image }] : [{ url: `${this._siteUrl}/og-image-16x9.png` }],
-        author: this._author ? {
-          "@type": "Person",
-          name: this._author,
-        } : {
-          "@type": "Organization",
-          name: this._siteName,
-          url: this._siteUrl,
-        },
+        image: this._image
+          ? [{ url: this._image }]
+          : [{ url: `${this._siteUrl}/og-image-16x9.png` }],
+        author: this._author
+          ? {
+              "@type": "Person",
+              name: this._author,
+            }
+          : {
+              "@type": "Organization",
+              name: this._siteName,
+              url: this._siteUrl,
+            },
         publisher: {
           "@type": "Organization",
           name: this._siteName,
@@ -373,7 +401,7 @@ export class MetadataComposer {
           "https://twitter.com/postforme",
           "https://github.com/postforme",
           "https://linkedin.com/company/postforme",
-          "https://discord.gg/postforme"
+          "https://discord.gg/postforme",
         ],
       },
       ...(config.totalItems && { numberOfItems: config.totalItems }),
@@ -447,10 +475,6 @@ export class MetadataComposer {
     const autoMeta = this.generateAutoMetadata();
     const autoSchemas = this.generateAutoSchema();
 
-    return [
-      ...this.explicitMeta,
-      ...autoMeta,
-      ...autoSchemas
-    ];
+    return [...this.explicitMeta, ...autoMeta, ...autoSchemas];
   }
 }

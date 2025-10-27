@@ -17,34 +17,31 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const categories = categoriesResponse?.categories || [];
 
   // Find the current category
-  const currentCategory = categories.find(cat => cat.slug === category);
+  const currentCategory = categories.find((cat) => cat.slug === category);
 
   if (!currentCategory) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // Defer posts loading for faster initial render
-  const postsPromise = marble.getPosts().then(response => {
-    const posts = response?.posts || [];
-    return posts.filter(post => post.category.slug === category);
-  });
+  // Get posts for this category (required for meta generation)
+  const postsResponse = await marble.getPosts();
+  const allPosts = postsResponse?.posts || [];
+  const categoryPosts = allPosts.filter((post) => post.category.slug === category);
 
   const url = new URL(request.url);
 
   return data({
     category: currentCategory,
-    posts: postsPromise, // Deferred posts
+    posts: categoryPosts, // Resolved posts
     title: currentCategory.name,
-    summary: currentCategory.description || `Browse all articles in the ${currentCategory.name} category.`,
+    summary:
+      currentCategory.description ||
+      `Browse all articles in the ${currentCategory.name} category.`,
     slug: currentCategory.slug,
     siteUrl: `${url.protocol}//${url.host}`,
     siteName: url.hostname,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    seo_meta: {
-      title: `${currentCategory.name} - Resources`,
-      description: currentCategory.description || `Browse all articles in the ${currentCategory.name} category.`,
-    },
     breadcrumb: {
       title: currentCategory.name,
       href: null, // This is the current page
