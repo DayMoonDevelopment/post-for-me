@@ -78,32 +78,32 @@ export function Component() {
         </Suspense>
         <SidebarInset className="flex flex-col pt-18 relative">
           <SidebarTrigger className="fixed top-20 ml-4 bg-background" />
-          <div className="pr-4 pl-16 pb-12">
-            {breadcrumbs.length > 0 ? (
-              <Breadcrumb className="mb-6 pt-3">
-                <BreadcrumbList>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink asChild>
-                      <Link to="/resources">Resources</Link>
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  {breadcrumbs.map((breadcrumb, index) => (
-                    <div key={index} className="contents">
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        {breadcrumb.href ? (
-                          <BreadcrumbLink asChild>
-                            <Link to={breadcrumb.href}>{breadcrumb.title}</Link>
-                          </BreadcrumbLink>
-                        ) : (
-                          <span>{breadcrumb.title}</span>
-                        )}
-                      </BreadcrumbItem>
-                    </div>
-                  ))}
-                </BreadcrumbList>
-              </Breadcrumb>
-            ) : null}
+          {breadcrumbs.length > 0 ? (
+            <Breadcrumb className="fixed top-20 right-4 left-64 bg-background z-10 py-3 px-4 border-b">
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link to="/resources">Resources</Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                {breadcrumbs.map((breadcrumb, index) => (
+                  <div key={index} className="contents">
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      {breadcrumb.href ? (
+                        <BreadcrumbLink asChild>
+                          <Link to={breadcrumb.href}>{breadcrumb.title}</Link>
+                        </BreadcrumbLink>
+                      ) : (
+                        <span>{breadcrumb.title}</span>
+                      )}
+                    </BreadcrumbItem>
+                  </div>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+          ) : null}
+          <div className={`pr-4 pl-16 pb-12 overflow-auto ${breadcrumbs.length > 0 ? 'pt-16' : 'pt-3'}`}>
             <Suspense fallback={
               <Outlet context={{ categories, posts: [] }} />
             }>
