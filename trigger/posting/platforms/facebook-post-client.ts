@@ -374,6 +374,9 @@ export class FacebookPostClient extends PostClient {
     // Upload each image
     let index = 0;
     for (const medium of media) {
+      if (medium.type == "video") {
+        continue;
+      }
       const fileUrl = await this.getSignedUrlForFile(medium);
       const payload: {
         url: string;
