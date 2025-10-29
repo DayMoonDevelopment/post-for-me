@@ -1,7 +1,6 @@
-import type { MetaFunction } from "react-router";
-import { faqs } from "./content";
+import type { Route } from "./+types/route";
 
-export const meta: MetaFunction = () => {
+export const meta: Route.MetaFunction = ({ data }) => {
   return [
     {
       title:
@@ -60,17 +59,19 @@ export const meta: MetaFunction = () => {
         },
         keywords:
           "Social media API, social media posting API, social media scheduling API, developer-friendly social media API, TikTok API, Instagram API, Facebook API, X API, LinkedIn API, YouTube API, Threads API, Pinterest API, Bluesky API, automate social posts, Ayrshare alternative, Hootsuite API alternative, Buffer API alternative",
-        mainEntity: {
-          "@type": "FAQPage",
-          mainEntity: faqs.map((faq) => ({
-            "@type": "Question",
-            name: faq.question,
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: faq.answer,
-            },
-          })),
-        },
+        mainEntity: data?.faq
+          ? {
+              "@type": "FAQPage",
+              mainEntity: data.faq.map(({ q, a }) => ({
+                "@type": "Question",
+                name: q,
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: a,
+                },
+              })),
+            }
+          : undefined,
       },
     },
   ];
