@@ -34,6 +34,8 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.20
 
       - name: Install dependencies
         run: bun install
@@ -79,7 +81,6 @@ jobs:
           CI: true
         run: |
           render deploys create ${{ secrets.RENDER_SERVICE_ID }} --output json --wait --confirm
-
 
       - name: Link Dashboard to Vercel Project
         run: bunx vercel link --project post-for-me-app --scope day-moon --token=${{ secrets.VERCEL_TOKEN }} --yes
