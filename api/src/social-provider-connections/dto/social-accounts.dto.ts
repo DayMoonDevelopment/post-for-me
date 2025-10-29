@@ -22,6 +22,13 @@ export class SocialAccountDto {
   user_id: string;
 
   @ApiProperty({
+    description: "The platform's profile photo of the social account",
+    type: String,
+    nullable: true,
+  })
+  profile_photo_url?: string | null | undefined;
+
+  @ApiProperty({
     description: 'The access token of the social account',
     type: String,
   })
