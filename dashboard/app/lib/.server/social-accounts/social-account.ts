@@ -105,6 +105,7 @@ export async function addSocialAccountConnections({
           platform: c.provider || "",
           username: c.social_provider_user_name || "",
           user_id: c.social_provider_user_id || "",
+          profile_photo_url: c.social_provider_profile_photo_url,
           status: c.access_token ? "connected" : "disconnected",
           external_id: c.external_id,
           access_token: c.access_token || "",
