@@ -250,12 +250,22 @@ export class BlueskyPostClient extends PostClient {
     const videoBuffer = await file.arrayBuffer();
     const fileSizeBytes = videoBuffer.byteLength;
 
-    if (fileSizeBytes > this.#maxVideoFileSize) {
-      //TODO: Process Video
-    }
+    let buffer = Buffer.from(videoBuffer);
 
-    const buffer = Buffer.from(videoBuffer);
+    // Write original file first so we can process it
     await fs.writeFile(inputPath, buffer);
+
+    if (fileSizeBytes > this.#maxVideoFileSize) {
+      const processedVideoBuffer = await this.#processVideoForSize({
+        inputPath,
+        fileSizeBytes,
+        maxSizeBytes: this.#maxVideoFileSize,
+      });
+
+      // Update buffer to use processed video
+      buffer = Buffer.from(processedVideoBuffer);
+      await fs.writeFile(inputPath, buffer);
+    }
 
     const metadata = await new Promise<any>((resolve, reject) => {
       ffmpeg.ffprobe(inputPath, (err: any, data: any) => {
@@ -285,7 +295,7 @@ export class BlueskyPostClient extends PostClient {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "video/mp4",
-        "Content-Length": file.size.toString(),
+        "Content-Length": buffer.length.toString(),
       },
       body: buffer,
     });
@@ -420,6 +430,118 @@ export class BlueskyPostClient extends PostClient {
     }
 
     return images;
+  }
+
+  async #processVideoForSize({
+    inputPath,
+    fileSizeBytes,
+    maxSizeBytes,
+  }: {
+    inputPath: string;
+    fileSizeBytes: number;
+    maxSizeBytes: number;
+  }): Promise<Buffer> {
+    const tempDir = os.tmpdir();
+    const outputPath = path.join(tempDir, `processed_${Date.now()}.mp4`);
+
+    try {
+      // Get video metadata to calculate compression strategy
+      const metadata = await new Promise<any>((resolve, reject) => {
+        ffmpeg.ffprobe(inputPath, (err: any, data: any) => {
+          if (err) reject(err);
+          else resolve(data);
+        });
+      });
+
+      const videoStream = metadata.streams.find(
+        (s: any) => s.codec_type === "video"
+      );
+
+      if (!videoStream) {
+        throw new Error("No video stream found in file");
+      }
+
+      const durationSeconds = metadata.format.duration;
+      const compressionRatio = maxSizeBytes / fileSizeBytes;
+
+      // Calculate target bitrate to achieve desired file size
+      // Use 90% of max size to provide buffer
+      const targetSizeBytes = maxSizeBytes * 0.9;
+      const targetBitrate = Math.floor((targetSizeBytes * 8) / durationSeconds);
+      const targetBitrateMbps = Math.max(targetBitrate / 1000000, 1); // Minimum 1Mbps
+
+      logger.info("Compressing video for Bluesky", {
+        originalSizeBytes: fileSizeBytes,
+        targetSizeBytes,
+        compressionRatio,
+        targetBitrateMbps,
+        durationSeconds,
+      });
+
+      // FFmpeg options for compression
+      const ffmpegOptions = [
+        "-c:v libx264",
+        "-preset fast",
+        `-b:v ${targetBitrateMbps}M`,
+        `-maxrate ${targetBitrateMbps * 1.2}M`,
+        `-bufsize ${targetBitrateMbps * 2}M`,
+        "-profile:v high",
+        "-level 4.0",
+        "-pix_fmt yuv420p",
+        "-movflags +faststart",
+      ];
+
+      // Handle audio compression
+      const audioStream = metadata.streams.find(
+        (s: any) => s.codec_type === "audio"
+      );
+
+      if (audioStream) {
+        ffmpegOptions.push("-c:a aac", "-b:a 128k", "-ac 2", "-ar 48000");
+      } else {
+        ffmpegOptions.push("-an"); // No audio
+      }
+
+      // Process video with FFmpeg
+      await new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+          .outputOptions(ffmpegOptions)
+          .output(outputPath)
+          .on("end", () => {
+            logger.info("Video compression completed");
+            resolve(null);
+          })
+          .on("error", (err: any) => {
+            logger.error("Video compression failed", { error: err });
+            reject(err);
+          })
+          .run();
+      });
+
+      // Read the processed video
+      const processedBuffer = await fs.readFile(outputPath);
+
+      logger.info("Video compressed successfully", {
+        originalSize: fileSizeBytes,
+        compressedSize: processedBuffer.length,
+        compressionRatio: processedBuffer.length / fileSizeBytes,
+      });
+
+      return processedBuffer;
+    } catch (error) {
+      logger.error("Error processing video", { error });
+      throw error;
+    } finally {
+      // Clean up temporary output file
+      try {
+        await fs.unlink(outputPath);
+      } catch (cleanupError) {
+        logger.warn("Failed to clean up temporary file", {
+          outputPath,
+          error: cleanupError,
+        });
+      }
+    }
   }
 
   async #fetchEmbedCard(url: string): Promise<{
