@@ -21,12 +21,14 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import { logger } from "@trigger.dev/sdk/v3";
 
 export class BlueskyPostClient extends PostClient {
   #agent: AtpAgent;
   #charLimit = 300;
   #maxImages = 4;
   #maxFileSize = 976.56 * 1024;
+  #maxVideoFileSize = 100_000_000;
   #requests: any[] = [];
   #responses: any[] = [];
 
@@ -246,6 +248,12 @@ export class BlueskyPostClient extends PostClient {
 
     const inputPath = path.join(tempDir, file.name);
     const videoBuffer = await file.arrayBuffer();
+    const fileSizeBytes = videoBuffer.byteLength;
+
+    if (fileSizeBytes > this.#maxVideoFileSize) {
+      //TODO: Process Video
+    }
+
     const buffer = Buffer.from(videoBuffer);
     await fs.writeFile(inputPath, buffer);
 
@@ -271,6 +279,7 @@ export class BlueskyPostClient extends PostClient {
     uploadUrl.searchParams.append("did", this.#agent.session!.did);
     uploadUrl.searchParams.append("name", file.name);
 
+    this.#requests.push({ uploadVideoRequest: uploadUrl });
     const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
       headers: {
@@ -283,7 +292,17 @@ export class BlueskyPostClient extends PostClient {
 
     const uploadResponseData = await uploadResponse.json();
 
+    this.#responses.push({ uploadVideoResponse: uploadResponseData });
+
     const jobStatus = uploadResponseData as AppBskyVideoDefs.JobStatus;
+
+    if (!jobStatus.jobId) {
+      logger.error("Error starting video upload job", {
+        error: uploadResponseData,
+      });
+
+      throw new Error(`Unable to start video upload, ${jobStatus.error}`);
+    }
 
     let blob: BlobRef | undefined = jobStatus.blob;
     let jobFinished: boolean = false;
