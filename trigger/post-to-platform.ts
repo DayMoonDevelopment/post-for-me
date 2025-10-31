@@ -131,9 +131,14 @@ const handleTokenRefresh = async ({
 
 export const postToPlatform = task({
   id: "post-to-platform",
-  machine: "medium-1x",
   maxDuration: 3600,
-  retry: { maxAttempts: 1 },
+  retry: {
+    maxAttempts: 2,
+    outOfMemory: {
+      machine: "large-1x",
+    },
+  },
+  machine: "medium-2x",
   run: async (payload: IndividualPostData): Promise<PostResult> => {
     const {
       platform,
