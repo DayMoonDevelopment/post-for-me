@@ -18,11 +18,12 @@ import {
 } from "./posting/post.types";
 import { TikTokBusinessPostClient } from "posting/platforms/tiktok_business-post-client";
 import { differenceInDays } from "date-fns";
+import { Database } from "@post-for-me/db";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
 const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
 
-const supabaseClient = createClient(
+const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
@@ -244,9 +245,12 @@ export const postToPlatform = task({
     await tags.add(`result_${postResult.success ? "success" : "error"}`);
 
     logger.info("Saving Post Result", { postResult });
-    const { error: insertResultError } = await supabaseClient
-      .from("social_post_results")
-      .insert(postResult);
+    const { data: insertedPostResult, error: insertResultError } =
+      await supabaseClient
+        .from("social_post_results")
+        .insert(postResult)
+        .select()
+        .single();
 
     if (insertResultError) {
       logger.error("Failed to insert post result", { insertResultError });
@@ -254,7 +258,18 @@ export const postToPlatform = task({
       await tasks.trigger("process-webhooks", {
         projectId: projectId,
         eventType: "social.post.result.created",
-        eventData: postResult,
+        eventData: {
+          details: insertedPostResult.details,
+          id: insertedPostResult.id,
+          error: insertedPostResult.error_message,
+          platform_data: {
+            id: insertedPostResult.provider_post_id,
+            url: insertedPostResult.provider_post_url,
+          },
+          post_id: insertedPostResult.post_id,
+          social_account_id: insertedPostResult.provider_connection_id,
+          success: insertedPostResult.success,
+        },
       });
     }
 
