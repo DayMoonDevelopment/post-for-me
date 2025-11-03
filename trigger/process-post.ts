@@ -467,18 +467,31 @@ export const processPost = task({
     } finally {
       if (missingAccountResults && missingAccountResults.length > 0) {
         logger.info("Saving Post Results", { missingAccountResults });
-        const { error: insertResultsError } = await supabaseClient
-          .from("social_post_results")
-          .insert(missingAccountResults);
+        const { data: insertedPostResults, error: insertResultsError } =
+          await supabaseClient
+            .from("social_post_results")
+            .insert(missingAccountResults)
+            .select();
 
         if (insertResultsError) {
           logger.error("Failed to insert post results", { insertResultsError });
         } else {
-          const webhookEvents = missingAccountResults.map((r) => ({
+          const webhookEvents = insertedPostResults.map((r) => ({
             payload: {
               projectId: post.project_id,
               eventType: "social.post.result.created",
-              eventData: r,
+              eventData: {
+                details: r.details,
+                id: r.id,
+                error: r.error_message,
+                platform_data: {
+                  id: r.provider_post_id,
+                  url: r.provider_post_url,
+                },
+                post_id: r.post_id,
+                social_account_id: r.provider_connection_id,
+                success: r.success,
+              },
             },
           }));
           await tasks.batchTrigger("process-webhooks", webhookEvents);
