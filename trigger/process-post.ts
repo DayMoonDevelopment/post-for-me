@@ -143,10 +143,7 @@ export const processPost = task({
   id: "process-post",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
-  run: async (payload: {
-    index: number;
-    post: Post;
-  }): Promise<PostResult[]> => {
+  run: async (payload: { index: number; post: Post }) => {
     const { post } = payload;
     logger.info("Starting post processing", { post });
 
@@ -159,9 +156,7 @@ export const processPost = task({
       })
     );
 
-    const results: PostResult[] = [];
-
-    const missingAccountResults: PostResult[] = [];
+    const errorResults: PostResult[] = [];
 
     try {
       if (!accounts || accounts.length === 0) {
@@ -174,7 +169,7 @@ export const processPost = task({
 
       if (error || !result.enabled) {
         logger.error("API Key is invalid", { key_result: result });
-        results.push(
+        errorResults.push(
           ...accounts.map((connection) => ({
             success: false,
             provider_connection_id: connection.id,
@@ -206,7 +201,7 @@ export const processPost = task({
 
       if (projectError || !project?.teams?.stripe_customer_id) {
         logger.error("Project not found", { projectError, project });
-        results.push(
+        errorResults.push(
           ...accounts.map((connection) => ({
             success: false,
             provider_connection_id: connection.id,
@@ -272,7 +267,7 @@ export const processPost = task({
 
         if (postMedia.length == 0) {
           logger.error("All Media Failed");
-          results.push(
+          errorResults.push(
             ...accounts.map((connection) => ({
               success: false,
               provider_connection_id: connection.id,
@@ -345,7 +340,7 @@ export const processPost = task({
             logger.error("No App credentials found for provider", {
               provider: account.provider,
             });
-            results.push({
+            errorResults.push({
               success: false,
               provider_connection_id: account.id,
               post_id: post.id,
@@ -417,7 +412,7 @@ export const processPost = task({
             error,
           });
 
-          results.push({
+          errorResults.push({
             success: false,
             error_message: error?.message || "Unkown error",
             provider_connection_id: account.id,
@@ -434,43 +429,15 @@ export const processPost = task({
       );
 
       logger.info("Posting To Accounts Complete", { batchPostResult });
-
-      results.push(
-        ...batchPostResult.runs.filter((run) => run.ok).map((run) => run.output)
-      );
-
-      logger.info("Checking Post Results");
-      const accountsWithResults = results.map(
-        (result) => result.provider_connection_id
-      );
-
-      const missingAccounts = postData.accounts.filter(
-        (account) => !accountsWithResults.includes(account.id)
-      );
-
-      if (missingAccounts && missingAccounts.length > 0) {
-        logger.info("Found Missing Post Results", { missingAccounts });
-
-        logger.info("Adding Failed Post Results For Missing Accounts");
-        missingAccountResults.push(
-          ...missingAccounts.map((account) => ({
-            provider_connection_id: account.id,
-            error_message:
-              "Post Status Unavailable, Please check the social account.",
-            success: false,
-            post_id: postData.id,
-          }))
-        );
-      }
     } catch (error) {
       logger.error("Unexpected Error", { error });
     } finally {
-      if (missingAccountResults && missingAccountResults.length > 0) {
-        logger.info("Saving Post Results", { missingAccountResults });
+      if (errorResults && errorResults.length > 0) {
+        logger.info("Saving Post Results", { errorResults });
         const { data: insertedPostResults, error: insertResultsError } =
           await supabaseClient
             .from("social_post_results")
-            .insert(missingAccountResults)
+            .insert(errorResults)
             .select();
 
         if (insertResultsError) {
@@ -542,8 +509,6 @@ export const processPost = task({
           eventData: transformPostData(updatedPost),
         });
       }
-
-      return results;
     }
   },
 });
