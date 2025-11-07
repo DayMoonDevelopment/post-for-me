@@ -12,35 +12,35 @@ const features = [
     icon: TimerIcon,
     title: "Ship in hours, not weeks.",
     description:
-      "Drop-in REST calls replace dozens of separate APIs. Our example code get you live the same day.",
+      "Drop-in REST calls replace dozens of separate APIs. Our example code gets you live the same day.",
     expand: true,
   },
   {
     icon: TrendingUpDownIcon,
     title: "9 platforms. 1 tool.",
     description:
-      "TikTok, Instagram, YouTube, and more. Manage integrations with every social media platform from one tool.",
+      "TikTok, Instagram, YouTube, and more. Manage integrations with every social media platform from place.",
     expand: true,
   },
   {
     icon: SendIcon,
     title: "Social Media Posts",
     description:
-      "Create, schedule, and publish posts across all your social accounts with a single API call.",
+      "Create, schedule, and publish text, images, and videos across all social platforms with a single API call.",
     expand: false,
   },
   {
     icon: NewspaperIcon,
     title: "Social Media Feeds",
     description:
-      "Fetch and display social media content in your app. Real-time feeds from any connected platform.",
+      "Fetch and display social media content in your app. View feeds from any connected account across every platform.",
     expand: false,
   },
   {
     icon: ChartPie,
-    title: "Post Metrics",
+    title: "Post Analytics",
     description:
-      "Track views, likes, shares, and engagement metrics. Get comprehensive analytics from all platforms in one place.",
+      "Track views, likes, shares, and engagement. Get comprehensive analytics from all platforms in one place.",
     expand: false,
   },
 ];
@@ -70,10 +70,12 @@ export function ValueProps() {
               key={feature.title}
               className={gridStyles({ expand: feature.expand })}
             >
-              <div className="mb-4 h-10 w-10 flex items-center justify-center bg-muted rounded-full">
-                <feature.icon className="size-5" />
+              <div className="flex flex-row items-center gap-3 mb-4">
+                <div className="h-10 w-10 flex items-center justify-center bg-muted rounded-full">
+                  <feature.icon className="size-5" />
+                </div>
+                <span className="text-lg font-semibold">{feature.title}</span>
               </div>
-              <span className="text-lg font-semibold">{feature.title}</span>
               <p className="mt-1 text-foreground/80 text-[15px]">
                 {feature.description}
               </p>

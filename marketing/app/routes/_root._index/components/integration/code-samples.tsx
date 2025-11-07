@@ -156,7 +156,7 @@ export function CodeSamples() {
   const [language, setLanguage] = useState(code[0].language);
 
   return (
-    <div className="relative flex flex-col gap-4">
+    <div className="w-full relative flex flex-col gap-4">
       <div className="w-full overflow-x-auto scrollbar-hidden">
         <ToggleGroup
           value={language}
