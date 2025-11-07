@@ -6,6 +6,6 @@ export function loader() {
       version: "1.1.0",
       url: "#",
     },
-    faq: faq.filter(({ featured }) => featured),
+    faq,
   };
 }

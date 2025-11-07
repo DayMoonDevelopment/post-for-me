@@ -2,8 +2,6 @@ import { Link } from "react-router";
 
 import { Logo } from "~/components/logo";
 
-import { Separator } from "~/ui/separator";
-
 import { GetStarted } from "./get-started";
 
 const footerSections = [
@@ -140,8 +138,23 @@ export const Footer = () => {
       <GetStarted />
 
       <footer className="border-t">
-        <div className="max-w-(--breakpoint-2xl) mx-auto">
-          <div className="py-12 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-8 gap-y-10 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-(--breakpoint-2xl) mx-auto flex flex-col lg:flex-row justify-between gap-8 pt-12">
+          <div className="flex flex-col justify-start gap-x-2 gap-y-4 px-4 sm:px-6 lg:px-8">
+            {/* Logo */}
+            <Logo className="h-8 self-start" />
+
+            {/* Copyright */}
+            <span className="text-muted-foreground">
+              &copy; {new Date().getFullYear()}{" "}
+              <Link to="/" target="_blank">
+                Day Moon Development
+              </Link>
+              . <br />
+              All rights reserved.
+            </span>
+          </div>
+
+          <div className="flex-1 justify-end grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-8 gap-y-10 px-4 sm:px-6 lg:px-8">
             {footerSections.map(({ title, links }) => (
               <div key={title}>
                 <h6 className="font-medium">{title}</h6>
@@ -159,20 +172,6 @@ export const Footer = () => {
                 </ul>
               </div>
             ))}
-          </div>
-          <Separator />
-          <div className="py-8 flex flex-col sm:flex-row items-center justify-between gap-x-2 gap-y-4 px-4 sm:px-6 lg:px-8">
-            {/* Logo */}
-            <Logo className="h-8" />
-
-            {/* Copyright */}
-            <span className="text-muted-foreground">
-              &copy; {new Date().getFullYear()}{" "}
-              <Link to="/" target="_blank">
-                Day Moon Development
-              </Link>
-              . All rights reserved.
-            </span>
           </div>
         </div>
       </footer>

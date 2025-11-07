@@ -118,29 +118,6 @@ func main() {
 	fmt.Printf("%+v\\n", socialPost.ID)
 }`,
   },
-  {
-    language: "kotlin",
-    filename: "Main.kt",
-    code: `import com.post_for_me.api.client.PostForMeClient
-import com.post_for_me.api.client.okhttp.PostForMeOkHttpClient
-import com.post_for_me.api.models.socialposts.CreateSocialPost
-import com.post_for_me.api.models.socialposts.SocialPost
-import com.post_for_me.api.models.socialposts.SocialPostCreateParams
-
-// Configure the client using environment variables or system properties
-val client: PostForMeClient = PostForMeOkHttpClient.fromEnv()
-
-// Create parameters for a social post
-val params: SocialPostCreateParams = SocialPostCreateParams.builder()
-  .createSocialPost(CreateSocialPost.builder()
-    .caption("My first post!")
-    .addSocialAccount("sa_1234")
-    .build())
-  .build()
-
-// Create the social post
-val socialPost: SocialPost = client.socialPosts().create(params)`,
-  },
 ];
 
 const languageIcons = {
@@ -156,7 +133,7 @@ export function CodeSamples() {
   const [language, setLanguage] = useState(code[0].language);
 
   return (
-    <div className="w-full relative flex flex-col gap-4">
+    <div className="w-full min-w-0 relative flex flex-col gap-4">
       <div className="w-full overflow-x-auto scrollbar-hidden">
         <ToggleGroup
           value={language}
@@ -181,7 +158,7 @@ export function CodeSamples() {
         </ToggleGroup>
       </div>
 
-      <CodeBlock data={code} value={language} className="flex-1">
+      <CodeBlock data={code} value={language} className="flex-1 min-w-0">
         <CodeBlockBody>
           {(item) => (
             <CodeBlockItem key={item.language} value={item.language}>

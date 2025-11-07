@@ -1,36 +1,37 @@
+import { useState } from "react";
+import {
+  BotIcon,
+  CalendarClockIcon,
+  GamepadIcon,
+  MonitorSmartphoneIcon,
+  PartyPopperIcon,
+} from "lucide-react";
+
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "~/ui/accordion";
-import {
-  BotIcon,
-  CalendarClockIcon,
-  GamepadIcon,
-  MonitorSmartphoneIcon,
-  WorkflowIcon,
-} from "lucide-react";
-import { useState } from "react";
 
 const features = [
   {
     icon: CalendarClockIcon,
     title: "Social Media Scheduling",
     description:
-      "Lower the overhead and maintenance of your unique social media scheduling tool so you can focus on the parts that make your app truly unique.",
+      "Go to market faster with more integrations. Lower the overhead and maintenance of your social media scheduling tool so you can focus on the parts that make your app truly unique.",
   },
   {
     icon: BotIcon,
     title: "AI Content Generation",
     description:
-      "Share your generated images and videos directly from your content generation flows and apps.",
+      "Generate text, images, and video, then post them to all social media platforms. Our MCP server and API makes it easy to add posting directly in the tools you're already using.",
   },
   {
-    icon: WorkflowIcon,
+    icon: PartyPopperIcon,
     title: "Marketing Teams",
     description:
-      "Customize your internal tools to best fit your team’s unique automation workflows.",
+      "Scale your client base with specialized workflows and automation to let you serve more content for less cost. Tailor reporting to engagement metrics that are actually relevant.",
   },
   {
     icon: GamepadIcon,
@@ -42,7 +43,7 @@ const features = [
     icon: MonitorSmartphoneIcon,
     title: "SaaS products",
     description:
-      "Build new social media posting experiences for your customers in a fraction of the time.",
+      "Add social media experiences to your customers without disrupting your current roadmap. Give your users unique insights into their social media accounts or launch them into a new level of social media growth.",
   },
 ];
 

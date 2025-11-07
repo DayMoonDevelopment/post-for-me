@@ -6,9 +6,10 @@ import {
   AccordionTrigger,
 } from "~/ui/accordion";
 
-import type { Route } from "../+types/route";
 import { Button } from "~/ui/button";
 import { ArrowRightIcon } from "icons";
+
+import type { Route } from "../+types/route";
 
 export const FAQ = () => {
   const { faq } = useLoaderData<Route.ComponentProps["loaderData"]>();
@@ -21,7 +22,7 @@ export const FAQ = () => {
             Frequently Asked <br /> Questions
           </h2>
 
-          <Button variant="link" className="-ml-2" asChild>
+          <Button variant="link" asChild>
             <Link to="/faq">
               more questions answered
               <ArrowRightIcon />
