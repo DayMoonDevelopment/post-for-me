@@ -25,6 +25,7 @@ export function Component() {
     portalUrl,
     checkoutUrl,
     hasCredsAccess,
+    upcomingInvoice,
   } = useLoaderData<typeof loader>();
 
   const [showAddonDialog, setShowAddonDialog] = useState(false);
@@ -169,6 +170,41 @@ export function Component() {
           </CardContent>
         </Card>
       </div>
+
+      {upcomingInvoice && hasActiveSubscription ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming Invoice</CardTitle>
+            <CardDescription>
+              Your next billing charge scheduled for{" "}
+              {new Date(upcomingInvoice.created * 1000).toLocaleDateString()}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              {upcomingInvoice.lines.data.map((line, index) => (
+                <div key={index} className="flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">
+                      {line.description}
+                    </span>
+                  </div>
+                  <span className="text-sm font-medium">
+                    ${(line.amount / 100).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t pt-3">
+              <div className="flex justify-between items-center font-semibold">
+                <span>Total</span>
+                <span>${(upcomingInvoice.total / 100).toFixed(2)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <AddonConfirmationDialog
         isOpen={showAddonDialog}
