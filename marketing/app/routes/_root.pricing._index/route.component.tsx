@@ -28,7 +28,7 @@ export function Component() {
   const selectedTier = tiers[selectedTierIndex];
 
   return (
-    <div className="flex flex-col items-center justify-center pt-24 px-6">
+    <div className="flex flex-col items-center justify-center pt-32 px-6">
       <h1 className="text-5xl sm:text-6xl font-semibold text-center tracking-tighter">
         Predictable pricing <br />
         without surprises.
@@ -91,9 +91,8 @@ export function Component() {
             <p className="text-sm text-muted-foreground">
               {`We want you to succeed, and not be afraid of surprise charges. If
               you unexpectedly go over the limits of your plan, we won't shut
-              you down automatically, nor will we charge you extra. If your
-              usage is consistently exceeding the limits, you should upgrade to
-              the next higher plan.`}
+              you down or charge you extra automatically. If your
+              usage is consistently exceeding the limits, we'll reach out about upgrading your account.`}
             </p>
           </div>
         </div>
@@ -111,7 +110,12 @@ export function Component() {
         </CardHeader>
         <CardContent className="mt-2 flex flex-row gap-2 px-8">
           <Button asChild>
-            <Link to="mailto:postforme@daymoon.dev">Get in Touch</Link>
+            <Link
+              to="https://cal.com/team/day-moon/post-for-me-enterprise-plan-inquiry"
+              target="_blank"
+            >
+              Get in Touch
+            </Link>
           </Button>
         </CardContent>
       </Card>

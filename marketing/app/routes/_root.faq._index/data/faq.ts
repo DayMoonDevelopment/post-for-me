@@ -22,7 +22,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       },
       {
         q: "How long has Post for Me been available?",
-        a: "Launched by Day Moon Development, we’ve been helping developers integrate social media since [year TBD – please confirm].",
+        a: "Launched by Day Moon Development, we’ve been helping developers integrate social media since 2025.",
       },
     ],
   },
@@ -31,7 +31,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
     faq: [
       {
         q: "What are the pricing plans for Post for Me?",
-        a: "We offer tiered pricing to give you a predictable, fixed cost that scales with your usage, starting at $5/month for 500 total posts.",
+        a: "We offer tiered pricing to give you a predictable, fixed cost that scales with your usage, starting at $10/month for 1,000 total posts.",
       },
       {
         q: "Will I get shut down if I go over my plan’s post limit?",
@@ -55,7 +55,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       },
       {
         q: "What payment methods are accepted?",
-        a: "We accept major credit cards and secure payments via our billing provider [TBD – please confirm].",
+        a: "We accept major credit cards and secure payments via Stripe.",
       },
     ],
   },

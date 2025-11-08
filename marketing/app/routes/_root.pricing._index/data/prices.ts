@@ -1,18 +1,14 @@
 export const baseFeatures = [
   "Unlimited social accounts",
-  "Social account feeds",
-  "Social post metrics",
-  "Unlimited API Keys",
+  "Read social account feeds",
+  "Analytics for social posts",
   "Bring your own social media developer credentials",
   "Use our social media developer credentials",
-  "Unlimited dashboard accounts",
+  "Unlimited API Keys",
+  "Unlimited team members",
 ];
 
 export const tiers: { price: number; posts: number }[] = [
-  {
-    price: 5,
-    posts: 500,
-  },
   {
     price: 10,
     posts: 1000,
@@ -24,6 +20,10 @@ export const tiers: { price: number; posts: number }[] = [
   {
     price: 50,
     posts: 5000,
+  },
+  {
+    price: 75,
+    posts: 10000,
   },
   {
     price: 150,
@@ -38,7 +38,7 @@ export const tiers: { price: number; posts: number }[] = [
     posts: 100000,
   },
   {
-    price: 1500,
-    posts: 300000,
+    price: 1000,
+    posts: 200000,
   },
 ];

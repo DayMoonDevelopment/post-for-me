@@ -135,7 +135,9 @@ const footerSections = [
 export const Footer = () => {
   return (
     <div className="space-y-12">
-      <GetStarted />
+      <div className="px-4">
+        <GetStarted />
+      </div>
 
       <footer className="border-t">
         <div className="max-w-(--breakpoint-2xl) mx-auto flex flex-col lg:flex-row justify-between gap-8 pt-12">

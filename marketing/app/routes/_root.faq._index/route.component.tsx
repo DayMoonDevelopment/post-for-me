@@ -3,7 +3,6 @@ import { useLoaderData } from "react-router";
 import { cn } from "~/lib/utils";
 
 import { FAQ } from "./components/faq";
-import { Contact } from "./components/contact";
 
 import type { Route } from "./+types/route";
 
@@ -24,8 +23,6 @@ export function Component() {
           <FAQ title={section.title} faq={section.faq} />
         </div>
       ))}
-
-      <Contact />
     </div>
   );
 }
