@@ -85,7 +85,7 @@ export const ffmpegCompressVideo = task({
     maxSizeBytes: number;
   }): Promise<string> => {
     const bucket = "post-media";
-    console.log(url);
+
     const key = getFileKeyFromPublicUrl(url, bucket);
 
     if (!key) {
@@ -103,7 +103,6 @@ export const ffmpegCompressVideo = task({
     const videoBuffer = await videoResponse.arrayBuffer();
     const fileSizeBytes = videoBuffer.byteLength;
 
-    console.log(fileSizeBytes, maxSizeBytes, fileSizeBytes <= maxSizeBytes);
     if (fileSizeBytes <= maxSizeBytes) {
       logger.info("file the right size, skipping process");
       return url;
