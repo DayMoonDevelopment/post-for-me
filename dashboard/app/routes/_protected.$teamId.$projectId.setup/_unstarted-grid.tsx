@@ -22,7 +22,7 @@ const allPlatforms = [
   "tiktok_business",
 ] as const;
 
-const providersComingSoon = ["instagram"] as const;
+const providersComingSoon: string[] = [] as const;
 
 export function UnstartedGrid() {
   const { credentials, isSystem } =
