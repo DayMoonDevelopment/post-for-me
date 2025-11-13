@@ -25,7 +25,7 @@ const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 const createPostClient = ({
@@ -78,7 +78,7 @@ const handleTokenRefresh = async ({
 
     if (!access_token) {
       console.error(
-        `Failed to refresh ${account.provider} token for account ${account.id}`
+        `Failed to refresh ${account.provider} token for account ${account.id}`,
       );
 
       return {
@@ -136,10 +136,10 @@ export const postToPlatform = task({
   retry: {
     maxAttempts: 2,
     outOfMemory: {
-      machine: "medium-2x",
+      machine: "medium-1x",
     },
   },
-  machine: "small-1x",
+  machine: "small-2x",
   run: async (payload: IndividualPostData): Promise<PostResult> => {
     const {
       platform,
@@ -169,7 +169,7 @@ export const postToPlatform = task({
         platformsToAlwaysRefresh.includes(account.provider) ||
         differenceInDays(
           account.access_token_expires_at || new Date(),
-          new Date()
+          new Date(),
         ) <= 7
       ) {
         logger.info("Refreshing Token", {
