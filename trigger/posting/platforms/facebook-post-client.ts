@@ -1023,7 +1023,9 @@ export class FacebookPostClient extends PostClient {
     form.append("access_token", accessToken);
     form.append("is_preferred", "true");
 
-    const buffer = await file.arrayBuffer();
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
     form.append("source", buffer, {
       filename: file.name,
       contentType: file.type,

@@ -111,7 +111,7 @@ export class SocialAccountsService {
           values.push(username);
           break;
       }
-      query.in('username', values);
+      query.in('social_provider_user_name', values);
     }
 
     query.order('created_at', { ascending: false });
