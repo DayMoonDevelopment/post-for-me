@@ -1,12 +1,9 @@
-import type {
-  SocialProviderAppCredentials,
-  SocialAccount,
-} from './dto/global.dto';
+import type { PlatformPost, SocialAccount } from './dto/global.dto';
 
 export interface SocialPlatformService {
-  appCredentials: SocialProviderAppCredentials;
+  initService(projectId: string): Promise<void>;
 
-  refreshAccessToken(account: SocialAccount): Promise<SocialAccount>;
+  refreshAccessToken(account: SocialAccount): Promise<SocialAccount | null>;
 
   getAccountPosts({
     account,
@@ -14,5 +11,5 @@ export interface SocialPlatformService {
   }: {
     account: SocialAccount;
     platformIds?: string[];
-  }): Promise<string>;
+  }): Promise<PlatformPost>;
 }

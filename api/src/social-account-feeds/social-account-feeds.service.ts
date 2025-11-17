@@ -5,14 +5,17 @@ import { PlatformPostQueryDto } from './dto/platform-post-query.dto';
 import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-response.dto';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
-import { SocialProvierAppCredentials } from '../lib/dto/global.dto.ts';
-import { SocialProviderService } from '../lib/social-provider-service.ts';
+import { SocialAccount } from '../lib/dto/global.dto';
+import { SocialPlatformService } from '../lib/social-provider-service';
+import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
+import { differenceInDays } from 'date-fns';
 
 @Injectable()
 export class SocialAccountFeedsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     @Inject(REQUEST) private request: Request,
+    private readonly tiktokBusinessService: TikTokBusinessService,
   ) {}
 
   generateNextUrl(queryParams: PlatformPostQueryDto): string {
@@ -53,7 +56,7 @@ export class SocialAccountFeedsService {
       throw new Error('Unable to fetch account');
     }
 
-    const plaformPostIds: string[] = [];
+    const platformPostIds: string[] = [];
     const postResultsQuery = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
@@ -108,7 +111,7 @@ export class SocialAccountFeedsService {
         const ids = postResults
           ?.filter((pr) => pr.provider_post_id)
           ?.map((pr) => pr.provider_post_id!);
-        plaformPostIds.push(...ids);
+        platformPostIds.push(...ids);
       }
     }
 
@@ -127,25 +130,62 @@ export class SocialAccountFeedsService {
           break;
       }
 
-      plaformPostIds.push(...values);
+      platformPostIds.push(...values);
     }
 
     //Get App Credentials
-    const { data: appCredentials, error: appCredentialsError } =
-      this.supabaseService.supabaseClient
-        .from('social_provider_app_credentials')
-        .select()
-        .eq('project_id', projectId)
-        .eq('provider', account.provider)
-        .single();
+    const platformService = await this.getPlatformService({
+      platform: account.provider,
+      projectId,
+    });
 
-    if (appCredentialsError) {
-      console.error(appCredentialsError);
-      throw new Error('No app credentials found for platform');
+    const socialAccount: SocialAccount = {
+      provider: account.provider,
+      id: account.id,
+      social_provider_user_name: account.social_provider_user_name,
+      access_token: account.access_token || '',
+      refresh_token: account.access_token,
+      access_token_expires_at: new Date(
+        account.access_token_expires_at || new Date(),
+      ),
+      refresh_token_expires_at: account.refresh_token_expires_at
+        ? new Date(account.refresh_token_expires_at)
+        : null,
+      social_provider_user_id: account.social_provider_user_id,
+      social_provider_metadata: account.social_provider_metadata,
+    };
+
+    if (
+      differenceInDays(
+        new Date(account.access_token_expires_at || new Date()),
+        new Date(),
+      ) >= 7
+    ) {
+      const updatedAccount =
+        await platformService.refreshAccessToken(socialAccount);
+
+      if (updatedAccount) {
+        await this.supabaseService.supabaseClient
+          .from('social_provider_connections')
+          .update({
+            access_token: updatedAccount.access_token,
+            refresh_token: updatedAccount.refresh_token,
+            access_token_expires_at:
+              updatedAccount.access_token_expires_at?.toISOString(),
+            refresh_token_expires_at:
+              updatedAccount.refresh_token_expires_at?.toISOString(),
+          })
+          .eq('id', account.id);
+      }
     }
-    // Use service to get post data based on query params
 
-    await Promise.resolve();
+    const posts = await platformService.getAccountPosts({
+      account: socialAccount,
+      platformIds: platformPostIds,
+    });
+    console.log(posts);
+
+    //Get System posts that match platform posts
     return {
       data: [],
       meta: {
@@ -156,16 +196,18 @@ export class SocialAccountFeedsService {
     };
   }
 
-  getPlatformService({
+  async getPlatformService({
     platform,
-    appCredentials,
+    projectId,
   }: {
     platform: string;
-    appCredientials: SocialProvierAppCredentials;
-  }): SocialProviderService {
+    projectId: string;
+  }): Promise<SocialPlatformService> {
     switch (platform) {
       case 'tiktok_business':
-        break;
+        await this.tiktokBusinessService.initService(projectId);
+        return this.tiktokBusinessService;
     }
+    throw new Error('Unable to create platform service');
   }
 }

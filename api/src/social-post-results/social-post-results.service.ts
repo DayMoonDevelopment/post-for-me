@@ -14,7 +14,22 @@ type ProviderEnum = Database['public']['Enums']['social_provider'];
 export class PostResultsService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
-  async getPostPostResultRecord(id: string, projectId: string) {
+  async getPostPostResultRecord(
+    id: string,
+    projectId: string,
+  ): Promise<{
+    data: {
+      success: boolean;
+      provider_post_id?: string;
+      provider_post_url?: string;
+      id: string;
+      details?: any;
+      post_id: string;
+      provider_connection_id: string;
+      error_message: string;
+    };
+    error: any;
+  }> {
     const postResults = await this.supabaseService.supabaseClient
       .from('social_post_results')
       .select('*, social_provider_connections(provider, project_id)')
@@ -139,7 +154,7 @@ export class PostResultsService {
       };
     }
 
-    return {
+    const result: SocialPostResultDto = {
       id: postResults.data.id,
       social_account_id: postResults.data.provider_connection_id,
       post_id: postResults.data.post_id,
@@ -148,5 +163,7 @@ export class PostResultsService {
       details: postResults.data.details,
       platform_data,
     };
+
+    return result;
   }
 }

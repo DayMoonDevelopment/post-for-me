@@ -31,10 +31,8 @@ export class PlatformPostDto {
 
   @ApiProperty({
     description: 'ID of the social account',
-    required: false,
-    nullable: true,
   })
-  social_account_id?: string;
+  social_account_id: string;
 
   @ApiProperty({
     description: 'External account ID from the platform',

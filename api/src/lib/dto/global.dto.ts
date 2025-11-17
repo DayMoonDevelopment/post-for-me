@@ -38,3 +38,13 @@ export interface SocialAccount {
   social_provider_user_id: string;
   social_provider_metadata: any;
 }
+
+export interface PlatformPost {
+  provider: Provider;
+  id: string;
+  account_id: string;
+  caption: string;
+  url: string;
+  media: string[];
+  metrics: any;
+}
