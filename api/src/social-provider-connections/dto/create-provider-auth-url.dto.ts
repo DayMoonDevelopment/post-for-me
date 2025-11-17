@@ -69,7 +69,7 @@ export class CreateSocialAccountProviderAuthUrlDto {
   external_id?: string;
 
   @ApiProperty({
-    description: `Override the default redirect URL for the OAuth flow. If provided, this URL will be used instead of our redirecut URL. Make sure this URL is included in your app's authorized redirect url. This ovveride will not work when using our system credientals.`,
+    description: `Override the default redirect URL for the OAuth flow. If provided, this URL will be used instead of our redirect URL. Make sure this URL is included in your app's authorized redirect urls. This override will not work when using our system credientals.`,
     required: false,
   })
   redirect_url_override?: string;
