@@ -216,6 +216,7 @@ export class SocialAccountsController {
       appCredentials: socialProviderAppCredentials,
       providerData: createAuthUrlInput.platform_data,
       externalId: createAuthUrlInput.external_id,
+      redirectUrlOverride: createAuthUrlInput.redirect_url_override,
     });
 
     return {
