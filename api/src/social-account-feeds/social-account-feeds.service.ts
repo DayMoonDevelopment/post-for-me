@@ -5,6 +5,8 @@ import { PlatformPostQueryDto } from './dto/platform-post-query.dto';
 import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-response.dto';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
+import { SocialProvierAppCredentials } from '../lib/dto/global.dto.ts';
+import { SocialProviderService } from '../lib/social-provider-service.ts';
 
 @Injectable()
 export class SocialAccountFeedsService {
@@ -129,10 +131,20 @@ export class SocialAccountFeedsService {
     }
 
     //Get App Credentials
+    const { data: appCredentials, error: appCredentialsError } =
+      this.supabaseService.supabaseClient
+        .from('social_provider_app_credentials')
+        .select()
+        .eq('project_id', projectId)
+        .eq('provider', account.provider)
+        .single();
 
+    if (appCredentialsError) {
+      console.error(appCredentialsError);
+      throw new Error('No app credentials found for platform');
+    }
     // Use service to get post data based on query params
 
-    console.log(queryParams, projectId);
     await Promise.resolve();
     return {
       data: [],
@@ -142,5 +154,18 @@ export class SocialAccountFeedsService {
         next: this.generateNextUrl(queryParams),
       },
     };
+  }
+
+  getPlatformService({
+    platform,
+    appCredentials,
+  }: {
+    platform: string;
+    appCredientials: SocialProvierAppCredentials;
+  }): SocialProviderService {
+    switch (platform) {
+      case 'tiktok_business':
+        break;
+    }
   }
 }

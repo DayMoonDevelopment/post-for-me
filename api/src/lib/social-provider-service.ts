@@ -6,7 +6,7 @@ import type {
 export interface SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  refreshAccessToken(account: SocialAccount): void;
+  refreshAccessToken(account: SocialAccount): Promise<SocialAccount>;
 
   getAccountPosts({
     account,
