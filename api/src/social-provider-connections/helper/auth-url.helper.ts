@@ -17,6 +17,7 @@ export async function generateAuthUrl({
   supabaseService,
   providerData,
   externalId,
+  redirectUrlOverride,
 }: {
   projectId: string;
   isSystem: boolean;
@@ -25,6 +26,7 @@ export async function generateAuthUrl({
   supabaseService: SupabaseService;
   providerData: AuthUrlProviderData | null | undefined;
   externalId: string | undefined;
+  redirectUrlOverride: string | undefined | null;
 }): Promise<string | undefined> {
   const { appId, appSecret } = appCredentials;
 
@@ -35,7 +37,9 @@ export async function generateAuthUrl({
 
   const appUrl = configService.get<string>('DASHBOARD_APP_URL');
 
-  let callbackUrl = `${appUrl}/callback/${projectId}/${provider}/account`;
+  let callbackUrl =
+    redirectUrlOverride ||
+    `${appUrl}/callback/${projectId}/${provider}/account`;
 
   const authState = generateOAuthState();
 
