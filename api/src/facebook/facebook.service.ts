@@ -8,6 +8,11 @@ import type {
 } from '../lib/dto/global.dto';
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
+import type {
+  FacebookTokenResponse,
+  FacebookPost,
+  FacebookFeedResponse,
+} from './facebook.types';
 
 @Injectable({ scope: Scope.REQUEST })
 export class FacebookService implements SocialPlatformService {
@@ -51,7 +56,7 @@ export class FacebookService implements SocialPlatformService {
         },
       );
 
-      const data = response.data as { access_token: string };
+      const data = response.data as FacebookTokenResponse;
       if (!data.access_token) {
         throw new Error('No access token in refresh response');
       }
@@ -94,43 +99,8 @@ export class FacebookService implements SocialPlatformService {
 
         const responses = await Promise.all(postPromises);
         const posts: PlatformPost[] = responses.map((response) => {
-          const post = response.data;
-          return {
-            provider: 'facebook',
-            id: post.id,
-            account_id: account.social_provider_user_id,
-            caption: post.message || '',
-            url: post.permalink_url || '',
-            media: post.full_picture
-              ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
-              : [],
-            metrics: {
-              likes: post.likes?.summary?.total_count || 0,
-              comments: post.comments?.summary?.total_count || 0,
-              shares: post.shares?.count || 0,
-              favorites: 0,
-              reach: 0,
-              video_views: 0,
-              total_time_watched: 0,
-              average_time_watched: 0,
-              full_video_watched_rate: 0,
-              new_followers: 0,
-              profile_views: 0,
-              website_clicks: 0,
-              phone_number_clicks: 0,
-              lead_submissions: 0,
-              app_download_clicks: 0,
-              email_clicks: 0,
-              address_clicks: 0,
-              video_view_retention: [],
-              impression_sources: [],
-              audience_types: [],
-              audience_genders: [],
-              audience_countries: [],
-              audience_cities: [],
-              engagement_likes: [],
-            },
-          };
+          const post = response.data as FacebookPost;
+          return this.mapFacebookPostToPlatformPost(post, account);
         });
 
         return {
@@ -153,50 +123,16 @@ export class FacebookService implements SocialPlatformService {
         },
       );
 
-      const posts: PlatformPost[] = (response.data.data || []).map(
-        (post: any) => ({
-          provider: 'facebook',
-          id: post.id,
-          account_id: account.social_provider_user_id,
-          caption: post.message || '',
-          url: post.permalink_url || '',
-          media: post.full_picture
-            ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
-            : [],
-          metrics: {
-            likes: post.likes?.summary?.total_count || 0,
-            comments: post.comments?.summary?.total_count || 0,
-            shares: post.shares?.count || 0,
-            favorites: 0,
-            reach: 0,
-            video_views: 0,
-            total_time_watched: 0,
-            average_time_watched: 0,
-            full_video_watched_rate: 0,
-            new_followers: 0,
-            profile_views: 0,
-            website_clicks: 0,
-            phone_number_clicks: 0,
-            lead_submissions: 0,
-            app_download_clicks: 0,
-            email_clicks: 0,
-            address_clicks: 0,
-            video_view_retention: [],
-            impression_sources: [],
-            audience_types: [],
-            audience_genders: [],
-            audience_countries: [],
-            audience_cities: [],
-            engagement_likes: [],
-          },
-        }),
+      const feedResponse = response.data as FacebookFeedResponse;
+      const posts: PlatformPost[] = (feedResponse.data || []).map((post) =>
+        this.mapFacebookPostToPlatformPost(post, account),
       );
 
       return {
         posts,
         count: posts.length,
-        has_more: !!response.data.paging?.next,
-        cursor: response.data.paging?.cursors?.after,
+        has_more: !!feedResponse.paging?.next,
+        cursor: feedResponse.paging?.cursors?.after,
       };
     } catch (error) {
       console.error('Error fetching Facebook posts:', error);
@@ -206,5 +142,47 @@ export class FacebookService implements SocialPlatformService {
         has_more: false,
       };
     }
+  }
+
+  private mapFacebookPostToPlatformPost(
+    post: FacebookPost,
+    account: SocialAccount,
+  ): PlatformPost {
+    return {
+      provider: 'facebook',
+      id: post.id,
+      account_id: account.social_provider_user_id,
+      caption: post.message || '',
+      url: post.permalink_url || '',
+      media: post.full_picture
+        ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
+        : [],
+      metrics: {
+        likes: post.likes?.summary?.total_count || 0,
+        comments: post.comments?.summary?.total_count || 0,
+        shares: post.shares?.count || 0,
+        favorites: 0,
+        reach: 0,
+        video_views: 0,
+        total_time_watched: 0,
+        average_time_watched: 0,
+        full_video_watched_rate: 0,
+        new_followers: 0,
+        profile_views: 0,
+        website_clicks: 0,
+        phone_number_clicks: 0,
+        lead_submissions: 0,
+        app_download_clicks: 0,
+        email_clicks: 0,
+        address_clicks: 0,
+        video_view_retention: [],
+        impression_sources: [],
+        audience_types: [],
+        audience_genders: [],
+        audience_countries: [],
+        audience_cities: [],
+        engagement_likes: [],
+      },
+    };
   }
 }
