@@ -8,6 +8,15 @@ import { Request } from 'express';
 import { SocialAccount } from '../lib/dto/global.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
+import { YouTubeService } from '../youtube/youtube.service';
+import { TikTokService } from '../tiktok/tiktok.service';
+import { InstagramService } from '../instagram/instagram.service';
+import { FacebookService } from '../facebook/facebook.service';
+import { LinkedInService } from '../linkedin/linkedin.service';
+import { PinterestService } from '../pinterest/pinterest.service';
+import { ThreadsService } from '../threads/threads.service';
+import { TwitterService } from '../twitter/twitter.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 import { differenceInDays } from 'date-fns';
 import { PlatformPostDto } from './dto/platform-post.dto';
 
@@ -17,6 +26,15 @@ export class SocialAccountFeedsService {
     private readonly supabaseService: SupabaseService,
     @Inject(REQUEST) private request: Request,
     private readonly tiktokBusinessService: TikTokBusinessService,
+    private readonly youtubeService: YouTubeService,
+    private readonly tiktokService: TikTokService,
+    private readonly instagramService: InstagramService,
+    private readonly facebookService: FacebookService,
+    private readonly linkedinService: LinkedInService,
+    private readonly pinterestService: PinterestService,
+    private readonly threadsService: ThreadsService,
+    private readonly twitterService: TwitterService,
+    private readonly blueskyService: BlueskyService,
   ) {}
 
   generateNextUrl(queryParams: PlatformPostQueryDto): string {
@@ -257,6 +275,34 @@ export class SocialAccountFeedsService {
       case 'tiktok_business':
         await this.tiktokBusinessService.initService(projectId);
         return this.tiktokBusinessService;
+      case 'youtube':
+        await this.youtubeService.initService(projectId);
+        return this.youtubeService;
+      case 'tiktok':
+        await this.tiktokService.initService(projectId);
+        return this.tiktokService;
+      case 'instagram':
+      case 'instagram_w_facebook':
+        await this.instagramService.initService(projectId);
+        return this.instagramService;
+      case 'facebook':
+        await this.facebookService.initService(projectId);
+        return this.facebookService;
+      case 'linkedin':
+        await this.linkedinService.initService(projectId);
+        return this.linkedinService;
+      case 'pinterest':
+        await this.pinterestService.initService(projectId);
+        return this.pinterestService;
+      case 'threads':
+        await this.threadsService.initService(projectId);
+        return this.threadsService;
+      case 'x':
+        await this.twitterService.initService(projectId);
+        return this.twitterService;
+      case 'bluesky':
+        await this.blueskyService.initService(projectId);
+        return this.blueskyService;
     }
     throw new Error('Unable to create platform service');
   }
