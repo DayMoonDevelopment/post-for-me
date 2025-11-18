@@ -6,7 +6,8 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
-import { google, youtube_v3 } from 'googleapis';
+import { google } from 'googleapis';
+import type { OAuth2Client } from 'google-auth-library';
 import { SupabaseService } from '../supabase/supabase.service';
 
 interface YouTubeVideo {
@@ -32,7 +33,7 @@ interface YouTubeVideo {
 @Injectable()
 export class YouTubeService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
-  private oauth2Client: any;
+  private oauth2Client: OAuth2Client | null = null;
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
@@ -79,6 +80,10 @@ export class YouTubeService implements SocialPlatformService {
     });
 
     const { credentials } = await this.oauth2Client.refreshAccessToken();
+
+    if (!credentials.access_token) {
+      throw new Error('Failed to refresh access token');
+    }
 
     account.access_token = credentials.access_token;
     account.refresh_token = credentials.refresh_token || account.refresh_token;

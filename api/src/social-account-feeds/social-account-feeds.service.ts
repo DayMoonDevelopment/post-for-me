@@ -155,8 +155,18 @@ export class SocialAccountFeedsService {
     }
 
     //Get App Credentials
+
+    let platformName = account.provider;
+
+    if (
+      platformName == 'instagram' &&
+      !account.access_token?.startsWith('IG')
+    ) {
+      platformName = 'instagram_w_facebook';
+    }
+
     const platformService = await this.getPlatformService({
-      platform: account.provider,
+      platform: platformName,
       projectId,
     });
 
