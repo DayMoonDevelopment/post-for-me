@@ -160,30 +160,9 @@ export class InstagramService implements SocialPlatformService {
         },
       ],
       metrics: {
-        likes: item.like_count || 0,
-        comments: item.comments_count || 0,
-        shares: 0,
-        favorites: 0,
-        reach: 0,
-        video_views: 0,
-        total_time_watched: 0,
-        average_time_watched: 0,
-        full_video_watched_rate: 0,
-        new_followers: 0,
-        profile_views: 0,
-        website_clicks: 0,
-        phone_number_clicks: 0,
-        lead_submissions: 0,
-        app_download_clicks: 0,
-        email_clicks: 0,
-        address_clicks: 0,
-        video_view_retention: [],
-        impression_sources: [],
-        audience_types: [],
-        audience_genders: [],
-        audience_countries: [],
-        audience_cities: [],
-        engagement_likes: [],
+        like_count: item.like_count || 0,
+        comments_count: item.comments_count || 0,
+        view_count: item.view_count || 0,
       },
     };
   }
@@ -204,7 +183,7 @@ export class InstagramService implements SocialPlatformService {
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
       const params = {
         fields:
-          'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+          'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,view_count',
         access_token: account.access_token,
         limit: safeLimit,
       };
@@ -215,7 +194,7 @@ export class InstagramService implements SocialPlatformService {
           axios.get<InstagramMediaItem>(`${baseUrl}/${id}`, {
             params: {
               fields:
-                'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+                'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,view_count',
               access_token: account.access_token,
             },
           }),

@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TikTokBusinessMetricsDto } from './platform-post-metrics.dto';
+import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
+import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
 
 export class PlatformPostDto {
   @ApiProperty({ description: 'Social media platform name' })
@@ -59,5 +61,8 @@ export class PlatformPostDto {
   @ApiProperty({
     description: 'Post metrics and analytics data',
   })
-  metrics: TikTokBusinessMetricsDto;
+  metrics:
+    | TikTokBusinessMetricsDto
+    | InstagramPostMetricsDto
+    | YouTubePostMetricsDto;
 }

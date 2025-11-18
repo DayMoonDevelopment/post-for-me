@@ -22,6 +22,7 @@ import { PlatformPostDto } from './dto/platform-post.dto';
 
 @Injectable()
 export class SocialAccountFeedsService {
+  platformsToAlwaysRefresh = ['youtube', 'bluesky'];
   constructor(
     private readonly supabaseService: SupabaseService,
     @Inject(REQUEST) private request: Request,
@@ -185,6 +186,7 @@ export class SocialAccountFeedsService {
     };
 
     if (
+      this.platformsToAlwaysRefresh.indexOf(account.provider) > -1 ||
       differenceInDays(
         new Date(account.access_token_expires_at || new Date()),
         new Date(),

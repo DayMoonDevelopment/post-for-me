@@ -15,6 +15,7 @@ export interface InstagramMediaItem {
   permalink?: string;
   timestamp?: string;
   like_count?: number;
+  view_count?: number;
   comments_count?: number;
 }
 

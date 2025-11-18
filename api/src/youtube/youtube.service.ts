@@ -27,6 +27,7 @@ interface YouTubeVideo {
     likeCount: string;
     commentCount: string;
     favoriteCount: string;
+    dislikeCount: string;
   };
 }
 
@@ -201,30 +202,11 @@ export class YouTubeService implements SocialPlatformService {
           },
         ],
         metrics: {
-          likes: parseInt(video.statistics.likeCount || '0', 10),
-          comments: parseInt(video.statistics.commentCount || '0', 10),
-          shares: 0,
-          favorites: parseInt(video.statistics.favoriteCount || '0', 10),
-          reach: 0,
-          video_views: parseInt(video.statistics.viewCount || '0', 10),
-          total_time_watched: 0,
-          average_time_watched: 0,
-          full_video_watched_rate: 0,
-          new_followers: 0,
-          profile_views: 0,
-          website_clicks: 0,
-          phone_number_clicks: 0,
-          lead_submissions: 0,
-          app_download_clicks: 0,
-          email_clicks: 0,
-          address_clicks: 0,
-          video_view_retention: [],
-          impression_sources: [],
-          audience_types: [],
-          audience_genders: [],
-          audience_countries: [],
-          audience_cities: [],
-          engagement_likes: [],
+          likeCount: parseInt(video.statistics.likeCount || '0', 10),
+          commentCount: parseInt(video.statistics.commentCount || '0', 10),
+          favoriteCount: parseInt(video.statistics.favoriteCount || '0', 10),
+          viewCount: parseInt(video.statistics.viewCount || '0', 10),
+          dislikeCount: parseInt(video.statistics.dislikeCount || '0'),
         },
       }));
 

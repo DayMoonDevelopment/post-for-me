@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
 import { TikTokBusinessMetricsDto } from 'src/social-account-feeds/dto/platform-post-metrics.dto';
+import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
 
 export class DeleteEntityResponseDto {
   @ApiProperty({ description: 'Whether or not the entity was deleted' })
@@ -47,7 +49,10 @@ export interface PlatformPost {
   caption: string;
   url: string;
   media: { url: string; thumbnail_url: string }[];
-  metrics: TikTokBusinessMetricsDto;
+  metrics:
+    | TikTokBusinessMetricsDto
+    | InstagramPostMetricsDto
+    | YouTubePostMetricsDto;
 }
 
 export interface PlatformPostsResponse {
