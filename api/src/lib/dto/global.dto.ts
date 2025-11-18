@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { TikTokBusinessMetricsDto } from 'src/social-account-feeds/dto/platform-post-metrics.dto';
 
 export class DeleteEntityResponseDto {
   @ApiProperty({ description: 'Whether or not the entity was deleted' })
@@ -46,13 +47,12 @@ export interface PlatformPost {
   caption: string;
   url: string;
   media: { url: string; thumbnail_url: string }[];
-  metrics: any;
+  metrics: TikTokBusinessMetricsDto;
 }
 
 export interface PlatformPostsResponse {
   posts: PlatformPost[];
   count: number;
-  total_count?: number;
   cursor?: string;
   has_more: boolean;
 }

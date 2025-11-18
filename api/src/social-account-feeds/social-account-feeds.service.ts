@@ -9,6 +9,7 @@ import { SocialAccount } from '../lib/dto/global.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
 import { differenceInDays } from 'date-fns';
+import { PlatformPostDto } from './dto/platform-post.dto';
 
 @Injectable()
 export class SocialAccountFeedsService {
@@ -179,21 +180,35 @@ export class SocialAccountFeedsService {
       }
     }
 
-    const posts = await platformService.getAccountPosts({
+    const accountPostsResult = await platformService.getAccountPosts({
       account: socialAccount,
       platformIds: platformPostIds,
+      limit: queryParams.limit,
     });
-    console.log(posts);
 
-    //Get System posts that match platform posts
-    return {
-      data: [],
+    const result: PaginatedPlatformPostResponse = {
+      data: accountPostsResult.posts.map(
+        (p): PlatformPostDto => ({
+          platform_account_id: p.account_id,
+          platform_post_id: p.id,
+          media: p.media,
+          caption: p.caption,
+          metrics: p.metrics,
+          platform: p.provider!.toString(),
+          social_account_id: socialAccount.id,
+          platform_url: p.url,
+        }),
+      ),
       meta: {
-        cursor: '',
+        cursor: accountPostsResult.cursor || '',
         limit: queryParams.limit,
-        next: this.generateNextUrl(queryParams),
+        next: `?cursor=${accountPostsResult.cursor || ''}`,
+        has_more: accountPostsResult.has_more,
       },
     };
+
+    //Get System posts that match platform posts
+    return result;
   }
 
   async getPlatformService({

@@ -26,22 +26,33 @@ export class PostResultsService {
       details?: any;
       post_id: string;
       provider_connection_id: string;
-      error_message: string;
+      error_message?: string;
     };
-    error: any;
   }> {
-    const postResults = await this.supabaseService.supabaseClient
-      .from('social_post_results')
-      .select('*, social_provider_connections(provider, project_id)')
-      .eq('id', id)
-      .eq('social_provider_connections.project_id', projectId)
-      .maybeSingle();
+    const { data: postResult, error: postResultError } =
+      await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .select('*, social_provider_connections(provider, project_id)')
+        .eq('id', id)
+        .eq('social_provider_connections.project_id', projectId)
+        .maybeSingle();
 
-    if (postResults.error) {
-      throw postResults.error;
+    if (!postResult || postResultError) {
+      throw new Error(postResultError?.message);
     }
 
-    return postResults;
+    return {
+      data: {
+        success: postResult.success,
+        provider_post_id: postResult?.provider_post_id || undefined,
+        provider_post_url: postResult?.provider_post_url || undefined,
+        id: postResult?.id,
+        details: postResult?.details,
+        post_id: postResult?.post_id,
+        provider_connection_id: postResult?.provider_connection_id,
+        error_message: postResult?.error_message || undefined,
+      },
+    };
   }
 
   async getPostResults(
@@ -149,8 +160,8 @@ export class PostResultsService {
 
     if (postResults.data.success) {
       platform_data = {
-        id: postResults.data.provider_post_id,
-        url: postResults.data.provider_post_url,
+        id: postResults.data.provider_post_id || null,
+        url: postResults.data.provider_post_url || null,
       };
     }
 
@@ -159,7 +170,7 @@ export class PostResultsService {
       social_account_id: postResults.data.provider_connection_id,
       post_id: postResults.data.post_id,
       success: postResults.data.success,
-      error: postResults.data.error_message,
+      error: postResults.data.error_message || null,
       details: postResults.data.details,
       platform_data,
     };

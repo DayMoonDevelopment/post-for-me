@@ -22,9 +22,9 @@ export class PlatformPostQueryDto {
     description: 'Cursor identifying next page of results',
     required: false,
   })
+  @IsString()
   @IsOptional()
-  @Type(() => String)
-  cursor?: string | null;
+  cursor?: string;
 
   @ApiProperty({
     description:

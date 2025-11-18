@@ -8,8 +8,10 @@ export interface SocialPlatformService {
   getAccountPosts({
     account,
     platformIds,
+    limit,
   }: {
     account: SocialAccount;
     platformIds?: string[];
+    limit: number;
   }): Promise<PlatformPostsResponse>;
 }

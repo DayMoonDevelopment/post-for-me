@@ -4,6 +4,7 @@ export interface PaginationPlatformPostMeta {
   cursor: string;
   limit: number;
   next: string | null;
+  has_more: boolean;
 }
 
 export interface PaginatedPlatformPostResponse {

@@ -68,6 +68,10 @@ export class SocialAccountFeedsController {
               example:
                 'https://api.postforme.dev/v1/items?cursor=pgn_xxxxx&limit=10',
             },
+            has_more: {
+              type: 'boolean',
+              description: 'Indicates if there are more results or not',
+            },
           },
           required: ['cursor', 'limit', 'next'],
         },
