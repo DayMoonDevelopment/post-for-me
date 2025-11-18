@@ -94,13 +94,23 @@ export class TikTokBusinessService implements SocialPlatformService {
     platformIds?: string[];
     limit: number;
   }): Promise<PlatformPostsResponse> {
+    let videoIds: string[] | undefined;
+
+    // If platformIds are provided, fetch the item_ids from publish_ids
+    if (platformIds && platformIds.length > 0) {
+      videoIds = await this.getItemIdsFromPublishIds({
+        publishIds: platformIds,
+        account,
+      });
+    }
+
     let getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=["item_id","create_time","thumbnail_url","share_url","embed_url","caption","video_views","likes","comments","shares","reach","video_duration","full_video_watched_rate","total_time_watched","average_time_watched","impression_sources","audience_countries"]`;
 
-    if (platformIds) {
-      getVideosUrl += `&filters.video_ids=[${platformIds
-        .map((p) => `"${p.replace('v_pub_url~v2.', '')}"`)
+    if (videoIds && videoIds.length > 0) {
+      getVideosUrl += `&filters={"video_ids":[${videoIds
+        .map((id) => `"${id}"`)
         .join(',')
-        .toString()}]`;
+        .toString()}]}`;
     }
 
     const safeLimit = Math.min(limit, 20);
@@ -181,5 +191,59 @@ export class TikTokBusinessService implements SocialPlatformService {
     };
 
     return response;
+  }
+
+  private async getItemIdsFromPublishIds({
+    publishIds,
+    account,
+  }: {
+    publishIds: string[];
+    account: SocialAccount;
+  }): Promise<string[]> {
+    const statusUrl = `${this.apiUrl}business/publish/status/`;
+
+    // Fetch all publish statuses in parallel
+    const statusPromises = publishIds.map(async (publishId) => {
+      try {
+        const response = await axios.get(
+          `${statusUrl}?business_id=${account.social_provider_user_id}&publish_id=${publishId}`,
+          {
+            headers: {
+              'Access-Token': account.access_token,
+            },
+          },
+        );
+
+        const statusData = response.data as {
+          code: number;
+          message: string;
+          data: {
+            status: string;
+            post_ids: string[];
+          };
+        };
+
+        if (
+          statusData.code === 0 &&
+          statusData.data.post_ids &&
+          statusData.data.post_ids.length > 0
+        ) {
+          return statusData.data.post_ids;
+        }
+
+        return [];
+      } catch (error) {
+        console.error(
+          `Failed to fetch status for publish_id ${publishId}:`,
+          error,
+        );
+        return [];
+      }
+    });
+
+    const itemIds = await Promise.all(statusPromises);
+
+    // Filter out null values and return only valid item_ids
+    return itemIds.flatMap((p) => p.map((i) => i));
   }
 }
