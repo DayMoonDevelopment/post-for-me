@@ -51,11 +51,12 @@ export class FacebookService implements SocialPlatformService {
         },
       );
 
-      if (!response.data.access_token) {
+      const data = response.data as { access_token: string };
+      if (!data.access_token) {
         throw new Error('No access token in refresh response');
       }
 
-      account.access_token = response.data.access_token;
+      account.access_token = data.access_token;
       account.access_token_expires_at = new Date(
         Date.now() + 60 * 24 * 60 * 60 * 1000,
       );

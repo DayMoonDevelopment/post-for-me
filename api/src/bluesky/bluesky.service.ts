@@ -57,9 +57,12 @@ export class BlueskyService implements SocialPlatformService {
       console.error('Failed to resume Bluesky session', error);
 
       // Try to login with app password
+      const accountMeatadata = account.social_provider_metadata as {
+        bluesky_app_password: string;
+      };
       await this.agent.login({
         identifier: account.social_provider_user_name || '',
-        password: account.social_provider_metadata?.bluesky_app_password || '',
+        password: accountMeatadata?.bluesky_app_password || '',
       });
 
       account.access_token =
@@ -117,7 +120,7 @@ export class BlueskyService implements SocialPlatformService {
           provider: 'bluesky',
           id: post.uri,
           account_id: account.social_provider_user_id,
-          caption: (post.record as any)?.text || '',
+          caption: (post.record as { text?: string })?.text || '',
           url: `https://bsky.app/profile/${account.social_provider_user_id}/post/${post.uri.split('/').pop()}`,
           media: [],
           metrics: {
