@@ -17,8 +17,12 @@ export class InstagramService implements SocialPlatformService {
 
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
+
+    const accountMetaData = account.social_provider_metadata as {
+      connection_type: string;
+    };
     if (
-      account.social_provider_metadata?.connection_type === 'instagram' ||
+      accountMetaData?.connection_type === 'instagram' ||
       (account.access_token && account.access_token.startsWith('IG'))
     ) {
       return 'https://graph.instagram.com/v23.0';
@@ -50,7 +54,11 @@ export class InstagramService implements SocialPlatformService {
 
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
     try {
-      if (account.social_provider_metadata?.connection_type === 'instagram') {
+      const accountMetaData = account.social_provider_metadata as {
+        connection_type: string;
+      };
+
+      if (accountMetaData?.connection_type === 'instagram') {
         const response = await axios.get(
           'https://graph.instagram.com/refresh_access_token',
           {
@@ -61,9 +69,13 @@ export class InstagramService implements SocialPlatformService {
           },
         );
 
-        if (response.data && response.data.access_token) {
-          const newAccessToken = response.data.access_token;
-          const expiresIn = response.data.expires_in;
+        const data = response.data as {
+          access_token: string;
+          expires_in: number;
+        };
+        if (data?.access_token) {
+          const newAccessToken = data.access_token;
+          const expiresIn = data.expires_in;
 
           account.access_token = newAccessToken;
           account.access_token_expires_at = new Date(
@@ -84,9 +96,14 @@ export class InstagramService implements SocialPlatformService {
           },
         );
 
-        if (response.data && response.data.access_token) {
-          const newAccessToken = response.data.access_token;
-          const expiresIn = response.data.expires_in || 5184000;
+        const data = response.data as {
+          access_token: string;
+          expires_in?: number;
+        };
+
+        if (data && data.access_token) {
+          const newAccessToken = data.access_token;
+          const expiresIn = data.expires_in || 5184000;
 
           account.access_token = newAccessToken;
           account.access_token_expires_at = new Date(
