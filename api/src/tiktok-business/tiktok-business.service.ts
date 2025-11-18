@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
+  PlatformPostsResponse,
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
+import { TikTokBusinessMetricsDto } from '../social-account-feeds/dto/platform-post-metrics.dto';
 
 @Injectable()
 export class TikTokBusinessService implements SocialPlatformService {
@@ -83,15 +85,68 @@ export class TikTokBusinessService implements SocialPlatformService {
     return account;
   }
 
-  getAccountPosts({
+  async getAccountPosts({
     account,
     platformIds,
   }: {
     account: SocialAccount;
     platformIds?: string[];
-  }): Promise<PlatformPost> {
-    console.log(account, platformIds);
+  }): Promise<PlatformPostsResponse> {
+    let getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=["item_id","create_time","thumbnail_url","share_url","embed_url","caption","video_views","likes","comments","shares","reach","video_duration","full_video_watched_rate","total_time_watched","average_time_watched","impression_sources","audience_countries"]`;
 
-    throw new Error('Method not implemented.');
+    if (platformIds) {
+      getVideosUrl += `&filters["video_ids"]=[${platformIds.join(',').toString()}]`;
+    }
+
+    const videoResponse = await axios.get(getVideosUrl, {
+      headers: {
+        'Access-Token': account.access_token,
+      },
+    });
+
+    const data = videoResponse.data as {
+      code: number;
+      message: string;
+      data: {
+        cursor: number;
+        has_more: boolean;
+        videos: TikTokBusinessMetricsDto &
+          {
+            item_id: string;
+            share_url: string;
+            caption: string;
+            embed_url: string;
+            thumbnail_url: string;
+          }[];
+      };
+    };
+
+    if (data.code != 0 && data.code != 20001) {
+      throw new Error(`Unable to get posts, message: ${data.message}`);
+    }
+
+    const response: PlatformPostsResponse = {
+      has_more: data.data.has_more,
+      posts: data.data.videos.map(
+        (v): PlatformPost => ({
+          provider: 'tiktok_business',
+          id: v.item_id,
+          url: v.share_url,
+          account_id: account.social_provider_user_id,
+          caption: v.caption,
+          metrics: {},
+          media: [
+            {
+              url: v.embed_url,
+              thumbnail_url: v.thumbnail_url,
+            },
+          ],
+        }),
+      ),
+      cursor: data.data.cursor.toString(),
+      count: data.data.videos.length,
+    };
+
+    return response;
   }
 }

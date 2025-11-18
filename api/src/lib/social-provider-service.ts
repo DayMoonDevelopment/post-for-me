@@ -1,4 +1,4 @@
-import type { PlatformPost, SocialAccount } from './dto/global.dto';
+import type { PlatformPostsResponse, SocialAccount } from './dto/global.dto';
 
 export interface SocialPlatformService {
   initService(projectId: string): Promise<void>;
@@ -11,5 +11,5 @@ export interface SocialPlatformService {
   }: {
     account: SocialAccount;
     platformIds?: string[];
-  }): Promise<PlatformPost>;
+  }): Promise<PlatformPostsResponse>;
 }

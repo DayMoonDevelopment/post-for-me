@@ -45,6 +45,14 @@ export interface PlatformPost {
   account_id: string;
   caption: string;
   url: string;
-  media: string[];
+  media: { url: string; thumbnail_url: string }[];
   metrics: any;
+}
+
+export interface PlatformPostsResponse {
+  posts: PlatformPost[];
+  count: number;
+  total_count?: number;
+  cursor?: string;
+  has_more: boolean;
 }
