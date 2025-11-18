@@ -97,7 +97,10 @@ export class TikTokBusinessService implements SocialPlatformService {
     let getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=["item_id","create_time","thumbnail_url","share_url","embed_url","caption","video_views","likes","comments","shares","reach","video_duration","full_video_watched_rate","total_time_watched","average_time_watched","impression_sources","audience_countries"]`;
 
     if (platformIds) {
-      getVideosUrl += `&filters["video_ids"]=[${platformIds.join(',').toString()}]`;
+      getVideosUrl += `&filters.video_ids=[${platformIds
+        .map((p) => `"${p.replace('v_pub_url~v2.', '')}"`)
+        .join(',')
+        .toString()}]`;
     }
 
     const safeLimit = Math.min(limit, 20);
@@ -135,7 +138,7 @@ export class TikTokBusinessService implements SocialPlatformService {
       posts: data.data.videos.map(
         (v): PlatformPost => ({
           provider: 'tiktok_business',
-          id: v.item_id,
+          id: `v_pub_url~v2.${v.item_id}`,
           url: v.share_url,
           account_id: account.social_provider_user_id,
           caption: v.caption,

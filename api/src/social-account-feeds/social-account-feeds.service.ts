@@ -84,7 +84,7 @@ export class SocialAccountFeedsService {
           break;
       }
 
-      postResultsQuery.in('social_post_id', values);
+      postResultsQuery.in('post_id', values);
     }
 
     if (queryParams.external_post_id) {
@@ -106,8 +106,10 @@ export class SocialAccountFeedsService {
     }
 
     if (queryParams.social_post_id || queryParams.external_post_id) {
-      const { data: postResults } = await postResultsQuery;
+      const { data: postResults, error: postResultsError } =
+        await postResultsQuery;
 
+      console.log(postResults, postResultsError);
       if (postResults && postResults.length > 0) {
         const ids = postResults
           ?.filter((pr) => pr.provider_post_id)
@@ -180,15 +182,46 @@ export class SocialAccountFeedsService {
       }
     }
 
+    // Fetch account posts and social post results in parallel
     const accountPostsResult = await platformService.getAccountPosts({
       account: socialAccount,
       platformIds: platformPostIds,
       limit: queryParams.limit,
     });
 
+    const uniqueAccountIds = new Set(accountPostsResult.posts.map((p) => p.id));
+
+    const socialPostResultsResponse = await this.supabaseService.supabaseClient
+      .from('social_post_results')
+      .select(
+        `
+          *,
+          social_posts!inner(*)
+        `,
+      )
+      .eq('provider_connection_id', accountId)
+      .in('provider_post_id', [...uniqueAccountIds]);
+
+    const { data: socialPostResults } = socialPostResultsResponse;
+
+    console.log(socialPostResults);
+    // Create a map of provider_post_id to social post result with post data
+    const postResultMap = new Map(
+      socialPostResults?.map((result) => [
+        result.provider_post_id,
+        {
+          social_post_result_id: result.id,
+          social_post_id: result.post_id,
+          external_post_id: result.social_posts?.external_id,
+        },
+      ]) || [],
+    );
+
     const result: PaginatedPlatformPostResponse = {
-      data: accountPostsResult.posts.map(
-        (p): PlatformPostDto => ({
+      data: accountPostsResult.posts.map((p): PlatformPostDto => {
+        const matchedResult = postResultMap.get(p.id);
+        return {
+          external_account_id: account.external_id || undefined,
           platform_account_id: p.account_id,
           platform_post_id: p.id,
           media: p.media,
@@ -197,8 +230,11 @@ export class SocialAccountFeedsService {
           platform: p.provider!.toString(),
           social_account_id: socialAccount.id,
           platform_url: p.url,
-        }),
-      ),
+          social_post_result_id: matchedResult?.social_post_result_id,
+          social_post_id: matchedResult?.social_post_id,
+          external_post_id: matchedResult?.external_post_id || undefined,
+        };
+      }),
       meta: {
         cursor: accountPostsResult.cursor || '',
         limit: queryParams.limit,
@@ -207,7 +243,6 @@ export class SocialAccountFeedsService {
       },
     };
 
-    //Get System posts that match platform posts
     return result;
   }
 
