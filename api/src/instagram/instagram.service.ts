@@ -8,6 +8,13 @@ import type {
 } from '../lib/dto/global.dto';
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
+import type {
+  InstagramMediaItem,
+  InstagramMediaListResponse,
+  InstagramRefreshTokenResponse,
+  FacebookRefreshTokenResponse,
+  InstagramAccountMetadata,
+} from './instagram.types';
 
 @Injectable()
 export class InstagramService implements SocialPlatformService {
@@ -18,9 +25,8 @@ export class InstagramService implements SocialPlatformService {
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
 
-    const accountMetaData = account.social_provider_metadata as {
-      connection_type: string;
-    };
+    const accountMetaData =
+      account.social_provider_metadata as InstagramAccountMetadata;
     if (
       accountMetaData?.connection_type === 'instagram' ||
       (account.access_token && account.access_token.startsWith('IG'))
@@ -54,12 +60,11 @@ export class InstagramService implements SocialPlatformService {
 
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
     try {
-      const accountMetaData = account.social_provider_metadata as {
-        connection_type: string;
-      };
+      const accountMetaData =
+        account.social_provider_metadata as InstagramAccountMetadata;
 
       if (accountMetaData?.connection_type === 'instagram') {
-        const response = await axios.get(
+        const response = await axios.get<InstagramRefreshTokenResponse>(
           'https://graph.instagram.com/refresh_access_token',
           {
             params: {
@@ -69,10 +74,7 @@ export class InstagramService implements SocialPlatformService {
           },
         );
 
-        const data = response.data as {
-          access_token: string;
-          expires_in: number;
-        };
+        const data = response.data;
         if (data?.access_token) {
           const newAccessToken = data.access_token;
           const expiresIn = data.expires_in;
@@ -83,7 +85,7 @@ export class InstagramService implements SocialPlatformService {
           );
         }
       } else {
-        const response = await axios.get(
+        const response = await axios.get<FacebookRefreshTokenResponse>(
           'https://graph.facebook.com/v20.0/oauth/access_token',
           {
             params: {
@@ -96,10 +98,7 @@ export class InstagramService implements SocialPlatformService {
           },
         );
 
-        const data = response.data as {
-          access_token: string;
-          expires_in?: number;
-        };
+        const data = response.data;
 
         if (data && data.access_token) {
           const newAccessToken = data.access_token;
@@ -119,6 +118,54 @@ export class InstagramService implements SocialPlatformService {
     }
   }
 
+  /**
+   * Converts an Instagram media item to a platform post
+   */
+  private mapMediaItemToPlatformPost(
+    item: InstagramMediaItem,
+    accountId: string,
+  ): PlatformPost {
+    return {
+      provider: 'instagram',
+      id: item.id,
+      account_id: accountId,
+      caption: item.caption || '',
+      url: item.permalink || '',
+      media: [
+        {
+          url: item.media_url || '',
+          thumbnail_url: item.thumbnail_url || item.media_url || '',
+        },
+      ],
+      metrics: {
+        likes: item.like_count || 0,
+        comments: item.comments_count || 0,
+        shares: 0,
+        favorites: 0,
+        reach: 0,
+        video_views: 0,
+        total_time_watched: 0,
+        average_time_watched: 0,
+        full_video_watched_rate: 0,
+        new_followers: 0,
+        profile_views: 0,
+        website_clicks: 0,
+        phone_number_clicks: 0,
+        lead_submissions: 0,
+        app_download_clicks: 0,
+        email_clicks: 0,
+        address_clicks: 0,
+        video_view_retention: [],
+        impression_sources: [],
+        audience_types: [],
+        audience_genders: [],
+        audience_countries: [],
+        audience_cities: [],
+        engagement_likes: [],
+      },
+    };
+  }
+
   async getAccountPosts({
     account,
     platformIds,
@@ -133,7 +180,7 @@ export class InstagramService implements SocialPlatformService {
       const baseUrl = this.getApiBaseUrl(account);
 
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
-      const params: any = {
+      const params = {
         fields:
           'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
         access_token: account.access_token,
@@ -143,7 +190,7 @@ export class InstagramService implements SocialPlatformService {
       if (platformIds && platformIds.length > 0) {
         // Fetch specific media by IDs
         const mediaPromises = platformIds.map((id) =>
-          axios.get(`${baseUrl}/${id}`, {
+          axios.get<InstagramMediaItem>(`${baseUrl}/${id}`, {
             params: {
               fields:
                 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
@@ -155,45 +202,13 @@ export class InstagramService implements SocialPlatformService {
         const responses = await Promise.all(mediaPromises);
         const mediaItems = responses.map((r) => r.data);
 
-        const posts: PlatformPost[] = mediaItems.map((item) => ({
-          provider: 'instagram',
-          id: item.id,
-          account_id: account.social_provider_user_id,
-          caption: item.caption || '',
-          url: item.permalink || '',
-          media: [
-            {
-              url: item.media_url || '',
-              thumbnail_url: item.thumbnail_url || item.media_url || '',
-            },
-          ],
-          metrics: {
-            likes: item.like_count || 0,
-            comments: item.comments_count || 0,
-            shares: 0,
-            favorites: 0,
-            reach: 0,
-            video_views: 0,
-            total_time_watched: 0,
-            average_time_watched: 0,
-            full_video_watched_rate: 0,
-            new_followers: 0,
-            profile_views: 0,
-            website_clicks: 0,
-            phone_number_clicks: 0,
-            lead_submissions: 0,
-            app_download_clicks: 0,
-            email_clicks: 0,
-            address_clicks: 0,
-            video_view_retention: [],
-            impression_sources: [],
-            audience_types: [],
-            audience_genders: [],
-            audience_countries: [],
-            audience_cities: [],
-            engagement_likes: [],
-          },
-        }));
+        const posts: PlatformPost[] = mediaItems.map(
+          (item: InstagramMediaItem) =>
+            this.mapMediaItemToPlatformPost(
+              item,
+              account.social_provider_user_id,
+            ),
+        );
 
         return {
           posts,
@@ -202,48 +217,12 @@ export class InstagramService implements SocialPlatformService {
         };
       }
 
-      const response = await axios.get(mediaUrl, { params });
+      const response = await axios.get<InstagramMediaListResponse>(mediaUrl, {
+        params,
+      });
 
-      const posts: PlatformPost[] = (response.data.data || []).map(
-        (item: any) => ({
-          provider: 'instagram',
-          id: item.id,
-          account_id: account.social_provider_user_id,
-          caption: item.caption || '',
-          url: item.permalink || '',
-          media: [
-            {
-              url: item.media_url || '',
-              thumbnail_url: item.thumbnail_url || item.media_url || '',
-            },
-          ],
-          metrics: {
-            likes: item.like_count || 0,
-            comments: item.comments_count || 0,
-            shares: 0,
-            favorites: 0,
-            reach: 0,
-            video_views: 0,
-            total_time_watched: 0,
-            average_time_watched: 0,
-            full_video_watched_rate: 0,
-            new_followers: 0,
-            profile_views: 0,
-            website_clicks: 0,
-            phone_number_clicks: 0,
-            lead_submissions: 0,
-            app_download_clicks: 0,
-            email_clicks: 0,
-            address_clicks: 0,
-            video_view_retention: [],
-            impression_sources: [],
-            audience_types: [],
-            audience_genders: [],
-            audience_countries: [],
-            audience_cities: [],
-            engagement_likes: [],
-          },
-        }),
+      const posts: PlatformPost[] = (response.data.data || []).map((item) =>
+        this.mapMediaItemToPlatformPost(item, account.social_provider_user_id),
       );
 
       return {
