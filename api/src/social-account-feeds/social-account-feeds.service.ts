@@ -124,10 +124,8 @@ export class SocialAccountFeedsService {
     }
 
     if (queryParams.social_post_id || queryParams.external_post_id) {
-      const { data: postResults, error: postResultsError } =
-        await postResultsQuery;
+      const { data: postResults } = await postResultsQuery;
 
-      console.log(postResults, postResultsError);
       if (postResults && postResults.length > 0) {
         const ids = postResults
           ?.filter((pr) => pr.provider_post_id)
@@ -232,7 +230,6 @@ export class SocialAccountFeedsService {
 
     const { data: socialPostResults } = socialPostResultsResponse;
 
-    console.log(socialPostResults);
     // Create a map of provider_post_id to social post result with post data
     const postResultMap = new Map(
       socialPostResults?.map((result) => [

@@ -9,6 +9,47 @@ import type {
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 
+// Pinterest API Types
+interface PinterestImageVariant {
+  url: string;
+  width: number;
+  height: number;
+}
+
+interface PinterestMedia {
+  images?: {
+    '150x150'?: PinterestImageVariant;
+    '400x300'?: PinterestImageVariant;
+    '600x'?: PinterestImageVariant;
+    '1200x'?: PinterestImageVariant;
+  };
+  media_type?: 'image' | 'video';
+}
+
+interface PinterestPin {
+  id: string;
+  title?: string;
+  description?: string;
+  link?: string;
+  media?: PinterestMedia;
+  board_id?: string;
+  created_at?: string;
+  note?: string;
+}
+
+interface PinterestPinsResponse {
+  items: PinterestPin[];
+  bookmark?: string;
+}
+
+interface PinterestTokenResponse {
+  access_token: string;
+  expires_in: number;
+  refresh_token: string;
+  token_type: string;
+  scope: string;
+}
+
 @Injectable({ scope: Scope.REQUEST })
 export class PinterestService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
@@ -48,16 +89,23 @@ export class PinterestService implements SocialPlatformService {
     });
 
     let requestUrl = 'https://api.pinterest.com/v5/oauth/token';
-    if (account.social_provider_metadata?.is_sandbox) {
+    const accountMetadata = account.social_provider_metadata as {
+      is_sandbox: boolean;
+    };
+    if (accountMetadata?.is_sandbox) {
       requestUrl = 'https://api-sandbox.pinterest.com/v5/oauth/token';
     }
 
-    const refreshResponse = await axios.post(requestUrl, params.toString(), {
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+    const refreshResponse = await axios.post<PinterestTokenResponse>(
+      requestUrl,
+      params.toString(),
+      {
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
       },
-    });
+    );
 
     const { access_token, expires_in, refresh_token } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
@@ -82,14 +130,17 @@ export class PinterestService implements SocialPlatformService {
       const safeLimit = Math.min(limit, 25);
 
       let pinsUrl = 'https://api.pinterest.com/v5/pins';
-      if (account.social_provider_metadata?.is_sandbox) {
+      const accountMetadata = account.social_provider_metadata as {
+        is_sandbox: boolean;
+      };
+      if (accountMetadata?.is_sandbox) {
         pinsUrl = 'https://api-sandbox.pinterest.com/v5/pins';
       }
 
       if (platformIds && platformIds.length > 0) {
         // Fetch specific pins by ID
         const pinPromises = platformIds.map((id) =>
-          axios.get(`${pinsUrl}/${id}`, {
+          axios.get<PinterestPin>(`${pinsUrl}/${id}`, {
             headers: {
               Authorization: `Bearer ${account.access_token}`,
             },
@@ -148,7 +199,7 @@ export class PinterestService implements SocialPlatformService {
       }
 
       // Get user's pins
-      const response = await axios.get(pinsUrl, {
+      const response = await axios.get<PinterestPinsResponse>(pinsUrl, {
         headers: {
           Authorization: `Bearer ${account.access_token}`,
         },
@@ -158,7 +209,7 @@ export class PinterestService implements SocialPlatformService {
       });
 
       const posts: PlatformPost[] = (response.data.items || []).map(
-        (pin: any) => ({
+        (pin: PinterestPin) => ({
           provider: 'pinterest',
           id: pin.id,
           account_id: account.social_provider_user_id,

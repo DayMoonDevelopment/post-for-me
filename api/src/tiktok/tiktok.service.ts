@@ -8,6 +8,11 @@ import type {
 } from '../lib/dto/global.dto';
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
+import type {
+  TikTokTokenResponse,
+  TikTokVideoListResponse,
+  TikTokVideo,
+} from './tiktok.types';
 
 @Injectable({ scope: Scope.REQUEST })
 export class TikTokService implements SocialPlatformService {
@@ -49,36 +54,88 @@ export class TikTokService implements SocialPlatformService {
     formData.append('grant_type', 'refresh_token');
     formData.append('refresh_token', account.refresh_token || '');
 
-    const refreshResponse = await axios.post(this.tokenUrl, formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cache-Control': 'no-cache',
+    const refreshResponse = await axios.post<TikTokTokenResponse>(
+      this.tokenUrl,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cache-Control': 'no-cache',
+        },
       },
-    });
+    );
 
-    if (refreshResponse.data.error) {
+    const data = refreshResponse.data;
+
+    if (data.error) {
       throw new Error(
-        `TikTok API error: ${
-          refreshResponse.data.error_description || refreshResponse.data.error
-        }`,
+        `TikTok API error: ${data.error_description || data.error}`,
       );
     }
 
-    const { access_token, refresh_token, expires_in } = refreshResponse.data;
-    const newExpirationDate = new Date(Date.now() + expires_in * 1000);
+    const newExpirationDate = new Date(Date.now() + data.expires_in * 1000);
 
     // Set expiration to refresh two days early
     newExpirationDate.setDate(newExpirationDate.getDate() - 2);
 
-    account.access_token = access_token;
-    account.refresh_token = refresh_token;
+    account.access_token = data.access_token;
+    account.refresh_token = data.refresh_token;
     account.access_token_expires_at = newExpirationDate;
 
     return account;
   }
 
+  /**
+   * Converts a TikTok video item to a platform post
+   */
+  private mapVideoToPlatformPost(
+    video: TikTokVideo,
+    accountId: string,
+  ): PlatformPost {
+    return {
+      provider: 'tiktok',
+      id: video.id,
+      account_id: accountId,
+      caption: video.title || video.video_description || '',
+      url: video.share_url || '',
+      media: [
+        {
+          url: video.embed_link || '',
+          thumbnail_url: video.cover_image_url || '',
+        },
+      ],
+      metrics: {
+        likes: video.like_count || 0,
+        comments: video.comment_count || 0,
+        shares: video.share_count || 0,
+        favorites: 0,
+        reach: 0,
+        video_views: video.view_count || 0,
+        total_time_watched: 0,
+        average_time_watched: 0,
+        full_video_watched_rate: 0,
+        new_followers: 0,
+        profile_views: 0,
+        website_clicks: 0,
+        phone_number_clicks: 0,
+        lead_submissions: 0,
+        app_download_clicks: 0,
+        email_clicks: 0,
+        address_clicks: 0,
+        video_view_retention: [],
+        impression_sources: [],
+        audience_types: [],
+        audience_genders: [],
+        audience_countries: [],
+        audience_cities: [],
+        engagement_likes: [],
+      },
+    };
+  }
+
   async getAccountPosts({
     account,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     platformIds,
     limit,
   }: {
@@ -92,7 +149,7 @@ export class TikTokService implements SocialPlatformService {
       // TikTok API doesn't have a direct "get my videos" endpoint in the standard API
       // This is a placeholder implementation - actual implementation would depend on
       // available TikTok API endpoints for the project
-      const response = await axios.post(
+      const response = await axios.post<TikTokVideoListResponse>(
         `${this.apiUrl}video/list/`,
         {
           max_count: safeLimit,
@@ -105,61 +162,24 @@ export class TikTokService implements SocialPlatformService {
         },
       );
 
-      const data = response.data as {
-        data: {
-          videos: any[];
-          cursor: number;
-          has_more: boolean;
-        };
-      };
+      const data = response.data;
 
-      const posts: PlatformPost[] = (data.data.videos || []).map(
-        (video: any) => ({
-          provider: 'tiktok',
-          id: video.id,
-          account_id: account.social_provider_user_id,
-          caption: video.title || '',
-          url: video.share_url || '',
-          media: [
-            {
-              url: video.embed_link || '',
-              thumbnail_url: video.cover_image_url || '',
-            },
-          ],
-          metrics: {
-            likes: video.like_count || 0,
-            comments: video.comment_count || 0,
-            shares: video.share_count || 0,
-            favorites: 0,
-            reach: 0,
-            video_views: video.view_count || 0,
-            total_time_watched: 0,
-            average_time_watched: 0,
-            full_video_watched_rate: 0,
-            new_followers: 0,
-            profile_views: 0,
-            website_clicks: 0,
-            phone_number_clicks: 0,
-            lead_submissions: 0,
-            app_download_clicks: 0,
-            email_clicks: 0,
-            address_clicks: 0,
-            video_view_retention: [],
-            impression_sources: [],
-            audience_types: [],
-            audience_genders: [],
-            audience_countries: [],
-            audience_cities: [],
-            engagement_likes: [],
-          },
-        }),
+      if (data.error) {
+        throw new Error(
+          `TikTok API error: ${data.error.message} (${data.error.code})`,
+        );
+      }
+
+      const videos = data.data?.videos || [];
+      const posts: PlatformPost[] = videos.map((video) =>
+        this.mapVideoToPlatformPost(video, account.social_provider_user_id),
       );
 
       return {
         posts,
         count: posts.length,
-        has_more: data.data.has_more,
-        cursor: data.data.cursor.toString(),
+        has_more: data.data?.has_more || false,
+        cursor: data.data?.cursor?.toString(),
       };
     } catch (error) {
       console.error('Error fetching TikTok posts:', error);

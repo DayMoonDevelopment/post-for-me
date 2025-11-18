@@ -9,6 +9,31 @@ import type {
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 
+interface ThreadsPost {
+  id: string;
+  text?: string;
+  permalink?: string;
+  timestamp?: string;
+  media_type?: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+  media_url?: string;
+}
+
+interface ThreadsPostsResponse {
+  data: ThreadsPost[];
+  paging?: {
+    cursors?: {
+      before?: string;
+      after?: string;
+    };
+    next?: string;
+  };
+}
+
+interface ThreadsRefreshTokenResponse {
+  access_token: string;
+  expires_in: number;
+}
+
 @Injectable({ scope: Scope.REQUEST })
 export class ThreadsService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
@@ -38,7 +63,7 @@ export class ThreadsService implements SocialPlatformService {
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
-    const refreshResponse = await axios.get(
+    const refreshResponse = await axios.get<ThreadsRefreshTokenResponse>(
       'https://graph.threads.net/refresh_access_token',
       {
         params: {
@@ -73,7 +98,7 @@ export class ThreadsService implements SocialPlatformService {
       if (platformIds && platformIds.length > 0) {
         // Fetch specific threads by ID
         const threadPromises = platformIds.map((id) =>
-          axios.get(`https://graph.threads.net/v1.0/${id}`, {
+          axios.get<ThreadsPost>(`https://graph.threads.net/v1.0/${id}`, {
             params: {
               fields: 'id,text,permalink,timestamp,media_type,media_url',
               access_token: account.access_token,
@@ -88,8 +113,8 @@ export class ThreadsService implements SocialPlatformService {
             provider: 'threads',
             id: thread.id,
             account_id: account.social_provider_user_id,
-            caption: thread.text || '',
-            url: thread.permalink || '',
+            caption: thread.text ?? '',
+            url: thread.permalink ?? '',
             media: thread.media_url
               ? [{ url: thread.media_url, thumbnail_url: thread.media_url }]
               : [],
@@ -130,7 +155,7 @@ export class ThreadsService implements SocialPlatformService {
       }
 
       // Fetch threads from user's profile
-      const response = await axios.get(
+      const response = await axios.get<ThreadsPostsResponse>(
         `https://graph.threads.net/v1.0/me/threads`,
         {
           params: {
@@ -141,13 +166,13 @@ export class ThreadsService implements SocialPlatformService {
         },
       );
 
-      const posts: PlatformPost[] = (response.data.data || []).map(
-        (thread: any) => ({
+      const posts: PlatformPost[] = (response.data.data ?? []).map(
+        (thread) => ({
           provider: 'threads',
           id: thread.id,
           account_id: account.social_provider_user_id,
-          caption: thread.text || '',
-          url: thread.permalink || '',
+          caption: thread.text ?? '',
+          url: thread.permalink ?? '',
           media: thread.media_url
             ? [{ url: thread.media_url, thumbnail_url: thread.media_url }]
             : [],
