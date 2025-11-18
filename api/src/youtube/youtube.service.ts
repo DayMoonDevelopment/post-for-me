@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -30,7 +30,7 @@ interface YouTubeVideo {
   };
 }
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class YouTubeService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
   private oauth2Client: OAuth2Client | null = null;

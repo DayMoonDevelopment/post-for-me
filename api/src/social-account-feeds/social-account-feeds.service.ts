@@ -292,8 +292,10 @@ export class SocialAccountFeedsService {
         await this.tiktokService.initService(projectId);
         return this.tiktokService;
       case 'instagram':
-      case 'instagram_w_facebook':
         await this.instagramService.initService(projectId);
+        return this.instagramService;
+      case 'instagram_w_facebook':
+        await this.instagramService.initFacebookService(projectId);
         return this.instagramService;
       case 'facebook':
         await this.facebookService.initService(projectId);

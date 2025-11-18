@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -9,7 +9,7 @@ import type {
 import { TwitterApi } from 'twitter-api-v2';
 import { SupabaseService } from '../supabase/supabase.service';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class TwitterService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -16,7 +16,7 @@ import type {
   InstagramAccountMetadata,
 } from './instagram.types';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
@@ -43,6 +43,28 @@ export class InstagramService implements SocialPlatformService {
         .select()
         .eq('project_id', projectId)
         .eq('provider', 'instagram')
+        .single();
+
+    if (!appCredentials || appCredentialsError) {
+      console.error(appCredentialsError);
+      throw new Error('No app credentials found for platform');
+    }
+
+    this.appCredentials = {
+      appId: appCredentials.app_id || '',
+      appSecret: appCredentials.app_secret || '',
+      provider: appCredentials.provider,
+      projectId: appCredentials.project_id,
+    };
+  }
+
+  async initFacebookService(projectId: string): Promise<void> {
+    const { data: appCredentials, error: appCredentialsError } =
+      await this.supabaseService.supabaseServiceRole
+        .from('social_provider_app_credentials')
+        .select()
+        .eq('project_id', projectId)
+        .eq('provider', 'instagram_w_facebook')
         .single();
 
     if (!appCredentials || appCredentialsError) {

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPostsResponse,
@@ -7,7 +7,7 @@ import type {
 } from '../lib/dto/global.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class LinkedInService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 

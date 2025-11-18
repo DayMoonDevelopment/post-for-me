@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -9,7 +9,7 @@ import type {
 import { AtpAgent } from '@atproto/api';
 import { SupabaseService } from '../supabase/supabase.service';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class BlueskyService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
   private agent: AtpAgent;
