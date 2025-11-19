@@ -6,7 +6,7 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import type {
   InstagramMediaItem,
@@ -14,6 +14,8 @@ import type {
   InstagramRefreshTokenResponse,
   FacebookRefreshTokenResponse,
   InstagramAccountMetadata,
+  InstagramInsightsResponse,
+  InstagramInsight,
 } from './instagram.types';
 
 @Injectable({ scope: Scope.REQUEST })
@@ -141,12 +143,64 @@ export class InstagramService implements SocialPlatformService {
   }
 
   /**
+   * Extracts insight values from Instagram insights response
+   */
+  private extractInsightsFromResponse(
+    insights?: InstagramInsightsResponse,
+  ): Partial<InstagramMediaItem> {
+    if (!insights || !insights.data) {
+      return {};
+    }
+
+    const insightValues: Partial<InstagramMediaItem> = {};
+
+    insights.data.forEach((insight: InstagramInsight) => {
+      const value = insight.values?.[0]?.value;
+      if (value !== undefined) {
+        switch (insight.name) {
+          case 'impressions':
+            insightValues.impressions = value;
+            break;
+          case 'reach':
+            insightValues.reach = value;
+            break;
+          case 'saved':
+            insightValues.saved = value;
+            break;
+          case 'shares':
+            insightValues.shares = value;
+            break;
+          case 'video_views':
+            insightValues.video_views = value;
+            break;
+          case 'exits':
+            insightValues.exits = value;
+            break;
+          case 'replies':
+            insightValues.replies = value;
+            break;
+          case 'taps_forward':
+            insightValues.taps_forward = value;
+            break;
+          case 'taps_back':
+            insightValues.taps_back = value;
+            break;
+        }
+      }
+    });
+
+    return insightValues;
+  }
+
+  /**
    * Converts an Instagram media item to a platform post
    */
   private mapMediaItemToPlatformPost(
     item: InstagramMediaItem,
     accountId: string,
   ): PlatformPost {
+    const insights = this.extractInsightsFromResponse(item.insights);
+
     return {
       provider: 'instagram',
       id: item.id,
@@ -163,8 +217,64 @@ export class InstagramService implements SocialPlatformService {
         like_count: item.like_count || 0,
         comments_count: item.comments_count || 0,
         view_count: item.view_count || 0,
+        impressions: insights.impressions || item.impressions,
+        reach: insights.reach || item.reach,
+        saved: insights.saved || item.saved,
+        shares: insights.shares || item.shares,
+        video_views: insights.video_views || item.video_views,
+        exits: insights.exits || item.exits,
+        replies: insights.replies || item.replies,
+        taps_forward: insights.taps_forward || item.taps_forward,
+        taps_back: insights.taps_back || item.taps_back,
       },
     };
+  }
+
+  /**
+   * Fetches insights for a specific media item
+   */
+  private async fetchMediaInsights(
+    mediaId: string,
+    mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM',
+    baseUrl: string,
+    accessToken: string,
+  ): Promise<InstagramInsightsResponse | undefined> {
+    try {
+      // Different metrics are available for different media types
+      let metrics: string[];
+
+      if (mediaType === 'VIDEO') {
+        metrics = ['reach', 'saved', 'video_views', 'shares'];
+      } else {
+        // IMAGE or CAROUSEL_ALBUM
+        metrics = ['reach', 'saved', 'shares'];
+      }
+
+      const insightsUrl = `${baseUrl}/${mediaId}/insights`;
+      const response = await axios.get<InstagramInsightsResponse>(insightsUrl, {
+        params: {
+          metric: metrics.join(','),
+          access_token: accessToken,
+        },
+      });
+
+      return response.data;
+    } catch (error: unknown) {
+      // Insights may not be available for all media (e.g., old posts, stories)
+      // Log but don't throw - we'll return the post without insights
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.debug(
+        `Could not fetch insights for media ${mediaId}:`,
+        errorMessage,
+      );
+
+      if (error instanceof AxiosError) {
+        console.error(error.response?.data);
+      }
+
+      return undefined;
+    }
   }
 
   async getAccountPosts({
@@ -181,27 +291,39 @@ export class InstagramService implements SocialPlatformService {
       const baseUrl = this.getApiBaseUrl(account);
 
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
-      const params = {
-        fields:
-          'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,view_count',
-        access_token: account.access_token,
-        limit: safeLimit,
-      };
+      const baseFields =
+        'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,view_count';
 
       if (platformIds && platformIds.length > 0) {
-        // Fetch specific media by IDs
-        const mediaPromises = platformIds.map((id) =>
-          axios.get<InstagramMediaItem>(`${baseUrl}/${id}`, {
-            params: {
-              fields:
-                'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,view_count',
-              access_token: account.access_token,
+        // Fetch specific media by IDs with insights
+        const mediaPromises = platformIds.map(async (id) => {
+          const mediaResponse = await axios.get<InstagramMediaItem>(
+            `${baseUrl}/${id}`,
+            {
+              params: {
+                fields: baseFields,
+                access_token: account.access_token,
+              },
             },
-          }),
-        );
+          );
 
-        const responses = await Promise.all(mediaPromises);
-        const mediaItems = responses.map((r) => r.data);
+          const mediaItem = mediaResponse.data;
+
+          // Fetch insights for this media
+          const insights = await this.fetchMediaInsights(
+            id,
+            mediaItem.media_type,
+            baseUrl,
+            account.access_token,
+          );
+
+          return {
+            ...mediaItem,
+            insights,
+          };
+        });
+
+        const mediaItems = await Promise.all(mediaPromises);
 
         const posts: PlatformPost[] = mediaItems.map(
           (item: InstagramMediaItem) =>
@@ -218,11 +340,33 @@ export class InstagramService implements SocialPlatformService {
         };
       }
 
+      // Fetch media list
       const response = await axios.get<InstagramMediaListResponse>(mediaUrl, {
-        params,
+        params: {
+          fields: baseFields,
+          access_token: account.access_token,
+          limit: safeLimit,
+        },
       });
 
-      const posts: PlatformPost[] = (response.data.data || []).map((item) =>
+      // Fetch insights for each media item
+      const mediaWithInsights = await Promise.all(
+        (response.data.data || []).map(async (item) => {
+          const insights = await this.fetchMediaInsights(
+            item.id,
+            item.media_type,
+            baseUrl,
+            account.access_token,
+          );
+
+          return {
+            ...item,
+            insights,
+          };
+        }),
+      );
+
+      const posts: PlatformPost[] = mediaWithInsights.map((item) =>
         this.mapMediaItemToPlatformPost(item, account.social_provider_user_id),
       );
 
@@ -233,7 +377,12 @@ export class InstagramService implements SocialPlatformService {
         cursor: response.data.paging?.cursors?.after,
       };
     } catch (error) {
-      console.error('Error fetching Instagram posts:', error);
+      if (error instanceof AxiosError) {
+        console.error(error.response?.data);
+      } else {
+        console.error('unkown error', error);
+      }
+
       return {
         posts: [],
         count: 0,

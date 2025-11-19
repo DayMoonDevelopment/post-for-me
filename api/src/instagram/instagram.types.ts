@@ -4,6 +4,33 @@
  */
 
 /**
+ * Instagram media insight value
+ */
+export interface InstagramInsightValue {
+  value: number;
+}
+
+/**
+ * Instagram media insight
+ */
+export interface InstagramInsight {
+  name: string;
+  period: string;
+  values: InstagramInsightValue[];
+  title: string;
+  description: string;
+  id: string;
+}
+
+/**
+ * Instagram insights response
+ */
+export interface InstagramInsightsResponse {
+  data: InstagramInsight[];
+  paging?: Paging;
+}
+
+/**
  * Instagram media item from the Graph API
  */
 export interface InstagramMediaItem {
@@ -17,6 +44,19 @@ export interface InstagramMediaItem {
   like_count?: number;
   view_count?: number;
   comments_count?: number;
+  // Insights data
+  insights?: InstagramInsightsResponse;
+  // Additional engagement metrics from insights
+  impressions?: number;
+  reach?: number;
+  saved?: number;
+  shares?: number;
+  video_views?: number;
+  // Story-specific metrics
+  exits?: number;
+  replies?: number;
+  taps_forward?: number;
+  taps_back?: number;
 }
 
 /**
