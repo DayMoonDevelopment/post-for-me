@@ -292,7 +292,7 @@ export class InstagramService implements SocialPlatformService {
 
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
       const baseFields =
-        'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,view_count';
+        'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
 
       if (platformIds && platformIds.length > 0) {
         // Fetch specific media by IDs with insights
