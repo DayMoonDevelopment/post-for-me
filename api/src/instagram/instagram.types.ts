@@ -41,20 +41,27 @@ export interface InstagramMediaItem {
   thumbnail_url?: string;
   permalink?: string;
   timestamp?: string;
-  like_count?: number;
-  view_count?: number;
-  comments_count?: number;
   // Insights data
   insights?: InstagramInsightsResponse;
-  // Additional engagement metrics from insights
+  // All engagement metrics come from insights API
+  comments?: number;
+  follows?: number;
+  ig_reels_avg_watch_time?: number;
+  ig_reels_video_view_total_time?: number;
   impressions?: number;
+  likes?: number;
+  navigation?: number;
+  profile_activity?: number;
+  profile_visits?: number;
   reach?: number;
+  replies?: number;
   saved?: number;
   shares?: number;
+  total_interactions?: number;
   video_views?: number;
-  // Story-specific metrics
+  views?: number;
+  // Story-specific metrics (may not be available in current API)
   exits?: number;
-  replies?: number;
   taps_forward?: number;
   taps_back?: number;
 }

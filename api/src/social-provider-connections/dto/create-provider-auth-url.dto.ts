@@ -73,4 +73,12 @@ export class CreateSocialAccountProviderAuthUrlDto {
     required: false,
   })
   redirect_url_override?: string;
+
+  @ApiProperty({
+    description:
+      'List of permissions you want to allow. Use this to connect users to apps that are not approved for all permissions. Will default to all permissions.',
+    required: false,
+    default: ['posts', 'feed'],
+  })
+  permissions?: string[];
 }

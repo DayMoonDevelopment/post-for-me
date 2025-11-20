@@ -17,7 +17,8 @@ export class TikTokBusinessService implements SocialPlatformService {
   apiUrl: string;
 
   constructor(private readonly supabaseService: SupabaseService) {
-    this.tokenUrl = 'https://open.tiktokapis.com/v2/oauth/token/';
+    this.tokenUrl =
+      'https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/refresh_token/';
     this.apiUrl = 'https://business-api.tiktok.com/open_api/v1.3/';
   }
 
@@ -51,6 +52,7 @@ export class TikTokBusinessService implements SocialPlatformService {
       refresh_token: account.refresh_token,
     };
 
+    console.log(refreshRequestBody);
     const refreshResponse = await axios.post(
       this.tokenUrl,
       refreshRequestBody,
@@ -60,6 +62,7 @@ export class TikTokBusinessService implements SocialPlatformService {
         },
       },
     );
+    console.log(refreshResponse);
 
     const refreshData = refreshResponse.data as {
       code: number;

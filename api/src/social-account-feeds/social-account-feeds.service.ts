@@ -174,7 +174,7 @@ export class SocialAccountFeedsService {
       id: account.id,
       social_provider_user_name: account.social_provider_user_name,
       access_token: account.access_token || '',
-      refresh_token: account.access_token,
+      refresh_token: account.refresh_token,
       access_token_expires_at: new Date(
         account.access_token_expires_at || new Date(),
       ),
@@ -186,14 +186,16 @@ export class SocialAccountFeedsService {
     };
 
     if (
-      this.platformsToAlwaysRefresh.indexOf(account.provider) > -1 ||
+      this.platformsToAlwaysRefresh.includes(account.provider) ||
       differenceInDays(
         new Date(account.access_token_expires_at || new Date()),
         new Date(),
-      ) >= 7
+      ) <= 7
     ) {
+      console.log('refreshing token');
       const updatedAccount =
         await platformService.refreshAccessToken(socialAccount);
+      console.log(updatedAccount);
 
       if (updatedAccount) {
         await this.supabaseService.supabaseClient

@@ -158,11 +158,35 @@ export class InstagramService implements SocialPlatformService {
       const value = insight.values?.[0]?.value;
       if (value !== undefined) {
         switch (insight.name) {
-          case 'impressions':
-            insightValues.impressions = value;
+          case 'comments':
+            insightValues.comments = value;
+            break;
+          case 'follows':
+            insightValues.follows = value;
+            break;
+          case 'ig_reels_avg_watch_time':
+            insightValues.ig_reels_avg_watch_time = value;
+            break;
+          case 'ig_reels_video_view_total_time':
+            insightValues.ig_reels_video_view_total_time = value;
+            break;
+          case 'likes':
+            insightValues.likes = value;
+            break;
+          case 'navigation':
+            insightValues.navigation = value;
+            break;
+          case 'profile_activity':
+            insightValues.profile_activity = value;
+            break;
+          case 'profile_visits':
+            insightValues.profile_visits = value;
             break;
           case 'reach':
             insightValues.reach = value;
+            break;
+          case 'replies':
+            insightValues.replies = value;
             break;
           case 'saved':
             insightValues.saved = value;
@@ -170,20 +194,11 @@ export class InstagramService implements SocialPlatformService {
           case 'shares':
             insightValues.shares = value;
             break;
-          case 'video_views':
-            insightValues.video_views = value;
+          case 'total_interactions':
+            insightValues.total_interactions = value;
             break;
-          case 'exits':
-            insightValues.exits = value;
-            break;
-          case 'replies':
-            insightValues.replies = value;
-            break;
-          case 'taps_forward':
-            insightValues.taps_forward = value;
-            break;
-          case 'taps_back':
-            insightValues.taps_back = value;
+          case 'views':
+            insightValues.views = value;
             break;
         }
       }
@@ -214,18 +229,20 @@ export class InstagramService implements SocialPlatformService {
         },
       ],
       metrics: {
-        like_count: item.like_count || 0,
-        comments_count: item.comments_count || 0,
-        view_count: item.view_count || 0,
-        impressions: insights.impressions || item.impressions,
-        reach: insights.reach || item.reach,
-        saved: insights.saved || item.saved,
-        shares: insights.shares || item.shares,
-        video_views: insights.video_views || item.video_views,
-        exits: insights.exits || item.exits,
-        replies: insights.replies || item.replies,
-        taps_forward: insights.taps_forward || item.taps_forward,
-        taps_back: insights.taps_back || item.taps_back,
+        likes: insights.likes,
+        comments: insights.comments,
+        views: insights.views,
+        reach: insights.reach,
+        saved: insights.saved,
+        shares: insights.shares,
+        replies: insights.replies,
+        follows: insights.follows,
+        ig_reels_avg_watch_time: insights.ig_reels_avg_watch_time,
+        ig_reels_video_view_total_time: insights.ig_reels_video_view_total_time,
+        navigation: insights.navigation,
+        profile_activity: insights.profile_activity,
+        profile_visits: insights.profile_visits,
+        total_interactions: insights.total_interactions,
       },
     };
   }
@@ -241,14 +258,22 @@ export class InstagramService implements SocialPlatformService {
   ): Promise<InstagramInsightsResponse | undefined> {
     try {
       // Different metrics are available for different media types
-      let metrics: string[];
-
-      if (mediaType === 'VIDEO') {
-        metrics = ['reach', 'saved', 'video_views', 'shares'];
-      } else {
-        // IMAGE or CAROUSEL_ALBUM
-        metrics = ['reach', 'saved', 'shares'];
-      }
+      const metrics: string[] = [
+        'comments',
+        'follows',
+        //'ig_reels_avg_watch_time',
+        //'ig_reels_video_view_total_time',
+        'likes',
+        //'navigation',
+        'profile_activity',
+        'profile_visits',
+        'reach',
+        //'replies',
+        'saved',
+        'shares',
+        'total_interactions',
+        'views',
+      ];
 
       const insightsUrl = `${baseUrl}/${mediaId}/insights`;
       const response = await axios.get<InstagramInsightsResponse>(insightsUrl, {
@@ -292,7 +317,7 @@ export class InstagramService implements SocialPlatformService {
 
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
       const baseFields =
-        'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
+        'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
 
       if (platformIds && platformIds.length > 0) {
         // Fetch specific media by IDs with insights
