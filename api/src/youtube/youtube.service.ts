@@ -33,19 +33,34 @@ interface YouTubeVideo {
 }
 
 interface YouTubeAnalyticsMetrics {
+  engagedViews?: number;
+  views?: number;
+  redViews?: number;
+  comments?: number;
+  likes?: number;
+  dislikes?: number;
+  videosAddedToPlaylists?: number;
+  videosRemovedFromPlaylists?: number;
+  shares?: number;
+  estimatedMinutesWatched?: number;
+  estimatedRedMinutesWatched?: number;
+  averageViewDuration?: number;
+  averageViewPercentage?: number;
   annotationClickThroughRate?: number;
   annotationCloseRate?: number;
-  averageViewDuration?: number;
-  comments?: number;
-  dislikes?: number;
-  engagedViews?: number;
-  estimatedMinutesWatched?: number;
-  likes?: number;
-  shares?: number;
+  annotationImpressions?: number;
+  annotationClickableImpressions?: number;
+  annotationClosableImpressions?: number;
+  annotationClicks?: number;
+  annotationCloses?: number;
+  cardClickRate?: number;
+  cardTeaserClickRate?: number;
+  cardImpressions?: number;
+  cardTeaserImpressions?: number;
+  cardClicks?: number;
+  cardTeaserClicks?: number;
   subscribersGained?: number;
   subscribersLost?: number;
-  viewerPercentage?: number;
-  views?: number;
 }
 
 @Injectable({ scope: Scope.REQUEST })
@@ -304,16 +319,35 @@ export class YouTubeService implements SocialPlatformService {
                 analyticsMetrics.dislikes ||
                 parseInt(video.statistics.dislikeCount || '0', 10),
               // Analytics-only metrics
+              engagedViews: analyticsMetrics.engagedViews,
+              redViews: analyticsMetrics.redViews,
+              videosAddedToPlaylists: analyticsMetrics.videosAddedToPlaylists,
+              videosRemovedFromPlaylists:
+                analyticsMetrics.videosRemovedFromPlaylists,
+              shares: analyticsMetrics.shares,
+              estimatedMinutesWatched: analyticsMetrics.estimatedMinutesWatched,
+              estimatedRedMinutesWatched:
+                analyticsMetrics.estimatedRedMinutesWatched,
+              averageViewDuration: analyticsMetrics.averageViewDuration,
+              averageViewPercentage: analyticsMetrics.averageViewPercentage,
               annotationClickThroughRate:
                 analyticsMetrics.annotationClickThroughRate,
               annotationCloseRate: analyticsMetrics.annotationCloseRate,
-              averageViewDuration: analyticsMetrics.averageViewDuration,
-              engagedViews: analyticsMetrics.engagedViews,
-              estimatedMinutesWatched: analyticsMetrics.estimatedMinutesWatched,
-              shares: analyticsMetrics.shares,
+              annotationImpressions: analyticsMetrics.annotationImpressions,
+              annotationClickableImpressions:
+                analyticsMetrics.annotationClickableImpressions,
+              annotationClosableImpressions:
+                analyticsMetrics.annotationClosableImpressions,
+              annotationClicks: analyticsMetrics.annotationClicks,
+              annotationCloses: analyticsMetrics.annotationCloses,
+              cardClickRate: analyticsMetrics.cardClickRate,
+              cardTeaserClickRate: analyticsMetrics.cardTeaserClickRate,
+              cardImpressions: analyticsMetrics.cardImpressions,
+              cardTeaserImpressions: analyticsMetrics.cardTeaserImpressions,
+              cardClicks: analyticsMetrics.cardClicks,
+              cardTeaserClicks: analyticsMetrics.cardTeaserClicks,
               subscribersGained: analyticsMetrics.subscribersGained,
               subscribersLost: analyticsMetrics.subscribersLost,
-              viewerPercentage: analyticsMetrics.viewerPercentage,
             },
           };
         }),
