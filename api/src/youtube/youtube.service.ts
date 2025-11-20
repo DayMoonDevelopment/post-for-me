@@ -103,7 +103,7 @@ export class YouTubeService implements SocialPlatformService {
     if (!this.oauth2Client) {
       throw new Error('OAuth2 client not initialized. Call initService first.');
     }
-    console.log(account);
+
     this.oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
