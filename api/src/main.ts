@@ -16,6 +16,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { webhookControllerDescription } from './webhooks/docs/webhooks-controller.md';
 import { socialPostPreviewControllerDescription } from './social-posts-previews/docs/social-posts-preview-controller.md';
+import { socialAccountFeedsControllerDescription } from './social-account-feeds/docs/social-account-feeds-controller.md';
 
 async function bootstrap() {
   const app: NestExpressApplication = await NestFactory.create(AppModule);
@@ -32,6 +33,7 @@ async function bootstrap() {
     .addTag('Social Posts', postsControllerDescription)
     .addTag('Social Accounts', socialAccountsControllerDescription)
     .addTag('Social Post Results', postResultsControllerDescription)
+    .addTag('Social Account Feeds', socialAccountFeedsControllerDescription)
     .addTag('Webhooks', webhookControllerDescription)
     .addTag('Social Post Previews', socialPostPreviewControllerDescription)
     .setVersion('1.0')

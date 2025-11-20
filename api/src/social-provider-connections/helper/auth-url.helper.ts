@@ -111,6 +111,9 @@ export async function generateAuthUrl({
         'pages_show_list',
         'public_profile',
         'business_management',
+        //Feed permissions
+        'pages_read_engagement',
+        'instagram_manage_insight',
       ];
       const facebookVersion =
         configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
@@ -129,6 +132,8 @@ export async function generateAuthUrl({
       const scopes = [
         'instagram_business_basic',
         'instagram_business_content_publish',
+        //Feeds permissions
+        'instagram_business_manage_insights',
       ];
 
       const authParams = new URLSearchParams([
@@ -255,6 +260,8 @@ export async function generateAuthUrl({
         'https://www.googleapis.com/auth/youtube.upload',
         'https://www.googleapis.com/auth/youtube.readonly',
         'https://www.googleapis.com/auth/userinfo.profile',
+        //Feed Permissions
+        'https://www.googleapis.com/auth/yt-analytics.readonly',
       ];
 
       authUrl = oauth2Client.generateAuthUrl({
