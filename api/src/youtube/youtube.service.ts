@@ -21,6 +21,7 @@ interface YouTubeVideo {
       medium?: { url: string };
       high?: { url: string };
     };
+    channelId: string;
   };
   statistics: {
     viewCount: string;
@@ -29,6 +30,22 @@ interface YouTubeVideo {
     favoriteCount: string;
     dislikeCount: string;
   };
+}
+
+interface YouTubeAnalyticsMetrics {
+  annotationClickThroughRate?: number;
+  annotationCloseRate?: number;
+  averageViewDuration?: number;
+  comments?: number;
+  dislikes?: number;
+  engagedViews?: number;
+  estimatedMinutesWatched?: number;
+  likes?: number;
+  shares?: number;
+  subscribersGained?: number;
+  subscribersLost?: number;
+  viewerPercentage?: number;
+  views?: number;
 }
 
 @Injectable({ scope: Scope.REQUEST })
@@ -71,7 +88,7 @@ export class YouTubeService implements SocialPlatformService {
     if (!this.oauth2Client) {
       throw new Error('OAuth2 client not initialized. Call initService first.');
     }
-
+    console.log(account);
     this.oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
@@ -94,6 +111,68 @@ export class YouTubeService implements SocialPlatformService {
     }
 
     return account;
+  }
+
+  /**
+   * Fetches analytics metrics for a specific video using YouTube Analytics API
+   */
+  private async getVideoAnalytics(
+    videoId: string,
+    publishedAt: string,
+    channelId: string,
+  ): Promise<YouTubeAnalyticsMetrics> {
+    if (!this.oauth2Client) {
+      throw new Error('OAuth2 client not initialized.');
+    }
+
+    const youtubeAnalytics = google.youtubeAnalytics({
+      version: 'v2',
+      auth: this.oauth2Client,
+    });
+
+    try {
+      // Format dates for all-time analytics
+      const startDate = new Date(publishedAt).toISOString().split('T')[0];
+      const endDate = new Date().toISOString().split('T')[0];
+
+      const response = await youtubeAnalytics.reports.query({
+        ids: `channel==${channelId}`,
+        startDate,
+        endDate,
+        metrics:
+          'engagedViews,views,redViews,comments,likes,dislikes,videosAddedToPlaylists,videosRemovedFromPlaylists,shares,estimatedMinutesWatched,estimatedRedMinutesWatched,averageViewDuration,averageViewPercentage,annotationClickThroughRate,annotationCloseRate,annotationImpressions,annotationClickableImpressions,annotationClosableImpressions,annotationClicks,annotationCloses,cardClickRate,cardTeaserClickRate,cardImpressions,cardTeaserImpressions,cardClicks,cardTeaserClicks,subscribersGained,subscribersLost',
+        filters: `video==${videoId}`,
+      });
+
+      // Parse the response data
+      if (response.data.rows && response.data.rows.length > 0) {
+        const row = response.data.rows[0];
+        const headers = response.data.columnHeaders || [];
+
+        const metrics: YouTubeAnalyticsMetrics = {};
+
+        headers.forEach((header, index) => {
+          const name = header.name as string;
+          const value = row[index];
+
+          if (typeof value === 'number' || typeof value === 'string') {
+            metrics[name as keyof YouTubeAnalyticsMetrics] =
+              typeof value === 'string' ? parseFloat(value) : value;
+          }
+        });
+
+        return metrics;
+      }
+
+      return {};
+    } catch (error) {
+      // Analytics API might fail due to permissions or video being too new
+      console.warn(
+        `Failed to fetch analytics for video ${videoId}:`,
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+      return {};
+    }
   }
 
   async getAccountPosts({
@@ -185,30 +264,60 @@ export class YouTubeService implements SocialPlatformService {
         videos = (videosResponse.data.items || []) as YouTubeVideo[];
       }
 
-      const posts: PlatformPost[] = videos.map((video) => ({
-        provider: 'youtube',
-        id: video.id,
-        account_id: account.social_provider_user_id,
-        caption: video.snippet.title,
-        url: `https://www.youtube.com/watch?v=${video.id}`,
-        media: [
-          {
-            url: `https://www.youtube.com/embed/${video.id}`,
-            thumbnail_url:
-              video.snippet.thumbnails.high?.url ||
-              video.snippet.thumbnails.medium?.url ||
-              video.snippet.thumbnails.default?.url ||
-              '',
-          },
-        ],
-        metrics: {
-          likeCount: parseInt(video.statistics.likeCount || '0', 10),
-          commentCount: parseInt(video.statistics.commentCount || '0', 10),
-          favoriteCount: parseInt(video.statistics.favoriteCount || '0', 10),
-          viewCount: parseInt(video.statistics.viewCount || '0', 10),
-          dislikeCount: parseInt(video.statistics.dislikeCount || '0'),
-        },
-      }));
+      // Fetch analytics for each video and combine with basic stats
+      const posts: PlatformPost[] = await Promise.all(
+        videos.map(async (video) => {
+          const analyticsMetrics = await this.getVideoAnalytics(
+            video.id,
+            video.snippet.publishedAt,
+            video.snippet.channelId,
+          );
+
+          return {
+            provider: 'youtube',
+            id: video.id,
+            account_id: account.social_provider_user_id,
+            caption: video.snippet.title,
+            url: `https://www.youtube.com/watch?v=${video.id}`,
+            media: [
+              {
+                url: `https://www.youtube.com/embed/${video.id}`,
+                thumbnail_url:
+                  video.snippet.thumbnails.high?.url ||
+                  video.snippet.thumbnails.medium?.url ||
+                  video.snippet.thumbnails.default?.url ||
+                  '',
+              },
+            ],
+            metrics: {
+              // Use Analytics API data when available, fallback to Data API
+              views:
+                analyticsMetrics.views ||
+                parseInt(video.statistics.viewCount || '0', 10),
+              likes:
+                analyticsMetrics.likes ||
+                parseInt(video.statistics.likeCount || '0', 10),
+              comments:
+                analyticsMetrics.comments ||
+                parseInt(video.statistics.commentCount || '0', 10),
+              dislikes:
+                analyticsMetrics.dislikes ||
+                parseInt(video.statistics.dislikeCount || '0', 10),
+              // Analytics-only metrics
+              annotationClickThroughRate:
+                analyticsMetrics.annotationClickThroughRate,
+              annotationCloseRate: analyticsMetrics.annotationCloseRate,
+              averageViewDuration: analyticsMetrics.averageViewDuration,
+              engagedViews: analyticsMetrics.engagedViews,
+              estimatedMinutesWatched: analyticsMetrics.estimatedMinutesWatched,
+              shares: analyticsMetrics.shares,
+              subscribersGained: analyticsMetrics.subscribersGained,
+              subscribersLost: analyticsMetrics.subscribersLost,
+              viewerPercentage: analyticsMetrics.viewerPercentage,
+            },
+          };
+        }),
+      );
 
       return {
         posts,

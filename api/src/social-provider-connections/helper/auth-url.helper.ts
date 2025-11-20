@@ -260,6 +260,8 @@ export async function generateAuthUrl({
         'https://www.googleapis.com/auth/youtube.upload',
         'https://www.googleapis.com/auth/youtube.readonly',
         'https://www.googleapis.com/auth/userinfo.profile',
+        //Feed Permissions
+        'https://www.googleapis.com/auth/yt-analytics.readonly',
       ];
 
       authUrl = oauth2Client.generateAuthUrl({
