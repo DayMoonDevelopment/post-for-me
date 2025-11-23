@@ -252,33 +252,69 @@ export class InstagramService implements SocialPlatformService {
    */
   private async fetchMediaInsights(
     mediaId: string,
-    mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM',
+    mediaType: 'FEED' | 'STORY' | 'REELS' | undefined,
     baseUrl: string,
     accessToken: string,
   ): Promise<InstagramInsightsResponse | undefined> {
     try {
       // Different metrics are available for different media types
-      const metrics: string[] = [
-        'comments',
-        'follows',
-        //'ig_reels_avg_watch_time',
-        //'ig_reels_video_view_total_time',
-        'likes',
-        //'navigation',
-        'profile_activity',
-        'profile_visits',
-        'reach',
-        //'replies',
-        'saved',
-        'shares',
-        'total_interactions',
-        'views',
-      ];
+      const metrics: string[] = [];
+
+      switch (mediaType) {
+        case 'REELS':
+          metrics.push(
+            ...[
+              `comments`,
+              `ig_reels_avg_watch_time`,
+              `ig_reels_video_view_total_time`,
+              `likes`,
+              `reach`,
+              `saved`,
+              `shares`,
+              `total_interactions`,
+              `views`,
+            ],
+          );
+          break;
+        case 'STORY':
+          metrics.push(
+            ...[
+              `follows`,
+              `navigation`,
+              `profile_activity`,
+              `profile_visits`,
+              `reach`,
+              `replies`,
+              `shares`,
+              `total_interactions`,
+              `views`,
+            ],
+          );
+          break;
+        default:
+          metrics.push(
+            ...[
+              'comments',
+              'follows',
+              'likes',
+              'profile_activity',
+              'profile_visits',
+              'reach',
+              'saved',
+              'shares',
+              'total_interactions',
+              'views',
+            ],
+          );
+
+          break;
+      }
 
       const insightsUrl = `${baseUrl}/${mediaId}/insights`;
       const response = await axios.get<InstagramInsightsResponse>(insightsUrl, {
         params: {
           metric: metrics.join(','),
+          preriod: 'lifetime',
           access_token: accessToken,
         },
       });
@@ -317,7 +353,7 @@ export class InstagramService implements SocialPlatformService {
 
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
       const baseFields =
-        'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
+        'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp';
 
       if (platformIds && platformIds.length > 0) {
         // Fetch specific media by IDs with insights
@@ -337,7 +373,7 @@ export class InstagramService implements SocialPlatformService {
           // Fetch insights for this media
           const insights = await this.fetchMediaInsights(
             id,
-            mediaItem.media_type,
+            mediaItem.media_product_type,
             baseUrl,
             account.access_token,
           );
@@ -377,9 +413,10 @@ export class InstagramService implements SocialPlatformService {
       // Fetch insights for each media item
       const mediaWithInsights = await Promise.all(
         (response.data.data || []).map(async (item) => {
+          console.log(item);
           const insights = await this.fetchMediaInsights(
             item.id,
-            item.media_type,
+            item.media_product_type,
             baseUrl,
             account.access_token,
           );

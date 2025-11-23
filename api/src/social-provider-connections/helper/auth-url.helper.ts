@@ -113,7 +113,7 @@ export async function generateAuthUrl({
         'business_management',
         //Feed permissions
         'pages_read_engagement',
-        'instagram_manage_insight',
+        'instagram_manage_insights',
       ];
       const facebookVersion =
         configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';

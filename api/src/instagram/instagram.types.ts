@@ -37,6 +37,7 @@ export interface InstagramMediaItem {
   id: string;
   caption?: string;
   media_type: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+  media_product_type?: 'FEED' | 'STORY' | 'REELS';
   media_url?: string;
   thumbnail_url?: string;
   permalink?: string;
