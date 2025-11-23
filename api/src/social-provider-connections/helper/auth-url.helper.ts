@@ -82,6 +82,8 @@ export async function generateAuthUrl({
         'pages_read_engagement',
         'pages_manage_posts',
         'business_management',
+        //Feed Permissions
+        'read_insights',
       ];
       const facebookVersion =
         configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
