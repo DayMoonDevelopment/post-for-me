@@ -57,3 +57,42 @@ export interface TikTokTokenResponse {
   error?: string;
   error_description?: string;
 }
+
+/**
+ * TikTok publish status response
+ */
+export interface TikTokPublishStatusResponse {
+  data: {
+    status: string;
+    publicaly_available_post_id: number[];
+    fail_reason?: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+    log_id?: string;
+  };
+}
+
+/**
+ * TikTok video query request body
+ */
+export interface TikTokVideoQueryRequest {
+  filters: {
+    video_ids: string[];
+  };
+}
+
+/**
+ * TikTok video query response
+ */
+export interface TikTokVideoQueryResponse {
+  data: {
+    videos: TikTokVideo[];
+  };
+  error?: {
+    code: string;
+    message: string;
+    log_id?: string;
+  };
+}

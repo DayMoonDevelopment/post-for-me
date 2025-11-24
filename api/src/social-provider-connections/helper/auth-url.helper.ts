@@ -196,7 +196,7 @@ export async function generateAuthUrl({
     case 'tiktok': {
       const scopes = [
         'user.info.basic',
-        'video.list',
+        'video.list', //also used for feed permissions
         'video.upload',
         'video.publish',
       ];
