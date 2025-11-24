@@ -144,15 +144,10 @@ export class TikTokService implements SocialPlatformService {
     limit: number;
   }): Promise<PlatformPostsResponse> {
     try {
-      const safeLimit = Math.min(limit, 20);
-
-      // TikTok API doesn't have a direct "get my videos" endpoint in the standard API
-      // This is a placeholder implementation - actual implementation would depend on
-      // available TikTok API endpoints for the project
       const response = await axios.post<TikTokVideoListResponse>(
         `${this.apiUrl}video/list/`,
         {
-          max_count: safeLimit,
+          max_count: limit,
         },
         {
           headers: {
