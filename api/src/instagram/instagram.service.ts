@@ -314,7 +314,7 @@ export class InstagramService implements SocialPlatformService {
       const response = await axios.get<InstagramInsightsResponse>(insightsUrl, {
         params: {
           metric: metrics.join(','),
-          preriod: 'lifetime',
+          period: 'lifetime',
           access_token: accessToken,
         },
       });

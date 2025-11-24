@@ -46,3 +46,21 @@ export interface FacebookFeedResponse {
   data: FacebookPost[];
   paging?: FacebookPaging;
 }
+
+export interface FacebookInsightValue {
+  value: number | Record<string, number>;
+}
+
+export interface FacebookInsight {
+  name: string;
+  period: string;
+  values: FacebookInsightValue[];
+  title?: string;
+  description?: string;
+  id?: string;
+}
+
+export interface FacebookInsightsResponse {
+  data: FacebookInsight[];
+  paging?: FacebookPaging;
+}

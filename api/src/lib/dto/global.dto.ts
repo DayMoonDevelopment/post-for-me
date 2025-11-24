@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
 import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
 import { TikTokBusinessMetricsDto } from 'src/social-account-feeds/dto/platform-post-metrics.dto';
 import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
@@ -50,6 +51,7 @@ export interface PlatformPost {
   url: string;
   media: { url: string; thumbnail_url: string }[];
   metrics:
+    | FacebookPostMetricsDto
     | TikTokBusinessMetricsDto
     | InstagramPostMetricsDto
     | YouTubePostMetricsDto;

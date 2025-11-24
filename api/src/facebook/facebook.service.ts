@@ -6,13 +6,15 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import type {
   FacebookTokenResponse,
   FacebookPost,
   FacebookFeedResponse,
+  FacebookInsightsResponse,
 } from './facebook.types';
+import { FacebookPostMetricsDto } from './dto/facebook-post-metrics.dto';
 
 @Injectable({ scope: Scope.REQUEST })
 export class FacebookService implements SocialPlatformService {
@@ -98,10 +100,12 @@ export class FacebookService implements SocialPlatformService {
         );
 
         const responses = await Promise.all(postPromises);
-        const posts: PlatformPost[] = responses.map((response) => {
-          const post = response.data as FacebookPost;
-          return this.mapFacebookPostToPlatformPost(post, account);
-        });
+        const posts: PlatformPost[] = await Promise.all(
+          responses.map(async (response) => {
+            const post = response.data as FacebookPost;
+            return this.mapFacebookPostToPlatformPost(post, account);
+          }),
+        );
 
         return {
           posts,
@@ -124,8 +128,10 @@ export class FacebookService implements SocialPlatformService {
       );
 
       const feedResponse = response.data as FacebookFeedResponse;
-      const posts: PlatformPost[] = (feedResponse.data || []).map((post) =>
-        this.mapFacebookPostToPlatformPost(post, account),
+      const posts: PlatformPost[] = await Promise.all(
+        (feedResponse.data || []).map((post) =>
+          this.mapFacebookPostToPlatformPost(post, account),
+        ),
       );
 
       return {
@@ -144,10 +150,322 @@ export class FacebookService implements SocialPlatformService {
     }
   }
 
-  private mapFacebookPostToPlatformPost(
+  private async fetchPostInsights(
+    postId: string,
+    accessToken: string,
+  ): Promise<FacebookPostMetricsDto> {
+    try {
+      const metrics: FacebookPostMetricsDto = {};
+
+      // Fetch post insights with all requested metrics
+      const insightsResponse = await axios.get(
+        `https://graph.facebook.com/v20.0/${postId}/insights`,
+        {
+          params: {
+            metric: [
+              'post_impressions_unique',
+              'post_media_view',
+              'post_reactions_like_total',
+              'post_reactions_love_total',
+              'post_reactions_wow_total',
+              'post_reactions_haha_total',
+              'post_reactions_sorry_total',
+              'post_reactions_anger_total',
+              'post_reactions_by_type_total',
+              'post_impressions_viral_unique',
+              'post_impressions_paid_unique',
+              'post_impressions_fan_unique',
+              'post_impressions_organic_unique',
+              'post_impressions_nonviral_unique',
+              'post_video_avg_time_watched',
+              'post_video_complete_views_organic',
+              'post_video_complete_views_organic_unique',
+              'post_video_complete_views_paid',
+              'post_video_complete_views_paid_unique',
+              'post_video_retention_graph_clicked_to_play',
+              'post_video_retention_graph_autoplayed',
+              'post_video_views_organic',
+              'post_video_views_organic_unique',
+              'post_video_views_paid',
+              'post_video_views_paid_unique',
+              'post_video_length',
+              'post_video_views',
+              'post_video_views_unique',
+              'post_video_views_autoplayed',
+              'post_video_views_clicked_to_play',
+              'post_video_views_15s',
+              'post_video_views_60s_excludes_shorter',
+              'post_video_views_sound_on',
+              'post_video_view_time',
+              'post_video_view_time_organic',
+              'post_video_view_time_by_age_bucket_and_gender',
+              'post_video_view_time_by_region_id',
+              'post_video_views_by_distribution_type',
+              'post_video_view_time_by_distribution_type',
+              'post_video_view_time_by_country_id',
+              'post_video_social_actions_count_unique',
+              'post_activity_by_action_type',
+              'post_activity_by_action_type_unique',
+            ].join(','),
+            access_token: accessToken,
+          },
+        },
+      );
+
+      const insightsData = insightsResponse.data as FacebookInsightsResponse;
+
+      // Process insights data
+      for (const insight of insightsData.data || []) {
+        const value = insight.values?.[0]?.value;
+
+        switch (insight.name) {
+          // Reach and Impressions
+          case 'post_impressions_unique':
+            metrics.reach = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_impressions_viral_unique':
+            metrics.viral_reach = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_impressions_paid_unique':
+            metrics.paid_reach = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_impressions_fan_unique':
+            metrics.fan_reach = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_impressions_organic_unique':
+            metrics.organic_reach = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_impressions_nonviral_unique':
+            metrics.nonviral_reach = typeof value === 'number' ? value : 0;
+            break;
+
+          // Media Views
+          case 'post_media_view':
+            metrics.media_views = typeof value === 'number' ? value : 0;
+            break;
+
+          // Reactions
+          case 'post_reactions_like_total':
+            metrics.reactions_like = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_reactions_love_total':
+            metrics.reactions_love = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_reactions_wow_total':
+            metrics.reactions_wow = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_reactions_haha_total':
+            metrics.reactions_haha = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_reactions_sorry_total':
+            metrics.reactions_sorry = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_reactions_anger_total':
+            metrics.reactions_anger = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_reactions_by_type_total':
+            if (typeof value === 'object' && value !== null) {
+              metrics.reactions_by_type = value;
+              // Calculate total reactions
+              metrics.reactions_total = Object.values(value).reduce(
+                (sum, count) => sum + count,
+                0,
+              );
+            }
+            break;
+
+          // Video Views
+          case 'post_video_views':
+            metrics.video_views = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_unique':
+            metrics.video_views_unique = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_organic':
+            metrics.video_views_organic = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_organic_unique':
+            metrics.video_views_organic_unique =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_paid':
+            metrics.video_views_paid = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_paid_unique':
+            metrics.video_views_paid_unique =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_autoplayed':
+            metrics.video_views_autoplayed =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_clicked_to_play':
+            metrics.video_views_clicked_to_play =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_15s':
+            metrics.video_views_15s = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_60s_excludes_shorter':
+            metrics.video_views_60s = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_views_sound_on':
+            metrics.video_views_sound_on =
+              typeof value === 'number' ? value : 0;
+            break;
+
+          // Video Complete Views
+          case 'post_video_complete_views_organic':
+            metrics.video_complete_views_organic =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_complete_views_organic_unique':
+            metrics.video_complete_views_organic_unique =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_complete_views_paid':
+            metrics.video_complete_views_paid =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_complete_views_paid_unique':
+            metrics.video_complete_views_paid_unique =
+              typeof value === 'number' ? value : 0;
+            break;
+
+          // Video Watch Time
+          case 'post_video_view_time':
+            metrics.video_view_time = typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_view_time_organic':
+            metrics.video_view_time_organic =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_avg_time_watched':
+            metrics.video_avg_time_watched =
+              typeof value === 'number' ? value : 0;
+            break;
+          case 'post_video_length':
+            metrics.video_length = typeof value === 'number' ? value : 0;
+            break;
+
+          // Video Demographics
+          case 'post_video_view_time_by_age_bucket_and_gender':
+            if (typeof value === 'object' && value !== null) {
+              metrics.video_view_time_by_age_gender = Object.entries(value).map(
+                ([key, val]) => ({
+                  key,
+                  value: Number(val),
+                }),
+              );
+            }
+            break;
+          case 'post_video_view_time_by_region_id':
+            if (typeof value === 'object' && value !== null) {
+              metrics.video_view_time_by_region = Object.entries(value).map(
+                ([key, val]) => ({
+                  key,
+                  value: Number(val),
+                }),
+              );
+            }
+            break;
+          case 'post_video_view_time_by_country_id':
+            if (typeof value === 'object' && value !== null) {
+              metrics.video_view_time_by_country = Object.entries(value).map(
+                ([key, val]) => ({
+                  key,
+                  value: Number(val),
+                }),
+              );
+            }
+            break;
+
+          // Video Distribution
+          case 'post_video_views_by_distribution_type':
+            if (typeof value === 'object' && value !== null) {
+              metrics.video_views_by_distribution_type = value;
+            }
+            break;
+          case 'post_video_view_time_by_distribution_type':
+            if (typeof value === 'object' && value !== null) {
+              metrics.video_view_time_by_distribution_type = value;
+            }
+            break;
+
+          // Video Retention
+          case 'post_video_retention_graph_clicked_to_play':
+            if (typeof value === 'object' && value !== null) {
+              metrics.video_retention_graph_clicked_to_play = Object.entries(
+                value,
+              ).map(([time, rate]) => ({
+                time: parseInt(time),
+                rate: Number(rate),
+              }));
+            }
+            break;
+          case 'post_video_retention_graph_autoplayed':
+            if (typeof value === 'object' && value !== null) {
+              metrics.video_retention_graph_autoplayed = Object.entries(
+                value,
+              ).map(([time, rate]) => ({
+                time: parseInt(time),
+                rate: Number(rate),
+              }));
+            }
+            break;
+
+          // Social Actions
+          case 'post_video_social_actions_count_unique':
+            metrics.video_social_actions_unique =
+              typeof value === 'number' ? value : 0;
+            break;
+
+          // Activity
+          case 'post_activity_by_action_type':
+            if (typeof value === 'object' && value !== null) {
+              metrics.activity_by_action_type = Object.entries(value).map(
+                ([action_type, val]) => ({
+                  action_type,
+                  value: Number(val),
+                }),
+              );
+            }
+            break;
+          case 'post_activity_by_action_type_unique':
+            if (typeof value === 'object' && value !== null) {
+              metrics.activity_by_action_type_unique = Object.entries(
+                value,
+              ).map(([action_type, val]) => ({
+                action_type,
+                value: Number(val),
+              }));
+            }
+            break;
+        }
+      }
+
+      return metrics;
+    } catch (error) {
+      console.error('Error fetching Facebook post insights');
+      if (error instanceof AxiosError) {
+        console.error(error.response?.data);
+      }
+
+      // Return empty metrics object on error
+      return {};
+    }
+  }
+
+  private async mapFacebookPostToPlatformPost(
     post: FacebookPost,
     account: SocialAccount,
-  ): PlatformPost {
+  ): Promise<PlatformPost> {
+    // Fetch insights for the post
+    const insights = await this.fetchPostInsights(
+      post.id,
+      account.access_token,
+    );
+
     return {
       provider: 'facebook',
       id: post.id,
@@ -158,30 +476,10 @@ export class FacebookService implements SocialPlatformService {
         ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
         : [],
       metrics: {
-        likes: post.likes?.summary?.total_count || 0,
-        comments: post.comments?.summary?.total_count || 0,
-        shares: post.shares?.count || 0,
-        favorites: 0,
-        reach: 0,
-        video_views: 0,
-        total_time_watched: 0,
-        average_time_watched: 0,
-        full_video_watched_rate: 0,
-        new_followers: 0,
-        profile_views: 0,
-        website_clicks: 0,
-        phone_number_clicks: 0,
-        lead_submissions: 0,
-        app_download_clicks: 0,
-        email_clicks: 0,
-        address_clicks: 0,
-        video_view_retention: [],
-        impression_sources: [],
-        audience_types: [],
-        audience_genders: [],
-        audience_countries: [],
-        audience_cities: [],
-        engagement_likes: [],
+        ...insights,
+        // Include basic metrics from the post object as fallback
+        comments: post.comments?.summary?.total_count ?? 0,
+        shares: post.shares?.count ?? 0,
       },
     };
   }
