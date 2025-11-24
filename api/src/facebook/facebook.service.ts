@@ -13,6 +13,7 @@ import type {
   FacebookPost,
   FacebookFeedResponse,
   FacebookInsightsResponse,
+  FacebookInsight,
 } from './facebook.types';
 import { FacebookPostMetricsDto } from './dto/facebook-post-metrics.dto';
 
@@ -153,72 +154,139 @@ export class FacebookService implements SocialPlatformService {
   private async fetchPostInsights(
     postId: string,
     accessToken: string,
+    createdTime: string,
   ): Promise<FacebookPostMetricsDto> {
     try {
       const metrics: FacebookPostMetricsDto = {};
 
-      // Fetch post insights with all requested metrics
-      const insightsResponse = await axios.get(
-        `https://graph.facebook.com/v20.0/${postId}/insights`,
-        {
-          params: {
-            metric: [
-              'post_impressions_unique',
-              'post_media_view',
-              'post_reactions_like_total',
-              'post_reactions_love_total',
-              'post_reactions_wow_total',
-              'post_reactions_haha_total',
-              'post_reactions_sorry_total',
-              'post_reactions_anger_total',
-              'post_reactions_by_type_total',
-              'post_impressions_viral_unique',
-              'post_impressions_paid_unique',
-              'post_impressions_fan_unique',
-              'post_impressions_organic_unique',
-              'post_impressions_nonviral_unique',
-              'post_video_avg_time_watched',
-              'post_video_complete_views_organic',
-              'post_video_complete_views_organic_unique',
-              'post_video_complete_views_paid',
-              'post_video_complete_views_paid_unique',
-              'post_video_retention_graph_clicked_to_play',
-              'post_video_retention_graph_autoplayed',
-              'post_video_views_organic',
-              'post_video_views_organic_unique',
-              'post_video_views_paid',
-              'post_video_views_paid_unique',
-              'post_video_length',
-              'post_video_views',
-              'post_video_views_unique',
-              'post_video_views_autoplayed',
-              'post_video_views_clicked_to_play',
-              'post_video_views_15s',
-              'post_video_views_60s_excludes_shorter',
-              'post_video_views_sound_on',
-              'post_video_view_time',
-              'post_video_view_time_organic',
-              'post_video_view_time_by_age_bucket_and_gender',
-              'post_video_view_time_by_region_id',
-              'post_video_views_by_distribution_type',
-              'post_video_view_time_by_distribution_type',
-              'post_video_view_time_by_country_id',
-              'post_video_social_actions_count_unique',
-              'post_activity_by_action_type',
-              'post_activity_by_action_type_unique',
-            ].join(','),
-            access_token: accessToken,
-          },
-        },
+      // Calculate 90-day intervals from post creation to now
+      const publishedDate = new Date(createdTime);
+      const now = new Date();
+      const intervals: Array<{ since: string; until: string }> = [];
+
+      let currentStart = publishedDate;
+      while (currentStart < now) {
+        const currentEnd = new Date(currentStart);
+        currentEnd.setDate(currentEnd.getDate() + 90);
+
+        // Don't go past the current date
+        const endDate = currentEnd > now ? now : currentEnd;
+
+        intervals.push({
+          since: Math.floor(currentStart.getTime() / 1000).toString(),
+          until: Math.floor(endDate.getTime() / 1000).toString(),
+        });
+
+        currentStart = currentEnd;
+      }
+
+      // Fetch insights for each 90-day interval
+      const metricsList = [
+        'post_impressions_unique',
+        'post_media_view',
+        'post_reactions_like_total',
+        'post_reactions_love_total',
+        'post_reactions_wow_total',
+        'post_reactions_haha_total',
+        'post_reactions_sorry_total',
+        'post_reactions_anger_total',
+        'post_reactions_by_type_total',
+        'post_impressions_viral_unique',
+        'post_impressions_paid_unique',
+        'post_impressions_fan_unique',
+        'post_impressions_organic_unique',
+        'post_impressions_nonviral_unique',
+        'post_video_avg_time_watched',
+        'post_video_complete_views_organic',
+        'post_video_complete_views_organic_unique',
+        'post_video_complete_views_paid',
+        'post_video_complete_views_paid_unique',
+        'post_video_retention_graph_clicked_to_play',
+        'post_video_retention_graph_autoplayed',
+        'post_video_views_organic',
+        'post_video_views_organic_unique',
+        'post_video_views_paid',
+        'post_video_views_paid_unique',
+        'post_video_length',
+        'post_video_views',
+        'post_video_views_unique',
+        'post_video_views_autoplayed',
+        'post_video_views_clicked_to_play',
+        'post_video_views_15s',
+        'post_video_views_60s_excludes_shorter',
+        'post_video_views_sound_on',
+        'post_video_view_time',
+        'post_video_view_time_organic',
+        'post_video_view_time_by_age_bucket_and_gender',
+        'post_video_view_time_by_region_id',
+        'post_video_views_by_distribution_type',
+        'post_video_view_time_by_distribution_type',
+        'post_video_view_time_by_country_id',
+        'post_video_social_actions_count_unique',
+        'post_activity_by_action_type',
+        'post_activity_by_action_type_unique',
+      ];
+
+      const allInsightsResponses = await Promise.all(
+        intervals.map((interval) =>
+          axios.get(`https://graph.facebook.com/v20.0/${postId}/insights`, {
+            params: {
+              metric: metricsList.join(','),
+              access_token: accessToken,
+              since: interval.since,
+              until: interval.until,
+            },
+          }),
+        ),
       );
 
-      const insightsData = insightsResponse.data as FacebookInsightsResponse;
+      // Aggregate insights from all intervals
+      const allInsights: FacebookInsight[] = [];
+      for (const response of allInsightsResponses) {
+        const insightsData = response.data as FacebookInsightsResponse;
+        allInsights.push(...(insightsData.data || []));
+      }
 
-      // Process insights data
-      for (const insight of insightsData.data || []) {
-        const value = insight.values?.[0]?.value;
+      // Group insights by metric name and aggregate values
+      const insightsByMetric = new Map<string, FacebookInsight[]>();
+      for (const insight of allInsights) {
+        if (!insightsByMetric.has(insight.name)) {
+          insightsByMetric.set(insight.name, []);
+        }
+        insightsByMetric.get(insight.name)!.push(insight);
+      }
 
-        switch (insight.name) {
+      // Process and aggregate insights data
+      for (const [metricName, insights] of insightsByMetric.entries()) {
+        // Aggregate values from all intervals for this metric
+        let aggregatedValue: number | Record<string, number> | undefined;
+
+        // Determine if this is a numeric or object metric and aggregate accordingly
+        const firstValue = insights[0]?.values?.[0]?.value;
+        if (typeof firstValue === 'number') {
+          // Sum numeric values
+          aggregatedValue = insights.reduce((sum, insight) => {
+            const value = insight.values?.[0]?.value;
+            return sum + (typeof value === 'number' ? value : 0);
+          }, 0);
+        } else if (typeof firstValue === 'object' && firstValue !== null) {
+          // Merge object values (for demographics, distribution types, etc.)
+          aggregatedValue = {};
+          for (const insight of insights) {
+            const value = insight.values?.[0]?.value;
+            if (typeof value === 'object' && value !== null) {
+              for (const [key, val] of Object.entries(value)) {
+                if (typeof val === 'number') {
+                  aggregatedValue[key] = (aggregatedValue[key] || 0) + val;
+                }
+              }
+            }
+          }
+        }
+
+        const value = aggregatedValue;
+
+        switch (metricName) {
           // Reach and Impressions
           case 'post_impressions_unique':
             metrics.reach = typeof value === 'number' ? value : 0;
@@ -464,6 +532,7 @@ export class FacebookService implements SocialPlatformService {
     const insights = await this.fetchPostInsights(
       post.id,
       account.access_token,
+      post.created_time,
     );
 
     return {
