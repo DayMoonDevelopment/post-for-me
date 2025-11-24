@@ -86,8 +86,6 @@ export class FacebookService implements SocialPlatformService {
     limit: number;
   }): Promise<PlatformPostsResponse> {
     try {
-      const safeLimit = Math.min(limit, 25);
-
       if (platformIds && platformIds.length > 0) {
         // Fetch specific posts by ID
         const postPromises = platformIds.map((id) =>
@@ -123,7 +121,7 @@ export class FacebookService implements SocialPlatformService {
             fields:
               'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
             access_token: account.access_token,
-            limit: safeLimit,
+            limit: limit,
           },
         },
       );
