@@ -50,6 +50,7 @@ export interface PlatformPost {
   account_id: string;
   caption: string;
   url: string;
+  posted_at?: string;
   media: { url: string; thumbnail_url: string }[];
   metrics:
     | FacebookPostMetricsDto

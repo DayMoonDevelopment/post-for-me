@@ -294,6 +294,7 @@ export class YouTubeService implements SocialPlatformService {
             account_id: account.social_provider_user_id,
             caption: video.snippet.title,
             url: `https://www.youtube.com/watch?v=${video.id}`,
+            posted_at: video.snippet.publishedAt,
             media: [
               {
                 url: `https://www.youtube.com/embed/${video.id}`,

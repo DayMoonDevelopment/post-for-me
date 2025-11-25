@@ -16,6 +16,13 @@ export class PlatformPostDto {
   social_post_result_id?: string;
 
   @ApiProperty({
+    description: 'Date the post was published',
+    required: false,
+    type: Date,
+  })
+  posted_at?: string;
+
+  @ApiProperty({
     description: 'ID of the social post',
     required: false,
     nullable: true,

@@ -222,6 +222,7 @@ export class InstagramService implements SocialPlatformService {
       account_id: accountId,
       caption: item.caption || '',
       url: item.permalink || '',
+      posted_at: item.timestamp,
       media: [
         {
           url: item.media_url || '',

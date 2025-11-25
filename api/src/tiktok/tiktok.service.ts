@@ -108,6 +108,9 @@ export class TikTokService implements SocialPlatformService {
       account_id: accountId,
       caption: video.title || video.video_description || '',
       url: video.share_url || '',
+      posted_at: video.create_time
+        ? new Date(video.create_time * 1000).toISOString()
+        : undefined,
       media: [
         {
           url: video.embed_link || '',

@@ -138,6 +138,7 @@ export class TikTokBusinessService implements SocialPlatformService {
           caption: string;
           embed_url: string;
           thumbnail_url: string;
+          create_time?: number;
         })[];
       };
     };
@@ -155,6 +156,9 @@ export class TikTokBusinessService implements SocialPlatformService {
           url: v.share_url,
           account_id: account.social_provider_user_id,
           caption: v.caption,
+          posted_at: v.create_time
+            ? new Date(v.create_time * 1000).toISOString()
+            : undefined,
           metrics: {
             likes: v.likes,
             comments: v.comments,

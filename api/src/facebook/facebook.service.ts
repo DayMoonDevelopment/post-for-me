@@ -539,6 +539,7 @@ export class FacebookService implements SocialPlatformService {
       account_id: account.social_provider_user_id,
       caption: post.message || '',
       url: post.permalink_url || '',
+      posted_at: post.created_time,
       media: post.full_picture
         ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
         : [],
