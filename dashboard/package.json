@@ -58,6 +58,7 @@
     "supabase": "^2.24.3",
     "tailwind-merge": "^3.3.0",
     "zod": "^3.25.67",
+    "icons": "workspace:*",
     "@trigger.dev/sdk": "4.0.0-v4-beta.27"
   },
   "devDependencies": {
