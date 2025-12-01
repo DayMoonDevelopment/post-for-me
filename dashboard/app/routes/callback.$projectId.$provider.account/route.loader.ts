@@ -38,7 +38,7 @@ export const loader = withSupabase(async function ({
           app_id,
           app_secret
         )
-      `
+      `,
     )
     .eq("id", projectId)
     .single();
@@ -63,16 +63,20 @@ export const loader = withSupabase(async function ({
     .from("social_provider_connection_oauth_data")
     .select("*")
     .eq("key_id", key)
-    .in("key", ["external_id", "connection_type"])
+    .in("key", ["external_id", "connection_type", "redirect_url"])
     .eq("project_id", projectId)
     .eq("provider", provider as SocialProviderEnum);
 
   const externalId = oauthData.data?.find(
-    (d) => d.key === "external_id"
+    (d) => d.key === "external_id",
   )?.value;
 
   const connectionType = oauthData.data?.find(
-    (d) => d.key === "connection_type"
+    (d) => d.key === "connection_type",
+  )?.value;
+
+  const redirectUrlOverride = oauthData.data?.find(
+    (d) => d.key === "redirect_url",
   )?.value;
 
   if (
@@ -84,7 +88,7 @@ export const loader = withSupabase(async function ({
   }
 
   const providerAppCredentials = project.social_provider_app_credentials.find(
-    (appCredential) => appCredential.provider === provider
+    (appCredential) => appCredential.provider === provider,
   );
 
   const normalizedProvider =
@@ -114,6 +118,7 @@ export const loader = withSupabase(async function ({
       appSecret: providerAppCredentials?.app_secret,
     },
     externalId,
+    redirectUrlOverride,
   });
 
   if (!accounts || accounts.length === 0) {
