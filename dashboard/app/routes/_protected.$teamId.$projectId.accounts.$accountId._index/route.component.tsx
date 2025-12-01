@@ -37,7 +37,7 @@ export function Component() {
         <div className="px-1">
           <div className="flex items-center gap-3">
             <h2 className="font-semibold text-lg">Account Feed</h2>
-            {data.accountInfo && (
+            {data.accountInfo ? (
               <Badge
                 className={`${
                   providerColors[
@@ -47,7 +47,7 @@ export function Component() {
               >
                 {data.accountInfo.provider}
               </Badge>
-            )}
+            ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
             {data.accountInfo?.username
@@ -56,12 +56,12 @@ export function Component() {
           </p>
         </div>
 
-        {data.accountInfo && (
+        {data.accountInfo ? (
           <div className="text-right">
             <div className="text-sm text-muted-foreground">Account ID</div>
             <div className="font-mono text-xs">{data.accountInfo.id}</div>
           </div>
-        )}
+        ) : null}
       </div>
 
       <AccountFeedDataTable data={data} />

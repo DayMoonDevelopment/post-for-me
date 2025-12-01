@@ -76,7 +76,9 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
         caption.length > 50 ? `${caption.slice(0, 50)}...` : caption;
       return (
         <div className="max-w-md" title={caption}>
-          {truncated || <span className="text-muted-foreground">No caption</span>}
+          {truncated || (
+            <span className="text-muted-foreground">No caption</span>
+          )}
         </div>
       );
     },

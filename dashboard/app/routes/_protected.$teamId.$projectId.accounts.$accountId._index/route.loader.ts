@@ -2,7 +2,6 @@ import { data } from "react-router";
 import { withSupabase } from "~/lib/.server/supabase";
 import { withDashboardKey } from "~/lib/.server/api/api";
 import { API_URL } from "~/lib/.server/api/api.constants";
-import type { LoaderData } from "./_types";
 
 export const loader = withSupabase(
   withDashboardKey(async ({ supabase, params, request, apiKey }) => {
@@ -20,8 +19,9 @@ export const loader = withSupabase(
         success: false,
         posts: [],
         meta: { limit, has_more: false },
+        accountInfo: undefined,
         error: "API key not available",
-      } as LoaderData);
+      });
     }
 
     // Get account info from Supabase
@@ -37,16 +37,14 @@ export const loader = withSupabase(
         success: false,
         posts: [],
         meta: { limit, has_more: false },
+        accountInfo: undefined,
         error: "Account not found",
-      } as LoaderData);
+      });
     }
 
     // Fetch posts from API
     try {
-      const apiUrl = new URL(
-        `/v1/social-account-feeds/${accountId}`,
-        API_URL
-      );
+      const apiUrl = new URL(`/v1/social-account-feeds/${accountId}`, API_URL);
       if (cursor) {
         apiUrl.searchParams.set("cursor", cursor);
       }
@@ -75,7 +73,7 @@ export const loader = withSupabase(
           username: accountData.social_provider_user_name || undefined,
           external_id: accountData.external_id || undefined,
         },
-      } as LoaderData);
+      });
     } catch (error) {
       console.error("Error fetching social account feed:", error);
       return data({
@@ -92,7 +90,7 @@ export const loader = withSupabase(
           error instanceof Error
             ? error.message
             : "Failed to fetch account feed",
-      } as LoaderData);
+      });
     }
-  })
+  }),
 );
