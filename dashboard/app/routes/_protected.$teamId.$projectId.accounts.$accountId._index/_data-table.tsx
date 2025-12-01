@@ -25,21 +25,19 @@ import {
 } from "~/ui/table";
 
 import { columns, type CustomColumnDef } from "./_columns";
-import type { LoaderData, PlatformPost } from "./_types";
+import type { PlatformPost } from "./_types";
 import type {
   ColumnFiltersState,
   SortingState,
   VisibilityState,
 } from "@tanstack/react-table";
+import { useLoaderData } from "react-router";
 
-interface DataTableProps {
-  data: LoaderData;
-}
-
-export function AccountFeedDataTable({ data }: DataTableProps) {
+export function AccountFeedDataTable() {
+  const data = useLoaderData();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
+    [],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -98,8 +96,8 @@ export function AccountFeedDataTable({ data }: DataTableProps) {
                       column.toggleVisibility(!!value)
                     }
                   >
-                    {(column.columnDef as CustomColumnDef<PlatformPost>).label ??
-                      column.id}
+                    {(column.columnDef as CustomColumnDef<PlatformPost>)
+                      .label ?? column.id}
                   </DropdownMenuCheckboxItem>
                 );
               })}
@@ -119,7 +117,7 @@ export function AccountFeedDataTable({ data }: DataTableProps) {
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                     </TableHead>
                   );
@@ -138,7 +136,7 @@ export function AccountFeedDataTable({ data }: DataTableProps) {
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
@@ -146,7 +144,10 @@ export function AccountFeedDataTable({ data }: DataTableProps) {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
                   No posts found for this account.
                 </TableCell>
               </TableRow>

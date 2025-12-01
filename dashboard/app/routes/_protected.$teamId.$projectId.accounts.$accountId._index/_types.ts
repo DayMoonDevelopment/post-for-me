@@ -47,21 +47,3 @@ export interface PostMetrics {
   total_interactions?: number;
   [key: string]: number | string | boolean | null | undefined;
 }
-
-export interface LoaderData {
-  success: boolean;
-  posts: PlatformPost[];
-  meta: {
-    cursor?: string;
-    limit: number;
-    next?: string | null;
-    has_more: boolean;
-  };
-  accountInfo?: {
-    id: string;
-    provider: string;
-    username?: string;
-    external_id?: string;
-  };
-  error?: string;
-}
