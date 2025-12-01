@@ -33,16 +33,20 @@ export const loader = withSupabase(async function ({
   const oauthData = await supabaseServiceRole
     .from("social_provider_connection_oauth_data")
     .select("*")
-    .in("key", ["project", "external_id", "connection_type"])
+    .in("key", ["project", "external_id", "connection_type", "redirect_url"])
     .eq("key_id", key)
     .eq("provider", provider as SocialProviderEnum);
 
   const projectId = oauthData.data?.find(
-    (d) => d.key === "project"
+    (d) => d.key === "project",
   )?.project_id;
 
   const externalId = oauthData.data?.find(
-    (d) => d.key === "external_id"
+    (d) => d.key === "external_id",
+  )?.value;
+
+  const redirectUrlOverride = oauthData.data?.find(
+    (d) => d.key === "redirect_url",
   )?.value;
 
   if (!projectId || !provider) {
@@ -54,7 +58,7 @@ export const loader = withSupabase(async function ({
   }
 
   const connectionType = oauthData.data?.find(
-    (d) => d.key === "connection_type"
+    (d) => d.key === "connection_type",
   )?.value;
   if (
     connectionType &&
@@ -79,7 +83,7 @@ export const loader = withSupabase(async function ({
           app_id,
           app_secret
         )
-      `
+      `,
     )
     .eq("id", projectId)
     .single();
@@ -96,7 +100,7 @@ export const loader = withSupabase(async function ({
   }
 
   const providerAppCredentials = project.social_provider_app_credentials.find(
-    (appCredential) => appCredential.provider === provider
+    (appCredential) => appCredential.provider === provider,
   );
 
   if (!providerAppCredentials && provider !== "bluesky") {
@@ -123,6 +127,7 @@ export const loader = withSupabase(async function ({
       appSecret: providerAppCredentials?.app_secret,
     },
     externalId,
+    redirectUrlOverride,
   });
 
   if (!accounts || accounts.length === 0) {
