@@ -8,7 +8,7 @@ import { SocialProviderAppCredentialsDto } from '../social-provider-app-credenti
 import { generateAuthUrl } from './helper/auth-url.helper';
 import { ConfigService } from '@nestjs/config';
 import { AuthUrlProviderData } from './dto/create-provider-auth-url.dto';
-import { DeleteEntityResponseDto } from '../lib/global.dto';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { UpdateSocialAccountDto } from './dto/update-social-account.dto';
 import {
   CreateSocialAccountDto,

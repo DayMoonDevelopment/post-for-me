@@ -6,9 +6,9 @@ import type { CreateSocialPostDto } from './dto/create-post.dto';
 import { SocialPostQueryDto } from './dto/post-query.dto';
 
 import type { PaginatedRequestQuery } from '../pagination/pagination-request.interface';
-import { DeleteEntityResponseDto } from '../lib/global.dto';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { tasks } from '@trigger.dev/sdk/v3';
-import type { Provider } from '../lib/global.dto';
+import type { Provider } from '../lib/dto/global.dto';
 import {
   PlatformConfiguration,
   PlatformConfigurationsDto,
@@ -598,17 +598,22 @@ export class SocialPostsService {
     postId: string;
     projectId: string;
   }): Promise<DeleteEntityResponseDto> {
-    const { error } = await this.supabaseService.supabaseClient
-      .from('social_posts')
-      .delete()
-      .eq('project_id', projectId)
-      .eq('id', postId);
+    try {
+      const { error } = await this.supabaseService.supabaseClient
+        .from('social_posts')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('id', postId);
 
-    if (error) {
-      throw new Error(error.message);
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error(err);
+      return { success: false };
     }
-
-    return { success: true };
   }
 
   private async triggerPost(postId: string): Promise<void> {

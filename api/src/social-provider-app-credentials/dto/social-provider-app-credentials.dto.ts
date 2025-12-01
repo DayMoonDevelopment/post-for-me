@@ -1,4 +1,4 @@
-import type { Provider } from '../../lib/global.dto';
+import type { Provider } from '../../lib/dto/global.dto';
 
 export class SocialProviderAppCredentialsDto {
   provider: Provider;
