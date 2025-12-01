@@ -7,7 +7,6 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronDown } from "lucide-react";
-import { useNavigate, useParams } from "react-router";
 
 import { Button } from "~/ui/button";
 import {
@@ -24,13 +23,9 @@ import {
   TableHeader,
   TableRow,
 } from "~/ui/table";
-import { Copyable } from "~/components/copyable";
 
 import { columns, type CustomColumnDef } from "./_columns";
-import { TableFilters } from "./_table-filters";
-import { TablePagination } from "./_table-pagination";
-
-import type { LoaderData, SocialConnection } from "./_types";
+import type { LoaderData, PlatformPost } from "./_types";
 import type {
   ColumnFiltersState,
   SortingState,
@@ -41,9 +36,7 @@ interface DataTableProps {
   data: LoaderData;
 }
 
-export function SocialConnectionsDataTable({ data }: DataTableProps) {
-  const navigate = useNavigate();
-  const params = useParams();
+export function AccountFeedDataTable({ data }: DataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -52,14 +45,11 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
     React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
 
-  const connections = React.useMemo(
-    () => data.connections || [],
-    [data.connections]
-  );
+  const posts = React.useMemo(() => data.posts || [], [data.posts]);
 
   const table = useReactTable({
-    data: connections,
-    columns: columns as CustomColumnDef<SocialConnection>[],
+    data: posts,
+    columns: columns as CustomColumnDef<PlatformPost>[],
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
@@ -79,7 +69,7 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
     return (
       <div className="rounded-md border p-8 text-center">
         <p className="text-muted-foreground">
-          {"Failed to load social connections"}
+          {data.error || "Failed to load social account feed"}
         </p>
       </div>
     );
@@ -87,8 +77,7 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex items-center justify-between">
-        <TableFilters />
+      <div className="flex items-center justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto bg-card">
@@ -109,8 +98,8 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
                       column.toggleVisibility(!!value)
                     }
                   >
-                    {(column.columnDef as CustomColumnDef<SocialConnection>)
-                      .label ?? column.id}
+                    {(column.columnDef as CustomColumnDef<PlatformPost>).label ??
+                      column.id}
                   </DropdownMenuCheckboxItem>
                 );
               })}
@@ -144,28 +133,12 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() ? "selected" : null}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => {
-                    navigate(
-                      `/${params.teamId}/${params.projectId}/accounts/${row.original.id}`
-                    );
-                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {cell.column.id === "username" ||
-                      cell.column.id === "userId" ? (
-                        <Copyable value={String(cell.getValue())}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </Copyable>
-                      ) : (
-                        flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
                       )}
                     </TableCell>
                   ))}
@@ -173,11 +146,8 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No social connections found.
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No posts found for this account.
                 </TableCell>
               </TableRow>
             )}
@@ -185,7 +155,20 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
         </Table>
       </div>
 
-      <TablePagination data={data} />
+      {data.meta.has_more ? (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.set("cursor", data.meta.cursor || "");
+              window.location.href = url.toString();
+            }}
+          >
+            Load More
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
