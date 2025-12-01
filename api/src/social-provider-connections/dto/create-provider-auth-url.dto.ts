@@ -1,20 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class BluesyAuthUrlProviderData {
+export class BlueskyAuthUrlProviderData {
   @ApiProperty({ description: 'The handle of the account', type: String })
   handle: string;
 
   @ApiProperty({ description: 'The app password of the account', type: String })
   app_password: string;
-
-  @ApiProperty({
-    description:
-      'Override the default permissions/scopes requested during OAuth. Bluesky uses app passwords and does not have traditional OAuth scopes.',
-    required: false,
-    type: [String],
-    isArray: true,
-  })
-  permission_overrides?: string[];
 }
 
 export class LinkedInUrlProviderData {
@@ -59,17 +50,6 @@ export class FacebookProviderData {
   @ApiProperty({
     description:
       'Override the default permissions/scopes requested during OAuth. Default scopes: public_profile, pages_show_list, pages_read_engagement, pages_manage_posts, business_management',
-    required: false,
-    type: [String],
-    isArray: true,
-  })
-  permission_overrides?: string[];
-}
-
-export class XProviderData {
-  @ApiProperty({
-    description:
-      'Override the default permissions/scopes requested during OAuth. X (Twitter) uses OAuth 1.0a and does not support granular scopes - permissions are controlled by the app configuration.',
     required: false,
     type: [String],
     isArray: true,
@@ -136,9 +116,9 @@ export class AuthUrlProviderData {
   @ApiProperty({
     description: 'Additional data needed for connecting bluesky accounts',
     required: false,
-    type: BluesyAuthUrlProviderData,
+    type: BlueskyAuthUrlProviderData,
   })
-  bluesky?: BluesyAuthUrlProviderData;
+  bluesky?: BlueskyAuthUrlProviderData;
 
   @ApiProperty({
     description: 'Additional data for connecting linkedin accounts',
@@ -160,13 +140,6 @@ export class AuthUrlProviderData {
     type: FacebookProviderData,
   })
   facebook?: FacebookProviderData;
-
-  @ApiProperty({
-    description: 'Additional data for connecting X (Twitter) accounts',
-    required: false,
-    type: XProviderData,
-  })
-  x?: XProviderData;
 
   @ApiProperty({
     description: 'Additional data for connecting TikTok accounts',
