@@ -51,12 +51,20 @@ export class LinkedInService implements SocialPlatformService {
       }),
     });
 
-    const data = await response.json();
+    const data = (await response.json()) as {
+      error_description?: string;
+      expires_in?: number;
+      access_token?: string;
+    };
 
     if (!response.ok) {
       throw new Error(
-        `Failed to refresh LinkedIn token: ${data.error_description}`,
+        `Failed to refresh LinkedIn token: ${data.error_description || 'Unknown error'}`,
       );
+    }
+
+    if (!data.access_token || !data.expires_in) {
+      throw new Error('Invalid response from LinkedIn token endpoint');
     }
 
     const newExpiresAt = new Date(Date.now() + data.expires_in * 1000);
@@ -68,49 +76,48 @@ export class LinkedInService implements SocialPlatformService {
     return account;
   }
 
-  async getAccountPosts({
-    account,
+  getAccountPosts({
     platformIds,
-    limit,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
   }): Promise<PlatformPostsResponse> {
     try {
-      const safeLimit = Math.min(limit, 50);
-
       // LinkedIn API has limited post retrieval capabilities
       // This is a placeholder implementation
-      const authorUrn =
-        account.social_provider_metadata?.connection_type === 'page'
-          ? `urn:li:organization:${account.social_provider_user_id}`
-          : `urn:li:person:${account.social_provider_user_id}`;
+
+      // These variables would be used in a future implementation
+      // const safeLimit = Math.min(limit, 50);
+      // const authorUrn =
+      //   (account.social_provider_metadata as { connection_type?: string })?.connection_type === 'page'
+      //     ? `urn:li:organization:${account.social_provider_user_id}`
+      //     : `urn:li:person:${account.social_provider_user_id}`;
 
       if (platformIds && platformIds.length > 0) {
         // Fetch specific posts - LinkedIn doesn't have a direct endpoint
         // Would need to use specific post URNs
-        return {
+        return Promise.resolve({
           posts: [],
           count: 0,
           has_more: false,
-        };
+        });
       }
 
       // LinkedIn doesn't provide a simple "get my posts" endpoint
       // This would require more complex implementation
-      return {
+      return Promise.resolve({
         posts: [],
         count: 0,
         has_more: false,
-      };
+      });
     } catch (error) {
       console.error('Error fetching LinkedIn posts:', error);
-      return {
+      return Promise.resolve({
         posts: [],
         count: 0,
         has_more: false,
-      };
+      });
     }
   }
 }

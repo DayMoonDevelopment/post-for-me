@@ -103,6 +103,7 @@ export class YouTubeService implements SocialPlatformService {
       throw new Error('OAuth2 client not initialized. Call initService first.');
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     this.oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
@@ -111,16 +112,22 @@ export class YouTubeService implements SocialPlatformService {
         : undefined,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const { credentials } = await this.oauth2Client.refreshAccessToken();
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (!credentials.access_token) {
       throw new Error('Failed to refresh access token');
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     account.access_token = credentials.access_token;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     account.refresh_token = credentials.refresh_token || account.refresh_token;
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (credentials.expiry_date) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
       account.access_token_expires_at = new Date(credentials.expiry_date);
     }
 
@@ -139,8 +146,10 @@ export class YouTubeService implements SocialPlatformService {
       throw new Error('OAuth2 client not initialized.');
     }
 
+    // Google API returns any type, which is unavoidable
     const youtubeAnalytics = google.youtubeAnalytics({
       version: 'v2',
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       auth: this.oauth2Client,
     });
 
@@ -159,6 +168,7 @@ export class YouTubeService implements SocialPlatformService {
       });
 
       // Parse the response data
+
       if (response.data.rows && response.data.rows.length > 0) {
         const row = response.data.rows[0];
         const headers = response.data.columnHeaders || [];
@@ -167,6 +177,7 @@ export class YouTubeService implements SocialPlatformService {
 
         headers.forEach((header, index) => {
           const name = header.name as string;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const value = row[index];
 
           if (typeof value === 'number' || typeof value === 'string') {
@@ -203,6 +214,7 @@ export class YouTubeService implements SocialPlatformService {
     }
 
     // Set credentials for this request
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     this.oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
@@ -211,8 +223,10 @@ export class YouTubeService implements SocialPlatformService {
         : undefined,
     });
 
+    // Google API returns any type, which is unavoidable
     const youtube = google.youtube({
       version: 'v3',
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       auth: this.oauth2Client,
     });
 

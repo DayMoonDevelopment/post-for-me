@@ -207,9 +207,9 @@ export class SocialPostsService {
     }[] = [];
 
     const postConfigurations: {
-      caption?: string | undefined | null;
-      provider?: Provider | undefined | null;
-      provider_connection_id?: string | undefined | null;
+      caption?: string | null;
+      provider?: Provider;
+      provider_connection_id?: string;
       post_id: string;
       provider_data?: PlatformConfiguration | null;
     }[] = [];
@@ -680,20 +680,22 @@ export class SocialPostsService {
         external_id: string | null | undefined;
       };
     }[];
-    social_post_media: {
+    social_post_media: Array<{
       url: string;
       thumbnail_url: string | null;
       thumbnail_timestamp_ms: number | null;
+      // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
       provider: Provider | null;
       provider_connection_id: string | null;
-      tags: Json | undefined | null;
-    }[];
-    social_post_configurations: {
+      tags: Json;
+    }>;
+    social_post_configurations: Array<{
       caption: string | null;
+      // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
       provider: Provider | null;
       provider_connection_id: string | null;
       provider_data: Json;
-    }[];
+    }>;
   }): SocialPostDto {
     const postMedia = data.social_post_media
       .filter((media) => !media.provider && !media.provider_connection_id)

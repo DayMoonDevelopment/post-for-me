@@ -171,6 +171,7 @@ export class PostResultsService {
       post_id: postResults.data.post_id,
       success: postResults.data.success,
       error: postResults.data.error_message || null,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       details: postResults.data.details,
       platform_data,
     };
