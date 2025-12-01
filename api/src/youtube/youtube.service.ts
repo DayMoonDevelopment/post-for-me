@@ -7,7 +7,6 @@ import type {
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
 import { google } from 'googleapis';
-import type { OAuth2Client } from 'google-auth-library';
 import { SupabaseService } from '../supabase/supabase.service';
 
 interface YouTubeVideo {
@@ -66,7 +65,7 @@ interface YouTubeAnalyticsMetrics {
 @Injectable({ scope: Scope.REQUEST })
 export class YouTubeService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
-  private oauth2Client: OAuth2Client | null = null;
+  private oauth2Client: any = null;
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
