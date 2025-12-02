@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
 import { TikTokBusinessMetricsDto } from './platform-post-metrics.dto';
 import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
 import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
@@ -68,6 +68,12 @@ export class PlatformPostDto {
 
   @ApiProperty({
     description: 'Post metrics and analytics data',
+    oneOf: [
+      { $ref: getSchemaPath(TikTokBusinessMetricsDto) },
+      { $ref: getSchemaPath(TikTokPostMetricsDto) },
+      { $ref: getSchemaPath(InstagramPostMetricsDto) },
+      { $ref: getSchemaPath(YouTubePostMetricsDto) },
+    ],
   })
   metrics:
     | TikTokBusinessMetricsDto

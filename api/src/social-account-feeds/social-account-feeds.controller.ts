@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -15,8 +16,6 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
-
-import { PaginationService } from '../pagination/pagination.service';
 
 import { User } from '../auth/user.decorator';
 import type { RequestUser } from '../auth/user.interface';
@@ -26,15 +25,25 @@ import { PlatformPostDto } from './dto/platform-post.dto';
 import { PlatformPostQueryDto } from './dto/platform-post-query.dto';
 import { SocialAccountFeedsService } from './social-account-feeds.service';
 import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-response.dto';
+import { TikTokBusinessMetricsDto } from './dto/platform-post-metrics.dto';
+import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
+import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
+import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
 
 @Controller('social-account-feeds')
 @ApiTags('Social Account Feeds')
 @ApiBearerAuth()
 @Protect()
+@ApiExtraModels(
+  PlatformPostDto,
+  TikTokBusinessMetricsDto,
+  TikTokPostMetricsDto,
+  InstagramPostMetricsDto,
+  YouTubePostMetricsDto,
+)
 export class SocialAccountFeedsController {
   constructor(
     private readonly socialPostFeedService: SocialAccountFeedsService,
-    private readonly paginationService: PaginationService,
   ) {}
 
   @Get(':social_account_id')
@@ -111,6 +120,4 @@ export class SocialAccountFeedsController {
       );
     }
   }
-
-  // TODO: Discuss if endpoint to get single post is needed. Or if filter on paginated endpoint is enough.
 }
