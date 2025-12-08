@@ -29,7 +29,7 @@
     "@scalar/nestjs-api-reference": "^0.4.5",
     "@supabase/supabase-js": "^2.49.4",
     "@trigger.dev/sdk": "4.0.0-v4-beta.27",
-    "@unkey/api": "^0.35.0",
+    "@unkey/api": "^2.2.0",
     "axios": "^1.8.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
