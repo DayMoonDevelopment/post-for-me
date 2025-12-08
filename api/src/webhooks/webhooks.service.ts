@@ -224,6 +224,7 @@ export class WebhooksService {
             webhook_id: id,
             type: event as WebhookEventType,
           })),
+          { onConflict: 'webhook_id,type' },
         );
 
       if (createdEventTypes.error) {
