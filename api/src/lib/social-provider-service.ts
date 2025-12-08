@@ -9,9 +9,11 @@ export interface SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse>;
 }

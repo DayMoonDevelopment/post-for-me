@@ -217,6 +217,7 @@ export class SocialAccountFeedsService {
       account: socialAccount,
       platformIds: platformPostIds,
       limit: queryParams.limit,
+      cursor: queryParams.cursor,
     });
 
     const uniqueAccountIds = new Set(accountPostsResult.posts.map((p) => p.id));
@@ -262,7 +263,7 @@ export class SocialAccountFeedsService {
           social_post_result_id: matchedResult?.social_post_result_id,
           social_post_id: matchedResult?.social_post_id,
           external_post_id: matchedResult?.external_post_id || undefined,
-          posted_at: p.posted_at,
+          posted_at: p.posted_at || undefined,
         };
       }),
       meta: {
