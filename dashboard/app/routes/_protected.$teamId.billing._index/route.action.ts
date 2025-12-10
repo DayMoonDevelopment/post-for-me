@@ -6,10 +6,16 @@ import { withSupabase } from "~/lib/.server/supabase";
 import {
   STRIPE_API_PRODUCT_ID,
   STRIPE_CREDS_ADDON_PRODUCT_ID,
+  PRICING_TIERS,
 } from "~/lib/.server/stripe.constants";
 
 const addonActionSchema = z.object({
   action: z.enum(["add_addon", "remove_addon"]),
+});
+
+const checkoutActionSchema = z.object({
+  action: z.literal("create_checkout"),
+  tierIndex: z.string(),
 });
 
 export const action = withSupabase(async ({ supabase, params, request }) => {
@@ -38,6 +44,65 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
   }
 
   const formData = await request.formData();
+  const action = formData.get("action");
+
+  // Handle checkout creation
+  if (action === "create_checkout") {
+    const checkoutResult = checkoutActionSchema.safeParse({
+      action: formData.get("action"),
+      tierIndex: formData.get("tierIndex"),
+    });
+
+    if (!checkoutResult.success) {
+      return new Response("Invalid checkout action", { status: 400 });
+    }
+
+    const tierIndex = parseInt(checkoutResult.data.tierIndex);
+    const selectedTier = PRICING_TIERS[tierIndex];
+
+    if (!selectedTier) {
+      return new Response("Invalid tier selected", { status: 400 });
+    }
+
+    const product = await stripe.products.retrieve(selectedTier.productId);
+    const teamDashboardUrl = new URL(`/${teamId}/billing`, request.url).toString();
+
+    try {
+      const checkoutSession = await stripe.checkout.sessions.create({
+        customer: team.data.stripe_customer_id || undefined,
+        customer_email: team.data.stripe_customer_id ? undefined : (await supabase
+          .from("teams")
+          .select("billing_email")
+          .eq("id", teamId)
+          .single()).data?.billing_email || undefined,
+        mode: "subscription",
+        line_items: [
+          {
+            price: product.default_price as string,
+            quantity: 1,
+          },
+        ],
+        client_reference_id: teamId,
+        metadata: {
+          team_id: teamId,
+          team_name: team.data.name,
+          created_by: currentUser.data.user.id,
+        },
+        success_url: new URL(
+          `/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
+          request.url,
+        ).toString(),
+        cancel_url: teamDashboardUrl,
+      });
+
+      return redirect(checkoutSession.url!);
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      return new Response("Failed to create checkout session", { status: 500 });
+    }
+  }
+
+  // Handle addon actions
   const result = addonActionSchema.safeParse({
     action: formData.get("action"),
   });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLoaderData } from "react-router";
+import { Form, useLoaderData } from "react-router";
 import { CheckmarkSmallIcon, CrossSmallIcon } from "icons";
 
 import { Badge } from "~/ui/badge";
@@ -11,6 +11,13 @@ import {
   CardHeader,
   CardTitle,
 } from "~/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/ui/select";
 
 import { AddonConfirmationDialog } from "./_addon-confirmation-dialog";
 
@@ -32,6 +39,9 @@ export function Component() {
   } = useLoaderData<typeof loader>();
 
   const [showAddonDialog, setShowAddonDialog] = useState(false);
+  const [selectedTierIndex, setSelectedTierIndex] = useState(0);
+
+  const selectedTier = pricingTiers[selectedTierIndex];
 
   return (
     <div className="p-4 space-y-6">
@@ -210,7 +220,9 @@ export function Component() {
       </div>
 
       {/* Show pricing tiers for legacy plans or no subscription */}
-      {(isLegacyPlan || !hasActiveSubscription) && pricingTiers.length > 0 ? (
+      {(isLegacyPlan || !hasActiveSubscription) &&
+      pricingTiers.length > 0 &&
+      selectedTier ? (
         <Card>
           <CardHeader>
             <CardTitle>
@@ -223,57 +235,94 @@ export function Component() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {pricingTiers.map((tier) => (
-                <Card key={tier.productId} className="relative">
-                  <CardHeader>
-                    <CardTitle className="text-lg">{tier.name}</CardTitle>
-                    <div className="text-2xl font-bold">
-                      ${tier.price}
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-medium">
+                  How many posts do you need?
+                </label>
+                <Select
+                  value={selectedTierIndex.toString()}
+                  onValueChange={(value) =>
+                    setSelectedTierIndex(parseInt(value))
+                  }
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pricingTiers.map((tier, index) => (
+                      <SelectItem key={tier.productId} value={index.toString()}>
+                        {tier.posts.toLocaleString()} posts
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Card className="border-2">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-2xl">
+                      {selectedTier.name}
+                    </CardTitle>
+                    <div className="text-3xl font-bold">
+                      ${selectedTier.price}
                       <span className="text-sm font-normal text-muted-foreground">
                         /one-time
                       </span>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="text-sm">
-                      <div className="font-medium">
-                        {tier.posts.toLocaleString()} posts
-                      </div>
-                      <div className="text-muted-foreground">
-                        ${(tier.price / tier.posts).toFixed(3)} per post
-                      </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                      <span className="text-sm">
+                        {selectedTier.posts.toLocaleString()} posts included
+                      </span>
                     </div>
-                    <div className="text-xs text-muted-foreground pt-2">
-                      <CheckmarkSmallIcon className="inline w-3 h-3 mr-1" />
-                      System credentials included
+                    <div className="flex items-center gap-2">
+                      <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                      <span className="text-sm">
+                        System credentials included
+                      </span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                      <span className="text-sm">
+                        ${(selectedTier.price / selectedTier.posts).toFixed(3)}{" "}
+                        per post
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-4">
                     {portalUrl ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full mt-4"
-                        asChild
-                      >
+                      <Button className="w-full" asChild>
                         <a href={portalUrl}>
-                          {isLegacyPlan ? "Upgrade" : "Select"}
+                          {isLegacyPlan ? "Upgrade Plan" : "Select Plan"}
                         </a>
                       </Button>
                     ) : (
-                      checkoutUrl && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full mt-4"
-                          asChild
-                        >
-                          <a href={checkoutUrl}>Get Started</a>
+                      <Form method="post">
+                        <input
+                          type="hidden"
+                          name="action"
+                          value="create_checkout"
+                        />
+                        <input
+                          type="hidden"
+                          name="tierIndex"
+                          value={selectedTierIndex}
+                        />
+                        <Button type="submit" className="w-full">
+                          Get Started
                         </Button>
-                      )
+                      </Form>
                     )}
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </CardContent>
         </Card>
