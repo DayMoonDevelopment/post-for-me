@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn } from 'class-validator';
+import { IsIn, IsOptional } from 'class-validator';
 
 export class BlueskyAuthUrlProviderData {
   @ApiProperty({ description: 'The handle of the account', type: String })
@@ -210,5 +210,6 @@ export class CreateSocialAccountProviderAuthUrlDto {
     example: ['posts', 'feeds'],
   })
   @IsIn(['posts', 'feeds'], { each: true })
+  @IsOptional()
   permissions?: string[];
 }
