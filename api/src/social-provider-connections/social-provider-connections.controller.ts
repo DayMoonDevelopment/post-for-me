@@ -32,14 +32,14 @@ import { Paginated } from '../pagination/paginated.decorator';
 import { PaginationService } from '../pagination/pagination.service';
 import { SocialAccountQueryDto } from './dto/social-accounts-query.dto';
 import { SocialAccountProviderAuthUrlDto } from './dto/provider-auth-url.dto';
-import { SocialProviderAppCredentialsService } from 'src/social-provider-app-credentials/social-provider-app-credentials.service';
+import { SocialProviderAppCredentialsService } from '../social-provider-app-credentials/social-provider-app-credentials.service';
 import { CreateSocialAccountProviderAuthUrlDto } from './dto/create-provider-auth-url.dto';
 import { SocialProviderAppCredentialsDto } from '../social-provider-app-credentials/dto/social-provider-app-credentials.dto';
 import { createAuthUrlDescription } from './docs/create-auth-url.md';
 import { UpdateSocialAccountDto } from './dto/update-social-account.dto';
 import { CreateSocialAccountDto } from './dto/create-social-account.dto';
 import { tasks } from '@trigger.dev/sdk';
-import { PROCESS_WEBHOOK_TASK } from 'src/constants/string.constants';
+import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
 
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
@@ -217,6 +217,7 @@ export class SocialAccountsController {
       providerData: createAuthUrlInput.platform_data,
       externalId: createAuthUrlInput.external_id,
       redirectUrlOverride: createAuthUrlInput.redirect_url_override || null,
+      permissions: createAuthUrlInput.permissions || ['posts'],
     });
 
     return {

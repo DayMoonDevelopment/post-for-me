@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@post-for-me/db": "workspace:*",
     "@atproto/api": "^0.14.20",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -34,6 +35,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "date-fns": "^4.1.0",
+    "google-auth-library": "^10.5.0",
     "googleapis": "^144.0.0",
     "jsdom": "^26.0.0",
     "jsonwebtoken": "^9.0.2",

@@ -31,7 +31,7 @@ import { InvalidSocialPostDto } from './dto/post-validation.dto';
 
 import { RequestUser } from '../auth/user.interface';
 import { SocialPostQueryDto } from './dto/post-query.dto';
-import { DeleteEntityResponseDto } from '../lib/global.dto';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { SupabaseService } from 'src/supabase/supabase.service';
 import { tasks } from '@trigger.dev/sdk';
 import { PROCESS_WEBHOOK_TASK } from 'src/constants/string.constants';

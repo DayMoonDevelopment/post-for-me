@@ -12,6 +12,7 @@ import { AuthGuard } from './auth/auth.guard';
 import { UnkeyModule } from './unkey/unkey.module';
 import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     SocialAccountsModule,
     SocialPostPreviewsModule,
     WebhooksModule,
+    SocialAccountFeedsModule,
   ],
   controllers: [],
   providers: [AuthGuard],
