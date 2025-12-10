@@ -3,7 +3,9 @@ import { withSupabase } from "~/lib/.server/supabase";
 import {
   STRIPE_API_PRODUCT_ID,
   STRIPE_CREDS_ADDON_PRODUCT_ID,
+  PRICING_TIERS,
 } from "~/lib/.server/stripe.constants";
+import { getSubscriptionPlanInfo } from "~/lib/.server/get-subscription-plan-info";
 import type Stripe from "stripe";
 
 export const loader = withSupabase(async ({ supabase, params, request }) => {
@@ -41,6 +43,9 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
   let portalUrl = null;
   let checkoutUrl = null;
   let upcomingInvoice: Stripe.Invoice | null = null;
+  let planInfo = null;
+  let isLegacyPlan = false;
+  let isNewPricingPlan = false;
 
   if (team.data.stripe_customer_id) {
     const subscriptions = await stripe.subscriptions.list({
@@ -52,9 +57,16 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
     subscription = subscriptions.data[0] || null;
 
     if (subscription) {
-      hasActiveSubscription = subscription.items.data.some(
-        (item) => item.price.product === STRIPE_API_PRODUCT_ID
-      );
+      planInfo = getSubscriptionPlanInfo(subscription);
+      isLegacyPlan = planInfo.isLegacy;
+      isNewPricingPlan = planInfo.isNewPricing;
+
+      hasActiveSubscription =
+        isLegacyPlan ||
+        isNewPricingPlan ||
+        subscription.items.data.some(
+          (item) => item.price.product === STRIPE_API_PRODUCT_ID
+        );
 
       hasCredsAccess = subscription.items.data.some(
         (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID
@@ -81,52 +93,61 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
       });
       portalUrl = portalSession.url;
     } else {
-      const product = await stripe.products.retrieve(STRIPE_API_PRODUCT_ID);
+      // No active subscription - show new pricing checkout
+      // Default to first tier if available
+      const defaultTier = PRICING_TIERS[0];
+      if (defaultTier) {
+        const product = await stripe.products.retrieve(defaultTier.productId);
+        const checkoutSession = await stripe.checkout.sessions.create({
+          client_reference_id: team.data.id,
+          customer: team.data.stripe_customer_id,
+          mode: "subscription",
+          line_items: [
+            {
+              price: product.default_price as string,
+            },
+          ],
+          metadata: {
+            team_id: team.data.id,
+            team_name: team.data.name,
+            created_by: currentUser.data.user.id,
+          },
+          success_url: new URL(
+            `/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
+            request.url
+          ).toString(),
+          cancel_url: teamDashboardUrl,
+        });
+        checkoutUrl = checkoutSession.url;
+      }
+    }
+  } else {
+    // No Stripe customer - show new pricing checkout
+    const defaultTier = PRICING_TIERS[0];
+    if (defaultTier) {
+      const product = await stripe.products.retrieve(defaultTier.productId);
       const checkoutSession = await stripe.checkout.sessions.create({
-        client_reference_id: team.data.id,
-        customer: team.data.stripe_customer_id,
+        customer_email: team.data.billing_email || undefined,
         mode: "subscription",
         line_items: [
           {
             price: product.default_price as string,
           },
         ],
+        client_reference_id: team.data.id,
         metadata: {
           team_id: team.data.id,
           team_name: team.data.name,
           created_by: currentUser.data.user.id,
         },
         success_url: new URL(
-          `/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
+          "/stripe/success?session_id={CHECKOUT_SESSION_ID}",
           request.url
         ).toString(),
-        cancel_url: teamDashboardUrl,
+        cancel_url: new URL(`/${teamId}`, request.url).toString(),
       });
       checkoutUrl = checkoutSession.url;
     }
-  } else {
-    const product = await stripe.products.retrieve(STRIPE_API_PRODUCT_ID);
-    const checkoutSession = await stripe.checkout.sessions.create({
-      customer_email: team.data.billing_email || undefined,
-      mode: "subscription",
-      line_items: [
-        {
-          price: product.default_price as string,
-        },
-      ],
-      client_reference_id: team.data.id,
-      metadata: {
-        team_id: team.data.id,
-        team_name: team.data.name,
-        created_by: currentUser.data.user.id,
-      },
-      success_url: new URL(
-        "/stripe/success?session_id={CHECKOUT_SESSION_ID}",
-        request.url
-      ).toString(),
-      cancel_url: new URL(`/${teamId}`, request.url).toString(),
-    });
-    checkoutUrl = checkoutSession.url;
   }
 
   return {
@@ -138,5 +159,9 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
     checkoutUrl,
     hasCredsAccess,
     upcomingInvoice,
+    planInfo,
+    isLegacyPlan,
+    isNewPricingPlan,
+    pricingTiers: PRICING_TIERS,
   };
 });

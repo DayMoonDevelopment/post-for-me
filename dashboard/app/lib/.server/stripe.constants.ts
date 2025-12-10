@@ -4,6 +4,88 @@ export const STRIPE_API_PRODUCT_ID = process.env?.STRIPE_API_PRODUCT_ID || "";
 export const STRIPE_CREDS_ADDON_PRODUCT_ID =
   process.env?.STRIPE_CREDS_ADDON_PRODUCT_ID || "";
 
+// New pricing model product IDs
+export const STRIPE_PRICING_TIER_1K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_1K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_2_5K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_2_5K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_5K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_5K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_10K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_10K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_20K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_20K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_40K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_40K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_100K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_100K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_200K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_200K_PRODUCT_ID || "";
+
+// Array of all new pricing tier product IDs for easy checking
+export const NEW_PRICING_TIER_PRODUCT_IDS = [
+  STRIPE_PRICING_TIER_1K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_2_5K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_5K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_10K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_20K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_40K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_100K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_200K_PRODUCT_ID,
+].filter(Boolean); // Filter out empty strings
+
+// Pricing tier configuration
+export const PRICING_TIERS = [
+  {
+    productId: STRIPE_PRICING_TIER_1K_PRODUCT_ID,
+    name: "Starter",
+    posts: 1000,
+    price: 10,
+  },
+  {
+    productId: STRIPE_PRICING_TIER_2_5K_PRODUCT_ID,
+    name: "Basic",
+    posts: 2500,
+    price: 25,
+  },
+  {
+    productId: STRIPE_PRICING_TIER_5K_PRODUCT_ID,
+    name: "Professional",
+    posts: 5000,
+    price: 50,
+  },
+  {
+    productId: STRIPE_PRICING_TIER_10K_PRODUCT_ID,
+    name: "Business",
+    posts: 10000,
+    price: 75,
+  },
+  {
+    productId: STRIPE_PRICING_TIER_20K_PRODUCT_ID,
+    name: "Premium",
+    posts: 20000,
+    price: 150,
+  },
+  {
+    productId: STRIPE_PRICING_TIER_40K_PRODUCT_ID,
+    name: "Enterprise",
+    posts: 40000,
+    price: 300,
+  },
+  {
+    productId: STRIPE_PRICING_TIER_100K_PRODUCT_ID,
+    name: "Scale",
+    posts: 100000,
+    price: 500,
+  },
+  {
+    productId: STRIPE_PRICING_TIER_200K_PRODUCT_ID,
+    name: "Ultimate",
+    posts: 200000,
+    price: 1000,
+  },
+].filter((tier) => tier.productId); // Filter out tiers without product IDs
+
 if (!STRIPE_SECRET_KEY || STRIPE_SECRET_KEY.trim() === "") {
   throw new Error("STRIPE_SECRET_KEY is not defined");
 }
