@@ -48,11 +48,13 @@ export class TwitterService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
       const twitterClient = new TwitterApi({
@@ -66,13 +68,11 @@ export class TwitterService implements SocialPlatformService {
 
       if (platformIds && platformIds.length > 0) {
         // Fetch specific tweets by ID
+        // Only request public_metrics if includeMetrics is true
         const tweets = await twitterClient.v2.tweets(platformIds, {
-          'tweet.fields': [
-            'created_at',
-            'public_metrics',
-            'attachments',
-            'entities',
-          ],
+          'tweet.fields': includeMetrics
+            ? ['created_at', 'public_metrics', 'attachments', 'entities']
+            : ['created_at', 'attachments', 'entities'],
           expansions: ['attachments.media_keys'],
           'media.fields': ['url', 'preview_image_url'],
         });
@@ -84,32 +84,34 @@ export class TwitterService implements SocialPlatformService {
           caption: tweet.text,
           url: `https://twitter.com/user/status/${tweet.id}`,
           media: [],
-          metrics: {
-            likes: tweet.public_metrics?.like_count || 0,
-            comments: tweet.public_metrics?.reply_count || 0,
-            shares: tweet.public_metrics?.retweet_count || 0,
-            favorites: 0,
-            reach: tweet.public_metrics?.impression_count || 0,
-            video_views: 0,
-            total_time_watched: 0,
-            average_time_watched: 0,
-            full_video_watched_rate: 0,
-            new_followers: 0,
-            profile_views: 0,
-            website_clicks: 0,
-            phone_number_clicks: 0,
-            lead_submissions: 0,
-            app_download_clicks: 0,
-            email_clicks: 0,
-            address_clicks: 0,
-            video_view_retention: [],
-            impression_sources: [],
-            audience_types: [],
-            audience_genders: [],
-            audience_countries: [],
-            audience_cities: [],
-            engagement_likes: [],
-          },
+          metrics: includeMetrics
+            ? {
+                likes: tweet.public_metrics?.like_count || 0,
+                comments: tweet.public_metrics?.reply_count || 0,
+                shares: tweet.public_metrics?.retweet_count || 0,
+                favorites: 0,
+                reach: tweet.public_metrics?.impression_count || 0,
+                video_views: 0,
+                total_time_watched: 0,
+                average_time_watched: 0,
+                full_video_watched_rate: 0,
+                new_followers: 0,
+                profile_views: 0,
+                website_clicks: 0,
+                phone_number_clicks: 0,
+                lead_submissions: 0,
+                app_download_clicks: 0,
+                email_clicks: 0,
+                address_clicks: 0,
+                video_view_retention: [],
+                impression_sources: [],
+                audience_types: [],
+                audience_genders: [],
+                audience_countries: [],
+                audience_cities: [],
+                engagement_likes: [],
+              }
+            : undefined,
         }));
 
         return {
@@ -124,12 +126,9 @@ export class TwitterService implements SocialPlatformService {
         account.social_provider_user_id,
         {
           max_results: safeLimit,
-          'tweet.fields': [
-            'created_at',
-            'public_metrics',
-            'attachments',
-            'entities',
-          ],
+          'tweet.fields': includeMetrics
+            ? ['created_at', 'public_metrics', 'attachments', 'entities']
+            : ['created_at', 'attachments', 'entities'],
           expansions: ['attachments.media_keys'],
           'media.fields': ['url', 'preview_image_url'],
           pagination_token: cursor,
@@ -143,32 +142,34 @@ export class TwitterService implements SocialPlatformService {
         caption: tweet.text,
         url: `https://twitter.com/user/status/${tweet.id}`,
         media: [],
-        metrics: {
-          likes: tweet.public_metrics?.like_count || 0,
-          comments: tweet.public_metrics?.reply_count || 0,
-          shares: tweet.public_metrics?.retweet_count || 0,
-          favorites: 0,
-          reach: tweet.public_metrics?.impression_count || 0,
-          video_views: 0,
-          total_time_watched: 0,
-          average_time_watched: 0,
-          full_video_watched_rate: 0,
-          new_followers: 0,
-          profile_views: 0,
-          website_clicks: 0,
-          phone_number_clicks: 0,
-          lead_submissions: 0,
-          app_download_clicks: 0,
-          email_clicks: 0,
-          address_clicks: 0,
-          video_view_retention: [],
-          impression_sources: [],
-          audience_types: [],
-          audience_genders: [],
-          audience_countries: [],
-          audience_cities: [],
-          engagement_likes: [],
-        },
+        metrics: includeMetrics
+          ? {
+              likes: tweet.public_metrics?.like_count || 0,
+              comments: tweet.public_metrics?.reply_count || 0,
+              shares: tweet.public_metrics?.retweet_count || 0,
+              favorites: 0,
+              reach: tweet.public_metrics?.impression_count || 0,
+              video_views: 0,
+              total_time_watched: 0,
+              average_time_watched: 0,
+              full_video_watched_rate: 0,
+              new_followers: 0,
+              profile_views: 0,
+              website_clicks: 0,
+              phone_number_clicks: 0,
+              lead_submissions: 0,
+              app_download_clicks: 0,
+              email_clicks: 0,
+              address_clicks: 0,
+              video_view_retention: [],
+              impression_sources: [],
+              audience_types: [],
+              audience_genders: [],
+              audience_countries: [],
+              audience_cities: [],
+              engagement_likes: [],
+            }
+          : undefined,
       }));
 
       return {

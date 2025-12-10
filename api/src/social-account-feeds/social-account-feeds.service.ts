@@ -57,27 +57,76 @@ export class SocialAccountFeedsService {
 
     url.searchParams.set('limit', String(queryParams.limit));
 
+    if (queryParams.social_post_id) {
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.social_post_id === 'string': {
+          values.push(...(queryParams.social_post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.social_post_id):
+          values.push(...queryParams.social_post_id);
+          break;
+        default:
+          values.push(queryParams.social_post_id);
+          break;
+      }
+
+      url.searchParams.set('social_post_id', values.join(','));
+    }
+
     if (queryParams.external_post_id) {
-      url.searchParams.set(
-        'external_post_id',
-        queryParams.external_post_id.join(','),
-      );
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.external_post_id === 'string': {
+          values.push(...(queryParams.external_post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.external_post_id):
+          values.push(...queryParams.external_post_id);
+          break;
+        default:
+          values.push(queryParams.external_post_id);
+          break;
+      }
+      url.searchParams.set('external_post_id', values.join(','));
     }
 
     if (queryParams.platform_post_id) {
-      url.searchParams.set(
-        'platform_post_id',
-        queryParams.platform_post_id.join(','),
-      );
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.platform_post_id === 'string': {
+          values.push(...(queryParams.platform_post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.platform_post_id):
+          values.push(...queryParams.platform_post_id);
+          break;
+        default:
+          values.push(queryParams.platform_post_id);
+          break;
+      }
+
+      url.searchParams.set('platform_post_id', values.join(','));
     }
 
-    if (queryParams.social_post_id) {
-      url.searchParams.set(
-        'social_post_id',
-        queryParams.social_post_id.join(','),
-      );
-    }
+    if (queryParams.expand) {
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.expand === 'string': {
+          values.push(...(queryParams.expand as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.expand):
+          values.push(...queryParams.expand);
+          break;
+        default:
+          values.push(queryParams.expand);
+          break;
+      }
 
+      url.searchParams.set('expand', values.join(','));
+    }
     return url.toString();
   }
 
@@ -241,12 +290,34 @@ export class SocialAccountFeedsService {
       }
     }
 
+    // Determine if metrics should be included
+    let includeMetrics = false;
+
+    if (queryParams.expand) {
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.expand === 'string': {
+          values.push(...(queryParams.expand as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.expand):
+          values.push(...queryParams.expand);
+          break;
+        default:
+          values.push(queryParams.expand);
+          break;
+      }
+
+      includeMetrics = values.includes('metrics');
+    }
+
     // Fetch account posts and social post results in parallel
     const accountPostsResult = await platformService.getAccountPosts({
       account: socialAccount,
       platformIds: platformPostIds,
       limit: queryParams.limit,
       cursor: queryParams.cursor,
+      includeMetrics,
     });
 
     const uniqueAccountIds = new Set(accountPostsResult.posts.map((p) => p.id));
@@ -285,7 +356,7 @@ export class SocialAccountFeedsService {
           platform_post_id: p.id,
           media: p.media,
           caption: p.caption,
-          metrics: p.metrics,
+          ...(includeMetrics && p.metrics ? { metrics: p.metrics } : {}),
           platform: p.provider!.toString(),
           social_account_id: socialAccount.id,
           platform_url: p.url,

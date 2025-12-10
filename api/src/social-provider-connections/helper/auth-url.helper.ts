@@ -18,6 +18,7 @@ export async function generateAuthUrl({
   providerData,
   externalId,
   redirectUrlOverride,
+  permissions,
 }: {
   projectId: string;
   isSystem: boolean;
@@ -27,6 +28,7 @@ export async function generateAuthUrl({
   providerData: AuthUrlProviderData | null | undefined;
   externalId: string | undefined;
   redirectUrlOverride: string | undefined | null;
+  permissions: string[];
 }): Promise<string | undefined> {
   const { appId, appSecret } = appCredentials;
 
@@ -91,10 +93,12 @@ export async function generateAuthUrl({
             'pages_read_engagement',
             'pages_manage_posts',
             'business_management',
-            //Feed Permissions
-            'read_insights',
           ],
         );
+
+        if (permissions.includes('feeds')) {
+          scopes.push('read_insights');
+        }
       }
 
       const facebookVersion =
@@ -135,11 +139,14 @@ export async function generateAuthUrl({
             'pages_show_list',
             'public_profile',
             'business_management',
-            //Feed permissions
-            'pages_read_engagement',
-            'instagram_manage_insights',
           ],
         );
+
+        if (permissions.includes('feeds')) {
+          scopes.push(
+            ...['pages_read_engagement', 'instagram_manage_insights'],
+          );
+        }
       }
 
       const facebookVersion =
@@ -165,13 +172,12 @@ export async function generateAuthUrl({
         scopes.push(...providerData.instagram.permission_overrides);
       } else {
         scopes.push(
-          ...[
-            'instagram_business_basic',
-            'instagram_business_content_publish',
-            //Feeds permissions
-            'instagram_business_manage_insights',
-          ],
+          ...['instagram_business_basic', 'instagram_business_content_publish'],
         );
+
+        if (permissions.includes('feeds')) {
+          scopes.push('instagram_business_manage_insights');
+        }
       }
 
       const authParams = new URLSearchParams([
@@ -328,10 +334,12 @@ export async function generateAuthUrl({
             'https://www.googleapis.com/auth/youtube.upload',
             'https://www.googleapis.com/auth/youtube.readonly',
             'https://www.googleapis.com/auth/userinfo.profile',
-            //Feed Permissions
-            'https://www.googleapis.com/auth/yt-analytics.readonly',
           ],
         );
+
+        if (permissions.includes('feeds')) {
+          scopes.push('https://www.googleapis.com/auth/yt-analytics.readonly');
+        }
       }
 
       authUrl = oauth2Client.generateAuthUrl({

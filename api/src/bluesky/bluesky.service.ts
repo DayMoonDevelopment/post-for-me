@@ -82,11 +82,13 @@ export class BlueskyService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
       const safeLimit = Math.min(limit, 50);
@@ -126,32 +128,34 @@ export class BlueskyService implements SocialPlatformService {
           caption: (post.record as { text?: string })?.text || '',
           url: `https://bsky.app/profile/${account.social_provider_user_id}/post/${post.uri.split('/').pop()}`,
           media: [],
-          metrics: {
-            likes: post.likeCount || 0,
-            comments: post.replyCount || 0,
-            shares: post.repostCount || 0,
-            favorites: 0,
-            reach: 0,
-            video_views: 0,
-            total_time_watched: 0,
-            average_time_watched: 0,
-            full_video_watched_rate: 0,
-            new_followers: 0,
-            profile_views: 0,
-            website_clicks: 0,
-            phone_number_clicks: 0,
-            lead_submissions: 0,
-            app_download_clicks: 0,
-            email_clicks: 0,
-            address_clicks: 0,
-            video_view_retention: [],
-            impression_sources: [],
-            audience_types: [],
-            audience_genders: [],
-            audience_countries: [],
-            audience_cities: [],
-            engagement_likes: [],
-          },
+          metrics: includeMetrics
+            ? {
+                likes: post.likeCount || 0,
+                comments: post.replyCount || 0,
+                shares: post.repostCount || 0,
+                favorites: 0,
+                reach: 0,
+                video_views: 0,
+                total_time_watched: 0,
+                average_time_watched: 0,
+                full_video_watched_rate: 0,
+                new_followers: 0,
+                profile_views: 0,
+                website_clicks: 0,
+                phone_number_clicks: 0,
+                lead_submissions: 0,
+                app_download_clicks: 0,
+                email_clicks: 0,
+                address_clicks: 0,
+                video_view_retention: [],
+                impression_sources: [],
+                audience_types: [],
+                audience_genders: [],
+                audience_countries: [],
+                audience_cities: [],
+                engagement_likes: [],
+              }
+            : undefined,
         };
       });
 

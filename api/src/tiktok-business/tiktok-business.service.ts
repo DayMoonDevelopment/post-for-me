@@ -93,11 +93,13 @@ export class TikTokBusinessService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     let videoIds: string[] | undefined;
 
@@ -109,7 +111,33 @@ export class TikTokBusinessService implements SocialPlatformService {
       });
     }
 
-    let getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=["item_id","create_time","thumbnail_url","share_url","embed_url","caption","video_views","likes","comments","shares","reach","video_duration","full_video_watched_rate","total_time_watched","average_time_watched","impression_sources","audience_countries"]`;
+    // Build fields list based on whether metrics are requested
+    const baseFields = [
+      'item_id',
+      'create_time',
+      'thumbnail_url',
+      'share_url',
+      'embed_url',
+      'caption',
+    ];
+    const metricsFields = [
+      'video_views',
+      'likes',
+      'comments',
+      'shares',
+      'reach',
+      'video_duration',
+      'full_video_watched_rate',
+      'total_time_watched',
+      'average_time_watched',
+      'impression_sources',
+      'audience_countries',
+    ];
+    const fields = includeMetrics
+      ? `[${[...baseFields, ...metricsFields].map((m) => `"${m}"`).join(',')}]`
+      : `[${baseFields.map((m) => `"${m}"`).join(',')}]`;
+
+    let getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=${fields}`;
 
     if (videoIds && videoIds.length > 0) {
       getVideosUrl += `&filters={"video_ids":[${videoIds
@@ -165,32 +193,34 @@ export class TikTokBusinessService implements SocialPlatformService {
           posted_at: v.create_time
             ? new Date(v.create_time * 1000).toISOString()
             : undefined,
-          metrics: {
-            likes: v.likes,
-            comments: v.comments,
-            shares: v.shares,
-            favorites: v.favorites,
-            reach: v.reach,
-            video_views: v.video_views,
-            total_time_watched: v.total_time_watched,
-            average_time_watched: v.average_time_watched,
-            full_video_watched_rate: v.full_video_watched_rate,
-            new_followers: v.new_followers,
-            profile_views: v.profile_views,
-            website_clicks: v.website_clicks,
-            phone_number_clicks: v.phone_number_clicks,
-            lead_submissions: v.lead_submissions,
-            app_download_clicks: v.app_download_clicks,
-            email_clicks: v.email_clicks,
-            address_clicks: v.address_clicks,
-            video_view_retention: v.video_view_retention,
-            impression_sources: v.impression_sources,
-            audience_types: v.audience_types,
-            audience_genders: v.audience_genders,
-            audience_countries: v.audience_countries,
-            audience_cities: v.audience_cities,
-            engagement_likes: v.engagement_likes,
-          },
+          metrics: includeMetrics
+            ? {
+                likes: v.likes,
+                comments: v.comments,
+                shares: v.shares,
+                favorites: v.favorites,
+                reach: v.reach,
+                video_views: v.video_views,
+                total_time_watched: v.total_time_watched,
+                average_time_watched: v.average_time_watched,
+                full_video_watched_rate: v.full_video_watched_rate,
+                new_followers: v.new_followers,
+                profile_views: v.profile_views,
+                website_clicks: v.website_clicks,
+                phone_number_clicks: v.phone_number_clicks,
+                lead_submissions: v.lead_submissions,
+                app_download_clicks: v.app_download_clicks,
+                email_clicks: v.email_clicks,
+                address_clicks: v.address_clicks,
+                video_view_retention: v.video_view_retention,
+                impression_sources: v.impression_sources,
+                audience_types: v.audience_types,
+                audience_genders: v.audience_genders,
+                audience_countries: v.audience_countries,
+                audience_cities: v.audience_cities,
+                engagement_likes: v.engagement_likes,
+              }
+            : undefined,
           media: [
             {
               url: v.embed_url,

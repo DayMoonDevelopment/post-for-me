@@ -52,7 +52,7 @@ export interface PlatformPost {
   url: string;
   posted_at?: string;
   media: { url: string; thumbnail_url: string }[];
-  metrics:
+  metrics?:
     | FacebookPostMetricsDto
     | TikTokBusinessMetricsDto
     | TikTokPostMetricsDto

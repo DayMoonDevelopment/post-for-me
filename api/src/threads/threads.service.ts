@@ -88,11 +88,13 @@ export class ThreadsService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
       const safeLimit = Math.min(limit, 25);
@@ -120,32 +122,34 @@ export class ThreadsService implements SocialPlatformService {
             media: thread.media_url
               ? [{ url: thread.media_url, thumbnail_url: thread.media_url }]
               : [],
-            metrics: {
-              likes: 0,
-              comments: 0,
-              shares: 0,
-              favorites: 0,
-              reach: 0,
-              video_views: 0,
-              total_time_watched: 0,
-              average_time_watched: 0,
-              full_video_watched_rate: 0,
-              new_followers: 0,
-              profile_views: 0,
-              website_clicks: 0,
-              phone_number_clicks: 0,
-              lead_submissions: 0,
-              app_download_clicks: 0,
-              email_clicks: 0,
-              address_clicks: 0,
-              video_view_retention: [],
-              impression_sources: [],
-              audience_types: [],
-              audience_genders: [],
-              audience_countries: [],
-              audience_cities: [],
-              engagement_likes: [],
-            },
+            metrics: includeMetrics
+              ? {
+                  likes: 0,
+                  comments: 0,
+                  shares: 0,
+                  favorites: 0,
+                  reach: 0,
+                  video_views: 0,
+                  total_time_watched: 0,
+                  average_time_watched: 0,
+                  full_video_watched_rate: 0,
+                  new_followers: 0,
+                  profile_views: 0,
+                  website_clicks: 0,
+                  phone_number_clicks: 0,
+                  lead_submissions: 0,
+                  app_download_clicks: 0,
+                  email_clicks: 0,
+                  address_clicks: 0,
+                  video_view_retention: [],
+                  impression_sources: [],
+                  audience_types: [],
+                  audience_genders: [],
+                  audience_countries: [],
+                  audience_cities: [],
+                  engagement_likes: [],
+                }
+              : undefined,
           };
         });
 
@@ -179,32 +183,34 @@ export class ThreadsService implements SocialPlatformService {
           media: thread.media_url
             ? [{ url: thread.media_url, thumbnail_url: thread.media_url }]
             : [],
-          metrics: {
-            likes: 0,
-            comments: 0,
-            shares: 0,
-            favorites: 0,
-            reach: 0,
-            video_views: 0,
-            total_time_watched: 0,
-            average_time_watched: 0,
-            full_video_watched_rate: 0,
-            new_followers: 0,
-            profile_views: 0,
-            website_clicks: 0,
-            phone_number_clicks: 0,
-            lead_submissions: 0,
-            app_download_clicks: 0,
-            email_clicks: 0,
-            address_clicks: 0,
-            video_view_retention: [],
-            impression_sources: [],
-            audience_types: [],
-            audience_genders: [],
-            audience_countries: [],
-            audience_cities: [],
-            engagement_likes: [],
-          },
+          metrics: includeMetrics
+            ? {
+                likes: 0,
+                comments: 0,
+                shares: 0,
+                favorites: 0,
+                reach: 0,
+                video_views: 0,
+                total_time_watched: 0,
+                average_time_watched: 0,
+                full_video_watched_rate: 0,
+                new_followers: 0,
+                profile_views: 0,
+                website_clicks: 0,
+                phone_number_clicks: 0,
+                lead_submissions: 0,
+                app_download_clicks: 0,
+                email_clicks: 0,
+                address_clicks: 0,
+                video_view_retention: [],
+                impression_sources: [],
+                audience_types: [],
+                audience_genders: [],
+                audience_countries: [],
+                audience_cities: [],
+                engagement_likes: [],
+              }
+            : undefined,
         }),
       );
 

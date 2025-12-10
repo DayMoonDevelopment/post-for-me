@@ -81,11 +81,13 @@ export class FacebookService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
       if (platformIds && platformIds.length > 0) {
@@ -104,7 +106,11 @@ export class FacebookService implements SocialPlatformService {
         const posts: PlatformPost[] = await Promise.all(
           responses.map(async (response) => {
             const post = response.data as FacebookPost;
-            return this.mapFacebookPostToPlatformPost(post, account);
+            return this.mapFacebookPostToPlatformPost(
+              post,
+              account,
+              includeMetrics,
+            );
           }),
         );
 
@@ -132,7 +138,7 @@ export class FacebookService implements SocialPlatformService {
       const feedResponse = response.data as FacebookFeedResponse;
       const posts: PlatformPost[] = await Promise.all(
         (feedResponse.data || []).map((post) =>
-          this.mapFacebookPostToPlatformPost(post, account),
+          this.mapFacebookPostToPlatformPost(post, account, includeMetrics),
         ),
       );
 
@@ -528,13 +534,16 @@ export class FacebookService implements SocialPlatformService {
   private async mapFacebookPostToPlatformPost(
     post: FacebookPost,
     account: SocialAccount,
+    includeMetrics: boolean = false,
   ): Promise<PlatformPost> {
-    // Fetch insights for the post
-    const insights = await this.fetchPostInsights(
-      post.id,
-      account.access_token,
-      post.created_time,
-    );
+    // Fetch insights for the post only if metrics are requested
+    const insights = includeMetrics
+      ? await this.fetchPostInsights(
+          post.id,
+          account.access_token,
+          post.created_time,
+        )
+      : {};
 
     return {
       provider: 'facebook',
@@ -546,12 +555,14 @@ export class FacebookService implements SocialPlatformService {
       media: post.full_picture
         ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
         : [],
-      metrics: {
-        ...insights,
-        // Include basic metrics from the post object as fallback
-        comments: post.comments?.summary?.total_count ?? 0,
-        shares: post.shares?.count ?? 0,
-      },
+      metrics: includeMetrics
+        ? {
+            ...insights,
+            // Include basic metrics from the post object as fallback
+            comments: post.comments?.summary?.total_count ?? 0,
+            shares: post.shares?.count ?? 0,
+          }
+        : undefined,
     };
   }
 }

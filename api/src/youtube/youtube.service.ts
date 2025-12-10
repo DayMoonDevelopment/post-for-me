@@ -205,11 +205,13 @@ export class YouTubeService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     if (!this.oauth2Client) {
       throw new Error('OAuth2 client not initialized. Call initService first.');
@@ -301,11 +303,14 @@ export class YouTubeService implements SocialPlatformService {
       // Fetch analytics for each video and combine with basic stats
       const posts: PlatformPost[] = await Promise.all(
         videos.map(async (video) => {
-          const analyticsMetrics = await this.getVideoAnalytics(
-            video.id,
-            video.snippet.publishedAt,
-            video.snippet.channelId,
-          );
+          // Only fetch analytics if metrics are requested
+          const analyticsMetrics = includeMetrics
+            ? await this.getVideoAnalytics(
+                video.id,
+                video.snippet.publishedAt,
+                video.snippet.channelId,
+              )
+            : {};
 
           return {
             provider: 'youtube',
@@ -324,51 +329,55 @@ export class YouTubeService implements SocialPlatformService {
                   '',
               },
             ],
-            metrics: {
-              // Use Analytics API data when available, fallback to Data API
-              views:
-                analyticsMetrics.views ||
-                parseInt(video.statistics.viewCount || '0', 10),
-              likes:
-                analyticsMetrics.likes ||
-                parseInt(video.statistics.likeCount || '0', 10),
-              comments:
-                analyticsMetrics.comments ||
-                parseInt(video.statistics.commentCount || '0', 10),
-              dislikes:
-                analyticsMetrics.dislikes ||
-                parseInt(video.statistics.dislikeCount || '0', 10),
-              // Analytics-only metrics
-              engagedViews: analyticsMetrics.engagedViews,
-              redViews: analyticsMetrics.redViews,
-              videosAddedToPlaylists: analyticsMetrics.videosAddedToPlaylists,
-              videosRemovedFromPlaylists:
-                analyticsMetrics.videosRemovedFromPlaylists,
-              shares: analyticsMetrics.shares,
-              estimatedMinutesWatched: analyticsMetrics.estimatedMinutesWatched,
-              estimatedRedMinutesWatched:
-                analyticsMetrics.estimatedRedMinutesWatched,
-              averageViewDuration: analyticsMetrics.averageViewDuration,
-              averageViewPercentage: analyticsMetrics.averageViewPercentage,
-              annotationClickThroughRate:
-                analyticsMetrics.annotationClickThroughRate,
-              annotationCloseRate: analyticsMetrics.annotationCloseRate,
-              annotationImpressions: analyticsMetrics.annotationImpressions,
-              annotationClickableImpressions:
-                analyticsMetrics.annotationClickableImpressions,
-              annotationClosableImpressions:
-                analyticsMetrics.annotationClosableImpressions,
-              annotationClicks: analyticsMetrics.annotationClicks,
-              annotationCloses: analyticsMetrics.annotationCloses,
-              cardClickRate: analyticsMetrics.cardClickRate,
-              cardTeaserClickRate: analyticsMetrics.cardTeaserClickRate,
-              cardImpressions: analyticsMetrics.cardImpressions,
-              cardTeaserImpressions: analyticsMetrics.cardTeaserImpressions,
-              cardClicks: analyticsMetrics.cardClicks,
-              cardTeaserClicks: analyticsMetrics.cardTeaserClicks,
-              subscribersGained: analyticsMetrics.subscribersGained,
-              subscribersLost: analyticsMetrics.subscribersLost,
-            },
+            metrics: includeMetrics
+              ? {
+                  // Use Analytics API data when available, fallback to Data API
+                  views:
+                    analyticsMetrics.views ||
+                    parseInt(video.statistics.viewCount || '0', 10),
+                  likes:
+                    analyticsMetrics.likes ||
+                    parseInt(video.statistics.likeCount || '0', 10),
+                  comments:
+                    analyticsMetrics.comments ||
+                    parseInt(video.statistics.commentCount || '0', 10),
+                  dislikes:
+                    analyticsMetrics.dislikes ||
+                    parseInt(video.statistics.dislikeCount || '0', 10),
+                  // Analytics-only metrics
+                  engagedViews: analyticsMetrics.engagedViews,
+                  redViews: analyticsMetrics.redViews,
+                  videosAddedToPlaylists:
+                    analyticsMetrics.videosAddedToPlaylists,
+                  videosRemovedFromPlaylists:
+                    analyticsMetrics.videosRemovedFromPlaylists,
+                  shares: analyticsMetrics.shares,
+                  estimatedMinutesWatched:
+                    analyticsMetrics.estimatedMinutesWatched,
+                  estimatedRedMinutesWatched:
+                    analyticsMetrics.estimatedRedMinutesWatched,
+                  averageViewDuration: analyticsMetrics.averageViewDuration,
+                  averageViewPercentage: analyticsMetrics.averageViewPercentage,
+                  annotationClickThroughRate:
+                    analyticsMetrics.annotationClickThroughRate,
+                  annotationCloseRate: analyticsMetrics.annotationCloseRate,
+                  annotationImpressions: analyticsMetrics.annotationImpressions,
+                  annotationClickableImpressions:
+                    analyticsMetrics.annotationClickableImpressions,
+                  annotationClosableImpressions:
+                    analyticsMetrics.annotationClosableImpressions,
+                  annotationClicks: analyticsMetrics.annotationClicks,
+                  annotationCloses: analyticsMetrics.annotationCloses,
+                  cardClickRate: analyticsMetrics.cardClickRate,
+                  cardTeaserClickRate: analyticsMetrics.cardTeaserClickRate,
+                  cardImpressions: analyticsMetrics.cardImpressions,
+                  cardTeaserImpressions: analyticsMetrics.cardTeaserImpressions,
+                  cardClicks: analyticsMetrics.cardClicks,
+                  cardTeaserClicks: analyticsMetrics.cardTeaserClicks,
+                  subscribersGained: analyticsMetrics.subscribersGained,
+                  subscribersLost: analyticsMetrics.subscribersLost,
+                }
+              : undefined,
           };
         }),
       );

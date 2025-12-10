@@ -68,6 +68,7 @@ export class PlatformPostDto {
 
   @ApiProperty({
     description: 'Post metrics and analytics data',
+    required: false,
     oneOf: [
       { $ref: getSchemaPath(TikTokBusinessMetricsDto) },
       { $ref: getSchemaPath(TikTokPostMetricsDto) },
@@ -75,7 +76,7 @@ export class PlatformPostDto {
       { $ref: getSchemaPath(YouTubePostMetricsDto) },
     ],
   })
-  metrics:
+  metrics?:
     | TikTokBusinessMetricsDto
     | TikTokPostMetricsDto
     | InstagramPostMetricsDto

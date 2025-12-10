@@ -213,10 +213,11 @@ export class InstagramService implements SocialPlatformService {
   private mapMediaItemToPlatformPost(
     item: InstagramMediaItem,
     accountId: string,
+    includeMetrics: boolean = false,
   ): PlatformPost {
     const insights = this.extractInsightsFromResponse(item.insights);
 
-    return {
+    const post: PlatformPost = {
       provider: 'instagram',
       id: item.id,
       account_id: accountId,
@@ -229,23 +230,28 @@ export class InstagramService implements SocialPlatformService {
           thumbnail_url: item.thumbnail_url || item.media_url || '',
         },
       ],
-      metrics: {
-        likes: insights.likes,
-        comments: insights.comments,
-        views: insights.views,
-        reach: insights.reach,
-        saved: insights.saved,
-        shares: insights.shares,
-        replies: insights.replies,
-        follows: insights.follows,
-        ig_reels_avg_watch_time: insights.ig_reels_avg_watch_time,
-        ig_reels_video_view_total_time: insights.ig_reels_video_view_total_time,
-        navigation: insights.navigation,
-        profile_activity: insights.profile_activity,
-        profile_visits: insights.profile_visits,
-        total_interactions: insights.total_interactions,
-      },
-    };
+      metrics: includeMetrics
+        ? {
+            likes: insights.likes,
+            comments: insights.comments,
+            views: insights.views,
+            reach: insights.reach,
+            saved: insights.saved,
+            shares: insights.shares,
+            replies: insights.replies,
+            follows: insights.follows,
+            ig_reels_avg_watch_time: insights.ig_reels_avg_watch_time,
+            ig_reels_video_view_total_time:
+              insights.ig_reels_video_view_total_time,
+            navigation: insights.navigation,
+            profile_activity: insights.profile_activity,
+            profile_visits: insights.profile_visits,
+            total_interactions: insights.total_interactions,
+          }
+        : undefined,
+    } as PlatformPost;
+
+    return post;
   }
 
   /**
@@ -344,11 +350,13 @@ export class InstagramService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
       const safeLimit = Math.min(limit, 25);
@@ -373,13 +381,15 @@ export class InstagramService implements SocialPlatformService {
 
           const mediaItem = mediaResponse.data;
 
-          // Fetch insights for this media
-          const insights = await this.fetchMediaInsights(
-            id,
-            mediaItem.media_product_type,
-            baseUrl,
-            account.access_token,
-          );
+          // Fetch insights for this media only if metrics are requested
+          const insights = includeMetrics
+            ? await this.fetchMediaInsights(
+                id,
+                mediaItem.media_product_type,
+                baseUrl,
+                account.access_token,
+              )
+            : undefined;
 
           return {
             ...mediaItem,
@@ -394,6 +404,7 @@ export class InstagramService implements SocialPlatformService {
             this.mapMediaItemToPlatformPost(
               item,
               account.social_provider_user_id,
+              includeMetrics,
             ),
         );
 
@@ -414,26 +425,32 @@ export class InstagramService implements SocialPlatformService {
         },
       });
 
-      // Fetch insights for each media item
-      const mediaWithInsights = await Promise.all(
-        (response.data.data || []).map(async (item) => {
-          console.log(item);
-          const insights = await this.fetchMediaInsights(
-            item.id,
-            item.media_product_type,
-            baseUrl,
-            account.access_token,
-          );
+      // Fetch insights for each media item only if metrics are requested
+      const mediaWithInsights = includeMetrics
+        ? await Promise.all(
+            (response.data.data || []).map(async (item) => {
+              console.log(item);
+              const insights = await this.fetchMediaInsights(
+                item.id,
+                item.media_product_type,
+                baseUrl,
+                account.access_token,
+              );
 
-          return {
-            ...item,
-            insights,
-          };
-        }),
-      );
+              return {
+                ...item,
+                insights,
+              };
+            }),
+          )
+        : response.data.data.map((item) => ({ ...item, insights: undefined }));
 
       const posts: PlatformPost[] = mediaWithInsights.map((item) =>
-        this.mapMediaItemToPlatformPost(item, account.social_provider_user_id),
+        this.mapMediaItemToPlatformPost(
+          item,
+          account.social_provider_user_id,
+          includeMetrics,
+        ),
       );
 
       return {

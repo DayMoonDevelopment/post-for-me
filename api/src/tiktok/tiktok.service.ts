@@ -15,7 +15,6 @@ import type {
   TikTokPublishStatusResponse,
   TikTokVideoQueryResponse,
 } from './tiktok.types';
-import type { TikTokPostMetricsDto } from './dto/tiktok-post-metrics.dto';
 
 @Injectable({ scope: Scope.REQUEST })
 export class TikTokService implements SocialPlatformService {
@@ -94,15 +93,9 @@ export class TikTokService implements SocialPlatformService {
   private mapVideoToPlatformPost(
     video: TikTokVideo,
     accountId: string,
+    includeMetrics: boolean = false,
   ): PlatformPost {
-    const metrics: TikTokPostMetricsDto = {
-      like_count: video.like_count || 0,
-      comment_count: video.comment_count || 0,
-      share_count: video.share_count || 0,
-      view_count: video.view_count || 0,
-    };
-
-    return {
+    const post: PlatformPost = {
       provider: 'tiktok',
       id: video.id,
       account_id: accountId,
@@ -117,8 +110,17 @@ export class TikTokService implements SocialPlatformService {
           thumbnail_url: video.cover_image_url || '',
         },
       ],
-      metrics,
-    };
+      metrics: includeMetrics
+        ? {
+            like_count: video.like_count || 0,
+            comment_count: video.comment_count || 0,
+            share_count: video.share_count || 0,
+            view_count: video.view_count || 0,
+          }
+        : undefined,
+    } as PlatformPost;
+
+    return post;
   }
 
   async getAccountPosts({
@@ -126,17 +128,18 @@ export class TikTokService implements SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
       let videoIds: string[] | undefined;
       const safeLimit = Math.min(limit, 20);
 
-      console.log(platformIds);
       // If platformIds are provided, fetch the video IDs from publish IDs
       if (platformIds && platformIds.length > 0) {
         videoIds = await this.getVideoIdsFromPublishIds({
@@ -151,12 +154,21 @@ export class TikTokService implements SocialPlatformService {
         return await this.queryVideosByIds({
           videoIds,
           account,
+          includeMetrics,
         });
       }
 
+      // Build fields list based on whether metrics are requested
+      const baseFields =
+        'id,create_time,cover_image_url,share_url,duration,title,embed_link';
+      const metricsFields = 'like_count,comment_count,share_count,view_count';
+      const fields = includeMetrics
+        ? `${baseFields},${metricsFields}`
+        : baseFields;
+
       // Otherwise, use the video list endpoint to get recent videos
       const response = await axios.post<TikTokVideoListResponse>(
-        `${this.apiUrl}video/list/?fields=id,create_time,cover_image_url,share_url,duration,title,embed_link,like_count,comment_count,share_count,view_count`,
+        `${this.apiUrl}video/list/?fields=${fields}`,
         {
           max_count: safeLimit,
           cursor: cursor ? parseInt(cursor) : undefined,
@@ -174,7 +186,11 @@ export class TikTokService implements SocialPlatformService {
 
       const videos = data.data?.videos || [];
       const posts: PlatformPost[] = videos.map((video) =>
-        this.mapVideoToPlatformPost(video, account.social_provider_user_id),
+        this.mapVideoToPlatformPost(
+          video,
+          account.social_provider_user_id,
+          includeMetrics,
+        ),
       );
 
       return {
@@ -260,12 +276,22 @@ export class TikTokService implements SocialPlatformService {
   private async queryVideosByIds({
     videoIds,
     account,
+    includeMetrics = false,
   }: {
     videoIds: string[];
     account: SocialAccount;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
+    // Build fields list based on whether metrics are requested
+    const baseFields =
+      'id,create_time,cover_image_url,share_url,duration,title,embed_link';
+    const metricsFields = 'like_count,comment_count,share_count,view_count';
+    const fields = includeMetrics
+      ? `${baseFields},${metricsFields}`
+      : baseFields;
+
     const response = await axios.post<TikTokVideoQueryResponse>(
-      `${this.apiUrl}video/query/?fields=id,create_time,cover_image_url,share_url,duration,title,embed_link,like_count,comment_count,share_count,view_count`,
+      `${this.apiUrl}video/query/?fields=${fields}`,
       {
         filters: {
           video_ids: videoIds,
@@ -289,7 +315,11 @@ export class TikTokService implements SocialPlatformService {
 
     const videos = data.data?.videos || [];
     const posts: PlatformPost[] = videos.map((video) =>
-      this.mapVideoToPlatformPost(video, account.social_provider_user_id),
+      this.mapVideoToPlatformPost(
+        video,
+        account.social_provider_user_id,
+        includeMetrics,
+      ),
     );
 
     return {

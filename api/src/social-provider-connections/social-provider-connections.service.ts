@@ -190,12 +190,14 @@ export class SocialAccountsService {
     providerData,
     externalId,
     redirectUrlOverride,
+    permissions,
   }: {
     projectId: string;
     appCredentials: SocialProviderAppCredentialsDto;
     providerData: AuthUrlProviderData | null | undefined;
     externalId: string | undefined;
     redirectUrlOverride: string | undefined | null;
+    permissions: string[];
   }): Promise<string | undefined> {
     const project = await this.supabaseService.supabaseClient
       .from('projects')
@@ -213,6 +215,7 @@ export class SocialAccountsService {
       providerData,
       externalId,
       redirectUrlOverride,
+      permissions,
     });
 
     return authUrl;

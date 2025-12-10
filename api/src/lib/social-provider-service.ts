@@ -10,10 +10,12 @@ export interface SocialPlatformService {
     platformIds,
     limit,
     cursor,
+    includeMetrics,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
     cursor?: string;
+    includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse>;
 }

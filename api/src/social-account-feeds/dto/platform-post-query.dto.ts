@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -58,4 +58,16 @@ export class PlatformPostQueryDto {
   @IsString({ each: true })
   @IsOptional()
   platform_post_id?: string[];
+
+  @ApiProperty({
+    description:
+      'Expand additional data in the response. Currently supports: "metrics" to include post analytics data.',
+    required: false,
+    type: 'array',
+    items: { type: 'string', enum: ['metrics'] },
+    example: ['metrics'],
+  })
+  @IsIn(['metrics'], { each: true })
+  @IsOptional()
+  expand?: string[];
 }

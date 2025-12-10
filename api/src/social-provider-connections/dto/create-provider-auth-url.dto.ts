@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsIn } from 'class-validator';
 
 export class BlueskyAuthUrlProviderData {
   @ApiProperty({ description: 'The handle of the account', type: String })
@@ -202,9 +203,12 @@ export class CreateSocialAccountProviderAuthUrlDto {
 
   @ApiProperty({
     description:
-      'List of permissions you want to allow. Use this to connect users to apps that are not approved for all permissions. Will default to post permissions.',
+      'List of permissions you want to allow. Will default to only post permissions. You must include the "feeds" permission to request an account feed and metrics',
     required: false,
-    default: ['posts'],
+    type: 'array',
+    items: { type: 'string', enum: ['posts', 'feeds'] },
+    example: ['posts', 'feeds'],
   })
+  @IsIn(['posts', 'feeds'], { each: true })
   permissions?: string[];
 }
