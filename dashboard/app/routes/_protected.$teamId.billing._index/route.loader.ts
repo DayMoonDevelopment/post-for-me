@@ -33,7 +33,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
 
   const teamDashboardUrl = new URL(
     `/${team.data.id}/billing`,
-    request.url
+    request.url,
   ).toString();
 
   let subscription = null;
@@ -65,11 +65,11 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
         isLegacyPlan ||
         isNewPricingPlan ||
         subscription.items.data.some(
-          (item) => item.price.product === STRIPE_API_PRODUCT_ID
+          (item) => item.price.product === STRIPE_API_PRODUCT_ID,
         );
 
       hasCredsAccess = subscription.items.data.some(
-        (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID
+        (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID,
       );
 
       const schedules = await stripe.subscriptionSchedules.list({
@@ -105,6 +105,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
           line_items: [
             {
               price: product.default_price as string,
+              quantity: 1,
             },
           ],
           metadata: {
@@ -114,7 +115,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
           },
           success_url: new URL(
             `/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
-            request.url
+            request.url,
           ).toString(),
           cancel_url: teamDashboardUrl,
         });
@@ -132,6 +133,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
         line_items: [
           {
             price: product.default_price as string,
+            quantity: 1,
           },
         ],
         client_reference_id: team.data.id,
@@ -142,7 +144,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
         },
         success_url: new URL(
           "/stripe/success?session_id={CHECKOUT_SESSION_ID}",
-          request.url
+          request.url,
         ).toString(),
         cancel_url: new URL(`/${teamId}`, request.url).toString(),
       });
