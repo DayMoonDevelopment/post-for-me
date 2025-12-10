@@ -1,16 +1,17 @@
 import {
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { verifyKey } from '@unkey/api';
-import { Request } from 'express';
+import type { Unkey } from '@unkey/api';
+import type { Request } from 'express';
 
 import { SupabaseService } from '../supabase/supabase.service';
 import { PROTECT_OPTIONS } from './protect.decorator';
-import { RequestUser } from './user.interface';
+import type { RequestUser } from './user.interface';
 
 // Augment Express Request type (good practice)
 declare module 'express' {
@@ -24,6 +25,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private supabaseService: SupabaseService,
+    @Inject('UNKEY_INSTANCE') private unkey: Unkey,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -129,8 +131,11 @@ export class AuthGuard implements CanActivate {
     teamId?: string;
   }> {
     try {
-      const response = await verifyKey(token);
-      if (!response?.result?.valid) {
+      const response = await this.unkey.keys.verifyKey({
+        key: token,
+      });
+
+      if (!response.data?.valid) {
         // Token itself is invalid according to Unkey
         return { valid: false };
       }
@@ -139,18 +144,16 @@ export class AuthGuard implements CanActivate {
       let projectId: string | undefined = undefined;
       let teamId: string | undefined = undefined;
 
-      if (response?.result?.meta?.created_by) {
-        userId = response.result.meta.created_by as string;
+      if (response.data.meta?.created_by) {
+        userId = response.data.meta?.created_by as string;
       }
 
-      if (response?.result?.meta?.team_id) {
-        teamId = response?.result?.meta?.team_id as string;
+      if (response.data.meta?.team_id) {
+        teamId = response.data.meta?.team_id as string;
       }
 
-      if (response?.result?.identity?.externalId) {
-        projectId = response.result.identity.externalId;
-      } else if (response?.result?.ownerId) {
-        projectId = response.result.ownerId;
+      if (response?.data.identity?.externalId) {
+        projectId = response.data.identity.externalId;
       }
 
       if (!userId || !projectId) {
@@ -169,7 +172,7 @@ export class AuthGuard implements CanActivate {
         valid: true,
         userId,
         projectId,
-        keyId: response.result.keyId,
+        keyId: response.data.keyId,
         teamId,
       };
     } catch (error) {

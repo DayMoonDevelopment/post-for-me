@@ -32,13 +32,17 @@ export const action = withSupabase(async ({ supabase, request, params }) => {
     throw new Error("User not found");
   }
 
-  const apiKey = await unkey.keys.delete({
-    keyId,
-  });
+  try {
+    await unkey.keys.deleteKey({
+      keyId,
+    });
 
-  if (apiKey.error) {
-    return data({ success: false, error: apiKey.error, result: null });
+    return redirect(`../?toast=API Key was deleted&toast_type=success`);
+  } catch (error) {
+    return data({
+      success: false,
+      error: (error as { message?: string })?.message,
+      result: null,
+    });
   }
-
-  return redirect(`../?toast=API Key was deleted&toast_type=success`);
 });

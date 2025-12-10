@@ -38,7 +38,7 @@ export const action = withSupabase(async ({ supabase, params }) => {
 
   const hasActiveSubscription = project.data.is_system
     ? await customerHasSubscriptionSystemCredsAddon(
-        team.data.stripe_customer_id
+        team.data.stripe_customer_id,
       )
     : await customerHasActiveSubscriptions(team.data.stripe_customer_id);
 
@@ -50,30 +50,33 @@ export const action = withSupabase(async ({ supabase, params }) => {
     });
   }
 
-  const apiKey = await unkey.keys.create({
-    apiId: UNKEY_API_ID,
-    prefix: "pfm_live",
-    name: "API Key",
-    externalId: projectId,
-    meta: {
-      project_id: projectId,
-      team_id: teamId,
-      created_by: currentUser.data.user.id,
-    },
-    enabled: true,
-    recoverable: false,
-    environment: "live",
-  });
+  try {
+    const apiKey = await unkey.keys.createKey({
+      apiId: UNKEY_API_ID,
+      prefix: "pfm_live",
+      name: "API Key",
+      externalId: projectId,
+      meta: {
+        project_id: projectId,
+        team_id: teamId,
+        created_by: currentUser.data.user.id,
+      },
+      enabled: true,
+      recoverable: false,
+    });
 
-  if (apiKey.error || !apiKey.result) {
-    return data({ success: false, error: apiKey.error, result: null });
+    return data({
+      success: true,
+      error: null,
+      result: {
+        key: apiKey.data.key,
+      },
+    });
+  } catch (error) {
+    return data({
+      success: false,
+      error: (error as { message?: string }).message,
+      result: null,
+    });
   }
-
-  return data({
-    success: true,
-    error: null,
-    result: {
-      key: apiKey.result.key,
-    },
-  });
 });

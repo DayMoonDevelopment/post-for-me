@@ -32,6 +32,7 @@ export async function addSocialAccountConnections({
   isSystem,
   appCredentials,
   externalId,
+  redirectUrlOverride,
 }: {
   supabaseServiceRole: SupabaseClient<Database>;
   projectId: string;
@@ -43,6 +44,7 @@ export async function addSocialAccountConnections({
     appSecret?: string | null;
   };
   externalId: string | undefined | null;
+  redirectUrlOverride: string | undefined | null;
 }) {
   const normalizedProvider =
     provider === "instagram_w_facebook" ? "instagram" : provider;
@@ -51,6 +53,10 @@ export async function addSocialAccountConnections({
 
   if (isSystem) {
     redirectUri = `${REDIRECT_APP_URL}/callback/${normalizedProvider}/account`;
+  }
+
+  if (redirectUrlOverride) {
+    redirectUri = redirectUrlOverride;
   }
 
   const socialProviderConnections: SocialProviderConnection[] =
@@ -84,7 +90,7 @@ export async function addSocialAccountConnections({
       }),
       social_provider_metadata: connection.social_provider_metadata,
       external_id: externalId,
-    }))
+    })),
   );
 
   const { data: insertedConnections, error: connectionsError } =
@@ -129,7 +135,7 @@ export async function addSocialAccountConnections({
 
 async function getSocialProviderConnections(
   provider: string,
-  info: SocialProviderInfo
+  info: SocialProviderInfo,
 ): Promise<SocialProviderConnection[]> {
   try {
     switch (provider) {

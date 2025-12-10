@@ -27,7 +27,7 @@ async function getTemporaryApiKey(
   teamId: string,
   projectId: string,
   cookieHeader: string,
-  supabase: SupabaseClient<Database>
+  supabase: SupabaseClient<Database>,
 ): Promise<DashboardApiKeyResponse> {
   const cookieName = `${TMP_API_KEY_COOKIE_PREFIX}_${projectId}`;
   const apiKeyCookie = createCookie(cookieName);
@@ -55,31 +55,33 @@ async function getTemporaryApiKey(
   }
 
   const hasActiveSubscription = await customerHasActiveSubscriptions(
-    team.data.stripe_customer_id
+    team.data.stripe_customer_id,
   );
 
   if (!hasActiveSubscription) {
     return { apiKey: null, error: "no active subscription" };
   }
 
-  const apiKey = await unkey.keys.create({
-    apiId: UNKEY_API_ID,
-    prefix: "pfm_tmp",
-    name: "TMP API Key",
-    externalId: projectId,
-    meta: {
-      project_id: projectId,
-      team_id: teamId,
-      created_by: currentUser.data.user.id,
-    },
-    enabled: true,
-    recoverable: false,
-    environment: "live",
-    expires: Date.now() + 24 * 60 * 60 * 1000,
-  });
+  let key: string | null = null;
+  try {
+    const apiKey = await unkey.keys.createKey({
+      apiId: UNKEY_API_ID,
+      prefix: "pfm_tmp",
+      name: "TMP API Key",
+      externalId: projectId,
+      meta: {
+        project_id: projectId,
+        team_id: teamId,
+        created_by: currentUser.data.user.id,
+      },
+      enabled: true,
+      recoverable: false,
+      expires: Date.now() + 24 * 60 * 60 * 1000,
+    });
 
-  if (apiKey.error || !apiKey.result) {
-    return { apiKey: null, error: apiKey.error.message };
+    key = apiKey.data.key;
+  } catch (error) {
+    return { apiKey: null, error: (error as { message?: string })?.message };
   }
 
   const newSession = createCookie(cookieName, {
@@ -88,7 +90,7 @@ async function getTemporaryApiKey(
   });
 
   return {
-    apiKey: apiKey.result.key,
+    apiKey: key,
     cookie: newSession,
   };
 } /**
@@ -111,15 +113,15 @@ export function withDashboardKey<
   THandler extends (
     args: (LoaderFunctionArgs | ActionFunctionArgs) &
       DashboardKeyContext &
-      SupabaseContext
+      SupabaseContext,
   ) => any,
 >(
-  handler: THandler
+  handler: THandler,
 ): THandler extends (args: any) => infer R
   ? (args: (LoaderFunctionArgs | ActionFunctionArgs) & SupabaseContext) => R
   : never {
   return async function (
-    args: (LoaderFunctionArgs | ActionFunctionArgs) & SupabaseContext
+    args: (LoaderFunctionArgs | ActionFunctionArgs) & SupabaseContext,
   ) {
     const { params, supabase } = args;
 
@@ -137,7 +139,7 @@ export function withDashboardKey<
       teamId,
       projectId,
       args.request.headers.get("cookie") || "",
-      supabase
+      supabase,
     );
 
     const res = await handler({ ...args, apiKey: apiKeyResult.apiKey });

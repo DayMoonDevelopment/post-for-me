@@ -65,6 +65,16 @@ export async function generateAuthUrl({
     callbackUrl = `${appUrl}/callback/${provider}/account`;
   }
 
+  if (redirectUrlOverride) {
+    oauthData.push({
+      project_id: projectId,
+      provider: provider as SocialProviderEnum,
+      key: 'redirect_url',
+      key_id: authState,
+      value: redirectUrlOverride,
+    });
+  }
+
   if (externalId) {
     oauthData.push({
       project_id: projectId,
