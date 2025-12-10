@@ -125,10 +125,12 @@ export class TikTokService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     try {
       let videoIds: string[] | undefined;
@@ -157,6 +159,7 @@ export class TikTokService implements SocialPlatformService {
         `${this.apiUrl}video/list/?fields=id,create_time,cover_image_url,share_url,duration,title,embed_link,like_count,comment_count,share_count,view_count`,
         {
           max_count: safeLimit,
+          cursor: cursor ? parseInt(cursor) : undefined,
         },
         {
           headers: {

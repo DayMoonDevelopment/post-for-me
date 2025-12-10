@@ -80,10 +80,12 @@ export class FacebookService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     try {
       if (platformIds && platformIds.length > 0) {
@@ -122,6 +124,7 @@ export class FacebookService implements SocialPlatformService {
               'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
             access_token: account.access_token,
             limit: limit,
+            after: cursor,
           },
         },
       );

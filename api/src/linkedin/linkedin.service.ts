@@ -82,6 +82,7 @@ export class LinkedInService implements SocialPlatformService {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     try {
       // LinkedIn API has limited post retrieval capabilities

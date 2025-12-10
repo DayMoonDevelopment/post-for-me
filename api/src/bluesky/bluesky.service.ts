@@ -81,10 +81,12 @@ export class BlueskyService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     try {
       const safeLimit = Math.min(limit, 50);
@@ -112,6 +114,7 @@ export class BlueskyService implements SocialPlatformService {
       const feed = await this.agent.getAuthorFeed({
         actor: account.social_provider_user_id,
         limit: safeLimit,
+        cursor: cursor,
       });
 
       const posts: PlatformPost[] = feed.data.feed.map((item) => {

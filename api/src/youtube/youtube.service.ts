@@ -204,10 +204,12 @@ export class YouTubeService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     if (!this.oauth2Client) {
       throw new Error('OAuth2 client not initialized. Call initService first.');
@@ -234,6 +236,7 @@ export class YouTubeService implements SocialPlatformService {
 
     try {
       let videos: YouTubeVideo[] = [];
+      let nextPageToken: string | undefined;
 
       if (platformIds && platformIds.length > 0) {
         // Fetch specific videos by ID
@@ -269,7 +272,10 @@ export class YouTubeService implements SocialPlatformService {
           part: ['snippet'],
           playlistId: uploadPlaylistId,
           maxResults: safeLimit,
+          pageToken: cursor,
         });
+
+        nextPageToken = playlistResponse.data.nextPageToken || undefined;
 
         const videoIds = playlistResponse.data.items
           ?.map((item) => item.snippet?.resourceId?.videoId)
@@ -371,6 +377,7 @@ export class YouTubeService implements SocialPlatformService {
         posts,
         count: posts.length,
         has_more: posts.length === safeLimit,
+        cursor: nextPageToken,
       };
     } catch (error) {
       console.error('Error fetching YouTube posts:', error);

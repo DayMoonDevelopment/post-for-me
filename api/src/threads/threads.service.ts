@@ -87,10 +87,12 @@ export class ThreadsService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     try {
       const safeLimit = Math.min(limit, 25);
@@ -162,6 +164,7 @@ export class ThreadsService implements SocialPlatformService {
             fields: 'id,text,permalink,timestamp,media_type,media_url',
             access_token: account.access_token,
             limit: safeLimit,
+            after: cursor,
           },
         },
       );

@@ -92,10 +92,12 @@ export class TikTokBusinessService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     let videoIds: string[] | undefined;
 
@@ -119,6 +121,10 @@ export class TikTokBusinessService implements SocialPlatformService {
     const safeLimit = Math.min(limit, 20);
 
     getVideosUrl += `&max_count=${safeLimit}`;
+
+    if (cursor) {
+      getVideosUrl += `&cursor=${cursor}`;
+    }
 
     const videoResponse = await axios.get(getVideosUrl, {
       headers: {

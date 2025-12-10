@@ -47,10 +47,12 @@ export class TwitterService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     try {
       const twitterClient = new TwitterApi({
@@ -130,6 +132,7 @@ export class TwitterService implements SocialPlatformService {
           ],
           expansions: ['attachments.media_keys'],
           'media.fields': ['url', 'preview_image_url'],
+          pagination_token: cursor,
         },
       );
 

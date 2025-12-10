@@ -121,10 +121,12 @@ export class PinterestService implements SocialPlatformService {
     account,
     platformIds,
     limit,
+    cursor,
   }: {
     account: SocialAccount;
     platformIds?: string[];
     limit: number;
+    cursor?: string;
   }): Promise<PlatformPostsResponse> {
     try {
       const safeLimit = Math.min(limit, 25);
@@ -205,6 +207,7 @@ export class PinterestService implements SocialPlatformService {
         },
         params: {
           page_size: safeLimit,
+          bookmark: cursor,
         },
       });
 
