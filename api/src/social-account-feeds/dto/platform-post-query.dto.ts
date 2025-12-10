@@ -7,7 +7,8 @@ const MAX_LIMIT = 100;
 
 export class PlatformPostQueryDto {
   @ApiProperty({
-    description: 'Number of items to return',
+    description:
+      "Number of items to return; Note: some platforms will have different max limits, in the case the provided limit is over the platform's limit we will return the max allowed by the platform.",
     default: DEFAULT_LIMIT,
     required: false,
   })

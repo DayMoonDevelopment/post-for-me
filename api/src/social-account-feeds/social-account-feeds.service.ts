@@ -38,16 +38,45 @@ export class SocialAccountFeedsService {
     private readonly blueskyService: BlueskyService,
   ) {}
 
-  generateNextUrl(queryParams: PlatformPostQueryDto): string {
+  generateNextUrl(
+    queryParams: PlatformPostQueryDto,
+    hasMore: boolean,
+    cursor?: string,
+  ): string | null {
+    if (!hasMore) {
+      return null;
+    }
+
     const url = new URL(
       `${this.request.protocol}://${this.request.get('host')}${this.request.path}`,
     );
 
-    if (queryParams.cursor) {
-      url.searchParams.set('cursor', queryParams.cursor);
+    if (cursor) {
+      url.searchParams.set('cursor', cursor);
     }
 
     url.searchParams.set('limit', String(queryParams.limit));
+
+    if (queryParams.external_post_id) {
+      url.searchParams.set(
+        'external_post_id',
+        queryParams.external_post_id.join(','),
+      );
+    }
+
+    if (queryParams.platform_post_id) {
+      url.searchParams.set(
+        'platform_post_id',
+        queryParams.platform_post_id.join(','),
+      );
+    }
+
+    if (queryParams.social_post_id) {
+      url.searchParams.set(
+        'social_post_id',
+        queryParams.social_post_id.join(','),
+      );
+    }
 
     return url.toString();
   }
@@ -269,7 +298,11 @@ export class SocialAccountFeedsService {
       meta: {
         cursor: accountPostsResult.cursor || '',
         limit: queryParams.limit,
-        next: `?cursor=${accountPostsResult.cursor || ''}`,
+        next: this.generateNextUrl(
+          queryParams,
+          accountPostsResult.has_more,
+          accountPostsResult.cursor,
+        ),
         has_more: accountPostsResult.has_more,
       },
     };
