@@ -273,7 +273,6 @@ export class SocialAccountFeedsService {
       console.log('refreshing token');
       const updatedAccount =
         await platformService.refreshAccessToken(socialAccount);
-      console.log(updatedAccount);
 
       if (updatedAccount) {
         await this.supabaseService.supabaseClient
