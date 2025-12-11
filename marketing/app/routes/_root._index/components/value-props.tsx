@@ -1,4 +1,3 @@
-import { cva } from "class-variance-authority";
 import {
   ChartPie,
   NewspaperIcon,
