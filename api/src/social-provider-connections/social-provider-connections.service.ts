@@ -8,7 +8,7 @@ import { SocialProviderAppCredentialsDto } from '../social-provider-app-credenti
 import { generateAuthUrl } from './helper/auth-url.helper';
 import { ConfigService } from '@nestjs/config';
 import { AuthUrlProviderData } from './dto/create-provider-auth-url.dto';
-import { DeleteEntityResponseDto } from '../lib/global.dto';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { UpdateSocialAccountDto } from './dto/update-social-account.dto';
 import {
   CreateSocialAccountDto,
@@ -111,7 +111,7 @@ export class SocialAccountsService {
           values.push(username);
           break;
       }
-      query.in('username', values);
+      query.in('social_provider_user_name', values);
     }
 
     query.order('created_at', { ascending: false });
@@ -189,11 +189,15 @@ export class SocialAccountsService {
     appCredentials,
     providerData,
     externalId,
+    redirectUrlOverride,
+    permissions,
   }: {
     projectId: string;
     appCredentials: SocialProviderAppCredentialsDto;
     providerData: AuthUrlProviderData | null | undefined;
     externalId: string | undefined;
+    redirectUrlOverride: string | undefined | null;
+    permissions: string[];
   }): Promise<string | undefined> {
     const project = await this.supabaseService.supabaseClient
       .from('projects')
@@ -210,6 +214,8 @@ export class SocialAccountsService {
       supabaseService: this.supabaseService,
       providerData,
       externalId,
+      redirectUrlOverride,
+      permissions,
     });
 
     return authUrl;

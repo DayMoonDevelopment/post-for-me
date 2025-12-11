@@ -12,6 +12,8 @@ import type { SupabaseContext } from "../supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@post-for-me/db";
 import { customerHasActiveSubscriptions } from "../customer-has-active-subscriptions.request";
+import { stripe } from "../stripe";
+import { getSubscriptionPlanInfo } from "../get-subscription-plan-info";
 
 interface DashboardKeyContext {
   apiKey: string | null;
@@ -27,7 +29,7 @@ async function getTemporaryApiKey(
   teamId: string,
   projectId: string,
   cookieHeader: string,
-  supabase: SupabaseClient<Database>
+  supabase: SupabaseClient<Database>,
 ): Promise<DashboardApiKeyResponse> {
   const cookieName = `${TMP_API_KEY_COOKIE_PREFIX}_${projectId}`;
   const apiKeyCookie = createCookie(cookieName);
@@ -55,31 +57,67 @@ async function getTemporaryApiKey(
   }
 
   const hasActiveSubscription = await customerHasActiveSubscriptions(
-    team.data.stripe_customer_id
+    team.data.stripe_customer_id,
   );
 
   if (!hasActiveSubscription) {
     return { apiKey: null, error: "no active subscription" };
   }
 
-  const apiKey = await unkey.keys.create({
-    apiId: UNKEY_API_ID,
-    prefix: "pfm_tmp",
-    name: "TMP API Key",
-    externalId: projectId,
-    meta: {
-      project_id: projectId,
-      team_id: teamId,
-      created_by: currentUser.data.user.id,
-    },
-    enabled: true,
-    recoverable: false,
-    environment: "live",
-    expires: Date.now() + 24 * 60 * 60 * 1000,
-  });
+  // Get plan info to add to metadata
+  const planMetadata: Record<string, string> = {};
+  if (team.data.stripe_customer_id) {
+    try {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: team.data.stripe_customer_id,
+        status: "active",
+        limit: 1,
+      });
 
-  if (apiKey.error || !apiKey.result) {
-    return { apiKey: null, error: apiKey.error.message };
+      if (subscriptions.data.length > 0) {
+        const planInfo = getSubscriptionPlanInfo(subscriptions.data[0]);
+        if (planInfo.productId) {
+          planMetadata.plan_product_id = planInfo.productId;
+        }
+        if (planInfo.planName) {
+          planMetadata.plan_name = planInfo.planName;
+        }
+        if (planInfo.postLimit) {
+          planMetadata.plan_post_limit = planInfo.postLimit.toString();
+        }
+        planMetadata.plan_type = planInfo.isNewPricing
+          ? "new_pricing"
+          : planInfo.isLegacy
+            ? "legacy"
+            : "unknown";
+      }
+    } catch (error) {
+      console.error("Error fetching plan info for temporary API key metadata:", error);
+      // Continue without plan metadata
+    }
+  }
+
+  let key: string | null = null;
+  try {
+    const apiKey = await unkey.keys.createKey({
+      apiId: UNKEY_API_ID,
+      prefix: "pfm_tmp",
+      name: "TMP API Key",
+      externalId: projectId,
+      meta: {
+        project_id: projectId,
+        team_id: teamId,
+        created_by: currentUser.data.user.id,
+        ...planMetadata,
+      },
+      enabled: true,
+      recoverable: false,
+      expires: Date.now() + 24 * 60 * 60 * 1000,
+    });
+
+    key = apiKey.data.key;
+  } catch (error) {
+    return { apiKey: null, error: (error as { message?: string })?.message };
   }
 
   const newSession = createCookie(cookieName, {
@@ -88,7 +126,7 @@ async function getTemporaryApiKey(
   });
 
   return {
-    apiKey: apiKey.result.key,
+    apiKey: key,
     cookie: newSession,
   };
 } /**
@@ -111,15 +149,15 @@ export function withDashboardKey<
   THandler extends (
     args: (LoaderFunctionArgs | ActionFunctionArgs) &
       DashboardKeyContext &
-      SupabaseContext
+      SupabaseContext,
   ) => any,
 >(
-  handler: THandler
+  handler: THandler,
 ): THandler extends (args: any) => infer R
   ? (args: (LoaderFunctionArgs | ActionFunctionArgs) & SupabaseContext) => R
   : never {
   return async function (
-    args: (LoaderFunctionArgs | ActionFunctionArgs) & SupabaseContext
+    args: (LoaderFunctionArgs | ActionFunctionArgs) & SupabaseContext,
   ) {
     const { params, supabase } = args;
 
@@ -137,7 +175,7 @@ export function withDashboardKey<
       teamId,
       projectId,
       args.request.headers.get("cookie") || "",
-      supabase
+      supabase,
     );
 
     const res = await handler({ ...args, apiKey: apiKeyResult.apiKey });

@@ -4,7 +4,7 @@ import { WebhookDto } from './dto/webhook.dto';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';
 import { WebhookQueryDto } from './dto/webhook-query.dto';
-import { DeleteEntityResponseDto } from '../lib/global.dto';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { Database } from '@post-for-me/db';
 import { randomUUID } from 'crypto';
 
@@ -224,6 +224,7 @@ export class WebhooksService {
             webhook_id: id,
             type: event as WebhookEventType,
           })),
+          { onConflict: 'webhook_id,type' },
         );
 
       if (createdEventTypes.error) {

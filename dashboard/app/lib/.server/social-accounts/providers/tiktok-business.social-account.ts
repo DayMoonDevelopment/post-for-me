@@ -37,12 +37,12 @@ export async function getTikTokBusinessSocialProviderConnection({
     const tokenResponseData = await tokenResponse.json();
 
     const userInfoResponse = await fetch(
-      `https://business-api.tiktok.com/open_api/v1.3/business/get/?business_id=${tokenResponseData.data.open_id}&fields=["display_name", "profile_image"]`,
+      `https://business-api.tiktok.com/open_api/v1.3/business/get/?business_id=${tokenResponseData.data.open_id}&fields=["display_name", "profile_image", "username"]`,
       {
         headers: {
           "Access-Token": `${tokenResponseData.data.access_token}`,
         },
-      }
+      },
     );
     const userInfoResponseData = await userInfoResponse.json();
 
@@ -51,16 +51,18 @@ export async function getTikTokBusinessSocialProviderConnection({
 
     return [
       {
-        social_provider_user_name: userInfoResponseData?.data?.display_name,
+        social_provider_user_name:
+          userInfoResponseData?.data?.username ||
+          userInfoResponseData?.data?.display_name,
         social_provider_user_id: tokenResponseData.data.open_id,
         social_provider_photo_url: publicProfilePhotoUrl,
         access_token: tokenResponseData.data.access_token,
         refresh_token: tokenResponseData.data.refresh_token,
         access_token_expires_at: new Date(
-          Date.now() + tokenResponseData.data.expires_in * 1000
+          Date.now() + tokenResponseData.data.expires_in * 1000,
         ),
         refresh_token_expires_at: new Date(
-          Date.now() + tokenResponseData.data.refresh_token_expires_in * 1000
+          Date.now() + tokenResponseData.data.refresh_token_expires_in * 1000,
         ),
       },
     ];

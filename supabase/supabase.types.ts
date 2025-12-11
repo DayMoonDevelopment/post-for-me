@@ -491,6 +491,38 @@ export type Database = {
           },
         ]
       }
+      social_provider_connection_pagination_data: {
+        Row: {
+          created_at: string | null
+          id: string
+          metadata: Json
+          provider_connection_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metadata: Json
+          provider_connection_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json
+          provider_connection_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_provider_connection_paginati_provider_connection_id_fkey"
+            columns: ["provider_connection_id"]
+            isOneToOne: false
+            referencedRelation: "social_provider_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_provider_connections: {
         Row: {
           access_token: string | null

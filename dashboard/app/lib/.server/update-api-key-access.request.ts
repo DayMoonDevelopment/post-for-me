@@ -13,14 +13,14 @@ type UpdateAPIKeyAccessParams = {
 
 export async function updateAPIKeyAccess(
   params: UpdateAPIKeyAccessParams,
-  supabaseServiceRole: SupabaseClient<Database>
+  supabaseServiceRole: SupabaseClient<Database>,
 ) {
   console.log(
     `${params.enabled ? "Enabling" : "Disabling"} API keys for ${
       params.stripeCustomerId
         ? `customer ${params.stripeCustomerId}`
         : `team ${params.teamId}`
-    }`
+    }`,
   );
 
   let hasSystemCredentialsAddon = false;
@@ -37,14 +37,14 @@ export async function updateAPIKeyAccess(
     if (_team.error || !_team.data) {
       console.error(
         `Failed to find team for customer ${params.stripeCustomerId}:`,
-        _team.error
+        _team.error,
       );
       return;
     }
     team = _team.data;
 
     hasSystemCredentialsAddon = await customerHasSubscriptionSystemCredsAddon(
-      params.stripeCustomerId
+      params.stripeCustomerId,
     );
   } else {
     team = { id: params.teamId };
@@ -64,14 +64,14 @@ export async function updateAPIKeyAccess(
   if (projects.error) {
     console.error(
       `Failed to find projects for team ${team.id}:`,
-      projects.error
+      projects.error,
     );
     return;
   }
 
   if (!projects.data || projects.data.length === 0) {
     console.log(
-      `No projects found for team ${team.id}, skipping API key updates`
+      `No projects found for team ${team.id}, skipping API key updates`,
     );
     return;
   }
@@ -95,24 +95,16 @@ export async function updateAPIKeyAccess(
           revalidateKeysCache: true,
         });
 
-        if (apiKeys.error) {
-          console.error(`Failed to list keys for project ${project.id}`, {
-            projectId: project.id,
-            cursor,
-          });
-          break;
-        }
-
-        if (!apiKeys.result || !apiKeys.result.keys.length) {
+        if (!apiKeys.data || !apiKeys.data.length) {
           console.error(
-            `No additional API keys found for project ${project.id}`
+            `No additional API keys found for project ${project.id}`,
           );
           break;
         }
 
         // Process keys in batches of 10
         const batchSize = 10;
-        const allKeys = apiKeys.result.keys;
+        const allKeys = apiKeys.data;
         const totalKeys = allKeys.length;
 
         for (let i = 0; i < totalKeys; i += batchSize) {
@@ -120,20 +112,20 @@ export async function updateAPIKeyAccess(
           const batchLength = currentBatch.length;
 
           const updatePromises = currentBatch.map((key) =>
-            unkey.keys.update({
-              keyId: key.id,
+            unkey.keys.updateKey({
+              keyId: key.keyId,
               enabled: params.enabled,
-            })
+            }),
           );
 
           await Promise.all(updatePromises);
           console.log(
-            `Updated batch of ${batchLength} keys for project ${project.id}`
+            `Updated batch of ${batchLength} keys for project ${project.id}`,
           );
         }
 
-        cursor = apiKeys.result.cursor;
-        hasMore = cursor !== null && cursor !== undefined;
+        cursor = apiKeys.pagination?.cursor;
+        hasMore = apiKeys.pagination?.hasMore || false;
       }
     } catch (error) {
       console.error(`Error processing project ${project.id}:`, error);
@@ -155,24 +147,16 @@ export async function updateAPIKeyAccess(
           revalidateKeysCache: true,
         });
 
-        if (apiKeys.error) {
-          console.error(`Failed to list keys for project ${project.id}`, {
-            projectId: project.id,
-            cursor,
-          });
-          break;
-        }
-
-        if (!apiKeys.result || !apiKeys.result.keys.length) {
+        if (!apiKeys.data || !apiKeys.data.length) {
           console.error(
-            `No additional API keys found for project ${project.id}`
+            `No additional API keys found for project ${project.id}`,
           );
           break;
         }
 
         // Process keys in batches of 10
         const batchSize = 10;
-        const allKeys = apiKeys.result.keys;
+        const allKeys = apiKeys.data;
         const totalKeys = allKeys.length;
 
         for (let i = 0; i < totalKeys; i += batchSize) {
@@ -180,20 +164,20 @@ export async function updateAPIKeyAccess(
           const batchLength = currentBatch.length;
 
           const updatePromises = currentBatch.map((key) =>
-            unkey.keys.update({
-              keyId: key.id,
+            unkey.keys.updateKey({
+              keyId: key.keyId,
               enabled: params.enabled && hasSystemCredentialsAddon,
-            })
+            }),
           );
 
           await Promise.all(updatePromises);
           console.log(
-            `Updated batch of ${batchLength} keys for project ${project.id}`
+            `Updated batch of ${batchLength} keys for project ${project.id}`,
           );
         }
 
-        cursor = apiKeys.result.cursor;
-        hasMore = cursor !== null && cursor !== undefined;
+        cursor = apiKeys.pagination?.cursor;
+        hasMore = apiKeys.pagination?.hasMore || false;
       }
     } catch (error) {
       console.error(`Error processing project ${project.id}:`, error);

@@ -7,6 +7,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronDown } from "lucide-react";
+import { useNavigate, useParams } from "react-router";
 
 import { Button } from "~/ui/button";
 import {
@@ -41,6 +42,8 @@ interface DataTableProps {
 }
 
 export function SocialConnectionsDataTable({ data }: DataTableProps) {
+  const navigate = useNavigate();
+  const params = useParams();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -141,6 +144,12 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() ? "selected" : null}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => {
+                    navigate(
+                      `/${params.teamId}/${params.projectId}/accounts/${row.original.id}`
+                    );
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
