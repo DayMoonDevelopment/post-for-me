@@ -12,6 +12,8 @@ import type { SupabaseContext } from "../supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@post-for-me/db";
 import { customerHasActiveSubscriptions } from "../customer-has-active-subscriptions.request";
+import { stripe } from "../stripe";
+import { getSubscriptionPlanInfo } from "../get-subscription-plan-info";
 
 interface DashboardKeyContext {
   apiKey: string | null;
@@ -62,6 +64,39 @@ async function getTemporaryApiKey(
     return { apiKey: null, error: "no active subscription" };
   }
 
+  // Get plan info to add to metadata
+  const planMetadata: Record<string, string> = {};
+  if (team.data.stripe_customer_id) {
+    try {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: team.data.stripe_customer_id,
+        status: "active",
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        const planInfo = getSubscriptionPlanInfo(subscriptions.data[0]);
+        if (planInfo.productId) {
+          planMetadata.plan_product_id = planInfo.productId;
+        }
+        if (planInfo.planName) {
+          planMetadata.plan_name = planInfo.planName;
+        }
+        if (planInfo.postLimit) {
+          planMetadata.plan_post_limit = planInfo.postLimit.toString();
+        }
+        planMetadata.plan_type = planInfo.isNewPricing
+          ? "new_pricing"
+          : planInfo.isLegacy
+            ? "legacy"
+            : "unknown";
+      }
+    } catch (error) {
+      console.error("Error fetching plan info for temporary API key metadata:", error);
+      // Continue without plan metadata
+    }
+  }
+
   let key: string | null = null;
   try {
     const apiKey = await unkey.keys.createKey({
@@ -73,6 +108,7 @@ async function getTemporaryApiKey(
         project_id: projectId,
         team_id: teamId,
         created_by: currentUser.data.user.id,
+        ...planMetadata,
       },
       enabled: true,
       recoverable: false,
