@@ -42,8 +42,9 @@ export function Component() {
             <div className="space-y-2">
               <div className="justify-between items-center">
                 <span className="text-muted-foreground">Total Usage:</span>{" "}
-                <span className="font-bold">
-                  {usage.toLocaleString()}
+                <span className="font-bold">{usage.toLocaleString()}</span>
+                <span>
+                  {" "}
                   {planInfo?.postLimit
                     ? ` / ${planInfo.postLimit.toLocaleString()}`
                     : ""}{" "}
