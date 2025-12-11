@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { stripe } from "~/lib/.server/stripe";
 import { withSupabase } from "~/lib/.server/supabase";
 import { STRIPE_METER_EVENT_ID } from "~/lib/.server/stripe.constants";
+import { getSubscriptionPlanInfo } from "~/lib/.server/get-subscription-plan-info";
 
 export const loader = withSupabase(async ({ supabase, params }) => {
   const { teamId } = params;
@@ -22,6 +23,7 @@ export const loader = withSupabase(async ({ supabase, params }) => {
 
   let usage: number | null = null;
   let subscriptionPeriod: { start: Date; end: Date } | null = null;
+  let planInfo = null;
 
   if (team.data.stripe_customer_id && STRIPE_METER_EVENT_ID) {
     try {
@@ -30,11 +32,15 @@ export const loader = withSupabase(async ({ supabase, params }) => {
         customer: team.data.stripe_customer_id,
         status: "active",
         limit: 1,
+        expand: ["data.items.data.price"],
       });
 
       const subscription = subscriptions.data[0];
 
       if (subscription) {
+        // Get plan info to determine post limit
+        planInfo = getSubscriptionPlanInfo(subscription);
+
         const item = subscription.items.data[0];
         const startTime = item.current_period_start;
         const endTime = Math.floor(Date.now() / 1000);
@@ -74,5 +80,6 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     usage,
     subscriptionPeriod,
     hasStripeCustomer: !!team.data.stripe_customer_id,
+    planInfo,
   };
 });

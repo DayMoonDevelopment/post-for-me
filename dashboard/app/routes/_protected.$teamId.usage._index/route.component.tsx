@@ -11,7 +11,7 @@ import {
 import type { loader } from "./route.loader";
 
 export function Component() {
-  const { team, usage, subscriptionPeriod, hasStripeCustomer } =
+  const { team, usage, subscriptionPeriod, hasStripeCustomer, planInfo } =
     useLoaderData<typeof loader>();
 
   return (
@@ -43,7 +43,11 @@ export function Component() {
               <div className="justify-between items-center">
                 <span className="text-muted-foreground">Total Usage:</span>{" "}
                 <span className="font-bold">
-                  {usage.toLocaleString()} posts
+                  {usage.toLocaleString()}
+                  {planInfo?.postLimit
+                    ? ` / ${planInfo.postLimit.toLocaleString()}`
+                    : ""}{" "}
+                  posts
                 </span>
               </div>
             </div>
