@@ -20,6 +20,7 @@ import {
 } from "~/ui/select";
 
 import { AddonConfirmationDialog } from "./_addon-confirmation-dialog";
+import { UpgradeConfirmationDialog } from "./_upgrade-confirmation-dialog";
 
 import type { loader } from "./route.loader";
 
@@ -38,6 +39,7 @@ export function Component() {
   } = useLoaderData<typeof loader>();
 
   const [showAddonDialog, setShowAddonDialog] = useState(false);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [selectedTierIndex, setSelectedTierIndex] = useState(0);
 
   const selectedTier = pricingTiers[selectedTierIndex];
@@ -269,11 +271,16 @@ export function Component() {
             </div>
 
             <div className="pt-4">
-              {portalUrl ? (
+              {isLegacyPlan ? (
+                <Button
+                  className="w-full"
+                  onClick={() => setShowUpgradeDialog(true)}
+                >
+                  Upgrade Plan
+                </Button>
+              ) : portalUrl ? (
                 <Button className="w-full" asChild>
-                  <a href={portalUrl}>
-                    {isLegacyPlan ? "Upgrade Plan" : "Select Plan"}
-                  </a>
+                  <a href={portalUrl}>Select Plan</a>
                 </Button>
               ) : (
                 <Form method="post">
@@ -332,6 +339,14 @@ export function Component() {
         isOpen={showAddonDialog}
         onClose={() => setShowAddonDialog(false)}
         hasAddon={hasCredsAddon}
+      />
+
+      <UpgradeConfirmationDialog
+        isOpen={showUpgradeDialog}
+        onClose={() => setShowUpgradeDialog(false)}
+        tierIndex={selectedTierIndex}
+        tierPosts={selectedTier?.posts || 0}
+        tierPrice={selectedTier?.price || 0}
       />
     </div>
   );
