@@ -38,12 +38,12 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
 
   const team = await supabase
     .from("teams")
-    .select("id, name, stripe_customer_id")
+    .select("id, name, stripe_customer_id, billing_email")
     .eq("id", teamId)
     .single();
 
-  if (team.error || !team.data.stripe_customer_id) {
-    return new Response("Team not found or no billing setup", {
+  if (team.error) {
+    return new Response("Team not found", {
       status: 404,
     });
   }
@@ -53,6 +53,10 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
 
   // Handle upgrade from legacy plan
   if (action === "upgrade_from_legacy") {
+    if (!team.data.stripe_customer_id) {
+      return new Response("No billing setup found", { status: 400 });
+    }
+
     const upgradeResult = upgradeActionSchema.safeParse({
       action: formData.get("action"),
       tierIndex: formData.get("tierIndex"),
@@ -180,11 +184,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
     try {
       const checkoutSession = await stripe.checkout.sessions.create({
         customer: team.data.stripe_customer_id || undefined,
-        customer_email: team.data.stripe_customer_id ? undefined : (await supabase
-          .from("teams")
-          .select("billing_email")
-          .eq("id", teamId)
-          .single()).data?.billing_email || undefined,
+        customer_email: team.data.stripe_customer_id ? undefined : team.data.billing_email || undefined,
         mode: "subscription",
         line_items: [
           {
@@ -213,6 +213,10 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
   }
 
   // Handle addon actions
+  if (!team.data.stripe_customer_id) {
+    return new Response("No billing setup found", { status: 400 });
+  }
+
   const result = addonActionSchema.safeParse({
     action: formData.get("action"),
   });

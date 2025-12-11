@@ -1,6 +1,11 @@
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "~/ui/sidebar";
 
-import { PeopleIcon, SquareGridCircleIcon, PencilLineIcon } from "icons";
+import {
+  PeopleIcon,
+  SquareGridCircleIcon,
+  PencilLineIcon,
+  BookIcon,
+} from "icons";
 import { Link, useParams } from "react-router";
 
 const items = [
@@ -18,6 +23,11 @@ const items = [
     title: "Team Details",
     url: "edit",
     icon: PencilLineIcon,
+  },
+  {
+    title: "Usage",
+    url: "usage",
+    icon: BookIcon,
   },
 ];
 
