@@ -30,7 +30,6 @@ export function Component() {
     hasActiveSubscription,
     hasCredsAddon,
     portalUrl,
-    checkoutUrl,
     hasCredsAccess,
     upcomingInvoice,
     planInfo,
@@ -52,12 +51,13 @@ export function Component() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Subscription Status
-              {hasActiveSubscription ? (
+      {/* Only show subscription status card if there is an active subscription */}
+      {hasActiveSubscription ? (
+        <div className={`gap-6 ${isLegacyPlan ? "grid md:grid-cols-2" : ""}`}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Subscription Status
                 <Badge
                   variant="default"
                   className="bg-green-100 text-green-800"
@@ -65,25 +65,16 @@ export function Component() {
                   <CheckmarkSmallIcon className="w-3 h-3 mr-1" />
                   Active
                 </Badge>
-              ) : (
-                <Badge variant="secondary" className="bg-red-100 text-red-800">
-                  <CrossSmallIcon className="w-3 h-3 mr-1" />
-                  Inactive
-                </Badge>
-              )}
-            </CardTitle>
-            <CardDescription>
-              {hasActiveSubscription
-                ? "Your subscription is active and ready to use"
-                : "Set up billing to start using the platform"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {subscription && hasActiveSubscription ? (
+              </CardTitle>
+              <CardDescription>
+                Your subscription is active and ready to use
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Status:</span>
-                  <span className="capitalize">{subscription.status}</span>
+                  <span className="capitalize">{subscription?.status}</span>
                 </div>
 
                 {planInfo ? (
@@ -123,65 +114,55 @@ export function Component() {
                   <span>{team.billing_email || "Not set"}</span>
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No active subscription found. Set up billing to get started.
-              </p>
-            )}
 
-            <div className="pt-2">
-              {hasActiveSubscription && portalUrl ? (
-                <Button asChild className="w-full">
-                  <a href={portalUrl}>Manage Subscription</a>
-                </Button>
-              ) : checkoutUrl ? (
-                <Button asChild className="w-full">
-                  <a href={checkoutUrl}>Set Up Billing</a>
-                </Button>
-              ) : (
-                <Button disabled className="w-full">
-                  Unable to load billing
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Only show addon card for legacy plans */}
-        {isLegacyPlan ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                System Credentials Addon
-                {hasCredsAddon ? (
-                  <Badge
-                    variant="default"
-                    className="bg-green-100 text-green-800"
-                  >
-                    <CheckmarkSmallIcon className="w-3 h-3 mr-1" />
-                    Enabled
-                  </Badge>
+              <div className="pt-2">
+                {portalUrl ? (
+                  <Button asChild className="w-full">
+                    <a href={portalUrl}>Manage Subscription</a>
+                  </Button>
                 ) : (
-                  <Badge variant="secondary">
-                    <CrossSmallIcon className="w-3 h-3 mr-1" />
-                    {hasCredsAccess ? "Removed" : "Not enabled"}
-                  </Badge>
+                  <Button disabled className="w-full">
+                    Unable to load billing
+                  </Button>
                 )}
-              </CardTitle>
-              <CardDescription>
-                Use our managed social media credentials for posting
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  {hasCredsAddon
-                    ? "You can create system projects that use our managed credentials for social media platforms."
-                    : hasCredsAccess
-                      ? "You can create system projects that use our managed credentials for social media platforms, for the remainder of your subscription term"
-                      : "Enable this addon for $10/month to create system projects without managing your own API credentials."}
-                </p>
-                {subscription && hasActiveSubscription ? (
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Only show addon card for legacy plans */}
+          {isLegacyPlan ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  System Credentials Addon
+                  {hasCredsAddon ? (
+                    <Badge
+                      variant="default"
+                      className="bg-green-100 text-green-800"
+                    >
+                      <CheckmarkSmallIcon className="w-3 h-3 mr-1" />
+                      Enabled
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      <CrossSmallIcon className="w-3 h-3 mr-1" />
+                      {hasCredsAccess ? "Removed" : "Not enabled"}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Use our managed social media credentials for posting
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {hasCredsAddon
+                      ? "You can create system projects that use our managed credentials for social media platforms."
+                      : hasCredsAccess
+                        ? "You can create system projects that use our managed credentials for social media platforms, for the remainder of your subscription term"
+                        : "Enable this addon for $10/month to create system projects without managing your own API credentials."}
+                  </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Status:</span>
                     <span className="capitalize">
@@ -192,32 +173,24 @@ export function Component() {
                           : "Inactive"}
                     </span>
                   </div>
-                ) : null}
-              </div>
+                </div>
 
-              <div className="pt-2 space-y-2">
-                {hasActiveSubscription ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => setShowAddonDialog(true)}
-                    >
-                      {hasCredsAddon
-                        ? "Disable System Credentials"
-                        : "Enable System Credentials"}
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="outline" disabled className="w-full">
-                    Requires active subscription
+                <div className="pt-2 space-y-2">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowAddonDialog(true)}
+                  >
+                    {hasCredsAddon
+                      ? "Disable System Credentials"
+                      : "Enable System Credentials"}
                   </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-      </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Show pricing tiers for legacy plans or no subscription */}
       {(isLegacyPlan || !hasActiveSubscription) &&
