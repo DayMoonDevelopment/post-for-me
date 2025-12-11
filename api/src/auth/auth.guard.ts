@@ -17,6 +17,7 @@ import type { RequestUser } from './user.interface';
 declare module 'express' {
   interface Request {
     user?: RequestUser; // User object attached by the guard
+    planType?: string; // Plan type from Unkey metadata
   }
 }
 
@@ -76,12 +77,26 @@ export class AuthGuard implements CanActivate {
       const projectId = validationResult.projectId!; // Guaranteed to be a string here
       const keyId = validationResult.keyId!; // Guaranteed to be a string here
       const teamId = validationResult.teamId; //Guranteed to be a string here
+      const planType = validationResult.planType; // Optional plan type from metadata
+
+      // Check if this is a request to social-account-feeds endpoint
+      const isSocialAccountFeedsEndpoint = request.path.includes(
+        '/social-account-feeds',
+      );
+
+      // If accessing social-account-feeds, plan_type must be "new_pricing"
+      if (isSocialAccountFeedsEndpoint && planType !== 'new_pricing') {
+        throw new UnauthorizedException(
+          'Access to social account feeds requires new_pricing plan.',
+        );
+      }
 
       // Set the userId in the SupabaseService for subsequent use *within this request scope*
       this.supabaseService.setUser(userId);
 
       // Attach the guaranteed user object to the request
       request.user = { id: userId, projectId, apiKey: keyId, teamId };
+      request.planType = planType;
 
       return true; // Access granted
     } catch (error: unknown) {
@@ -129,6 +144,7 @@ export class AuthGuard implements CanActivate {
     projectId?: string;
     keyId?: string;
     teamId?: string;
+    planType?: string;
   }> {
     try {
       const response = await this.unkey.keys.verifyKey({
@@ -143,6 +159,7 @@ export class AuthGuard implements CanActivate {
       let userId: string | undefined = undefined;
       let projectId: string | undefined = undefined;
       let teamId: string | undefined = undefined;
+      let planType: string | undefined = undefined;
 
       if (response.data.meta?.created_by) {
         userId = response.data.meta?.created_by as string;
@@ -150,6 +167,10 @@ export class AuthGuard implements CanActivate {
 
       if (response.data.meta?.team_id) {
         teamId = response.data.meta?.team_id as string;
+      }
+
+      if (response.data.meta?.plan_type) {
+        planType = response.data.meta?.plan_type as string;
       }
 
       if (response?.data.identity?.externalId) {
@@ -174,6 +195,7 @@ export class AuthGuard implements CanActivate {
         projectId,
         keyId: response.data.keyId,
         teamId,
+        planType,
       };
     } catch (error) {
       console.error(
