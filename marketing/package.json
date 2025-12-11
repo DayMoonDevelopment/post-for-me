@@ -28,6 +28,7 @@
     "@react-router/fs-routes": "^7.6.2",
     "@react-router/node": "^7.5.3",
     "@react-router/serve": "^7.5.3",
+    "@shikijs/transformers": "^3.19.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
     "class-variance-authority": "^0.7.1",

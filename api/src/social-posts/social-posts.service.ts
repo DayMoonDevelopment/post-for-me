@@ -684,14 +684,14 @@ export class SocialPostsService {
       url: string;
       thumbnail_url: string | null;
       thumbnail_timestamp_ms: number | null;
-      // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+
       provider: Provider | null;
       provider_connection_id: string | null;
       tags: Json;
     }>;
     social_post_configurations: Array<{
       caption: string | null;
-      // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+
       provider: Provider | null;
       provider_connection_id: string | null;
       provider_data: Json;
