@@ -58,12 +58,12 @@ export function UpgradeConfirmationDialog({
                 current billing period, and your new plan will take effect
                 immediately.
               </p>
-              {tierPosts >= 1000 && (
+              {tierPosts >= 1000 ? (
                 <p className="text-sm">
                   The new Pro plan includes system credentials at no additional
                   cost.
                 </p>
-              )}
+              ) : null}
             </div>
           </DialogDescription>
         </DialogHeader>
