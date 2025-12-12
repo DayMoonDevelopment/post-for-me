@@ -14,15 +14,11 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       },
       {
         q: "How does Post for Me compare to other social media APIs?",
-        a: "Unlike competitors, we offer a single API for 9 platforms, no arbitrary rate limits (only platform-enforced ones), no account caps, and pricing based on your actual posting volume.",
+        a: "Unlike competitors, we offer a single API for 9 platforms, no arbitrary rate limits (only platform-enforced ones), no account caps, and pricing based on your actual posting volume. Plus you can bring your own credentials for a completely white labelled experience",
       },
       {
         q: "Why should I choose Post for Me over direct platform APIs?",
         a: "We handle OAuth, token refresh, media processing, and platform-specific quirks, reducing integration time by weeks while giving you full access to each platform’s features.",
-      },
-      {
-        q: "How long has Post for Me been available?",
-        a: "Launched by Day Moon Development, we’ve been helping developers integrate social media since 2025.",
       },
     ],
   },
@@ -43,7 +39,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       },
       {
         q: "What is enterprise pricing?",
-        a: "For volumes above 300,000 posts/month, contact us at [postforme@daymoon.dev](mailto:postforme@daymoon.dev) for custom pricing and dedicated support.",
+        a: "For volumes above 200,000 posts/month, contact us at [postforme@daymoon.dev](mailto:postforme@daymoon.dev) for custom pricing and dedicated support.",
       },
       {
         q: "Are there any hidden fees?",
@@ -64,7 +60,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
     faq: [
       {
         q: "How does Post for Me handle user data security?",
-        a: "We store OAuth access tokens securely in our database, leveraging the security of providers like Supabase, Render, Trigger, and Vercel. We don’t store social media usernames or passwords.",
+        a: "We store OAuth access tokens securely in our database, leveraging the security of providers like Supabase, Render, Trigger, and Vercel.",
       },
       {
         q: "Can users disconnect their social media accounts?",
@@ -89,7 +85,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
     faq: [
       {
         q: "Which platforms does Post for Me support?",
-        a: "TikTok, Facebook, Instagram, X, LinkedIn, Pinterest, Bluesky, Threads, and YouTube.",
+        a: "TikTok, TikTok (Business), Facebook, Instagram, X, LinkedIn, Pinterest, Bluesky, Threads, and YouTube.",
       },
       {
         q: "Can I use my own social media developer credentials?",
@@ -97,7 +93,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       },
       {
         q: "What SDKs does Post for Me offer?",
-        a: "We provide TypeScript, Python, Go, Ruby, and Kotlin SDKs. Find setup guides on our [GitHub repos](https://github.com/DayMoonDevelopment).",
+        a: "We provide TypeScript, Python, Go, and Ruby SDKs. Find setup guides on our [GitHub repos](https://github.com/DayMoonDevelopment).",
       },
       {
         q: "Does Post for Me support webhooks?",
@@ -155,7 +151,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       },
       {
         q: "How do I reset my API keys?",
-        a: "Generate new keys in the admin dashboard; old keys will be invalidated.",
+        a: "Generate new keys in the admin dashboard; delete any keys you no longer need.",
       },
       {
         q: "Can I cancel my account?",
@@ -196,10 +192,6 @@ export const faq: { title: string; faq: FAQType[] }[] = [
         a: "No specific requirements—just use our REST API, SDKs, or MCP server. The admin dashboard works on any modern browser.",
       },
       {
-        q: "What are the rate limits for Post for Me?",
-        a: "We don’t impose rate limits; only platform-specific limits apply (e.g., Instagram’s API caps).",
-      },
-      {
         q: "Which SDKs are available?",
         a: "TypeScript, Python, Go, Ruby, and Kotlin. See [GitHub](https://github.com/DayMoonDevelopment) for setup.",
       },
@@ -222,7 +214,7 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       },
       {
         q: "What if my posts fail to publish?",
-        a: "Check platform-specific errors via webhooks or contact support with logs at [postforme@daymoon.dev](mailto:postforme@daymoon.dev).",
+        a: "Check platform-specific errors via webhooks, querying post results, or contact support with logs at [postforme@daymoon.dev](mailto:postforme@daymoon.dev).",
       },
       {
         q: "Why is my media upload failing?",
@@ -231,10 +223,6 @@ export const faq: { title: string; faq: FAQType[] }[] = [
       {
         q: "How do I debug API issues?",
         a: "Review error codes in our [API docs](https://api.postforme.dev) or use SDK logs for details.",
-      },
-      {
-        q: "What if I hit a platform rate limit?",
-        a: "We notify you via webhooks; adjust posting schedules to align with platform limits.",
       },
     ],
   },

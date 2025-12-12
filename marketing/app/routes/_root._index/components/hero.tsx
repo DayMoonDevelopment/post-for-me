@@ -1,5 +1,5 @@
 import { Link, useLoaderData } from "react-router";
-import { ArrowUpRight, CirclePlay } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 import { RotatingText } from "~/components/rotating-text";
 
