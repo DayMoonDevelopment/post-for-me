@@ -1,5 +1,5 @@
 import { Link, useLoaderData } from "react-router";
-import { ArrowUpRight, CirclePlay } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 import { RotatingText } from "~/components/rotating-text";
 
@@ -63,6 +63,8 @@ export const Hero = () => {
               Get Started <ArrowUpRight className="h-5! w-5!" />
             </Link>
           </Button>
+          {/***
+
           <Button
             variant="outline"
             size="lg"
@@ -70,6 +72,8 @@ export const Hero = () => {
           >
             <CirclePlay className="h-5! w-5!" /> Watch Demo
           </Button>
+
+          */}
         </div>
       </div>
     </div>
