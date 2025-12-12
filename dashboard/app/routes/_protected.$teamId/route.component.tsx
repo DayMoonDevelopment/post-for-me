@@ -49,6 +49,30 @@ export function Component() {
               </div>
             )}
 
+            {billing.legacy ? (
+              <div className="p-4">
+                <Alert variant="informative" className="@container">
+                  <TriangleExclamationIcon />
+
+                  <div className="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
+                    <div>
+                      <AlertTitle>Upgrade to access new features.</AlertTitle>
+                      <AlertDescription>
+                        To get access to all new features including analytics,
+                        you need to upgrade to the new pricing plans.
+                      </AlertDescription>
+                    </div>
+
+                    <Button asChild className="self-center">
+                      <Link to={`/${teamId}/billing`} prefetch="render">
+                        Upgrade now
+                      </Link>
+                    </Button>
+                  </div>
+                </Alert>
+              </div>
+            ) : null}
+
             <Outlet />
           </div>
         </SidebarInset>

@@ -99,7 +99,7 @@ export function Accounts() {
                       aria-expanded={open}
                       className="w-full justify-between"
                     >
-                      {field.value?.length > 0
+                      {field.value && field.value.length > 0
                         ? `${field.value.length} account${field.value.length > 1 ? "s" : ""} selected`
                         : "Select social accounts..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -184,7 +184,7 @@ export function Accounts() {
                           <button
                             type="button"
                             onClick={() => {
-                              const newValue = field.value.filter(
+                              const newValue = (field.value || []).filter(
                                 (id) => id !== accountId
                               );
                               field.onChange(newValue);

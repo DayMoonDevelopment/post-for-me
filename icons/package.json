@@ -10,9 +10,15 @@
     "lint:fix": "eslint . --ext ts,tsx --fix"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@eslint/js": "^9.39.1",
+    "@types/bun": "latest",
+    "@types/react": "^19.2.7",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react": "^7.37.5",
+    "typescript-eslint": "^8.48.0"
   },
   "peerDependencies": {
+    "react": "^19.0.0",
     "typescript": "^5.0.0"
   }
 }

@@ -10,16 +10,17 @@
 
 ## Code Style
 
-- **Framework**: React Router v7 with TypeScript
+- **Framework**: React Router v7 with TypeScript (SSR enabled)
+- **Runtime**: Bun package manager (use `bun` commands)
 - **Imports**: Use `~/` for app imports, group external imports first
-- **Components**: PascalCase, export as named functions
+- **Components**: PascalCase, export as named functions (use `export function Component()` for routes)
 - **Files**: kebab-case for routes, camelCase for utilities
 - **Types**: Define interfaces for form data, use Zod schemas for validation
-- **Forms**: Use react-hook-form with zodResolver, custom useFormFetcher hook
-- **UI**: Radix UI components in `~/ui/`, Tailwind CSS classes
-- **Error Handling**: Use toast notifications (sonner), validate inputs
-- **Async**: Use fetcher.submit() for form submissions, fetcher.load() for data
-- **Naming**: Descriptive names, prefix unused vars with `_`
+- **Forms**: Use react-hook-form with zodResolver, custom `useFormFetcher` hook from `~/hooks/use-form`
+- **UI**: Radix UI components in `~/ui/`, Tailwind CSS v4 classes
+- **Error Handling**: Use toast notifications (sonner), validate inputs before submission
+- **Async**: Use `fetcher.submit()` for form submissions, `fetcher.load()` for data fetching
+- **Naming**: Descriptive names, prefix unused vars with `_` (ESLint enforced)
 
 ## Testing
 

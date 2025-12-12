@@ -5,7 +5,8 @@
 - `bun run build` - Build the NestJS application
 - `bun run lint` - Run ESLint with TypeScript support
 - `bun run format` - Format code with Prettier
-- `bun run test` - Run Jest tests
+- `bun run test` - Run all Jest tests
+- `bun run test <file-pattern>` - Run specific test file(s) (e.g., `bun run test social-posts`)
 - `bun run test:watch` - Run tests in watch mode
 - `bun run test:cov` - Run tests with coverage
 - `bun run test:e2e` - Run end-to-end tests

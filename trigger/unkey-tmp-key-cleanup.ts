@@ -19,6 +19,7 @@ export const unkeyTmpKeyCleanup = schedules.task({
 
     logger.info("Fetching keys from Unkey");
     let cursor: string | undefined = undefined;
+    let hasMore = true;
     do {
       const apiKeys = await unkey.apis.listKeys({
         apiId: UNKEY_API_ID,
@@ -27,20 +28,21 @@ export const unkeyTmpKeyCleanup = schedules.task({
         revalidateKeysCache: true,
       });
 
-      if (apiKeys.result) {
-        for (const key of apiKeys.result.keys) {
+      if (apiKeys.data) {
+        for (const key of apiKeys.data) {
           if (
             key.start.includes(TMP_KEY_PREFIX) &&
             key.expires &&
             key.expires < Date.now()
           ) {
-            keysToDelete.push(key.id);
+            keysToDelete.push(key.keyId);
           }
         }
 
-        cursor = apiKeys.result.cursor;
+        cursor = apiKeys.pagination?.cursor;
+        hasMore = apiKeys.pagination?.hasMore || false;
       }
-    } while (cursor);
+    } while (hasMore);
 
     if (keysToDelete.length === 0) {
       logger.info("No expired TMP keys found");
@@ -50,7 +52,7 @@ export const unkeyTmpKeyCleanup = schedules.task({
     logger.info("Expired TMP Keys", { keysToDelete });
     for (const key of keysToDelete) {
       logger.info("Deleting key", { key });
-      const result = await unkey.keys.delete({ keyId: key });
+      const result = await unkey.keys.deleteKey({ keyId: key });
       logger.info("Deleted key", { key, result });
     }
 

@@ -21,32 +21,36 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     throw new Error("User not found");
   }
 
-  const apiKeys = await unkey.apis.listKeys({
-    apiId: UNKEY_API_ID,
-    externalId: projectId,
-    limit: 100,
-    revalidateKeysCache: true,
-  });
+  try {
+    const apiKeys = await unkey.apis.listKeys({
+      apiId: UNKEY_API_ID,
+      externalId: projectId,
+      limit: 100,
+      revalidateKeysCache: true,
+    });
 
-  if (apiKeys.error || !apiKeys.result) {
-    return data({ success: false, error: apiKeys.error, keys: [] });
+    return data({
+      success: true,
+      keys:
+        apiKeys?.data
+          ?.filter((key) => !key.start.includes("pfm_tmp"))
+          ?.map((key) => ({
+            id: key.keyId,
+            name: key.name,
+            start: key.start,
+            createdAt: key.createdAt,
+            enabled: key.enabled || false,
+          }))
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          ) || [],
+    });
+  } catch (error) {
+    return data({
+      success: false,
+      error: (error as { message?: string })?.message,
+      keys: [],
+    });
   }
-
-  return data({
-    success: true,
-    keys:
-      apiKeys?.result?.keys
-        ?.filter((key) => !key.start.includes("pfm_tmp"))
-        ?.map((key) => ({
-          id: key.id,
-          name: key.name,
-          start: key.start,
-          createdAt: key.createdAt,
-          enabled: key.enabled || false,
-        }))
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        ) || [],
-  });
 });

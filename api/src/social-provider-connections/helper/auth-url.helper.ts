@@ -18,6 +18,7 @@ export async function generateAuthUrl({
   providerData,
   externalId,
   redirectUrlOverride,
+  permissions,
 }: {
   projectId: string;
   isSystem: boolean;
@@ -27,6 +28,7 @@ export async function generateAuthUrl({
   providerData: AuthUrlProviderData | null | undefined;
   externalId: string | undefined;
   redirectUrlOverride: string | undefined | null;
+  permissions: string[];
 }): Promise<string | undefined> {
   const { appId, appSecret } = appCredentials;
 
@@ -86,13 +88,29 @@ export async function generateAuthUrl({
   let authUrl: string | undefined = undefined;
   switch (appCredentials.provider) {
     case 'facebook': {
-      const scopes = [
-        'public_profile',
-        'pages_show_list',
-        'pages_read_engagement',
-        'pages_manage_posts',
-        'business_management',
-      ];
+      const scopes: string[] = [];
+
+      if (
+        providerData?.facebook?.permission_overrides &&
+        providerData?.facebook?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.facebook.permission_overrides);
+      } else {
+        scopes.push(
+          ...[
+            'public_profile',
+            'pages_show_list',
+            'pages_read_engagement',
+            'pages_manage_posts',
+            'business_management',
+          ],
+        );
+
+        if (permissions.includes('feeds')) {
+          scopes.push('read_insights');
+        }
+      }
+
       const facebookVersion =
         configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
       const authParams = new URLSearchParams([
@@ -115,13 +133,32 @@ export async function generateAuthUrl({
         key_id: authState,
         value: 'facebook',
       });
-      const scopes = [
-        'instagram_basic',
-        'instagram_content_publish',
-        'pages_show_list',
-        'public_profile',
-        'business_management',
-      ];
+
+      const scopes: string[] = [];
+
+      if (
+        providerData?.instagram?.permission_overrides &&
+        providerData?.instagram?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.instagram.permission_overrides);
+      } else {
+        scopes.push(
+          ...[
+            'instagram_basic',
+            'instagram_content_publish',
+            'pages_show_list',
+            'public_profile',
+            'business_management',
+          ],
+        );
+
+        if (permissions.includes('feeds')) {
+          scopes.push(
+            ...['pages_read_engagement', 'instagram_manage_insights'],
+          );
+        }
+      }
+
       const facebookVersion =
         configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
       const authParams = new URLSearchParams([
@@ -136,10 +173,22 @@ export async function generateAuthUrl({
       break;
     }
     case 'instagram': {
-      const scopes = [
-        'instagram_business_basic',
-        'instagram_business_content_publish',
-      ];
+      const scopes: string[] = [];
+
+      if (
+        providerData?.instagram?.permission_overrides &&
+        providerData?.instagram?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.instagram.permission_overrides);
+      } else {
+        scopes.push(
+          ...['instagram_business_basic', 'instagram_business_content_publish'],
+        );
+
+        if (permissions.includes('feeds')) {
+          scopes.push('instagram_business_manage_insights');
+        }
+      }
 
       const authParams = new URLSearchParams([
         ['client_id', appId],
@@ -197,12 +246,23 @@ export async function generateAuthUrl({
       break;
     }
     case 'tiktok': {
-      const scopes = [
-        'user.info.basic',
-        'video.list',
-        'video.upload',
-        'video.publish',
-      ];
+      const scopes: string[] = [];
+
+      if (
+        providerData?.tiktok?.permission_overrides &&
+        providerData?.tiktok?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.tiktok.permission_overrides);
+      } else {
+        scopes.push(
+          ...[
+            'user.info.basic',
+            'video.list', //also used for feed permissions
+            'video.upload',
+            'video.publish',
+          ],
+        );
+      }
 
       const authParams = new URLSearchParams([
         ['client_key', appId],
@@ -221,22 +281,33 @@ export async function generateAuthUrl({
       break;
     }
     case 'tiktok_business': {
-      const scopes = [
-        'user.info.basic',
-        'user.info.username',
-        'user.info.stats',
-        'user.info.profile',
-        'user.account.type',
-        'user.insights',
-        'video.list',
-        'video.insights',
-        'comment.list',
-        'comment.list.manage',
-        'video.publish',
-        'video.upload',
-        'biz.spark.auth',
-        'discovery.search.words',
-      ];
+      const scopes: string[] = [];
+
+      if (
+        providerData?.tiktok_business?.permission_overrides &&
+        providerData?.tiktok_business?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.tiktok_business.permission_overrides);
+      } else {
+        scopes.push(
+          ...[
+            'user.info.basic',
+            'user.info.username',
+            'user.info.stats',
+            'user.info.profile',
+            'user.account.type',
+            'user.insights',
+            'video.list',
+            'video.insights',
+            'comment.list',
+            'comment.list.manage',
+            'video.publish',
+            'video.upload',
+            'biz.spark.auth',
+            'discovery.search.words',
+          ],
+        );
+      }
 
       const authParams = new URLSearchParams([
         ['client_key', appId],
@@ -259,13 +330,27 @@ export async function generateAuthUrl({
         appSecret,
         callbackUrl,
       );
+      const scopes: string[] = [];
 
-      const scopes = [
-        'https://www.googleapis.com/auth/youtube.force-ssl',
-        'https://www.googleapis.com/auth/youtube.upload',
-        'https://www.googleapis.com/auth/youtube.readonly',
-        'https://www.googleapis.com/auth/userinfo.profile',
-      ];
+      if (
+        providerData?.youtube?.permission_overrides &&
+        providerData?.youtube?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.youtube.permission_overrides);
+      } else {
+        scopes.push(
+          ...[
+            'https://www.googleapis.com/auth/youtube.force-ssl',
+            'https://www.googleapis.com/auth/youtube.upload',
+            'https://www.googleapis.com/auth/youtube.readonly',
+            'https://www.googleapis.com/auth/userinfo.profile',
+          ],
+        );
+
+        if (permissions.includes('feeds')) {
+          scopes.push('https://www.googleapis.com/auth/yt-analytics.readonly');
+        }
+      }
 
       authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -278,13 +363,24 @@ export async function generateAuthUrl({
       break;
     }
     case 'pinterest': {
-      const scopes = [
-        'boards:read',
-        'boards:write',
-        'pins:read',
-        'pins:write',
-        'user_accounts:read',
-      ];
+      const scopes: string[] = [];
+
+      if (
+        providerData?.pinterest?.permission_overrides &&
+        providerData?.pinterest?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.pinterest.permission_overrides);
+      } else {
+        scopes.push(
+          ...[
+            'boards:read',
+            'boards:write',
+            'pins:read',
+            'pins:write',
+            'user_accounts:read',
+          ],
+        );
+      }
 
       const authParams = new URLSearchParams([
         ['client_id', appId],
@@ -300,10 +396,28 @@ export async function generateAuthUrl({
     case 'linkedin': {
       const isOrgConnection =
         providerData?.linkedin?.connection_type === 'organization';
+      const scopes: string[] = [];
 
-      const scope = isOrgConnection
-        ? 'r_basicprofile w_member_social r_organization_social w_organization_social rw_organization_admin'
-        : 'openid w_member_social profile email';
+      if (
+        providerData?.linkedin?.permission_overrides &&
+        providerData?.linkedin?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.linkedin.permission_overrides);
+      } else {
+        scopes.push(
+          ...(isOrgConnection
+            ? [
+                'r_basicprofile',
+                'w_member_social',
+                'r_organization_social',
+                'w_organization_social',
+                'rw_organization_admin',
+              ]
+            : ['openid', 'w_member_social', 'profile email']),
+        );
+      }
+
+      const scope = scopes.join(' ');
       const authParams = new URLSearchParams([
         ['client_id', appId],
         ['redirect_uri', callbackUrl],
@@ -343,7 +457,17 @@ export async function generateAuthUrl({
       break;
     }
     case 'threads': {
-      const scopes = ['threads_basic', 'threads_content_publish'];
+      const scopes: string[] = [];
+
+      if (
+        providerData?.threads?.permission_overrides &&
+        providerData?.threads?.permission_overrides?.length > 0
+      ) {
+        scopes.push(...providerData.threads.permission_overrides);
+      } else {
+        scopes.push(...['threads_basic', 'threads_content_publish']);
+      }
+
       const authParams = new URLSearchParams([
         ['client_id', appId],
         ['redirect_uri', callbackUrl],

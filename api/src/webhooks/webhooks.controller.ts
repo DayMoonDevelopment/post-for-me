@@ -28,7 +28,7 @@ import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';
 import { WebhookQueryDto } from './dto/webhook-query.dto';
 import { WebhooksService } from './webhooks.service';
-import { DeleteEntityResponseDto } from '../lib/global.dto';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 
 @Controller('webhooks')
 @ApiTags('Webhooks')
