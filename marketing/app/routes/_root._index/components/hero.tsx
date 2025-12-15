@@ -1,14 +1,11 @@
-import { Link, useLoaderData } from "react-router";
+import { Link } from "react-router";
 import { ArrowUpRight } from "lucide-react";
 
 import { RotatingText } from "~/components/rotating-text";
 
-import { Badge } from "~/ui/badge";
 import { Button } from "~/ui/button";
 
 import { BackgroundPattern } from "./background-pattern";
-
-import type { Route } from "../+types/route";
 
 const rotatingText = [
   "product",
@@ -20,23 +17,11 @@ const rotatingText = [
 ];
 
 export const Hero = () => {
-  const { app } = useLoaderData<Route.ComponentProps["loaderData"]>();
-
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
       <BackgroundPattern />
 
       <div className="relative z-10 text-center max-w-3xl">
-        <Badge
-          variant="secondary"
-          className="rounded-full py-1 border-border"
-          asChild
-        >
-          <Link to={app.url}>
-            {`🚀 latest release v${app.version}`}
-            <ArrowUpRight className="ml-1 size-4" />
-          </Link>
-        </Badge>
         <h1 className="mt-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl md:leading-[1.2] font-semibold tracking-tighter">
           <span className="sr-only">
             {`Ship social media integrations for your product, ai content generator, marketing team, social media scheduler, game, or saas in hours, not weeks.`}
