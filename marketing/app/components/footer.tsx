@@ -10,7 +10,7 @@ const footerSections = [
     links: [
       {
         title: "Overview",
-        href: "/about",
+        href: "/",
       },
       {
         title: "Pricing",
@@ -26,6 +26,7 @@ const footerSections = [
       },
     ],
   },
+  /*
   {
     title: "Resources",
     links: [
@@ -67,6 +68,8 @@ const footerSections = [
       },
     ],
   },
+  */
+  /*
   {
     title: "Solutions",
     links: [
@@ -92,24 +95,17 @@ const footerSections = [
       },
     ],
   },
+  */
   {
     title: "Social",
     links: [
       {
         title: "X (Twitter)",
-        href: "#",
+        href: "https://x.com/postforme_dev",
       },
       {
         title: "GitHub",
-        href: "#",
-      },
-      {
-        title: "YouTube",
-        href: "#",
-      },
-      {
-        title: "LinkedIn",
-        href: "#",
+        href: "https://github.com/DayMoonDevelopment/post-for-me",
       },
     ],
   },
@@ -118,15 +114,15 @@ const footerSections = [
     links: [
       {
         title: "Terms",
-        href: "#",
+        href: "/terms",
       },
       {
         title: "Privacy",
-        href: "#",
+        href: "/privacy",
       },
       {
         title: "Contact",
-        href: "#",
+        href: "/contact",
       },
     ],
   },
