@@ -6,14 +6,18 @@ import type { Route } from "./+types/route";
 export async function loader(_args: Route.LoaderArgs) {
   const marble = new MarbleCMS();
 
-  // Critical data: Load categories immediately for sidebar navigation
-  const categoriesResponse = await marble.getCategories();
+  // Critical data: Load tags immediately for sidebar navigation
+  const tagsResponse = await marble.getTags();
 
   // Non-critical data: Defer posts loading to speed up initial render
-  const postsPromise = marble.getPosts().then(response => response?.posts || []);
+  const postsPromise = marble.getPosts().then(response => {
+    // Filter posts to only include those in "resources" category
+    const posts = response?.posts || [];
+    return posts.filter(post => post.category.slug === "resources");
+  });
 
   return data({
-    categories: categoriesResponse?.categories || [],
+    tags: tagsResponse?.tags || [],
     posts: postsPromise, // Return as promise for deferred loading
   });
 }

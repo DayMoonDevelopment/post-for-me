@@ -1,119 +1,46 @@
-import { Link, Outlet, useLoaderData, useMatches, Await } from "react-router";
+import { Outlet, useLoaderData, Await } from "react-router";
 import { Suspense } from "react";
 
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbSeparator,
-} from "~/ui/breadcrumb";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/ui/sidebar";
 import { Navbar } from "~/components/navbar";
 import { Footer } from "~/components/footer";
+
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/ui/sidebar";
+import { Separator } from "~/ui/separator";
 
 import { ResourcesSidebar } from "./components/resources-sidebar";
 
 import type { Route } from "./+types/route";
 
-interface BreadcrumbItem {
-  title: string;
-  href: string | null;
-}
-
-interface RouteData {
-  breadcrumb?: BreadcrumbItem | BreadcrumbItem[];
-  [key: string]: unknown;
-}
-
 export function Component() {
-  const { categories, posts } =
-    useLoaderData<Route.ComponentProps["loaderData"]>();
-
-  const matches = useMatches();
-
-  // Build breadcrumbs from route matches
-  const breadcrumbs = matches
-    .filter((match): match is typeof match & { data: RouteData } =>
-      Boolean(
-        match.data &&
-          typeof match.data === "object" &&
-          "breadcrumb" in match.data,
-      ),
-    )
-    .flatMap((match) => {
-      const breadcrumb = match.data.breadcrumb;
-      return Array.isArray(breadcrumb)
-        ? breadcrumb
-        : breadcrumb
-          ? [breadcrumb]
-          : [];
-    })
-    .filter((breadcrumb): breadcrumb is BreadcrumbItem =>
-      Boolean(
-        breadcrumb && typeof breadcrumb === "object" && "title" in breadcrumb,
-      ),
-    );
+  const { tags, posts } = useLoaderData<Route.ComponentProps["loaderData"]>();
 
   return (
     <div className="relative">
       <Navbar />
       <SidebarProvider>
-        <Suspense fallback={
-          <ResourcesSidebar
-            className="pt-16"
-            categories={categories}
-            posts={[]}
-          />
-        }>
+        <Suspense
+          fallback={
+            <ResourcesSidebar className="pt-16" tags={tags} posts={[]} />
+          }
+        >
           <Await resolve={posts}>
             {(resolvedPosts) => (
               <ResourcesSidebar
                 className="pt-16"
-                categories={categories}
+                tags={tags}
                 posts={resolvedPosts}
               />
             )}
           </Await>
         </Suspense>
-        <SidebarInset className="flex flex-col pt-18 relative">
-          <SidebarTrigger className="fixed top-20 ml-4 bg-background" />
-          {breadcrumbs.length > 0 ? (
-            <Breadcrumb className="fixed top-20 right-4 left-64 bg-background z-10 py-3 px-4 border-b">
-              <BreadcrumbList>
-                <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                    <Link to="/resources">Resources</Link>
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                {breadcrumbs.map((breadcrumb, index) => (
-                  <div key={index} className="contents">
-                    <BreadcrumbSeparator />
-                    <BreadcrumbItem>
-                      {breadcrumb.href ? (
-                        <BreadcrumbLink asChild>
-                          <Link to={breadcrumb.href}>{breadcrumb.title}</Link>
-                        </BreadcrumbLink>
-                      ) : (
-                        <span>{breadcrumb.title}</span>
-                      )}
-                    </BreadcrumbItem>
-                  </div>
-                ))}
-              </BreadcrumbList>
-            </Breadcrumb>
-          ) : null}
-          <div className={`pr-4 pl-16 pb-12 overflow-auto ${breadcrumbs.length > 0 ? 'pt-16' : 'pt-3'}`}>
-            <Suspense fallback={
-              <Outlet context={{ categories, posts: [] }} />
-            }>
-              <Await resolve={posts}>
-                {(resolvedPosts) => (
-                  <Outlet context={{ categories, posts: resolvedPosts }} />
-                )}
-              </Await>
-            </Suspense>
+        <SidebarInset className="flex flex-col pt-20 relative">
+          <SidebarTrigger className="fixed top-20 ml-3 bg-background" />
+
+          <div className={`pr-4 pl-12 pb-12 overflow-auto`}>
+            <Outlet />
           </div>
+
+          <Separator className="mb-12" />
 
           <Footer />
         </SidebarInset>
