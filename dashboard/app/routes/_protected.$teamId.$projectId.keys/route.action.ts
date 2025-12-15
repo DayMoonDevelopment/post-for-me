@@ -4,7 +4,7 @@ import { customerHasSubscriptionSystemCredsAddon } from "~/lib/.server/customer-
 
 import { withSupabase } from "~/lib/.server/supabase";
 import { unkey } from "~/lib/.server/unkey";
-import { UNKEY_API_ID } from "~/lib/.server/unkey.constants";
+import { RATE_LIMITS, UNKEY_API_ID } from "~/lib/.server/unkey.constants";
 import { stripe } from "~/lib/.server/stripe";
 import { getSubscriptionPlanInfo } from "~/lib/.server/get-subscription-plan-info";
 
@@ -99,6 +99,7 @@ export const action = withSupabase(async ({ supabase, params }) => {
       },
       enabled: true,
       recoverable: false,
+      ratelimits: RATE_LIMITS,
     });
 
     return data({

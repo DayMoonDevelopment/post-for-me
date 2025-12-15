@@ -7,7 +7,7 @@ import {
 } from "react-router";
 import { TMP_API_KEY_COOKIE_PREFIX } from "./api.constants";
 import { unkey } from "../unkey";
-import { UNKEY_API_ID } from "../unkey.constants";
+import { RATE_LIMITS, UNKEY_API_ID } from "../unkey.constants";
 import type { SupabaseContext } from "../supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@post-for-me/db";
@@ -92,7 +92,10 @@ async function getTemporaryApiKey(
             : "unknown";
       }
     } catch (error) {
-      console.error("Error fetching plan info for temporary API key metadata:", error);
+      console.error(
+        "Error fetching plan info for temporary API key metadata:",
+        error,
+      );
       // Continue without plan metadata
     }
   }
@@ -113,6 +116,7 @@ async function getTemporaryApiKey(
       enabled: true,
       recoverable: false,
       expires: Date.now() + 24 * 60 * 60 * 1000,
+      ratelimits: RATE_LIMITS,
     });
 
     key = apiKey.data.key;
