@@ -1,4 +1,4 @@
-import { useLoaderData } from "react-router";
+import { Link, useLoaderData } from "react-router";
 
 import {
   Card,
@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/ui/card";
+import { Button } from "~/ui/button";
 
 import type { loader } from "./route.loader";
 
@@ -30,6 +31,34 @@ export function Component() {
 
   const usageColor = getUsageColor();
 
+  // Determine if we should show the upgrade warning
+  const shouldShowUpgradeWarning = () => {
+    if (!planInfo?.postLimit || usage === null) return false;
+    const usagePercentage = (usage / planInfo.postLimit) * 100;
+    return usagePercentage >= 80; // Show warning at 80% or more
+  };
+
+  const getWarningMessage = () => {
+    if (!planInfo?.postLimit || usage === null) return { title: "", description: "" };
+    const usagePercentage = (usage / planInfo.postLimit) * 100;
+    
+    if (usagePercentage >= 100) {
+      return {
+        title: "Usage Limit Exceeded",
+        description: "You've exceeded your plan's post limit. Upgrade to continue posting without interruption.",
+      };
+    } else if (usagePercentage >= 80) {
+      return {
+        title: "Approaching Usage Limit",
+        description: `You've used ${Math.round(usagePercentage)}% of your plan's post limit. Consider upgrading to avoid hitting your limit.`,
+      };
+    }
+    return { title: "", description: "" };
+  };
+
+  const showWarning = shouldShowUpgradeWarning();
+  const warningMessage = getWarningMessage();
+
   return (
     <div className="p-4 space-y-6">
       <div>
@@ -38,6 +67,26 @@ export function Component() {
           View your current usage for {team.name}
         </p>
       </div>
+
+      {showWarning ? (
+        <Card className="border-yellow-600 bg-yellow-50 dark:bg-yellow-950/20">
+          <CardHeader>
+            <CardTitle className="text-yellow-900 dark:text-yellow-100">
+              {warningMessage.title}
+            </CardTitle>
+            <CardDescription className="text-yellow-800 dark:text-yellow-200">
+              {warningMessage.description}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link to={`/${team.id}/billing`}>
+                Upgrade Plan
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
