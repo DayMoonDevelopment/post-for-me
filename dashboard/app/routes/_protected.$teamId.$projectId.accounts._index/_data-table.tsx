@@ -7,7 +7,6 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronDown } from "lucide-react";
-import { useNavigate, useParams } from "react-router";
 
 import { Button } from "~/ui/button";
 import {
@@ -42,11 +41,9 @@ interface DataTableProps {
 }
 
 export function SocialConnectionsDataTable({ data }: DataTableProps) {
-  const navigate = useNavigate();
-  const params = useParams();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
+    [],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -54,7 +51,7 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
 
   const connections = React.useMemo(
     () => data.connections || [],
-    [data.connections]
+    [data.connections],
   );
 
   const table = useReactTable({
@@ -130,7 +127,7 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                     </TableHead>
                   );
@@ -145,11 +142,6 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
                   key={row.id}
                   data-state={row.getIsSelected() ? "selected" : null}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => {
-                    navigate(
-                      `/${params.teamId}/${params.projectId}/accounts/${row.original.id}`
-                    );
-                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -158,13 +150,13 @@ export function SocialConnectionsDataTable({ data }: DataTableProps) {
                         <Copyable value={String(cell.getValue())}>
                           {flexRender(
                             cell.column.columnDef.cell,
-                            cell.getContext()
+                            cell.getContext(),
                           )}
                         </Copyable>
                       ) : (
                         flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext()
+                          cell.getContext(),
                         )
                       )}
                     </TableCell>
