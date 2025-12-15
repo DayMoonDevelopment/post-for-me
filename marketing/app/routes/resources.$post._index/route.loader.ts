@@ -5,14 +5,16 @@ import { MarbleCMS } from "~/lib/.server/marble";
 import type { Route } from "./+types/route";
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const { post } = params;
+  const { post: postSlug } = params;
 
-  if (!post) {
+  if (!postSlug) {
     throw new Response("Not Found", { status: 404 });
   }
 
   const marble = new MarbleCMS();
-  const postData = await marble.getSinglePost(post);
+
+  // Look up post by slug
+  const postData = await marble.getSinglePost(postSlug);
 
   if (!postData?.post) {
     throw new Response("Not Found", { status: 404 });
@@ -43,18 +45,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       description: marblePost.description,
       keywords: marblePost.tags.map((tag) => tag.name).join(", "),
     },
-
-    // Breadcrumb data - return both category and post breadcrumbs
-    breadcrumb: [
-      {
-        title: marblePost.category.name,
-        href: `/resources/${marblePost.category.slug}`,
-      },
-      {
-        title: marblePost.title,
-        href: null, // This is the current page
-      },
-    ],
 
     // Non-critical data: Defer content loading
     content: contentPromise,

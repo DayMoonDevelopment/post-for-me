@@ -10,7 +10,7 @@ export function RawHtml({ html }: { html: string }) {
 
         // Headings - following shadcn/ui typography patterns
         "[&_h1]:scroll-m-20 [&_h1]:text-4xl [&_h1]:font-extrabold [&_h1]:tracking-tight [&_h1]:text-balance [&_h1]:mb-8 [&_h1]:mt-10 [&_h1:first-child]:mt-0",
-        "[&_h2]:mt-10 [&_h2]:scroll-m-20 [&_h2]:border-b [&_h2]:pb-2 [&_h2]:text-3xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:transition-colors [&_h2:first-child]:mt-0",
+        "[&_h2]:mt-10 [&_h2]:scroll-m-20 [&_h2]:pb-2 [&_h2]:text-3xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:transition-colors [&_h2:first-child]:mt-0",
         "[&_h3]:mt-8 [&_h3]:scroll-m-20 [&_h3]:text-2xl [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3:first-child]:mt-0",
         "[&_h4]:mt-8 [&_h4]:scroll-m-20 [&_h4]:text-xl [&_h4]:font-semibold [&_h4]:tracking-tight [&_h4:first-child]:mt-0",
         "[&_h5]:mt-8 [&_h5]:scroll-m-20 [&_h5]:text-lg [&_h5]:font-semibold [&_h5]:tracking-tight [&_h5:first-child]:mt-0",
@@ -54,7 +54,7 @@ export function RawHtml({ html }: { html: string }) {
         "[&_small]:text-sm [&_small]:font-medium [&_small]:leading-none",
 
         // Muted text
-        "[&_.muted]:text-sm [&_.muted]:text-muted-foreground"
+        "[&_.muted]:text-sm [&_.muted]:text-muted-foreground",
       )}
       dangerouslySetInnerHTML={{ __html: html }}
     />

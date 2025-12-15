@@ -10,32 +10,30 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarRail,
 } from "~/ui/sidebar";
 
-import type { Category, Post } from "~/lib/.server/marble.types";
+import type { Tag, Post } from "~/lib/.server/marble.types";
 
 interface ResourcesSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  categories: Category[];
+  tags: Tag[];
   posts: Post[];
 }
 
 export function ResourcesSidebar({
-  categories,
+  tags,
   posts,
   ...props
 }: ResourcesSidebarProps) {
-  // Group posts by category
-  const postsByCategory = posts.reduce(
+  // Group posts by tag
+  const postsByTag = posts.reduce(
     (acc, post) => {
-      const categoryId = post.category.id;
-      if (!acc[categoryId]) {
-        acc[categoryId] = [];
-      }
-      acc[categoryId].push(post);
+      post.tags.forEach((tag) => {
+        if (!acc[tag.id]) {
+          acc[tag.id] = [];
+        }
+        acc[tag.id].push(post);
+      });
       return acc;
     },
     {} as Record<string, Post[]>,
@@ -44,44 +42,32 @@ export function ResourcesSidebar({
   return (
     <Sidebar {...props}>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Resources</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {categories.map((category) => {
-                const categoryPosts = postsByCategory[category.id] || [];
-                return (
-                  <SidebarMenuItem key={category.id}>
-                    <SidebarMenuButton asChild>
-                      <Link
-                        to={`/resources/${category.slug}`}
-                        className="font-medium"
-                      >
-                        {category.name}
-                      </Link>
-                    </SidebarMenuButton>
-                    {categoryPosts.length > 0 ? (
-                      <SidebarMenuSub>
-                        {categoryPosts.map((post) => (
-                          <SidebarMenuSubItem key={post.id}>
-                            <SidebarMenuSubButton asChild>
-                              <Link
-                                to={`/resources/${category.slug}/${post.slug}`}
-                                className="whitespace-normal leading-tight py-2 h-auto min-h-8"
-                              >
-                                {post.title}
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    ) : null}
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {tags.map((tag) => {
+          const tagPosts = postsByTag[tag.id] || [];
+          if (tagPosts.length === 0) return null;
+
+          return (
+            <SidebarGroup key={tag.id} className="border-b">
+              <SidebarGroupLabel>{tag.name}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {tagPosts.map((post) => (
+                    <SidebarMenuItem key={post.id}>
+                      <SidebarMenuButton asChild>
+                        <Link
+                          to={`/resources/${post.slug}`}
+                          className="whitespace-normal leading-tight py-2 h-auto min-h-8"
+                        >
+                          {post.title}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          );
+        })}
       </SidebarContent>
       <SidebarRail />
     </Sidebar>
