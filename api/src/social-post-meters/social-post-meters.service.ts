@@ -48,13 +48,11 @@ export class SocialPostMetersService {
     scheduledDate: Date;
     provider: string;
   }): Promise<boolean> {
-    const [day, month, year, hour, min] = await Promise.all([
-      scheduledDate.getUTCDay(),
-      scheduledDate.getUTCMonth(),
-      scheduledDate.getUTCFullYear(),
-      scheduledDate.getUTCHours(),
-      scheduledDate.getUTCMinutes(),
-    ]);
+    const day = scheduledDate.getUTCDay();
+    const month = scheduledDate.getUTCMonth();
+    const year = scheduledDate.getUTCFullYear();
+    const hour = scheduledDate.getUTCHours();
+    const min = scheduledDate.getUTCMinutes();
 
     const socialProvider = provider as SocialProviderEnum;
     const meter = await this.supabaseService.supabaseServiceRole
@@ -83,13 +81,11 @@ export class SocialPostMetersService {
     scheduledDate: Date;
     provider: string;
   }) {
-    const [day, month, year, hour, min] = await Promise.all([
-      scheduledDate.getUTCDay(),
-      scheduledDate.getUTCMonth(),
-      scheduledDate.getUTCFullYear(),
-      scheduledDate.getUTCHours(),
-      scheduledDate.getUTCMinutes(),
-    ]);
+    const day = scheduledDate.getUTCDay();
+    const month = scheduledDate.getUTCMonth();
+    const year = scheduledDate.getUTCFullYear();
+    const hour = scheduledDate.getUTCHours();
+    const min = scheduledDate.getUTCMinutes();
 
     await this.supabaseService.supabaseServiceRole.rpc(
       'increment_team_social_post_meter',

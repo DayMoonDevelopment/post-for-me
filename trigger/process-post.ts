@@ -13,7 +13,7 @@ import { Database, Json } from "@post-for-me/db";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 const transformPostData = (data: {
@@ -119,7 +119,7 @@ const transformPostData = (data: {
       refresh_token_expires_at:
         connection.social_provider_connections.refresh_token_expires_at,
       external_id: connection.social_provider_connections.external_id,
-    })
+    }),
   );
 
   return {
@@ -153,7 +153,7 @@ export const processPost = task({
     const accounts = post.social_post_provider_connections?.map(
       ({ social_provider_connections: connection }) => ({
         ...connection,
-      })
+      }),
     );
 
     const errorResults: PostResult[] = [];
@@ -165,17 +165,17 @@ export const processPost = task({
       }
 
       logger.info("Checking API Key is valid");
-      const { result, error } = await unkey.keys.get({ keyId: post.api_key });
+      const { data } = await unkey.keys.getKey({ keyId: post.api_key });
 
-      if (error || !result.enabled) {
-        logger.error("API Key is invalid", { key_result: result });
+      if (!data.enabled) {
+        logger.error("API Key is invalid", { key_result: data });
         errorResults.push(
           ...accounts.map((connection) => ({
             success: false,
             provider_connection_id: connection.id,
             post_id: post.id,
             error_message: `API Key is invalid`,
-          }))
+          })),
         );
         throw new Error("API Key is invalid");
       }
@@ -194,7 +194,7 @@ export const processPost = task({
          app_id,
          app_secret
         )
-        `
+        `,
         )
         .eq("id", post.project_id)
         .single();
@@ -207,7 +207,7 @@ export const processPost = task({
             provider_connection_id: connection.id,
             post_id: post.id,
             error_message: `No project found`,
-          }))
+          })),
         );
         throw new Error("No project found");
       }
@@ -236,7 +236,7 @@ export const processPost = task({
                 thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
               },
             },
-          }))
+          })),
         );
 
         logger.info("Localizing Media Complete", { localizedMedia });
@@ -244,11 +244,11 @@ export const processPost = task({
         postMedia.push(
           ...localizedMedia.runs
             .filter((run) => run.ok)
-            .map((run) => run.output)
+            .map((run) => run.output),
         );
 
         const postVideos = postMedia.filter(
-          (medium) => medium.type === "video"
+          (medium) => medium.type === "video",
         );
 
         if (postVideos.length > 0) {
@@ -259,7 +259,7 @@ export const processPost = task({
               payload: {
                 medium: video,
               },
-            }))
+            })),
           );
 
           logger.info("Processing Videos Complete", { processVideosResult });
@@ -273,7 +273,7 @@ export const processPost = task({
               provider_connection_id: connection.id,
               post_id: post.id,
               error_message: `All media failed to process, please check media URLS`,
-            }))
+            })),
           );
           throw new Error("All media failed to process");
         }
@@ -310,20 +310,20 @@ export const processPost = task({
               switch (account.social_provider_metadata?.connection_type) {
                 case "instagram":
                   appCredentials = project.social_provider_app_credentials.find(
-                    (credential) => credential.provider === "instagram"
+                    (credential) => credential.provider === "instagram",
                   ) as PlatformAppCredentials;
                   break;
                 case "facebook":
                   appCredentials = project.social_provider_app_credentials.find(
                     (credential) =>
-                      credential.provider === "instagram_w_facebook"
+                      credential.provider === "instagram_w_facebook",
                   ) as PlatformAppCredentials;
                   break;
                 default:
                   appCredentials = project.social_provider_app_credentials.find(
                     (credential) =>
                       credential.provider === account.provider ||
-                      credential.provider === "instagram_w_facebook"
+                      credential.provider === "instagram_w_facebook",
                   ) as PlatformAppCredentials;
                   break;
               }
@@ -331,7 +331,7 @@ export const processPost = task({
               break;
             default:
               appCredentials = project.social_provider_app_credentials.find(
-                (credential) => credential.provider === account.provider
+                (credential) => credential.provider === account.provider,
               ) as PlatformAppCredentials;
               break;
           }
@@ -353,19 +353,19 @@ export const processPost = task({
 
           logger.info("Creating Individual Post Configuration");
           const platformConfig = postData.configurations.filter(
-            (config) => config.provider == account.provider
+            (config) => config.provider == account.provider,
           )?.[0];
           const accountConfig = postData.configurations.filter(
-            (config) => config.provider_connection_id == account.id
+            (config) => config.provider_connection_id == account.id,
           )?.[0];
           const platformMedia = postData.media.filter(
-            (medium) => medium.provider == account.provider
+            (medium) => medium.provider == account.provider,
           );
           const accountMedia = postData.media.filter(
-            (medium) => medium.provider_connection_id == account.id
+            (medium) => medium.provider_connection_id == account.id,
           );
           const defaultMedia = postData.media.filter(
-            (medium) => !medium.provider && !medium.provider_connection_id
+            (medium) => !medium.provider && !medium.provider_connection_id,
           );
 
           logger.info("Procesing Configuration Data", {
@@ -425,7 +425,7 @@ export const processPost = task({
       logger.info("Posting To Accounts", { bulkPostData });
       const batchPostResult = await tasks.batchTriggerAndWait(
         "post-to-platform",
-        bulkPostData.map((data) => ({ payload: data }))
+        bulkPostData.map((data) => ({ payload: data })),
       );
 
       logger.info("Posting To Accounts Complete", { batchPostResult });
@@ -494,7 +494,7 @@ export const processPost = task({
          provider_connection_id,
          provider_data
         )
-        `
+        `,
         )
         .single();
 

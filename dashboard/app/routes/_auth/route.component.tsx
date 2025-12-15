@@ -1,4 +1,5 @@
 import { Link, Outlet } from "react-router";
+import { Logo } from "~/components/logo";
 
 export function Component() {
   return (
@@ -10,7 +11,7 @@ export function Component() {
             className="flex items-center gap-2 font-semibold text-2xl"
             target="_blank"
           >
-            <img src="/logo-wordmark.png" alt="Post for Me Logo" />
+            <Logo className="h-6" />
           </Link>
         </div>
         <div className="flex flex-1 items-center justify-center">

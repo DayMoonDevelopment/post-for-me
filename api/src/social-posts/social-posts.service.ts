@@ -6,9 +6,9 @@ import type { CreateSocialPostDto } from './dto/create-post.dto';
 import { SocialPostQueryDto } from './dto/post-query.dto';
 
 import type { PaginatedRequestQuery } from '../pagination/pagination-request.interface';
-import { DeleteEntityResponseDto } from '../lib/global.dto';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { tasks } from '@trigger.dev/sdk/v3';
-import type { Provider } from '../lib/global.dto';
+import type { Provider } from '../lib/dto/global.dto';
 import {
   PlatformConfiguration,
   PlatformConfigurationsDto,
@@ -207,9 +207,9 @@ export class SocialPostsService {
     }[] = [];
 
     const postConfigurations: {
-      caption?: string | undefined | null;
-      provider?: Provider | undefined | null;
-      provider_connection_id?: string | undefined | null;
+      caption?: string | null;
+      provider?: Provider;
+      provider_connection_id?: string;
       post_id: string;
       provider_data?: PlatformConfiguration | null;
     }[] = [];
@@ -598,17 +598,22 @@ export class SocialPostsService {
     postId: string;
     projectId: string;
   }): Promise<DeleteEntityResponseDto> {
-    const { error } = await this.supabaseService.supabaseClient
-      .from('social_posts')
-      .delete()
-      .eq('project_id', projectId)
-      .eq('id', postId);
+    try {
+      const { error } = await this.supabaseService.supabaseClient
+        .from('social_posts')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('id', postId);
 
-    if (error) {
-      throw new Error(error.message);
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error(err);
+      return { success: false };
     }
-
-    return { success: true };
   }
 
   private async triggerPost(postId: string): Promise<void> {
@@ -675,20 +680,22 @@ export class SocialPostsService {
         external_id: string | null | undefined;
       };
     }[];
-    social_post_media: {
+    social_post_media: Array<{
       url: string;
       thumbnail_url: string | null;
       thumbnail_timestamp_ms: number | null;
+
       provider: Provider | null;
       provider_connection_id: string | null;
-      tags: Json | undefined | null;
-    }[];
-    social_post_configurations: {
+      tags: Json;
+    }>;
+    social_post_configurations: Array<{
       caption: string | null;
+
       provider: Provider | null;
       provider_connection_id: string | null;
       provider_data: Json;
-    }[];
+    }>;
   }): SocialPostDto {
     const postMedia = data.social_post_media
       .filter((media) => !media.provider && !media.provider_connection_id)

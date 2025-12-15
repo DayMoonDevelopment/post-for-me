@@ -46,7 +46,7 @@ function _createSupabaseClientFromRequest(
           );
         },
       },
-    }),
+    }) as unknown as SupabaseClientType<Database>,
     headers,
   ];
 }

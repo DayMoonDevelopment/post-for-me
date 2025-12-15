@@ -17,21 +17,35 @@ export function Component() {
 
       <UnstartedGrid />
 
-      {!isSystem ? (
-        <Card>
-          <CardContent className="p-6 text-center space-y-4">
-            <h3 className="text-lg font-semibold">
-              Don&apos;t have your own credentials?
-            </h3>
-            <p className="text-muted-foreground">
-              Create a new project using our Default Credentials
-            </p>
-            <Button asChild>
-              <Link to={`/${teamId}/new`}>Create project</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
+      <Card>
+        <CardContent className="p-6 text-center space-y-4">
+          {!isSystem ? (
+            <>
+              <h3 className="text-lg font-semibold">
+                Don&apos;t have your own credentials?
+              </h3>
+              <p className="text-muted-foreground">
+                Create a new project using our Default Credentials
+              </p>
+              <Button asChild>
+                <Link to={`/${teamId}/new`}>Create project</Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-semibold">
+                Have your own credentials?
+              </h3>
+              <p className="text-muted-foreground">
+                Create a new project using your own app credentials
+              </p>
+              <Button asChild>
+                <Link to={`/${teamId}/new`}>Create project</Link>
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Outlet />
     </div>

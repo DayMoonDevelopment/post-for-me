@@ -3,6 +3,7 @@ import { data } from "react-router";
 import { withSupabase } from "~/lib/.server/supabase";
 import { customerHasActiveSubscriptions } from "~/lib/.server/customer-has-active-subscriptions.request";
 import { customerHasSubscriptionSystemCredsAddon } from "~/lib/.server/customer-has-subscription-system-creds-addon.request";
+import { customerHasLegacyPlan } from "~/lib/.server/customer-has-legacy-plan.request";
 
 export const loader = withSupabase(async ({ supabase, params }) => {
   const { teamId } = params;
@@ -32,10 +33,12 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     return new Response("Team not found", { status: 404 });
   }
 
-  const [hasActiveSubscription, hasSystemCredsAddon] = await Promise.all([
-    customerHasActiveSubscriptions(team?.stripe_customer_id),
-    customerHasSubscriptionSystemCredsAddon(team?.stripe_customer_id),
-  ]);
+  const [hasActiveSubscription, hasSystemCredsAddon, hasLegacyPlan] =
+    await Promise.all([
+      customerHasActiveSubscriptions(team?.stripe_customer_id),
+      customerHasSubscriptionSystemCredsAddon(team?.stripe_customer_id),
+      customerHasLegacyPlan(team?.stripe_customer_id),
+    ]);
 
   return data({
     team,
@@ -45,6 +48,7 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     billing: {
       active: hasActiveSubscription,
       creds_addon: hasSystemCredsAddon,
+      legacy: hasLegacyPlan,
     },
   });
 });
