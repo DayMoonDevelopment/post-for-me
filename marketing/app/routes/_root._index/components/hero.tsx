@@ -1,14 +1,11 @@
-import { Link, useLoaderData } from "react-router";
+import { Link } from "react-router";
 import { ArrowUpRight } from "lucide-react";
 
 import { RotatingText } from "~/components/rotating-text";
 
-import { Badge } from "~/ui/badge";
 import { Button } from "~/ui/button";
 
 import { BackgroundPattern } from "./background-pattern";
-
-import type { Route } from "../+types/route";
 
 const rotatingText = [
   "product",
@@ -20,8 +17,6 @@ const rotatingText = [
 ];
 
 export const Hero = () => {
-  const { app } = useLoaderData<Route.ComponentProps["loaderData"]>();
-
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
       <BackgroundPattern />
