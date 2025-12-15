@@ -1,38 +1,38 @@
 {
-  "name": "post-for-me",
-  "version": "0.0.1",
-  "private": true,
-  "workspaces": [
-    "api",
-    "icons",
-    "dashboard",
-    "marketing",
-    "supabase"
-  ],
-  "scripts": {
-    "dev": "bun run dev:api & bun run dev:dashboard & bunx trigger.dev@latest dev",
-    "dev:dashboard": "bun run --filter=@post-for-me/dashboard dev",
-    "dev:api": "bun run --filter=@post-for-me/api start:dev",
-    "lint": "bun run --filter=\"*\" lint",
-    "typecheck": "bun run --filter=\"*\" typecheck",
-    "dev:trigger": "bunx trigger.dev@4.0.0-v4-beta.27 dev",
-    "dev:init": "supabase db reset && bun supabase:typegen",
-    "supabase:typegen": "supabase gen types typescript --local > ./supabase/supabase.types.ts"
-  },
-  "devDependencies": {
-    "@trigger.dev/build": "4.0.0-v4-beta.27",
-    "@types/fluent-ffmpeg": "^2.1.27",
-    "eslint-plugin-react": "^7.37.5",
-    "supabase": "^2.30.4",
-    "typescript-eslint": "^8.33.0"
-  },
   "dependencies": {
-    "@trigger.dev/sdk": "4.0.0-v4-beta.27",
+    "@trigger.dev/sdk": "4.3.0",
     "crypto": "^1.0.1",
     "dotenv": "^17.2.1",
     "fluent-ffmpeg": "^2.1.3",
     "stripe": "^18.1.1",
     "tus-js-client": "^4.3.1",
     "uuid": "^11.1.0"
-  }
+  },
+  "devDependencies": {
+    "@trigger.dev/build": "4.3.0",
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "eslint-plugin-react": "^7.37.5",
+    "supabase": "^2.30.4",
+    "typescript-eslint": "^8.33.0"
+  },
+  "name": "post-for-me",
+  "private": true,
+  "scripts": {
+    "dev": "bun run dev:api & bun run dev:dashboard & bunx trigger.dev@latest dev",
+    "dev:api": "bun run --filter=@post-for-me/api start:dev",
+    "dev:dashboard": "bun run --filter=@post-for-me/dashboard dev",
+    "dev:init": "supabase db reset && bun supabase:typegen",
+    "dev:trigger": "bunx trigger.dev@4.3.0 dev",
+    "lint": "bun run --filter=\"*\" lint",
+    "supabase:typegen": "supabase gen types typescript --local > ./supabase/supabase.types.ts",
+    "typecheck": "bun run --filter=\"*\" typecheck"
+  },
+  "version": "0.0.1",
+  "workspaces": [
+    "api",
+    "icons",
+    "dashboard",
+    "marketing",
+    "supabase"
+  ]
 }
