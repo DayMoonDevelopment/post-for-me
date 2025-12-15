@@ -26,7 +26,9 @@ export const Hero = () => {
           <span className="sr-only">
             {`Ship social media integrations for your product, ai content generator, marketing team, social media scheduler, game, or saas in hours, not weeks.`}
           </span>
-          <span>Ship social media integrations for your</span>
+          <span>Ship social media</span>
+          <br />
+          <span>integrations for your</span>
           <br />
           <RotatingText
             text={rotatingText}
