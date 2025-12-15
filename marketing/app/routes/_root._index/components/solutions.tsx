@@ -89,7 +89,6 @@ export const Solutions = () => {
                   </AccordionTrigger>
                   <AccordionContent className="text-[17px] leading-relaxed text-muted-foreground">
                     {description}
-                    <div className="mt-6 mb-2 md:hidden aspect-video w-full bg-muted rounded-xl" />
                   </AccordionContent>
                 </AccordionItem>
               ))}
