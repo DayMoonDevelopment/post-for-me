@@ -1,5 +1,5 @@
 import { ArrowUpDown, MoreHorizontal, User } from "lucide-react";
-import { useFetcher, useNavigate } from "react-router";
+import { useFetcher, useNavigate, useParams } from "react-router";
 
 import { Button } from "~/ui/button";
 import { Badge } from "~/ui/badge";
@@ -159,6 +159,8 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
       const connection = row.original;
       const fetcher = useFetcher();
       const navigate = useNavigate();
+      const params = useParams();
+
       const isSubmitting = fetcher.state === "submitting";
 
       const handleDisconnectConnection = () => {
@@ -188,6 +190,15 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
             >
               Copy connection ID
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                navigate(
+                  `/${params.teamId}/${params.projectId}/accounts/${row.original.id}`,
+                );
+              }}
+            >
+              View Account Feed
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleDisconnectConnection}>
               <span className="text-red-600">Disconnect Account</span>
             </DropdownMenuItem>
@@ -205,7 +216,7 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
                       },
                       {
                         method: "POST",
-                      }
+                      },
                     );
                   }}
                 />
