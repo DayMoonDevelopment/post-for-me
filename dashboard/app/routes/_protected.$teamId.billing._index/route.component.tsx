@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, useLoaderData } from "react-router";
+import { Form, Link, useLoaderData } from "react-router";
 import { CheckmarkSmallIcon, CrossSmallIcon } from "icons";
 
 import { Badge } from "~/ui/badge";
@@ -198,106 +198,135 @@ export function Component() {
       {(isLegacyPlan || !hasActiveSubscription) &&
       pricingTiers.length > 0 &&
       selectedTier ? (
-        <Card className="border-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-2xl">Pro</CardTitle>
-            </div>
-            <div className="flex flex-row gap-4">
-              <div className="text-3xl font-bold">
-                ${selectedTier.price}
-                <span className="text-sm font-normal text-muted-foreground">
-                  /month
-                </span>
+        <>
+          <Card className="border-2">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-2xl">Pro</CardTitle>
               </div>
+              <div className="flex flex-row gap-4">
+                <div className="text-3xl font-bold">
+                  ${selectedTier.price}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    /month
+                  </span>
+                </div>
 
-              <Select
-                value={selectedTierIndex.toString()}
-                onValueChange={(value) => setSelectedTierIndex(parseInt(value))}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {pricingTiers.map((tier, index) => (
-                    <SelectItem key={tier.productId} value={index.toString()}>
-                      {tier.posts.toLocaleString()} posts
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">
-                  {selectedTier.posts.toLocaleString()} posts per month
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Unlimited social accounts</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Read social account feeds</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Analytics for social posts</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">
-                  Bring your own social media developer credentials
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">
-                  Use our social media developer credentials
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Unlimited API Keys</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
-                <span className="text-sm">Unlimited team members</span>
-              </div>
-            </div>
-
-            <div className="pt-4">
-              {isLegacyPlan ? (
-                <Button
-                  className="w-full"
-                  onClick={() => setShowUpgradeDialog(true)}
+                <Select
+                  value={selectedTierIndex.toString()}
+                  onValueChange={(value) =>
+                    setSelectedTierIndex(parseInt(value))
+                  }
                 >
-                  Upgrade Plan
-                </Button>
-              ) : portalUrl ? (
-                <Button className="w-full" asChild>
-                  <a href={portalUrl}>Select Plan</a>
-                </Button>
-              ) : (
-                <Form method="post">
-                  <input type="hidden" name="action" value="create_checkout" />
-                  <input
-                    type="hidden"
-                    name="tierIndex"
-                    value={selectedTierIndex}
-                  />
-                  <Button type="submit" className="w-full">
-                    Get Started
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pricingTiers.map((tier, index) => (
+                      <SelectItem key={tier.productId} value={index.toString()}>
+                        {tier.posts.toLocaleString()} posts
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">
+                    {selectedTier.posts.toLocaleString()} posts per month
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">Unlimited social accounts</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">Read social account feeds</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">Analytics for social posts</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">
+                    Bring your own social media developer credentials
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">
+                    Use our social media developer credentials
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">Unlimited API Keys</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckmarkSmallIcon className="w-4 h-4 text-green-600" />
+                  <span className="text-sm">Unlimited team members</span>
+                </div>
+              </div>
+
+              <div className="pt-4">
+                {isLegacyPlan ? (
+                  <Button
+                    className="w-full"
+                    onClick={() => setShowUpgradeDialog(true)}
+                  >
+                    Upgrade Plan
                   </Button>
-                </Form>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                ) : portalUrl ? (
+                  <Button className="w-full" asChild>
+                    <a href={portalUrl}>Select Plan</a>
+                  </Button>
+                ) : (
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="action"
+                      value="create_checkout"
+                    />
+                    <input
+                      type="hidden"
+                      name="tierIndex"
+                      value={selectedTierIndex}
+                    />
+                    <Button type="submit" className="w-full">
+                      Get Started
+                    </Button>
+                  </Form>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-none bg-muted">
+            <CardHeader>
+              <CardTitle className="text-2xl font-semibold tracking-tight">
+                Need more support or higher usage?
+              </CardTitle>
+              <CardDescription className="text-base text-muted-foreground">
+                Contact us for a tailored plan to meet higher enterprise-level
+                needs.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-row gap-2">
+              <Button asChild>
+                <Link
+                  to="https://cal.com/team/day-moon/post-for-me-enterprise-plan-inquiry"
+                  target="_blank"
+                >
+                  Get in Touch
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </>
       ) : null}
 
       {upcomingInvoice && hasActiveSubscription ? (
