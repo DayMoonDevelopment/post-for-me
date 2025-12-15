@@ -18,9 +18,9 @@ export function Component() {
   // Calculate usage percentage and determine color
   const getUsageColor = () => {
     if (!planInfo?.postLimit || usage === null) return "";
-    
+
     const usagePercentage = (usage / planInfo.postLimit) * 100;
-    
+
     if (usagePercentage >= 100) {
       return "text-red-600"; // Over limit
     } else if (usagePercentage >= 80) {
@@ -39,13 +39,15 @@ export function Component() {
   };
 
   const getWarningMessage = () => {
-    if (!planInfo?.postLimit || usage === null) return { title: "", description: "" };
+    if (!planInfo?.postLimit || usage === null)
+      return { title: "", description: "" };
     const usagePercentage = (usage / planInfo.postLimit) * 100;
-    
+
     if (usagePercentage >= 100) {
       return {
         title: "Usage Limit Exceeded",
-        description: "You've exceeded your plan's post limit. Upgrade to continue posting without interruption.",
+        description:
+          "You've exceeded your plan's post limit. Upgrade to continue posting without interruption.",
       };
     } else if (usagePercentage >= 80) {
       return {
@@ -59,6 +61,15 @@ export function Component() {
   const showWarning = shouldShowUpgradeWarning();
   const warningMessage = getWarningMessage();
 
+  // Determine if usage has exceeded the limit
+  const isLimitExceeded = () => {
+    if (!planInfo?.postLimit || usage === null) return false;
+    const usagePercentage = (usage / planInfo.postLimit) * 100;
+    return usagePercentage >= 100;
+  };
+
+  const limitExceeded = isLimitExceeded();
+
   return (
     <div className="p-4 space-y-6">
       <div>
@@ -69,20 +80,36 @@ export function Component() {
       </div>
 
       {showWarning ? (
-        <Card className="border-yellow-600 bg-yellow-50 dark:bg-yellow-950/20">
+        <Card
+          className={
+            limitExceeded
+              ? "border-red-600 bg-red-50 dark:bg-red-950/20"
+              : "border-yellow-600 bg-yellow-50 dark:bg-yellow-950/20"
+          }
+        >
           <CardHeader>
-            <CardTitle className="text-yellow-900 dark:text-yellow-100">
+            <CardTitle
+              className={
+                limitExceeded
+                  ? "text-red-900 dark:text-red-100"
+                  : "text-yellow-900 dark:text-yellow-100"
+              }
+            >
               {warningMessage.title}
             </CardTitle>
-            <CardDescription className="text-yellow-800 dark:text-yellow-200">
+            <CardDescription
+              className={
+                limitExceeded
+                  ? "text-red-800 dark:text-red-200"
+                  : "text-yellow-800 dark:text-yellow-200"
+              }
+            >
               {warningMessage.description}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link to={`/${team.id}/billing`}>
-                Upgrade Plan
-              </Link>
+              <Link to={`/${team.id}/billing`}>Upgrade Plan</Link>
             </Button>
           </CardContent>
         </Card>
@@ -107,7 +134,9 @@ export function Component() {
             <div className="space-y-2">
               <div className="justify-between items-center">
                 <span className="text-muted-foreground">Total Usage:</span>{" "}
-                <span className={`font-bold ${usageColor}`}>{usage.toLocaleString()}</span>
+                <span className={`font-bold ${usageColor}`}>
+                  {usage.toLocaleString()}
+                </span>
                 <span className={usageColor}>
                   {" "}
                   {planInfo?.postLimit
