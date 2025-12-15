@@ -1,5 +1,7 @@
 import { unkey } from "~/lib/.server/unkey";
 import { UNKEY_API_ID } from "~/lib/.server/unkey.constants";
+import { stripe } from "~/lib/.server/stripe";
+import { getSubscriptionPlanInfo } from "./get-subscription-plan-info";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@post-for-me/db";
@@ -24,13 +26,14 @@ export async function updateAPIKeyAccess(
   );
 
   let hasSystemCredentialsAddon = false;
+  let stripeCustomerId: string | null = null;
 
   // Find the team either directly or via customer ID
   let team;
   if (params.stripeCustomerId) {
     const _team = await supabaseServiceRole
       .from("teams")
-      .select("id")
+      .select("id, stripe_customer_id")
       .eq("stripe_customer_id", params.stripeCustomerId)
       .single();
 
@@ -42,17 +45,62 @@ export async function updateAPIKeyAccess(
       return;
     }
     team = _team.data;
+    stripeCustomerId = _team.data.stripe_customer_id;
 
     hasSystemCredentialsAddon = await customerHasSubscriptionSystemCredsAddon(
       params.stripeCustomerId,
     );
   } else {
-    team = { id: params.teamId };
+    const _team = await supabaseServiceRole
+      .from("teams")
+      .select("id, stripe_customer_id")
+      .eq("id", params.teamId!)
+      .single();
+
+    if (_team.error || !_team.data) {
+      console.error(`Failed to find team ${params.teamId}:`, _team.error);
+      return;
+    }
+    team = _team.data;
+    stripeCustomerId = _team.data.stripe_customer_id;
   }
 
   if (!team.id) {
-    console.error(`Failed to find team for ${params.stripeCustomerId}`);
+    console.error(`Failed to find team`);
     return;
+  }
+
+  // Get plan info to add to metadata
+  const planMetadata: Record<string, string> = {};
+  if (stripeCustomerId) {
+    try {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: stripeCustomerId,
+        status: "active",
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        const planInfo = getSubscriptionPlanInfo(subscriptions.data[0]);
+        if (planInfo.productId) {
+          planMetadata.plan_product_id = planInfo.productId;
+        }
+        if (planInfo.planName) {
+          planMetadata.plan_name = planInfo.planName;
+        }
+        if (planInfo.postLimit) {
+          planMetadata.plan_post_limit = planInfo.postLimit.toString();
+        }
+        planMetadata.plan_type = planInfo.isNewPricing
+          ? "new_pricing"
+          : planInfo.isLegacy
+            ? "legacy"
+            : "unknown";
+      }
+    } catch (error) {
+      console.error("Error fetching plan info for API key metadata:", error);
+      // Continue without plan metadata
+    }
   }
 
   // Get all projects for the team
@@ -111,12 +159,19 @@ export async function updateAPIKeyAccess(
           const currentBatch = allKeys.slice(i, i + batchSize);
           const batchLength = currentBatch.length;
 
-          const updatePromises = currentBatch.map((key) =>
-            unkey.keys.updateKey({
+          const updatePromises = currentBatch.map((key) => {
+            // Merge existing metadata with new plan metadata
+            const updatedMeta = {
+              ...key.meta,
+              ...planMetadata,
+            };
+
+            return unkey.keys.updateKey({
               keyId: key.keyId,
               enabled: params.enabled,
-            }),
-          );
+              meta: updatedMeta,
+            });
+          });
 
           await Promise.all(updatePromises);
           console.log(
@@ -163,12 +218,19 @@ export async function updateAPIKeyAccess(
           const currentBatch = allKeys.slice(i, i + batchSize);
           const batchLength = currentBatch.length;
 
-          const updatePromises = currentBatch.map((key) =>
-            unkey.keys.updateKey({
+          const updatePromises = currentBatch.map((key) => {
+            // Merge existing metadata with new plan metadata
+            const updatedMeta = {
+              ...key.meta,
+              ...planMetadata,
+            };
+
+            return unkey.keys.updateKey({
               keyId: key.keyId,
               enabled: params.enabled && hasSystemCredentialsAddon,
-            }),
-          );
+              meta: updatedMeta,
+            });
+          });
 
           await Promise.all(updatePromises);
           console.log(
