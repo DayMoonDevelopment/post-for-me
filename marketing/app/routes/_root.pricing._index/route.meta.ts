@@ -63,7 +63,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
         category: "Software as a Service",
         offers: tiers.map((tier) => ({
           "@type": "Offer",
-          name: `${tier.posts.toLocaleString()} Social Posts Plan`,
+          name: `Pro - up to ${tier.posts.toLocaleString()} Social Posts`,
           description: `Monthly plan allowing up to ${tier.posts.toLocaleString()} successful social media posts with unlimited social accounts, API keys, and dashboard access.`,
           price: tier.price.toString(),
           priceCurrency: "USD",
