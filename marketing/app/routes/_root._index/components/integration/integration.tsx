@@ -30,7 +30,7 @@ const features = [
 
 export const Integration = () => {
   return (
-    <div className="dark flex items-center justify-center px-4">
+    <div id="integration" className="dark flex items-center justify-center px-4">
       <div className="max-w-(--breakpoint-xl) grid lg:grid-cols-5 gap-4 lg:gap-8 w-full py-4 px-4 lg:py-7 lg:px-8 bg-card text-card-foreground rounded-4xl">
         <div className="lg:col-span-2 self-start flex flex-col w-full mx-auto gap-6 lg:gap-12">
           <h2 className="text-2xl md:text-3xl lg:text-4xl font-semibold tracking-[-0.03em] max-w-lg">
