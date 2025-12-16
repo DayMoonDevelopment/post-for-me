@@ -1,9 +1,12 @@
-import { Link } from "react-router";
+import { Link } from "~/components/link";
 import { ArrowRightIcon } from "icons";
 import { Badge } from "~/ui/badge";
 
 export const OpenSource = () => (
-  <div id="open-source" className="flex items-center justify-center py-16 bg-muted">
+  <div
+    id="open-source"
+    className="flex items-center justify-center py-16 bg-muted"
+  >
     <div className="text-center">
       <Badge>Open Source</Badge>
       <h2 className="mt-3 text-2xl md:text-4xl font-semibold tracking-tight max-w-xl text-balanced">

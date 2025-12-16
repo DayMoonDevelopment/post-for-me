@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "~/components/link";
 import { ArrowRightIcon, MailIcon, MessageCircleIcon } from "lucide-react";
 import { Button } from "~/ui/button";
 
