@@ -82,6 +82,9 @@ jobs:
         run: |
           render deploys create ${{ secrets.RENDER_SERVICE_ID }} --output json --wait --confirm
 
+      - name: Install Reailway CLI
+        run: bun add -g @railway/cli
+
       - name: Deploy API to Railway
         env:
           SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
