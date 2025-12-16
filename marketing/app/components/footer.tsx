@@ -9,8 +9,9 @@ import {
 } from "~/ui/accordion";
 
 import { GetStarted } from "./get-started";
+import type { ResourcePreview } from "~/components/nav-menu";
 
-const footerSections = [
+const getFooterSections = (resources: ResourcePreview[] = []) => [
   {
     title: "Product",
     links: [
@@ -32,76 +33,19 @@ const footerSections = [
       },
     ],
   },
-  /*
-  {
-    title: "Resources",
-    links: [
-      {
-        title: "TikTok API",
-        href: "/resources/getting-started-with-the-tiktok-api",
-      },
-      {
-        title: "Facebook API",
-        href: "/resources/getting-started-with-the-facebook-api",
-      },
-      {
-        title: "Instagram API",
-        href: "/resources/getting-started-with-the-instagram-api",
-      },
-      {
-        title: "YouTube API",
-        href: "/resources/getting-started-with-the-youtub-api",
-      },
-      {
-        title: "LinkedIn API",
-        href: "/resources/getting-started-with-the-linkedin-api",
-      },
-      {
-        title: "X (Twitter) API",
-        href: "/resources/getting-started-with-the-x-api",
-      },
-      {
-        title: "Bluesky API",
-        href: "/resources/getting-started-with-the-bluesky-api",
-      },
-      {
-        title: "Pinterest API",
-        href: "/resources/getting-started-with-the-pinterest-api",
-      },
-      {
-        title: "Threads API",
-        href: "/resources/getting-started-with-the-threads-api",
-      },
-    ],
-  },
-  */
-  /*
-  {
-    title: "Solutions",
-    links: [
-      {
-        title: "Social Media Scheduler",
-        href: "/solutions/social-media-scheduler",
-      },
-      {
-        title: "AI Content Generation",
-        href: "/solutions/ai-content-generation",
-      },
-      {
-        title: "Marketing Teams",
-        href: "/solutions/marketing-teams",
-      },
-      {
-        title: "Games",
-        href: "/solutions/games",
-      },
-      {
-        title: "Saas Products",
-        href: "/solutions/saas-products",
-      },
-    ],
-  },
-  */
+  ...(resources.length > 0
+    ? [
+        {
+          title: "Resources",
+          links: [
+            ...resources.map((resource) => ({
+              title: resource.title,
+              href: resource.href,
+            })),
+          ],
+        },
+      ]
+    : []),
   {
     title: "Social",
     links: [
@@ -134,7 +78,13 @@ const footerSections = [
   },
 ];
 
-export const Footer = () => {
+export const Footer = ({
+  resources = [],
+}: {
+  resources?: ResourcePreview[];
+}) => {
+  const footerSections = getFooterSections(resources);
+
   return (
     <div className="space-y-12">
       <div className="px-4">
