@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/ui/select";
+import { MultiSelect } from "~/ui/multi-select";
 
 export type FieldType =
   | "text"
@@ -39,7 +40,8 @@ export type FieldType =
   | "email"
   | "url"
   | "textarea"
-  | "select";
+  | "select"
+  | "multiselect";
 
 export interface FormField {
   name: string;
@@ -82,17 +84,25 @@ export function SocialAuthForm({
   const createFormSchema = (fields: FormField[]) => {
     const schema: Record<string, z.ZodType> = {};
     fields.forEach((field) => {
-      let fieldSchema = z.string();
-      if (field.required !== false) {
-        fieldSchema = fieldSchema.min(1, "This field is required");
+      if (field.type === "multiselect") {
+        let fieldSchema = z.array(z.string());
+        if (field.required !== false) {
+          fieldSchema = fieldSchema.min(1, "Select at least one option");
+        }
+        schema[field.name] = fieldSchema;
+      } else {
+        let fieldSchema = z.string();
+        if (field.required !== false) {
+          fieldSchema = fieldSchema.min(1, "This field is required");
+        }
+        if (field.type === "email") {
+          fieldSchema = fieldSchema.email("Invalid email address");
+        }
+        if (field.type === "url") {
+          fieldSchema = fieldSchema.url("Invalid URL");
+        }
+        schema[field.name] = fieldSchema;
       }
-      if (field.type === "email") {
-        fieldSchema = fieldSchema.email("Invalid email address");
-      }
-      if (field.type === "url") {
-        fieldSchema = fieldSchema.url("Invalid URL");
-      }
-      schema[field.name] = fieldSchema;
     });
     return z.object(schema);
   };
@@ -110,12 +120,18 @@ export function SocialAuthForm({
           );
           const defaultOption = selectedOption || field.options?.[0];
           acc[field.name] = defaultOption?.value || "";
+        } else if (field.type === "multiselect") {
+          // For multiselect fields, get all selected options
+          const selectedOptions = field.options?.filter(
+            (option) => option.selected
+          );
+          acc[field.name] = selectedOptions?.map((opt) => opt.value) || [];
         } else {
           acc[field.name] = "";
         }
         return acc;
       },
-      {} as Record<string, string>
+      {} as Record<string, string | string[]>
     ),
   });
 
@@ -130,12 +146,17 @@ export function SocialAuthForm({
             );
             const defaultOption = selectedOption || field.options?.[0];
             acc[field.name] = defaultOption?.value || "";
+          } else if (field.type === "multiselect") {
+            const selectedOptions = field.options?.filter(
+              (option) => option.selected
+            );
+            acc[field.name] = selectedOptions?.map((opt) => opt.value) || [];
           } else {
             acc[field.name] = "";
           }
           return acc;
         },
-        {} as Record<string, string>
+        {} as Record<string, string | string[]>
       );
       form.reset(defaultValues);
       setShowPasswords({});
@@ -147,7 +168,7 @@ export function SocialAuthForm({
     setShowPasswords((prev) => ({ ...prev, [fieldName]: !prev[fieldName] }));
   };
 
-  const onSubmit = (data: Record<string, string>) => {
+  const onSubmit = (data: Record<string, string | string[]>) => {
     // Set submitting state
     setIsSubmitting(true);
 
@@ -157,7 +178,12 @@ export function SocialAuthForm({
 
     // Add all form fields to FormData
     Object.entries(data).forEach(([key, value]) => {
-      formData.append(key, value);
+      if (Array.isArray(value)) {
+        // For arrays (multiselect), append as JSON string
+        formData.append(key, JSON.stringify(value));
+      } else {
+        formData.append(key, value);
+      }
     });
 
     // Submit using React Router's submit function
@@ -204,6 +230,18 @@ export function SocialAuthForm({
                       ))}
                     </SelectContent>
                   </Select>
+                ) : field.type === "multiselect" ? (
+                  <MultiSelect
+                    options={
+                      field.options?.map((option) => ({
+                        label: option.name,
+                        value: option.value,
+                      })) || []
+                    }
+                    selected={formField.value as string[]}
+                    onChange={formField.onChange}
+                    placeholder={field.placeholder}
+                  />
                 ) : (
                   <Input
                     {...formField}
