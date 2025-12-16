@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
 
       - name: Notify Slack - Start
-        run: ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄
+        run: ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄 🔄
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
@@ -82,14 +82,36 @@ jobs:
         run: |
           render deploys create ${{ secrets.RENDER_SERVICE_ID }} --output json --wait --confirm
 
-      - name: Install Reailway CLI
+      - name: Install Railway CLI
         run: bun add -g @railway/cli
 
       - name: Deploy API to Railway
+        id: railway
+        timeout-minutes: 15
         env:
           SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service=${{ env.SVC_ID }}
+        run: |
+          echo "Starting Railway deployment..."
+          railway up --service=${{ env.SVC_ID }}
+
+          echo "Deployment command completed, checking status..."
+
+          # Get the latest deployment status
+          DEPLOYMENT_STATUS=$(railway status --service=${{ env.SVC_ID }} --json | jq -r '.status' || echo "UNKNOWN")
+          echo "Deployment status: $DEPLOYMENT_STATUS"
+
+          # Check if deployment was successful
+          if [ "$DEPLOYMENT_STATUS" = "SUCCESS" ] || [ "$DEPLOYMENT_STATUS" = "ACTIVE" ]; then
+            echo "Railway deployment successful"
+            exit 0
+          elif [ "$DEPLOYMENT_STATUS" = "SKIPPED" ]; then
+            echo "Railway deployment skipped (no changes detected)"
+            exit 0
+          else
+            echo "Railway deployment failed or in unexpected state: $DEPLOYMENT_STATUS"
+            exit 1
+          fi
 
       - name: Link Dashboard to Vercel Project
         run: bunx vercel link --project post-for-me-app --scope day-moon --token=${{ secrets.VERCEL_TOKEN }} --yes
@@ -115,10 +137,11 @@ jobs:
           SUPABASE_STATUS="${{ steps.supabase.outcome == 'success' && '🚀' || (steps.supabase.outcome == 'skipped' && '⏸️' || '❌') }}"
           TRIGGER_STATUS="${{ steps.trigger.outcome == 'success' && '🚀' || (steps.trigger.outcome == 'skipped' && '⏸️' || '❌') }}"
           API_STATUS="${{ steps.api.outcome == 'success' && '🚀' || (steps.api.outcome == 'skipped' && '⏸️' || '❌') }}"
+          RAILWAY_STATUS="${{ steps.railway.outcome == 'success' && '🚀' || (steps.railway.outcome == 'skipped' && '⏸️' || '❌') }}"
           DASHBOARD_STATUS="${{ steps.dashboard.outcome == 'success' && '🚀' || (steps.dashboard.outcome == 'skipped' && '⏸️' || '❌') }}"
           MARKETING_STATUS="${{ steps.marketing.outcome == 'success' && '🚀' || (steps.marketing.outcome == 'skipped' && '⏸️' || '❌') }}"
 
-          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$DASHBOARD_STATUS" "$MARKETING_STATUS"
+          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$RAILWAY_STATUS" "$DASHBOARD_STATUS" "$MARKETING_STATUS"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
