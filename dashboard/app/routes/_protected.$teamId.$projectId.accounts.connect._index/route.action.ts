@@ -61,14 +61,33 @@ export const action = withSupabase(
       );
     }
 
+    // Get permissions from form data
+    const permissionsData = formData.get("permissions") as string;
+    let permissions: string[] = [];
+    
+    if (permissionsData) {
+      try {
+        permissions = JSON.parse(permissionsData);
+      } catch {
+        // If parsing fails, treat it as a single value
+        permissions = [permissionsData];
+      }
+    }
+
     // Prepare request body
     const requestBody: {
       platform: string;
       platform_data?: Record<string, unknown>;
       external_id?: string;
+      permissions?: string[];
     } = {
       platform: provider.toLowerCase(),
     };
+
+    // Add permissions if provided
+    if (permissions.length > 0) {
+      requestBody.permissions = permissions;
+    }
 
     // Add provider_data for providers requiring custom auth
     if (requiresCustomAuth && providerConfig) {

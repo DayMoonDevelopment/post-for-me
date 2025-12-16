@@ -1,5 +1,25 @@
 import type { FormField, SocialProviderConfig } from "./_social-auth-form";
 
+const PERMISSIONS_FIELD: FormField = {
+  name: "permissions",
+  label: "Permissions",
+  type: "multiselect",
+  placeholder: "Select permissions",
+  description: "Choose which permissions to request for this account",
+  required: true,
+  options: [
+    {
+      name: "Posts",
+      value: "posts",
+      selected: true,
+    },
+    {
+      name: "Feeds",
+      value: "feeds",
+    },
+  ],
+};
+
 const EXTERNAL_ID_FIELD: FormField = {
   name: "external_id",
   label: "External ID",
@@ -34,6 +54,7 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
           "Generate an app password in your <a href='https://bsky.app/settings/app-passwords'>Bluesky settings</a>",
         required: true,
       },
+      PERMISSIONS_FIELD,
       EXTERNAL_ID_FIELD,
     ],
   },
@@ -62,6 +83,7 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
           },
         ],
       },
+      PERMISSIONS_FIELD,
       EXTERNAL_ID_FIELD,
     ],
   },
@@ -69,7 +91,7 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
     id: "facebook",
     name: "Facebook",
     description: "Connect your Facebook account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
   },
   instagram: {
     id: "instagram",
@@ -96,6 +118,7 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
           },
         ],
       },
+      PERMISSIONS_FIELD,
       EXTERNAL_ID_FIELD,
     ],
   },
@@ -103,37 +126,37 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
     id: "x",
     name: "X (Twitter)",
     description: "Connect your X account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
   },
   tiktok: {
     id: "tiktok",
     name: "TikTok",
     description: "Connect your TikTok account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
   },
   tiktok_business: {
     id: "tiktok_business",
     name: "TikTok Business",
     description: "Connect your TikTok Business account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
   },
   youtube: {
     id: "youtube",
     name: "YouTube",
     description: "Connect your YouTube account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
   },
   pinterest: {
     id: "pinterest",
     name: "Pinterest",
     description: "Connect your Pinterest account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
   },
   threads: {
     id: "threads",
     name: "Threads",
     description: "Connect your Threads account",
-    fields: [EXTERNAL_ID_FIELD],
+    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
   },
 };
 
