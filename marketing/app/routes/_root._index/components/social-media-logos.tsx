@@ -10,7 +10,7 @@ import { YouTubeLogo } from "~/components/youtube-logo";
 
 export const SocialMediaLogos = () => {
   return (
-    <div className="flex items-center justify-center px-6 py-24 bg-secondary/25">
+    <div id="platforms" className="flex items-center justify-center px-6 py-24 bg-secondary/25">
       <div>
         <div className="flex flex-wrap items-center justify-center gap-y-12 [&_svg]:h-8 lg:[&_svg]:h-10">
           {[TikTokLogo, YouTubeLogo, LinkedInLogo, PinterestLogo].map(

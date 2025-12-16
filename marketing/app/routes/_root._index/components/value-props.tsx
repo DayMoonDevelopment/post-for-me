@@ -48,7 +48,7 @@ const features = [
 
 export function ValueProps() {
   return (
-    <div className="flex items-center justify-center py-14">
+    <div id="features" className="flex items-center justify-center py-14">
       <div>
         <h2 className="text-4xl sm:text-5xl font-semibold tracking-tight text-center max-w-2xl text-balance mx-auto">
           Integrate your product into the biggest social media platforms
