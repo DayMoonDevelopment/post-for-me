@@ -7,6 +7,8 @@ import {
   PartyPopperIcon,
 } from "lucide-react";
 
+import { cn } from "~/lib/utils";
+
 import {
   Accordion,
   AccordionContent,
@@ -89,6 +91,10 @@ export const Solutions = () => {
                   </AccordionTrigger>
                   <AccordionContent className="text-[17px] leading-relaxed text-muted-foreground">
                     {description}
+                    <FeatureImage
+                      imgSrc={selectedFeature?.imgSrc}
+                      className="my-2 md:hidden"
+                    />
                   </AccordionContent>
                 </AccordionItem>
               ))}
@@ -96,17 +102,32 @@ export const Solutions = () => {
           </div>
 
           {/* Media */}
-          <div className="hidden md:block w-full aspect-square overflow-hidden">
-            {selectedFeature ? (
-              <img
-                src={selectedFeature.imgSrc}
-                alt={selectedFeature.title}
-                className="w-full h-full object-cover"
-              />
-            ) : null}
-          </div>
+          <FeatureImage
+            imgSrc={selectedFeature?.imgSrc}
+            className="hidden md:block"
+          />
         </div>
       </div>
     </div>
   );
 };
+
+function FeatureImage({
+  imgSrc,
+  className,
+}: {
+  imgSrc: string | null | undefined;
+  className?: string;
+}) {
+  if (!imgSrc) return null;
+
+  return (
+    <div className={cn("w-full aspect-square overflow-hidden", className)}>
+      <img
+        src={imgSrc}
+        alt="Feature Image"
+        className="w-full h-full object-cover"
+      />
+    </div>
+  );
+}
