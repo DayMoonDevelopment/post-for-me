@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "~/components/link";
 
 import { Skeleton } from "~/ui/skeleton";
 import { Card, CardContent, CardTitle, CardDescription } from "~/ui/card";

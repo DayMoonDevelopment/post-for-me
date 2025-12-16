@@ -9,7 +9,7 @@ import { Button } from "~/ui/button";
 import { Logo } from "~/components/logo";
 import { NavMenu } from "./nav-menu";
 import { NavigationSheet } from "./navigation-sheet";
-import { Link } from "react-router";
+import { Link } from "~/components/link";
 
 import type { ResourcePreview } from "~/components/nav-menu";
 
@@ -23,7 +23,7 @@ export const Navbar = ({
       <div className="h-full flex items-center justify-between mx-auto px-4 sm:px-6 lg:px-4">
         <div className="flex items-center gap-8">
           <Link to="/">
-            <Logo className="h-6" />
+            <Logo className="h-5.5" />
           </Link>
 
           {/* Desktop Menu */}

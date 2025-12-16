@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "~/components/link";
 import { ArrowUpRight } from "lucide-react";
 
 import { RotatingText } from "~/components/rotating-text";

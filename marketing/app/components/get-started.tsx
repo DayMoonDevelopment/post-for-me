@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "~/components/link";
 import { Button } from "~/ui/button";
 
 export const GetStarted = () => {
