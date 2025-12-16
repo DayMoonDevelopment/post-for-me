@@ -44,7 +44,10 @@ export const loader = withSupabase(
 
     // Fetch posts from API
     try {
-      const apiUrl = new URL(`/v1/social-account-feeds/${accountId}`, API_URL);
+      const apiUrl = new URL(
+        `/v1/social-account-feeds/${accountId}?expand=metrics`,
+        API_URL,
+      );
       if (cursor) {
         apiUrl.searchParams.set("cursor", cursor);
       }
