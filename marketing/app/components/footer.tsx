@@ -95,7 +95,7 @@ export const Footer = ({
         <div className="max-w-(--breakpoint-2xl) mx-auto flex flex-col-reverse sm:flex-row justify-between gap-8 sm:pt-6 lg:pt-12 pb-8">
           <div className="flex flex-col justify-start gap-x-2 gap-y-4 px-4 sm:px-6 lg:px-8">
             {/* Logo */}
-            <Logo className="h-6 lg:h-8 self-start" />
+            <Logo className="h-6 self-start" />
 
             {/* Copyright */}
             <span className="text-sm text-muted-foreground">
