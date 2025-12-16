@@ -23,7 +23,13 @@ export function Component() {
         <Outlet />
       </div>
 
-      <Footer />
+      <Footer
+        resources={featuredResources.map((resource) => ({
+          title: resource.title,
+          description: resource.description,
+          href: `/resources/${resource.slug}`,
+        }))}
+      />
     </div>
   );
 }
