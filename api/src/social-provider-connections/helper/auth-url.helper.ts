@@ -107,7 +107,7 @@ export async function generateAuthUrl({
         );
 
         if (permissions.includes('feeds')) {
-          scopes.push('read_insights');
+          scopes.push('read_insights', 'pages_read_user_content');
         }
       }
 
