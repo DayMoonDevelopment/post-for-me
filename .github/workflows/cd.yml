@@ -82,6 +82,12 @@ jobs:
         run: |
           render deploys create ${{ secrets.RENDER_SERVICE_ID }} --output json --wait --confirm
 
+      - name: Deploy API to Railway
+        env:
+          SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service=${{ env.SVC_ID }}
+
       - name: Link Dashboard to Vercel Project
         run: bunx vercel link --project post-for-me-app --scope day-moon --token=${{ secrets.VERCEL_TOKEN }} --yes
 
