@@ -6,5 +6,5 @@ Details will include:
  - Post information including caption, url, media, etc.. 
  - When passing **expand=metrics**, Metrics information including views, likes, follows, etc..
 
-Note: Currently only the following platforms are supported **Instagram**, **Facebook**, **TikTok**, **TikTok Business**, **Youtube**
+Note: Currently only the following platforms are supported **Instagram**, **TikTok**, **TikTok Business**, **Youtube**
 `;
