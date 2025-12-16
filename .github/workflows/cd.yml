@@ -67,25 +67,11 @@ jobs:
           TRIGGER_PROJECT_ID: ${{ secrets.TRIGGER_PROJECT_ID }}
         run: bunx trigger.dev@4.3.0 deploy
 
-      - name: Install Render CLI
-        run: |
-          curl -L https://github.com/render-oss/cli/releases/download/v1.1.0/cli_1.1.0_linux_amd64.zip -o render.zip
-          unzip -o render.zip
-          sudo mv cli_v1.1.0 /usr/local/bin/render
-
-      - name: Deploy API
-        id: api
-        env:
-          # The CLI can authenticate via a Render API key without logging in.
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          CI: true
-        run: |
-          render deploys create ${{ secrets.RENDER_SERVICE_ID }} --output json --wait --confirm
-
-      - name: Install Reailway CLI
+      - name: Install Railway CLI
         run: bun add -g @railway/cli
 
       - name: Deploy API to Railway
+        id: api
         env:
           SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
