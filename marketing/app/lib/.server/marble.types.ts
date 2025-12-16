@@ -18,6 +18,7 @@ export type Post = {
     author: string;
     url: string;
   } | null;
+  featured: boolean;
 };
 
 export type Pagination = {
