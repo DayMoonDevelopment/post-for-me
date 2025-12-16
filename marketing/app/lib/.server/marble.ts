@@ -16,6 +16,16 @@ export class MarbleCMS {
     this.key = process.env.MARBLE_WORKSPACE_KEY!;
   }
 
+  async fetch(path: string) {
+    try {
+      const raw = await fetch(`${this.url}/${this.key}/${path}`);
+      const data = await raw.json();
+      return data;
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
   async getPosts(): Promise<MarblePostListResponse | undefined> {
     try {
       const raw = await fetch(`${this.url}/${this.key}/posts`);
@@ -68,14 +78,18 @@ export class MarbleCMS {
     }
   }
 
-  async getPostsByTag(tagSlug: string, categorySlug: string = "resources"): Promise<MarblePostListResponse | undefined> {
+  async getPostsByTag(
+    tagSlug: string,
+    categorySlug: string = "resources",
+  ): Promise<MarblePostListResponse | undefined> {
     try {
       const postsResponse = await this.getPosts();
       if (!postsResponse?.posts) return undefined;
 
-      const filteredPosts = postsResponse.posts.filter(post =>
-        post.category.slug === categorySlug &&
-        post.tags.some(tag => tag.slug === tagSlug)
+      const filteredPosts = postsResponse.posts.filter(
+        (post) =>
+          post.category.slug === categorySlug &&
+          post.tags.some((tag) => tag.slug === tagSlug),
       );
 
       return {
@@ -83,23 +97,30 @@ export class MarbleCMS {
         pagination: {
           ...postsResponse.pagination,
           totalItems: filteredPosts.length,
-          totalPages: Math.ceil(filteredPosts.length / postsResponse.pagination.limit)
-        }
+          totalPages: Math.ceil(
+            filteredPosts.length / postsResponse.pagination.limit,
+          ),
+        },
       };
     } catch (error) {
       console.log(error);
     }
   }
 
-  async getPostByCategoryTagAndSlug(categorySlug: string, tagSlug: string, postSlug: string): Promise<MarblePostResponse | undefined> {
+  async getPostByCategoryTagAndSlug(
+    categorySlug: string,
+    tagSlug: string,
+    postSlug: string,
+  ): Promise<MarblePostResponse | undefined> {
     try {
       const postsResponse = await this.getPosts();
       if (!postsResponse?.posts) return undefined;
 
-      const post = postsResponse.posts.find(p =>
-        p.category.slug === categorySlug &&
-        p.tags.some(tag => tag.slug === tagSlug) &&
-        p.slug === postSlug
+      const post = postsResponse.posts.find(
+        (p) =>
+          p.category.slug === categorySlug &&
+          p.tags.some((tag) => tag.slug === tagSlug) &&
+          p.slug === postSlug,
       );
 
       return post ? { post } : undefined;
@@ -113,7 +134,7 @@ export class MarbleCMS {
       const tagsResponse = await this.getTags();
       if (!tagsResponse?.tags) return undefined;
 
-      const tag = tagsResponse.tags.find(t => t.slug === tagSlug);
+      const tag = tagsResponse.tags.find((t) => t.slug === tagSlug);
       return tag ? { tag } : undefined;
     } catch (error) {
       console.log(error);

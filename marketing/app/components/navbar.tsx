@@ -11,7 +11,13 @@ import { NavMenu } from "./nav-menu";
 import { NavigationSheet } from "./navigation-sheet";
 import { Link } from "react-router";
 
-export const Navbar = () => {
+import type { ResourcePreview } from "~/components/nav-menu";
+
+export const Navbar = ({
+  resources = [],
+}: {
+  resources?: ResourcePreview[];
+}) => {
   return (
     <nav className="h-16 bg-background border-b sticky top-0 z-100 -mb-16">
       <div className="h-full flex items-center justify-between mx-auto px-4 sm:px-6 lg:px-4">
@@ -21,7 +27,7 @@ export const Navbar = () => {
           </Link>
 
           {/* Desktop Menu */}
-          <NavMenu className="hidden md:block" />
+          <NavMenu className="hidden md:block" resources={resources} />
         </div>
 
         <div className="flex items-center gap-1">
