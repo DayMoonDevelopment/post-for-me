@@ -171,7 +171,8 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
       const views =
         row.original.metrics?.video_views ||
         row.original.metrics?.plays ||
-        row.original.metrics?.impressions;
+        row.original.metrics?.impressions ||
+        row.original.metrics?.views;
       return <div className="font-medium">{formatNumber(views)}</div>;
     },
   },

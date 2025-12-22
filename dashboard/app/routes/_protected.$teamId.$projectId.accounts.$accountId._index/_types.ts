@@ -29,6 +29,7 @@ export interface PostMetrics {
   favorites?: number;
   reach?: number;
   video_views?: number;
+  views?: number;
   total_time_watched?: number;
   average_time_watched?: number;
   full_video_watched_rate?: number;
