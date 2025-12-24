@@ -22,17 +22,39 @@ export const loader = withSupabase(async ({ supabase, params }) => {
   }
 
   try {
-    const apiKeys = await unkey.apis.listKeys({
-      apiId: UNKEY_API_ID,
-      externalId: projectId,
-      limit: 100,
-      revalidateKeysCache: true,
-    });
+    // Collect all API keys using pagination
+    const allKeys: Array<{
+      keyId: string;
+      name?: string;
+      start: string;
+      createdAt: number;
+      enabled: boolean;
+    }> = [];
+    let cursor: string | undefined;
+    let hasMore = true;
+
+    while (hasMore) {
+      const apiKeys = await unkey.apis.listKeys({
+        apiId: UNKEY_API_ID,
+        externalId: projectId,
+        limit: 100,
+        cursor,
+        revalidateKeysCache: true,
+      });
+
+      if (apiKeys?.data) {
+        allKeys.push(...apiKeys.data);
+      }
+
+      // Check if there are more pages
+      cursor = apiKeys.pagination?.cursor;
+      hasMore = apiKeys.pagination?.hasMore || false;
+    }
 
     return data({
       success: true,
       keys:
-        apiKeys?.data
+        allKeys
           ?.filter((key) => !key.start.includes("pfm_tmp"))
           ?.map((key) => ({
             id: key.keyId,
