@@ -429,7 +429,6 @@ export class InstagramService implements SocialPlatformService {
       const mediaWithInsights = includeMetrics
         ? await Promise.all(
             (response.data.data || []).map(async (item) => {
-              console.log(item);
               const insights = await this.fetchMediaInsights(
                 item.id,
                 item.media_product_type,
