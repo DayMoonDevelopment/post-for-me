@@ -476,7 +476,7 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'Sets the privacy status for TikTok (private, public), or YoutTube (private, public, unlisted)',
+      'Sets the privacy status for TikTok (private, public), or YouTube (private, public, unlisted)',
     nullable: true,
     required: false,
     enum: ['public', 'private', 'unlisted'],
