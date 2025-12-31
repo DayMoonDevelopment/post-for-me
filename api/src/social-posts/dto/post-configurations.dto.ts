@@ -475,12 +475,23 @@ export class AccountConfigurationDetailsDto {
   title?: string;
 
   @ApiProperty({
-    description: 'Sets the privacy status for TikTok (private, public)',
+    description:
+      'Sets the privacy status for TikTok (private, public), or YoutTube (private, public, unlisted)',
     nullable: true,
     required: false,
+    enum: ['public', 'private', 'unlisted'],
     default: 'public',
   })
   privacy_status?: string;
+
+  @ApiProperty({
+    description:
+      'If true will notify YouTube the video is intended for kids, defaults to false',
+    nullable: true,
+    required: false,
+    default: false,
+  })
+  made_for_kids?: boolean;
 
   @ApiProperty({
     description: 'Allow comments on TikTok',
