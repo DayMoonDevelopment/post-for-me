@@ -151,6 +151,8 @@ export interface TwitterConfiguration {
 export interface YoutubeConfiguration {
   caption?: string;
   title?: string;
+  privacy_status?: string;
+  made_for_kids?: boolean;
   media?: PostMedia[];
 }
 
