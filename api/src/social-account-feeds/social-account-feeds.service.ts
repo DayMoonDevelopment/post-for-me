@@ -270,7 +270,6 @@ export class SocialAccountFeedsService {
         new Date(),
       ) <= 7
     ) {
-      console.log('refreshing token');
       const updatedAccount =
         await platformService.refreshAccessToken(socialAccount);
 
