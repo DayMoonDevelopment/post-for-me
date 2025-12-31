@@ -24,7 +24,7 @@ export class YouTubePostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
 
@@ -33,13 +33,13 @@ export class YouTubePostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     this.#requests.push({ refreshRequest: "refreshing access token" });
     this.#oauth2Client = new google.auth.OAuth2(
       this.#googleClientId,
       this.#googleClientSecret,
-      `${process.env.NEXTAUTH_URL}/api/youtube-auth/callback`
+      `${process.env.NEXTAUTH_URL}/api/youtube-auth/callback`,
     );
 
     this.#oauth2Client.setCredentials({
@@ -91,6 +91,11 @@ export class YouTubePostClient extends PostClient {
         auth: this.#oauth2Client,
       }) as youtube_v3.Youtube;
 
+      const madeForKids =
+        platformConfig?.made_for_kids == undefined
+          ? false
+          : platformConfig.made_for_kids;
+
       const videoRequest = {
         part: ["snippet", "status"],
         requestBody: {
@@ -101,8 +106,8 @@ export class YouTubePostClient extends PostClient {
             description: this.#sanitizeYouTubeDescription(caption),
           },
           status: {
-            privacyStatus: "public",
-            selfDeclaredMadeForKids: false,
+            privacyStatus: platformConfig?.privacy_status || "public",
+            selfDeclaredMadeForKids: madeForKids,
           },
         },
       };
