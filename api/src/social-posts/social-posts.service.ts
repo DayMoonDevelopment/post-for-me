@@ -98,17 +98,13 @@ export class SocialPostsService {
     if (post.media && post.media.length > 0) {
       for (const media of post.media) {
         const urlValidation = this.validateMediaUrl(media.url);
-        if (!urlValidation.isValid) {
-          errors.push(urlValidation.error);
-        }
+        errors.push(...urlValidation);
 
         if (media.thumbnail_url) {
           const thumbnailValidation = this.validateMediaUrl(
             media.thumbnail_url,
           );
-          if (!thumbnailValidation.isValid) {
-            errors.push(thumbnailValidation.error);
-          }
+          errors.push(...thumbnailValidation);
         }
       }
     }
@@ -122,17 +118,15 @@ export class SocialPostsService {
         if (platformConfig.media) {
           for (const media of platformConfig.media) {
             const urlValidation = this.validateMediaUrl(media.url);
-            if (!urlValidation.isValid) {
-              errors.push(`${provider}: ${urlValidation.error}`);
-            }
+            errors.push(...urlValidation.map((e) => `${provider}: ${e}`));
 
             if (media.thumbnail_url) {
               const thumbnailValidation = this.validateMediaUrl(
                 media.thumbnail_url,
               );
-              if (!thumbnailValidation.isValid) {
-                errors.push(`${provider}: ${thumbnailValidation.error}`);
-              }
+              errors.push(
+                ...thumbnailValidation.map((e) => `${provider}: ${e}`),
+              );
             }
           }
         }
@@ -145,21 +139,21 @@ export class SocialPostsService {
         if (accountConfig.configuration?.media) {
           for (const media of accountConfig.configuration.media) {
             const urlValidation = this.validateMediaUrl(media.url);
-            if (!urlValidation.isValid) {
-              errors.push(
-                `account ${accountConfig.social_account_id}: ${urlValidation.error}`,
-              );
-            }
+            errors.push(
+              ...urlValidation.map(
+                (e) => `account ${accountConfig.social_account_id}: ${e}`,
+              ),
+            );
 
             if (media.thumbnail_url) {
               const thumbnailValidation = this.validateMediaUrl(
                 media.thumbnail_url,
               );
-              if (!thumbnailValidation.isValid) {
-                errors.push(
-                  `account ${accountConfig.social_account_id}: ${thumbnailValidation.error}`,
-                );
-              }
+              errors.push(
+                ...thumbnailValidation.map(
+                  (e) => `account ${accountConfig.social_account_id}: ${e}`,
+                ),
+              );
             }
           }
         }
@@ -188,24 +182,18 @@ export class SocialPostsService {
     };
   }
 
-  private validateMediaUrl(url: string): { isValid: boolean; error: string } {
+  private validateMediaUrl(url: string): string[] {
     // Check if the URL is valid
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(url);
     } catch {
-      return {
-        isValid: false,
-        error: `invalid media URL: ${url}`,
-      };
+      return [`invalid media URL: ${url}`];
     }
 
     // Check if protocol is http or https
     if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-      return {
-        isValid: false,
-        error: `media URL must use http or https protocol: ${url}`,
-      };
+      return [`media URL must use http or https protocol: ${url}`];
     }
 
     // Check for localhost
@@ -217,10 +205,7 @@ export class SocialPostsService {
       hostname.startsWith('localhost:') ||
       hostname.endsWith('.localhost')
     ) {
-      return {
-        isValid: false,
-        error: `media URL cannot point to localhost: ${url}`,
-      };
+      return [`media URL cannot point to localhost: ${url}`];
     }
 
     // Check for IP addresses (IPv4 and IPv6)
@@ -229,10 +214,7 @@ export class SocialPostsService {
     const ipv6Regex = /^\[?([0-9a-fA-F:]+)\]?$/;
 
     if (ipv4Regex.test(hostname) || ipv6Regex.test(hostname)) {
-      return {
-        isValid: false,
-        error: `media URL cannot use IP addresses: ${url}`,
-      };
+      return [`media URL cannot use IP addresses: ${url}`];
     }
 
     // Check for private IP ranges
@@ -245,17 +227,11 @@ export class SocialPostsService {
         (parts[0] === 192 && parts[1] === 168); // 192.168.0.0/16
 
       if (isPrivate) {
-        return {
-          isValid: false,
-          error: `media URL cannot point to private IP addresses: ${url}`,
-        };
+        return [`media URL cannot point to private IP addresses: ${url}`];
       }
     }
 
-    return {
-      isValid: true,
-      error: '',
-    };
+    return [];
   }
 
   validatePostCaptionLength({
