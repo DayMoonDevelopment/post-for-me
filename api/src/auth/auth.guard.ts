@@ -46,10 +46,7 @@ export class AuthGuard implements CanActivate {
     return this.validateRequest(request, options); // Pass request directly
   }
 
-  private async validateRequest(
-    request: Request,
-    options: Record<string, any>,
-  ): Promise<boolean> {
+  private async validateRequest(request: Request): Promise<boolean> {
     try {
       const token = this.getBearerTokenFromRequest(request); // Get token from request
 
