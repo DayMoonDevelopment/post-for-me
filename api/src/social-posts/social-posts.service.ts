@@ -94,6 +94,72 @@ export class SocialPostsService {
       errors.push('scheduled_at must be in the future');
     }
 
+    // Validate media URLs
+    if (post.media && post.media.length > 0) {
+      for (const media of post.media) {
+        const urlValidation = this.validateMediaUrl(media.url);
+        errors.push(...urlValidation);
+
+        if (media.thumbnail_url) {
+          const thumbnailValidation = this.validateMediaUrl(
+            media.thumbnail_url,
+          );
+          errors.push(...thumbnailValidation);
+        }
+      }
+    }
+
+    // Validate platform configuration media URLs
+    if (post.platform_configurations) {
+      for (const [provider, config] of Object.entries(
+        post.platform_configurations,
+      )) {
+        const platformConfig = config as PlatformConfiguration;
+        if (platformConfig.media) {
+          for (const media of platformConfig.media) {
+            const urlValidation = this.validateMediaUrl(media.url);
+            errors.push(...urlValidation.map((e) => `${provider}: ${e}`));
+
+            if (media.thumbnail_url) {
+              const thumbnailValidation = this.validateMediaUrl(
+                media.thumbnail_url,
+              );
+              errors.push(
+                ...thumbnailValidation.map((e) => `${provider}: ${e}`),
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Validate account configuration media URLs
+    if (post.account_configurations) {
+      for (const accountConfig of post.account_configurations) {
+        if (accountConfig.configuration?.media) {
+          for (const media of accountConfig.configuration.media) {
+            const urlValidation = this.validateMediaUrl(media.url);
+            errors.push(
+              ...urlValidation.map(
+                (e) => `account ${accountConfig.social_account_id}: ${e}`,
+              ),
+            );
+
+            if (media.thumbnail_url) {
+              const thumbnailValidation = this.validateMediaUrl(
+                media.thumbnail_url,
+              );
+              errors.push(
+                ...thumbnailValidation.map(
+                  (e) => `account ${accountConfig.social_account_id}: ${e}`,
+                ),
+              );
+            }
+          }
+        }
+      }
+    }
+
     if (isSystem && errors.length === 0) {
       for (const socialAccountProvider of providers) {
         const hasMetLimit = await this.socialPostMetersService.hasMetLimit({
@@ -114,6 +180,58 @@ export class SocialPostsService {
       isValid: errors.length === 0,
       errors,
     };
+  }
+
+  private validateMediaUrl(url: string): string[] {
+    // Check if the URL is valid
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return [`invalid media URL: ${url}`];
+    }
+
+    // Check if protocol is http or https
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return [`media URL must use http or https protocol: ${url}`];
+    }
+
+    // Check for localhost
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.startsWith('localhost:') ||
+      hostname.endsWith('.localhost')
+    ) {
+      return [`media URL cannot point to localhost: ${url}`];
+    }
+
+    // Check for IP addresses (IPv4 and IPv6)
+    const ipv4Regex =
+      /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const ipv6Regex = /^\[?([0-9a-fA-F:]+)\]?$/;
+
+    if (ipv4Regex.test(hostname) || ipv6Regex.test(hostname)) {
+      return [`media URL cannot use IP addresses: ${url}`];
+    }
+
+    // Check for private IP ranges
+    const ipv4Match = hostname.match(ipv4Regex);
+    if (ipv4Match) {
+      const parts = hostname.split('.').map(Number);
+      const isPrivate =
+        parts[0] === 10 || // 10.0.0.0/8
+        (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // 172.16.0.0/12
+        (parts[0] === 192 && parts[1] === 168); // 192.168.0.0/16
+
+      if (isPrivate) {
+        return [`media URL cannot point to private IP addresses: ${url}`];
+      }
+    }
+
+    return [];
   }
 
   validatePostCaptionLength({
