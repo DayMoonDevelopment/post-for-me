@@ -5,12 +5,10 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 import type { Unkey } from '@unkey/api';
 import type { Request } from 'express';
 
 import { SupabaseService } from '../supabase/supabase.service';
-import { PROTECT_OPTIONS } from './protect.decorator';
 import type { RequestUser } from './user.interface';
 
 // Augment Express Request type (good practice)
@@ -24,18 +22,11 @@ declare module 'express' {
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
-    private reflector: Reflector,
     private supabaseService: SupabaseService,
     @Inject('UNKEY_INSTANCE') private unkey: Unkey,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const options =
-      this.reflector.get<Record<string, any>>(
-        PROTECT_OPTIONS,
-        context.getHandler(),
-      ) || {};
-
     // Get the request object early
     const request = context.switchToHttp().getRequest<Request>();
     if (!request) {
@@ -43,7 +34,7 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Request object not available.');
     }
 
-    return this.validateRequest(request, options); // Pass request directly
+    return this.validateRequest(request); // Pass request directly
   }
 
   private async validateRequest(request: Request): Promise<boolean> {
