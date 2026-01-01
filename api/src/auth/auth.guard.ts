@@ -51,8 +51,6 @@ export class AuthGuard implements CanActivate {
     options: Record<string, any>,
   ): Promise<boolean> {
     try {
-      console.log('Protection options:', options);
-
       const token = this.getBearerTokenFromRequest(request); // Get token from request
 
       if (!token) {
