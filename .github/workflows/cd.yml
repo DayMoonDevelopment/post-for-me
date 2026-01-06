@@ -85,14 +85,6 @@ jobs:
         run: bunx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
         continue-on-error: true
 
-      - name: Link Marketing to Vercel Project
-        run: bunx vercel link --project post-for-me-marketing --scope day-moon --token=${{ secrets.VERCEL_TOKEN }} --yes
-
-      - name: Deploy Marketing
-        id: marketing
-        run: bunx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
-        continue-on-error: true
-
       - name: Update Slack - Final Status
         if: always()
         run: |
@@ -102,9 +94,8 @@ jobs:
           TRIGGER_STATUS="${{ steps.trigger.outcome == 'success' && '🚀' || (steps.trigger.outcome == 'skipped' && '⏸️' || '❌') }}"
           API_STATUS="${{ steps.api.outcome == 'success' && '🚀' || (steps.api.outcome == 'skipped' && '⏸️' || '❌') }}"
           DASHBOARD_STATUS="${{ steps.dashboard.outcome == 'success' && '🚀' || (steps.dashboard.outcome == 'skipped' && '⏸️' || '❌') }}"
-          MARKETING_STATUS="${{ steps.marketing.outcome == 'success' && '🚀' || (steps.marketing.outcome == 'skipped' && '⏸️' || '❌') }}"
 
-          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$DASHBOARD_STATUS" "$MARKETING_STATUS"
+          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$DASHBOARD_STATUS"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
