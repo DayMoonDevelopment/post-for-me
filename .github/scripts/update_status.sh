@@ -6,7 +6,6 @@ SUPABASE=$3
 TRIGGER=$4
 API=$5
 DASHBOARD=$6
-MARKETING=$7
 
 DASHBOARD_URL="https://post-for-me-app.vercel.app/"
 
@@ -21,7 +20,6 @@ Supabase     | ${SUPABASE}
 Trigger.dev  | ${TRIGGER}
 API          | ${API}
 Dashboard    | ${DASHBOARD}
-Marketing    | ${MARKETING}
 \`\`\`
 EOF
 )
