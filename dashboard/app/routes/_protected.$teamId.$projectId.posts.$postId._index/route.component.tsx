@@ -23,7 +23,7 @@ function badgeVariant(status: string) {
     case "processed":
       return "affirmative";
     default:
-      return "informative";
+      return "highlight";
   }
 }
 

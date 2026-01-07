@@ -40,20 +40,20 @@ export function AddonConfirmationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TriangleExclamationIcon className="w-5 h-5 text-amber-500" />
-            {hasAddon ? "Remove System Credentials" : "Add System Credentials"}
+            {hasAddon ? "Remove Quickstart Project" : "Add Quickstart Project"}
           </DialogTitle>
           <DialogDescription>
             {hasAddon ? (
               <>
-                Are you sure you want to remove the system credentials addon?
+                Are you sure you want to remove the Quickstart Project addon?
                 This will remove the $10/month charge and you will no longer be
                 able to use our managed credentials after your current
                 subscription period ends.
               </>
             ) : (
               <>
-                This will add the system credentials addon to your subscription
-                for $10/month. You&apos;ll be able to create system projects
+                This will add the Quickstart Project addon to your subscription
+                for $10/month. You&apos;ll be able to create Quickstart Projects
                 that use our managed social media credentials without setting up
                 your own API keys.
               </>

@@ -333,8 +333,8 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
     redirectUrl.searchParams.set(
       "toast",
       actionType === "add_addon"
-        ? "System credentials addon added successfully"
-        : "System credentials addon removed successfully"
+        ? "Quickstart Project addon added successfully"
+        : "Quickstart Project addon removed successfully"
     );
 
     return redirect(redirectUrl.toString());
