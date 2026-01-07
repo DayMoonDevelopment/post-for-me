@@ -106,16 +106,14 @@ export function RedirectUrlCard() {
               />
 
               <div className="flex gap-2 self-end">
-                {originalHasValue && (
-                  <Button
+                {originalHasValue ? <Button
                     type="button"
                     variant="ghost"
                     disabled={isSubmitting}
                     onClick={onRemove}
                   >
                     Remove
-                  </Button>
-                )}
+                  </Button> : null}
                 <Button
                   disabled={
                     !form.formState.isValid ||
