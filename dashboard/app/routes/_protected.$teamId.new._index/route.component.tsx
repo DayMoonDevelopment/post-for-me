@@ -131,10 +131,10 @@ export function Component() {
                       onValueChange={field.onChange}
                     >
                       <ToggleGroupItem value="user" className="px-3">
-                        My App Credentials
+                        White Label Project
                       </ToggleGroupItem>
                       <ToggleGroupItem value="system" className="px-3">
-                        Default App Credentials
+                        Quickstart Project
                       </ToggleGroupItem>
                     </ToggleGroup>
                   </FormControl>
