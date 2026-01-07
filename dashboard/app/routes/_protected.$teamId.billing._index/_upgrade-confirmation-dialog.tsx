@@ -60,7 +60,7 @@ export function UpgradeConfirmationDialog({
               </p>
               {tierPosts >= 1000 ? (
                 <p className="text-sm">
-                  The new Pro plan includes system credentials at no additional
+                  The new Pro plan includes the Quickstart Project addon at no additional
                   cost.
                 </p>
               ) : null}

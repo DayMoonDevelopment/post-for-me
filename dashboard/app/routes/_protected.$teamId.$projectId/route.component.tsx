@@ -26,15 +26,15 @@ export function Component() {
       !project?.is_system ||
       !loaderData?.billing?.active ? null : (
         <div className="p-4">
-          <Alert variant="informative" className="@container">
+          <Alert variant="highlight" className="@container">
             <TriangleExclamationIcon />
 
             <div className="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
               <div>
-                <AlertTitle>Enable the system credentials addon</AlertTitle>
+                <AlertTitle>Enable the Quickstart Project addon</AlertTitle>
                 <AlertDescription>
                   To get started creating API keys to integrate into your
-                  application, you need to enable the system credentials addon.
+                  application, you need to enable the Quickstart Project addon.
                 </AlertDescription>
               </div>
 

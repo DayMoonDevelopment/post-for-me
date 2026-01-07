@@ -1,4 +1,5 @@
 import { redirect } from "react-router";
+import { syncUserToLoops } from "~/lib/.server/loops";
 import { withSupabase } from "~/lib/.server/supabase";
 
 export const loader = withSupabase(async function ({ supabase, request }) {
@@ -28,6 +29,13 @@ export const loader = withSupabase(async function ({ supabase, request }) {
       }
 
       throw redirect(`/sign-in?error_code=${errorCode}`);
+    }
+
+    // Sync user to Loops (fire-and-forget, don't block login)
+    if (verify.data?.user) {
+      syncUserToLoops(verify.data.user).catch((err) => {
+        console.error("Failed to sync user to Loops on magic link login:", err);
+      });
     }
 
     return redirect("/");

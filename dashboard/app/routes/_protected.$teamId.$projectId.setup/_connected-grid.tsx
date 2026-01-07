@@ -52,7 +52,7 @@ export function ConnectedGrid() {
                 Connected
               </Badge>
             ) : (
-              <Badge variant="informative" size="sm">
+              <Badge variant="highlight" size="sm">
                 <TriangleExclamationIcon />
                 Incomplete
               </Badge>

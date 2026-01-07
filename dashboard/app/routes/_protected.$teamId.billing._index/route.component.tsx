@@ -103,7 +103,7 @@ export function Component() {
                     {planInfo.includesSystemCredentials ? (
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
-                          System Credentials:
+                          Quickstart Project:
                         </span>
                         <span className="text-green-600">Included</span>
                       </div>
@@ -136,7 +136,7 @@ export function Component() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  System Credentials Addon
+                  Quickstart Project Addon
                   {hasCredsAddon ? (
                     <Badge
                       variant="default"
@@ -160,10 +160,10 @@ export function Component() {
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">
                     {hasCredsAddon
-                      ? "You can create system projects that use our managed credentials for social media platforms."
+                      ? "You can create Quickstart Projects that use our managed credentials for social media platforms."
                       : hasCredsAccess
-                        ? "You can create system projects that use our managed credentials for social media platforms, for the remainder of your subscription term"
-                        : "Enable this addon for $10/month to create system projects without managing your own API credentials."}
+                        ? "You can create Quickstart Projects that use our managed credentials for social media platforms, for the remainder of your subscription term"
+                        : "Enable this addon for $10/month to create Quickstart Projects without managing your own API credentials."}
                   </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Status:</span>
@@ -184,8 +184,8 @@ export function Component() {
                     onClick={() => setShowAddonDialog(true)}
                   >
                     {hasCredsAddon
-                      ? "Disable System Credentials"
-                      : "Enable System Credentials"}
+                      ? "Disable Quickstart Project"
+                      : "Enable Quickstart Project"}
                   </Button>
                 </div>
               </CardContent>
