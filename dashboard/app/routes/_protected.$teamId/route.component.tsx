@@ -27,7 +27,7 @@ export function Component() {
           <div className="@container/main">
             {billing.active ? null : (
               <div className="p-4">
-                <Alert variant="informative" className="@container">
+                <Alert variant="highlight" className="@container">
                   <TriangleExclamationIcon />
 
                   <div className="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
@@ -51,7 +51,7 @@ export function Component() {
 
             {billing.legacy ? (
               <div className="p-4">
-                <Alert variant="informative" className="@container">
+                <Alert variant="highlight" className="@container">
                   <TriangleExclamationIcon />
 
                   <div className="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
