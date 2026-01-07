@@ -25,7 +25,7 @@ export function Component() {
                 Don&apos;t have your own credentials?
               </h3>
               <p className="text-muted-foreground">
-                Create a new project using our Default Credentials
+                Create a new Quickstart Project
               </p>
               <Button asChild>
                 <Link to={`/${teamId}/new`}>Create project</Link>
@@ -37,7 +37,7 @@ export function Component() {
                 Have your own credentials?
               </h3>
               <p className="text-muted-foreground">
-                Create a new project using your own app credentials
+                Create a new White Label Project
               </p>
               <Button asChild>
                 <Link to={`/${teamId}/new`}>Create project</Link>
