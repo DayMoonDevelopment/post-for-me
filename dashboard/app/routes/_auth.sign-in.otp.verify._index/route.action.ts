@@ -1,4 +1,5 @@
 import { redirect } from "react-router";
+import { syncUserToLoops } from "~/lib/.server/loops";
 import { withSupabase } from "~/lib/.server/supabase";
 
 export const action = withSupabase(async ({ supabase, request }) => {
@@ -39,6 +40,11 @@ export const action = withSupabase(async ({ supabase, request }) => {
     }
 
     if (verify.data.user) {
+      // Sync user to Loops (fire-and-forget, don't block login)
+      syncUserToLoops(verify.data.user).catch((err) => {
+        console.error("Failed to sync user to Loops on OTP login:", err);
+      });
+
       return redirect("/");
     }
 
