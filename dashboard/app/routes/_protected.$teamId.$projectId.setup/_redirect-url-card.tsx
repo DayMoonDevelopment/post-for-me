@@ -25,7 +25,10 @@ import { useLoaderData } from "react-router";
 import type { Route } from "./+types/route";
 
 const redirectUrlSchema = z.object({
-  auth_callback_url: z.string().url("Please enter a valid URL"),
+  auth_callback_url: z.union([
+    z.string().url("Please enter a valid URL"),
+    z.literal(""),
+  ]),
 });
 
 type RedirectUrlFormValues = z.infer<typeof redirectUrlSchema>;
@@ -38,15 +41,32 @@ export function RedirectUrlCard() {
   const form = useForm<RedirectUrlFormValues>({
     resolver: zodResolver(redirectUrlSchema),
     defaultValues: {
-      auth_callback_url: authCallbackUrl,
+      auth_callback_url: authCallbackUrl || "",
     },
   });
+
+  const currentValue = form.watch("auth_callback_url");
+  const originalValue = authCallbackUrl || "";
+  const hasChanged = currentValue !== originalValue;
+  const hasValue = currentValue.length > 0;
+  const originalHasValue = originalValue.length > 0;
 
   function onSubmit(data: RedirectUrlFormValues) {
     fetcher.submit(data, {
       method: "post",
       action: "redirect-url",
     });
+  }
+
+  function onRemove() {
+    form.setValue("auth_callback_url", "", { shouldValidate: true });
+    fetcher.submit(
+      { auth_callback_url: "" },
+      {
+        method: "post",
+        action: "redirect-url",
+      }
+    );
   }
 
   return (
@@ -85,17 +105,29 @@ export function RedirectUrlCard() {
                 )}
               />
 
-              <Button
-                className="self-end"
-                disabled={
-                  !form.formState.isValid ||
-                  !form.formState.isDirty ||
-                  isSubmitting
-                }
-                loading={isSubmitting}
-              >
-                Save
-              </Button>
+              <div className="flex gap-2 self-end">
+                {originalHasValue && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={isSubmitting}
+                    onClick={onRemove}
+                  >
+                    Remove
+                  </Button>
+                )}
+                <Button
+                  disabled={
+                    !form.formState.isValid ||
+                    !hasChanged ||
+                    !hasValue ||
+                    isSubmitting
+                  }
+                  loading={isSubmitting}
+                >
+                  Update
+                </Button>
+              </div>
             </div>
           </form>
         </Form>
