@@ -31,10 +31,10 @@ export function Component() {
 
             <div className="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
               <div>
-                <AlertTitle>Enable the system credentials addon</AlertTitle>
+                <AlertTitle>Enable the Quickstart Project addon</AlertTitle>
                 <AlertDescription>
                   To get started creating API keys to integrate into your
-                  application, you need to enable the system credentials addon.
+                  application, you need to enable the Quickstart Project addon.
                 </AlertDescription>
               </div>
 
