@@ -86,6 +86,7 @@ export class BlueskyService implements SocialPlatformService {
   }: {
     account: SocialAccount;
     platformIds?: string[];
+    platformPostsMetadata?: any;
     limit: number;
     cursor?: string;
     includeMetrics?: boolean;

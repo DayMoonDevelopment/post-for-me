@@ -5,7 +5,7 @@ import { PlatformPostQueryDto } from './dto/platform-post-query.dto';
 import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-response.dto';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
-import { SocialAccount } from '../lib/dto/global.dto';
+import { SocialAccount, PlatformPostMetadata } from '../lib/dto/global.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
 import { YouTubeService } from '../youtube/youtube.service';
@@ -155,12 +155,18 @@ export class SocialAccountFeedsService {
     }
 
     const platformPostIds: string[] = [];
+    const postResultsWithMetadata: Array<{
+      provider_post_id: string | null;
+      caption: string;
+      post_at: string;
+    }> = [];
+
     const postResultsQuery = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
         `
             *,
-            social_posts!inner(external_id)
+            social_posts!inner(external_id, caption, post_at)
                     
           `,
       )
@@ -206,10 +212,24 @@ export class SocialAccountFeedsService {
       const { data: postResults } = await postResultsQuery;
 
       if (postResults && postResults.length > 0) {
-        const ids = postResults
-          ?.filter((pr) => pr.provider_post_id)
-          ?.map((pr) => pr.provider_post_id!);
-        platformPostIds.push(...ids);
+        for (const pr of postResults) {
+          if (pr.provider_post_id) {
+            platformPostIds.push(pr.provider_post_id);
+          }
+
+          // Collect metadata for matching
+          if (pr.social_posts) {
+            const socialPost = pr.social_posts as {
+              caption: string;
+              post_at: string;
+            };
+            postResultsWithMetadata.push({
+              provider_post_id: pr.provider_post_id,
+              caption: socialPost.caption,
+              post_at: socialPost.post_at,
+            });
+          }
+        }
       }
     }
 
@@ -309,10 +329,22 @@ export class SocialAccountFeedsService {
       includeMetrics = values.includes('metrics');
     }
 
+    // Build platform posts metadata for matching
+    const platformPostsMetadata: PlatformPostMetadata[] =
+      postResultsWithMetadata
+        .filter((pr) => pr.provider_post_id)
+        .map((pr) => ({
+          platformId: pr.provider_post_id!,
+          caption: pr.caption,
+          postedAt: pr.post_at,
+        }));
+
     // Fetch account posts and social post results in parallel
     const accountPostsResult = await platformService.getAccountPosts({
       account: socialAccount,
       platformIds: platformPostIds,
+      platformPostsMetadata:
+        platformPostsMetadata.length > 0 ? platformPostsMetadata : undefined,
       limit: queryParams.limit,
       cursor: queryParams.cursor,
       includeMetrics,

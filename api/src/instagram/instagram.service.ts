@@ -354,6 +354,7 @@ export class InstagramService implements SocialPlatformService {
   }: {
     account: SocialAccount;
     platformIds?: string[];
+    platformPostsMetadata?: any;
     limit: number;
     cursor?: string;
     includeMetrics?: boolean;
