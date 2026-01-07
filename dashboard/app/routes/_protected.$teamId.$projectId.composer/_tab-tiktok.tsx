@@ -65,7 +65,7 @@ export function TabTikTok() {
         </p>
 
         <Alert
-          variant="informative"
+          variant="highlight"
           className={cn(discloseContent ? "" : "hidden")}
         >
           <AlertCircleIcon />

@@ -20,19 +20,6 @@ body {
 }
 
 @theme inline {
-  /* DEPRECATED: Coral palette not in marketing site, needs review and migration */
-  --color-coral-50: #fff1f1;
-  --color-coral-100: #ffe1e2;
-  --color-coral-200: #ffc7c9;
-  --color-coral-300: #ffa0a3;
-  --color-coral-400: #ff5a5f;
-  --color-coral-500: #f83b41;
-  --color-coral-600: #e51d23;
-  --color-coral-700: #c11419;
-  --color-coral-800: #a01418;
-  --color-coral-900: #84181b;
-  --color-coral-950: #480709;
-
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -97,8 +84,6 @@ body {
   --affirmative: oklch(69.6% 0.17 162.48);
   --highlight: oklch(76.9% 0.188 70.08);
   --pop: oklch(0.5614 0.1539 280.23);
-  /* DEPRECATED: --informative not in marketing site, needs review */
-  --informative: oklch(0.828 0.189 84.429);
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.704 0.04 256.788);
@@ -175,8 +160,6 @@ body {
   --affirmative: oklch(0.7 0.15 162.48);
   --highlight: oklch(82.8% 0.189 84.429);
   --pop: oklch(0.5614 0.1539 280.23);
-  /* DEPRECATED: --informative not in marketing site, needs review */
-  --informative: oklch(0.65 0.15 84.429);
   --border: oklch(0.25 0.01 264.695);
   --input: oklch(0.28 0.01 264.695);
   --ring: oklch(0.5 0.02 265.755);
