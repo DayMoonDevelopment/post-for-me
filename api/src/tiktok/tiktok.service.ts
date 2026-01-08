@@ -223,7 +223,9 @@ export class TikTokService implements SocialPlatformService {
   }): Promise<PlatformPostsResponse> {
     // Find the date range from all posts
     const dates = metadata
-      .filter((m) => m.postedAt)
+      .filter(
+        (m): m is PlatformPostMetadata & { postedAt: string } => !!m.postedAt,
+      )
       .map((m) => new Date(m.postedAt).getTime());
 
     if (dates.length === 0) {
