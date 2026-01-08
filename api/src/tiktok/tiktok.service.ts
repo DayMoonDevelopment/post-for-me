@@ -13,8 +13,6 @@ import type {
   TikTokTokenResponse,
   TikTokVideoListResponse,
   TikTokVideo,
-  TikTokVideoQueryResponse,
-  TikTokVideoSearchRequest,
 } from './tiktok.types';
 
 @Injectable({ scope: Scope.REQUEST })
@@ -207,8 +205,8 @@ export class TikTokService implements SocialPlatformService {
 
   /**
    * Matches videos by caption and posted date metadata
-   * Fetches videos within the date range of the provided posts and matches them
-   * based on caption similarity and timestamp (within 1 hour)
+   * Paginates through videos until all matches are found or we've gone past the date range
+   * Matches are based on caption similarity and timestamp (within 1 hour)
    */
   private async matchVideosByMetadata({
     metadata,
@@ -220,11 +218,7 @@ export class TikTokService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     // Find the date range from all posts
-    const dates = metadata
-      .filter(
-        (m): m is PlatformPostMetadata & { postedAt: string } => !!m.postedAt,
-      )
-      .map((m) => new Date(m.postedAt).getTime());
+    const dates = metadata.map((m) => new Date(m.postedAt).getTime());
 
     if (dates.length === 0) {
       console.warn('No valid posted dates provided for video matching');
@@ -232,12 +226,10 @@ export class TikTokService implements SocialPlatformService {
     }
 
     const minDate = Math.min(...dates);
-    const maxDate = Math.max(...dates);
 
     // Add buffer of 1 hour on each side
     const bufferMs = 60 * 60 * 1000; // 1 hour in milliseconds
     const minTimestamp = Math.floor((minDate - bufferMs) / 1000);
-    const maxTimestamp = Math.ceil((maxDate + bufferMs) / 1000);
 
     // Build fields list based on whether metrics are requested
     const baseFields =
@@ -248,84 +240,93 @@ export class TikTokService implements SocialPlatformService {
       : baseFields;
 
     try {
-      // Fetch all videos within the date range
-      const response = await axios.post<TikTokVideoQueryResponse>(
-        `${this.apiUrl}video/query/?fields=${fields}`,
-        {
-          filters: {
-            create_date_filter: {
-              min: minTimestamp,
-              max: maxTimestamp,
-            },
-          },
-          max_count: 100, // TikTok API max
-        } as TikTokVideoSearchRequest,
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            'Content-Type': 'application/json; charset=UTF-8',
-          },
-        },
+      const matchedPosts: PlatformPost[] = [];
+      let cursor: number | undefined = undefined;
+      let hasMore = true;
+      let shouldContinue = true;
+
+      // Keep track of which metadata items we've matched
+      const unmatchedMetadata = new Set(
+        metadata
+          .filter((m) => m.caption && m.postedAt)
+          .map((m) => m.platformId),
       );
 
-      const data = response.data;
-
-      if (data.error) {
-        throw new Error(
-          `TikTok API error: ${data.error.message} (${data.error.code})`,
+      // Paginate through videos until we find all matches or reach videos outside our date range
+      while (hasMore && shouldContinue && unmatchedMetadata.size > 0) {
+        const response = await axios.post<TikTokVideoListResponse>(
+          `${this.apiUrl}video/list/?fields=${fields}`,
+          {
+            max_count: 20,
+            cursor: cursor,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${account.access_token}`,
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+          },
         );
-      }
 
-      const videos = data.data?.videos || [];
+        const data: TikTokVideoListResponse = response.data;
 
-      // Match videos to metadata based on caption and time
-      const matchedPosts: PlatformPost[] = [];
-      const oneHourMs = 60 * 60 * 1000;
+        const videos: TikTokVideo[] = data.data?.videos || [];
+        hasMore = data.data?.has_more || false;
+        cursor = data.data?.cursor;
 
-      for (const meta of metadata) {
-        if (!meta.caption || !meta.postedAt) {
-          console.warn(
-            `Skipping metadata without caption or postedAt: ${meta.platformId}`,
-          );
-          continue;
-        }
-
-        const targetTime = new Date(meta.postedAt).getTime();
-        const normalizedCaption = this.normalizeCaption(meta.caption);
-
-        // Find matching video
-        const matchedVideo = videos.find((video) => {
+        // Check if any videos in this batch are older than our minimum date
+        // If so, we can stop paginating as videos are returned in reverse chronological order
+        const hasVideoOutsideRange = videos.some((video: TikTokVideo) => {
           if (!video.create_time) return false;
-
-          const videoTime = video.create_time * 1000; // Convert to milliseconds
-          const timeDiff = Math.abs(videoTime - targetTime);
-
-          // Check if within 1 hour
-          if (timeDiff > oneHourMs) return false;
-
-          // Check if caption matches
-          const videoCaption = this.normalizeCaption(
-            video.title || video.video_description || '',
-          );
-
-          return this.captionsMatch(normalizedCaption, videoCaption);
+          return video.create_time < minTimestamp;
         });
 
-        if (matchedVideo) {
-          matchedPosts.push(
-            this.mapVideoToPlatformPost(
-              matchedVideo,
-              account.social_provider_user_id,
-              includeMetrics,
-            ),
-          );
-        } else {
-          console.warn(
-            `No matching video found for platformId: ${meta.platformId}, caption: ${meta.caption?.substring(0, 50)}...`,
-          );
+        // Try to match videos in this batch
+        for (const meta of metadata) {
+          // Skip if we've already matched this metadata
+          if (!unmatchedMetadata.has(meta.platformId)) continue;
+
+          const targetTime = new Date(meta.postedAt).getTime();
+          const normalizedCaption = this.normalizeCaption(meta.caption);
+
+          console.log(targetTime, normalizedCaption);
+          // Find matching video in this batch
+          const matchedVideo = videos.find((video: TikTokVideo) => {
+            if (!video.create_time) return false;
+
+            const videoTime = video.create_time * 1000; // Convert to milliseconds
+            const timeDiff = Math.abs(videoTime - targetTime);
+
+            console.log(videoTime, timeDiff);
+            // Check if within 1 hour
+            if (timeDiff > bufferMs) return false;
+
+            // Check if caption matches
+            const videoCaption = this.normalizeCaption(
+              video.title || video.video_description || '',
+            );
+
+            console.log(videoCaption);
+            return this.captionsMatch(normalizedCaption, videoCaption);
+          });
+
+          if (matchedVideo) {
+            matchedPosts.push(
+              this.mapVideoToPlatformPost(
+                matchedVideo,
+                account.social_provider_user_id,
+                includeMetrics,
+              ),
+            );
+            unmatchedMetadata.delete(meta.platformId);
+          }
         }
+
+        // Stop if we've found a video outside our date range
+        shouldContinue = !hasVideoOutsideRange;
       }
 
+      console.log(matchedPosts);
       return {
         posts: matchedPosts,
         count: matchedPosts.length,

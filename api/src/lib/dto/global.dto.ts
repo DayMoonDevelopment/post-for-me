@@ -69,6 +69,6 @@ export interface PlatformPostsResponse {
 
 export interface PlatformPostMetadata {
   platformId: string;
-  caption?: string;
-  postedAt?: string;
+  caption: string;
+  postedAt: string;
 }

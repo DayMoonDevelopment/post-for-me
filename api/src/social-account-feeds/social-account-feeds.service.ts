@@ -155,7 +155,6 @@ export class SocialAccountFeedsService {
     }
 
     const postFilters = await this.getPostFilters({ queryParams, accountId });
-
     //Get App Credentials
     let platformName = account.provider;
 
@@ -366,7 +365,7 @@ export class SocialAccountFeedsService {
     const postResultsWithMetadata: Array<{
       provider_post_id: string | null;
       caption: string;
-      post_at: string;
+      posted_at: string;
     }> = [];
 
     const postResultsQuery = this.supabaseService.supabaseClient
@@ -438,7 +437,7 @@ export class SocialAccountFeedsService {
             postResultsWithMetadata.push({
               provider_post_id: pr.provider_post_id,
               caption: socialPost.caption,
-              post_at: socialPost.post_at,
+              posted_at: pr.created_at,
             });
           }
         }
@@ -469,7 +468,7 @@ export class SocialAccountFeedsService {
         .map((pr) => ({
           platformId: pr.provider_post_id!,
           caption: pr.caption,
-          postedAt: pr.post_at,
+          postedAt: pr.posted_at,
         }));
 
     return {
