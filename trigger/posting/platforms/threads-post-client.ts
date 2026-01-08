@@ -40,13 +40,13 @@ export class ThreadsPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<TokenRefreshResult> {
     this.#requests.push({
       refreshRequest: "https://graph.threads.net/refresh_access_token",
@@ -97,7 +97,7 @@ export class ThreadsPostClient extends PostClient {
             account,
             media,
             platformConfig?.location,
-            allowedCaption
+            allowedCaption,
           );
           break;
         }
@@ -105,7 +105,7 @@ export class ThreadsPostClient extends PostClient {
           containerId = await this.#processCarousel(
             account,
             media,
-            allowedCaption
+            allowedCaption,
           );
           break;
         }
@@ -115,30 +115,58 @@ export class ThreadsPostClient extends PostClient {
         throw new Error("Failed to create container");
       }
 
-      this.#requests.push({
-        postRequest: {
-          url: `https://graph.threads.net/v1.0/me/threads_publish`,
-          params: {
-            creation_id: containerId,
-            access_token: account.access_token,
-          },
-        },
-      });
+      let platformId: string | null = null;
+      const maxPublishAttempts = 10;
+      let publishAttempts = 0;
+      while (!platformId && publishAttempts < maxPublishAttempts) {
+        try {
+          console.log(`Publish attempt #${publishAttempts + 1}`);
+          this.#requests.push({
+            postRequest: {
+              url: `https://graph.threads.net/v1.0/me/threads_publish`,
+              params: {
+                creation_id: containerId,
+                access_token: account.access_token,
+              },
+            },
+          });
 
-      const publishResponse: AxiosResponse<{ id: string }> = await axios.post(
-        `https://graph.threads.net/v1.0/me/threads_publish`,
-        null,
-        {
-          params: {
-            creation_id: containerId,
-            access_token: account.access_token,
-          },
+          const publishResponse: AxiosResponse<{ id: string }> =
+            await axios.post(
+              `https://graph.threads.net/v1.0/me/threads_publish`,
+              null,
+              {
+                params: {
+                  creation_id: containerId,
+                  access_token: account.access_token,
+                },
+              },
+            );
+
+          this.#responses.push({ publishResponse: publishResponse.data });
+
+          platformId = publishResponse.data.id;
+        } catch (error: any) {
+          if (error.response?.status === 400) {
+            console.log(
+              `Bad Request With Error: ${error.response?.data?.error?.message || "Unknown error"}`,
+            );
+            console.log("Waiting 5 secs");
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+            continue;
+          }
+
+          throw error;
+        } finally {
+          publishAttempts++;
         }
-      );
+      }
 
-      this.#responses.push({ publishResponse: publishResponse.data });
-
-      const platformId = publishResponse.data.id;
+      if (!platformId) {
+        throw new Error(
+          "Unknown Error: Unable to publish media, please try again.",
+        );
+      }
 
       const platformUrl = await this.#getPostUrl(account, platformId);
       return {
@@ -186,7 +214,7 @@ export class ThreadsPostClient extends PostClient {
 
   async #processText(
     account: SocialAccount,
-    caption: string
+    caption: string,
   ): Promise<string | null> {
     this.#requests.push({
       createContainerRequest: {
@@ -209,7 +237,7 @@ export class ThreadsPostClient extends PostClient {
           headers: {
             Authorization: `Bearer ${account.access_token}`,
           },
-        }
+        },
       );
 
     this.#responses.push({
@@ -228,7 +256,7 @@ export class ThreadsPostClient extends PostClient {
     account: SocialAccount,
     media: PostMedia[],
     location?: string,
-    caption?: string
+    caption?: string,
   ): Promise<string | null> {
     const medium = media[0];
     const signedUrl = await this.getSignedUrlForFile(medium);
@@ -267,7 +295,7 @@ export class ThreadsPostClient extends PostClient {
           headers: {
             Authorization: `Bearer ${account.access_token}`,
           },
-        }
+        },
       );
 
     this.#responses.push({
@@ -314,7 +342,7 @@ export class ThreadsPostClient extends PostClient {
             throw new Error(
               `Container processing failed: ${
                 statusResponse.data.error_message || "Unknown error"
-              }`
+              }`,
             );
           case "EXPIRED":
             throw new Error("Container expired before publishing");
@@ -343,7 +371,7 @@ export class ThreadsPostClient extends PostClient {
   async #processCarousel(
     account: SocialAccount,
     media: PostMedia[],
-    caption: string
+    caption: string,
   ): Promise<string | null> {
     const containerIds: string[] = [];
     const allowedMedia = media.slice(0, this.#maxItems);
@@ -375,7 +403,7 @@ export class ThreadsPostClient extends PostClient {
           headers: {
             Authorization: `Bearer ${account.access_token}`,
           },
-        }
+        },
       );
 
       this.#responses.push({
@@ -412,7 +440,7 @@ export class ThreadsPostClient extends PostClient {
         headers: {
           Authorization: `Bearer ${account.access_token}`,
         },
-      }
+      },
     );
 
     this.#responses.push({
@@ -447,7 +475,7 @@ export class ThreadsPostClient extends PostClient {
 
     if (mediaResponse.data.error) {
       throw new Error(
-        `Failed to fetch media details: ${mediaResponse.data.error.message}`
+        `Failed to fetch media details: ${mediaResponse.data.error.message}`,
       );
     }
 
