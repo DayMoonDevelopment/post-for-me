@@ -154,105 +154,9 @@ export class SocialAccountFeedsService {
       throw new Error('Unable to fetch account');
     }
 
-    const platformPostIds: string[] = [];
-    const postResultsWithMetadata: Array<{
-      provider_post_id: string | null;
-      caption: string;
-      post_at: string;
-    }> = [];
-
-    const postResultsQuery = this.supabaseService.supabaseClient
-      .from('social_post_results')
-      .select(
-        `
-            *,
-            social_posts!inner(external_id, caption, post_at)
-                    
-          `,
-      )
-      .eq('provider_connection_id', accountId);
-
-    if (queryParams.social_post_id) {
-      const values: string[] = [];
-      switch (true) {
-        case typeof queryParams.social_post_id === 'string': {
-          values.push(...(queryParams.social_post_id as string).split(','));
-          break;
-        }
-        case Array.isArray(queryParams.social_post_id):
-          values.push(...queryParams.social_post_id);
-          break;
-        default:
-          values.push(queryParams.social_post_id);
-          break;
-      }
-
-      postResultsQuery.in('post_id', values);
-    }
-
-    if (queryParams.external_post_id) {
-      const values: string[] = [];
-      switch (true) {
-        case typeof queryParams.external_post_id === 'string': {
-          values.push(...(queryParams.external_post_id as string).split(','));
-          break;
-        }
-        case Array.isArray(queryParams.external_post_id):
-          values.push(...queryParams.external_post_id);
-          break;
-        default:
-          values.push(queryParams.external_post_id);
-          break;
-      }
-
-      postResultsQuery.in('social_posts.external_post_id', values);
-    }
-
-    if (queryParams.social_post_id || queryParams.external_post_id) {
-      const { data: postResults } = await postResultsQuery;
-
-      if (postResults && postResults.length > 0) {
-        for (const pr of postResults) {
-          if (pr.provider_post_id) {
-            platformPostIds.push(pr.provider_post_id);
-          }
-
-          // Collect metadata for matching
-          if (pr.social_posts) {
-            const socialPost = pr.social_posts as {
-              caption: string;
-              post_at: string;
-            };
-            postResultsWithMetadata.push({
-              provider_post_id: pr.provider_post_id,
-              caption: socialPost.caption,
-              post_at: socialPost.post_at,
-            });
-          }
-        }
-      }
-    }
-
-    if (queryParams.platform_post_id) {
-      const values: string[] = [];
-      switch (true) {
-        case typeof queryParams.platform_post_id === 'string': {
-          values.push(...(queryParams.platform_post_id as string).split(','));
-          break;
-        }
-        case Array.isArray(queryParams.platform_post_id):
-          values.push(...queryParams.platform_post_id);
-          break;
-        default:
-          values.push(queryParams.platform_post_id);
-          break;
-      }
-
-      platformPostIds.push(...values);
-    }
+    const postFilters = await this.getPostFilters({ queryParams, accountId });
 
     //Get App Credentials
-
     let platformName = account.provider;
 
     if (
@@ -329,22 +233,14 @@ export class SocialAccountFeedsService {
       includeMetrics = values.includes('metrics');
     }
 
-    // Build platform posts metadata for matching
-    const platformPostsMetadata: PlatformPostMetadata[] =
-      postResultsWithMetadata
-        .filter((pr) => pr.provider_post_id)
-        .map((pr) => ({
-          platformId: pr.provider_post_id!,
-          caption: pr.caption,
-          postedAt: pr.post_at,
-        }));
-
     // Fetch account posts and social post results in parallel
     const accountPostsResult = await platformService.getAccountPosts({
       account: socialAccount,
-      platformIds: platformPostIds,
+      platformIds: postFilters.platformPostIds,
       platformPostsMetadata:
-        platformPostsMetadata.length > 0 ? platformPostsMetadata : undefined,
+        postFilters.platformPostsMetadata.length > 0
+          ? postFilters.platformPostsMetadata
+          : undefined,
       limit: queryParams.limit,
       cursor: queryParams.cursor,
       includeMetrics,
@@ -454,5 +350,131 @@ export class SocialAccountFeedsService {
         return this.blueskyService;
     }
     throw new Error('Unable to create platform service');
+  }
+
+  async getPostFilters({
+    queryParams,
+    accountId,
+  }: {
+    queryParams: PlatformPostQueryDto;
+    accountId: string;
+  }): Promise<{
+    platformPostIds: string[];
+    platformPostsMetadata: PlatformPostMetadata[];
+  }> {
+    const platformPostIds: string[] = [];
+    const postResultsWithMetadata: Array<{
+      provider_post_id: string | null;
+      caption: string;
+      post_at: string;
+    }> = [];
+
+    const postResultsQuery = this.supabaseService.supabaseClient
+      .from('social_post_results')
+      .select(
+        `
+            *,
+            social_posts!inner(external_id, caption, post_at)
+                    
+          `,
+      )
+      .eq('provider_connection_id', accountId);
+
+    let executePostsQuery = false;
+
+    if (queryParams.social_post_id) {
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.social_post_id === 'string': {
+          values.push(...(queryParams.social_post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.social_post_id):
+          values.push(...queryParams.social_post_id);
+          break;
+        default:
+          values.push(queryParams.social_post_id);
+          break;
+      }
+
+      postResultsQuery.in('post_id', values);
+      executePostsQuery = true;
+    }
+
+    if (queryParams.external_post_id) {
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.external_post_id === 'string': {
+          values.push(...(queryParams.external_post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.external_post_id):
+          values.push(...queryParams.external_post_id);
+          break;
+        default:
+          values.push(queryParams.external_post_id);
+          break;
+      }
+
+      postResultsQuery.in('social_posts.external_post_id', values);
+      executePostsQuery = true;
+    }
+
+    if (executePostsQuery) {
+      const { data: postResults } = await postResultsQuery;
+
+      if (postResults && postResults.length > 0) {
+        for (const pr of postResults) {
+          if (pr.provider_post_id) {
+            platformPostIds.push(pr.provider_post_id);
+          }
+
+          // Collect metadata for matching
+          if (pr.social_posts) {
+            const socialPost = pr.social_posts as {
+              caption: string;
+              post_at: string;
+            };
+            postResultsWithMetadata.push({
+              provider_post_id: pr.provider_post_id,
+              caption: socialPost.caption,
+              post_at: socialPost.post_at,
+            });
+          }
+        }
+      }
+    }
+
+    if (queryParams.platform_post_id) {
+      const values: string[] = [];
+      switch (true) {
+        case typeof queryParams.platform_post_id === 'string': {
+          values.push(...(queryParams.platform_post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(queryParams.platform_post_id):
+          values.push(...queryParams.platform_post_id);
+          break;
+        default:
+          values.push(queryParams.platform_post_id);
+          break;
+      }
+
+      platformPostIds.push(...values);
+    }
+    // Build platform posts metadata for matching
+    const platformPostsMetadata: PlatformPostMetadata[] =
+      postResultsWithMetadata
+        .filter((pr) => pr.provider_post_id)
+        .map((pr) => ({
+          platformId: pr.provider_post_id!,
+          caption: pr.caption,
+          postedAt: pr.post_at,
+        }));
+
+    return {
+      platformPostIds,
+      platformPostsMetadata,
+    };
   }
 }

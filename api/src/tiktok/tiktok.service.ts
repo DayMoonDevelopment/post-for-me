@@ -174,8 +174,6 @@ export class TikTokService implements SocialPlatformService {
       );
 
       const data = response.data;
-      console.log(data);
-
       const videos = data.data?.videos || [];
       const posts: PlatformPost[] = videos.map((video) =>
         this.mapVideoToPlatformPost(
