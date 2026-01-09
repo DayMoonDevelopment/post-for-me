@@ -289,7 +289,6 @@ export class TikTokService implements SocialPlatformService {
           const targetTime = new Date(meta.postedAt).getTime();
           const normalizedCaption = this.normalizeCaption(meta.caption);
 
-          console.log(targetTime, normalizedCaption);
           // Find matching video in this batch
           const matchedVideo = videos.find((video: TikTokVideo) => {
             if (!video.create_time) return false;
@@ -297,7 +296,6 @@ export class TikTokService implements SocialPlatformService {
             const videoTime = video.create_time * 1000; // Convert to milliseconds
             const timeDiff = Math.abs(videoTime - targetTime);
 
-            console.log(videoTime, timeDiff);
             // Check if within 1 hour
             if (timeDiff > bufferMs) return false;
 
@@ -306,7 +304,6 @@ export class TikTokService implements SocialPlatformService {
               video.title || video.video_description || '',
             );
 
-            console.log(videoCaption);
             return this.captionsMatch(normalizedCaption, videoCaption);
           });
 
@@ -326,7 +323,6 @@ export class TikTokService implements SocialPlatformService {
         shouldContinue = !hasVideoOutsideRange;
       }
 
-      console.log(matchedPosts);
       return {
         posts: matchedPosts,
         count: matchedPosts.length,

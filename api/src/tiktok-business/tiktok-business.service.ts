@@ -204,8 +204,8 @@ export class TikTokBusinessService implements SocialPlatformService {
 
   /**
    * Matches videos by caption and posted date metadata
-   * Fetches videos within the date range of the provided posts and matches them
-   * based on caption similarity and timestamp (within 1 hour)
+   * Paginates through videos until all matches are found or we've gone past the date range
+   * Matches are based on caption similarity and timestamp (within 1 hour)
    */
   private async matchVideosByMetadata({
     metadata,
@@ -217,9 +217,7 @@ export class TikTokBusinessService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     // Find the date range from all posts
-    const dates = metadata
-      .filter((m) => m.postedAt)
-      .map((m) => new Date(m.postedAt!).getTime());
+    const dates = metadata.map((m) => new Date(m.postedAt).getTime());
 
     if (dates.length === 0) {
       console.warn('No valid posted dates provided for video matching');
@@ -227,130 +225,149 @@ export class TikTokBusinessService implements SocialPlatformService {
     }
 
     const minDate = Math.min(...dates);
-    const maxDate = Math.max(...dates);
 
     // Add buffer of 1 hour on each side
     const bufferMs = 60 * 60 * 1000; // 1 hour in milliseconds
     const minTimestamp = Math.floor((minDate - bufferMs) / 1000);
-    const maxTimestamp = Math.ceil((maxDate + bufferMs) / 1000);
 
     // Build fields list
     const fields = this.buildFieldsList(includeMetrics);
 
     try {
-      // Fetch all videos within the date range
-      const getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=${fields}&filters={"create_time":{"min":${minTimestamp},"max":${maxTimestamp}}}&max_count=100`;
-
-      const videoResponse = await axios.get(getVideosUrl, {
-        headers: {
-          'Access-Token': account.access_token,
-        },
-      });
-
-      const data = videoResponse.data as {
-        code: number;
-        message: string;
-        data: {
-          cursor: number;
-          has_more: boolean;
-          videos: (TikTokBusinessMetricsDto & {
-            item_id: string;
-            share_url: string;
-            caption: string;
-            embed_url: string;
-            thumbnail_url: string;
-            create_time?: number;
-          })[];
-        };
-      };
-
-      if (data.code != 0 && data.code != 20001) {
-        throw new Error(`Unable to get posts, message: ${data.message}`);
-      }
-
-      const videos = data.data.videos || [];
-
-      // Match videos to metadata based on caption and time
       const matchedPosts: PlatformPost[] = [];
-      const oneHourMs = 60 * 60 * 1000;
+      let cursor: number | undefined = undefined;
+      let hasMore = true;
+      let shouldContinue = true;
 
-      for (const meta of metadata) {
-        if (!meta.caption || !meta.postedAt) {
-          console.warn(
-            `Skipping metadata without caption or postedAt: ${meta.platformId}`,
-          );
-          continue;
+      // Keep track of which metadata items we've matched
+      const unmatchedMetadata = new Set(
+        metadata
+          .filter((m) => m.caption && m.postedAt)
+          .map((m) => m.platformId),
+      );
+
+      // Paginate through videos until we find all matches or reach videos outside our date range
+      while (hasMore && shouldContinue && unmatchedMetadata.size > 0) {
+        let getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=${fields}&max_count=20`;
+
+        if (cursor) {
+          getVideosUrl += `&cursor=${cursor}`;
         }
 
-        const targetTime = new Date(meta.postedAt).getTime();
-        const normalizedCaption = this.normalizeCaption(meta.caption);
-
-        // Find matching video
-        const matchedVideo = videos.find((video) => {
-          if (!video.create_time) return false;
-
-          const videoTime = video.create_time * 1000; // Convert to milliseconds
-          const timeDiff = Math.abs(videoTime - targetTime);
-
-          // Check if within 1 hour
-          if (timeDiff > oneHourMs) return false;
-
-          // Check if caption matches
-          const videoCaption = this.normalizeCaption(video.caption || '');
-
-          return this.captionsMatch(normalizedCaption, videoCaption);
+        const videoResponse = await axios.get(getVideosUrl, {
+          headers: {
+            'Access-Token': account.access_token,
+          },
         });
 
-        if (matchedVideo) {
-          matchedPosts.push({
-            provider: 'tiktok_business',
-            id: `v_pub_url~v2.${matchedVideo.item_id}`,
-            url: matchedVideo.share_url,
-            account_id: account.social_provider_user_id,
-            caption: matchedVideo.caption,
-            posted_at: matchedVideo.create_time
-              ? new Date(matchedVideo.create_time * 1000).toISOString()
-              : undefined,
-            metrics: includeMetrics
-              ? {
-                  likes: matchedVideo.likes,
-                  comments: matchedVideo.comments,
-                  shares: matchedVideo.shares,
-                  favorites: matchedVideo.favorites,
-                  reach: matchedVideo.reach,
-                  video_views: matchedVideo.video_views,
-                  total_time_watched: matchedVideo.total_time_watched,
-                  average_time_watched: matchedVideo.average_time_watched,
-                  full_video_watched_rate: matchedVideo.full_video_watched_rate,
-                  new_followers: matchedVideo.new_followers,
-                  profile_views: matchedVideo.profile_views,
-                  website_clicks: matchedVideo.website_clicks,
-                  phone_number_clicks: matchedVideo.phone_number_clicks,
-                  lead_submissions: matchedVideo.lead_submissions,
-                  app_download_clicks: matchedVideo.app_download_clicks,
-                  email_clicks: matchedVideo.email_clicks,
-                  address_clicks: matchedVideo.address_clicks,
-                  video_view_retention: matchedVideo.video_view_retention,
-                  impression_sources: matchedVideo.impression_sources,
-                  audience_types: matchedVideo.audience_types,
-                  audience_genders: matchedVideo.audience_genders,
-                  audience_countries: matchedVideo.audience_countries,
-                  audience_cities: matchedVideo.audience_cities,
-                  engagement_likes: matchedVideo.engagement_likes,
-                }
-              : undefined,
-            media: [
-              {
-                url: matchedVideo.embed_url,
-                thumbnail_url: matchedVideo.thumbnail_url,
-              },
-            ],
-          });
-        } else {
-          console.warn(
-            `No matching video found for platformId: ${meta.platformId}, caption: ${meta.caption?.substring(0, 50)}...`,
-          );
+        const data = videoResponse.data as {
+          code: number;
+          message: string;
+          data: {
+            cursor: number;
+            has_more: boolean;
+            videos: (TikTokBusinessMetricsDto & {
+              item_id: string;
+              share_url: string;
+              caption: string;
+              embed_url: string;
+              thumbnail_url: string;
+              create_time?: number;
+            })[];
+          };
+        };
+
+        if (data.code != 0 && data.code != 20001) {
+          throw new Error(`Unable to get posts, message: ${data.message}`);
         }
+
+        const videos = data.data?.videos || [];
+        hasMore = data.data?.has_more || false;
+        cursor = data.data?.cursor;
+
+        // Check if any videos in this batch are older than our minimum date
+        // If so, we can stop paginating as videos are returned in reverse chronological order
+        const hasVideoOutsideRange = videos.some((video) => {
+          if (!video.create_time) return false;
+          return video.create_time < minTimestamp;
+        });
+
+        // Try to match videos in this batch
+        for (const meta of metadata) {
+          // Skip if we've already matched this metadata
+          if (!unmatchedMetadata.has(meta.platformId)) continue;
+
+          const targetTime = new Date(meta.postedAt).getTime();
+          const normalizedCaption = this.normalizeCaption(meta.caption);
+
+          // Find matching video in this batch
+          const matchedVideo = videos.find((video) => {
+            if (!video.create_time) return false;
+
+            const videoTime = video.create_time * 1000; // Convert to milliseconds
+            const timeDiff = Math.abs(videoTime - targetTime);
+
+            // Check if within 1 hour
+            if (timeDiff > bufferMs) return false;
+
+            // Check if caption matches
+            const videoCaption = this.normalizeCaption(video.caption || '');
+
+            return this.captionsMatch(normalizedCaption, videoCaption);
+          });
+
+          if (matchedVideo) {
+            matchedPosts.push({
+              provider: 'tiktok_business',
+              id: `v_pub_url~v2.${matchedVideo.item_id}`,
+              url: matchedVideo.share_url,
+              account_id: account.social_provider_user_id,
+              caption: matchedVideo.caption,
+              posted_at: matchedVideo.create_time
+                ? new Date(matchedVideo.create_time * 1000).toISOString()
+                : undefined,
+              metrics: includeMetrics
+                ? {
+                    likes: matchedVideo.likes,
+                    comments: matchedVideo.comments,
+                    shares: matchedVideo.shares,
+                    favorites: matchedVideo.favorites,
+                    reach: matchedVideo.reach,
+                    video_views: matchedVideo.video_views,
+                    total_time_watched: matchedVideo.total_time_watched,
+                    average_time_watched: matchedVideo.average_time_watched,
+                    full_video_watched_rate:
+                      matchedVideo.full_video_watched_rate,
+                    new_followers: matchedVideo.new_followers,
+                    profile_views: matchedVideo.profile_views,
+                    website_clicks: matchedVideo.website_clicks,
+                    phone_number_clicks: matchedVideo.phone_number_clicks,
+                    lead_submissions: matchedVideo.lead_submissions,
+                    app_download_clicks: matchedVideo.app_download_clicks,
+                    email_clicks: matchedVideo.email_clicks,
+                    address_clicks: matchedVideo.address_clicks,
+                    video_view_retention: matchedVideo.video_view_retention,
+                    impression_sources: matchedVideo.impression_sources,
+                    audience_types: matchedVideo.audience_types,
+                    audience_genders: matchedVideo.audience_genders,
+                    audience_countries: matchedVideo.audience_countries,
+                    audience_cities: matchedVideo.audience_cities,
+                    engagement_likes: matchedVideo.engagement_likes,
+                  }
+                : undefined,
+              media: [
+                {
+                  url: matchedVideo.embed_url,
+                  thumbnail_url: matchedVideo.thumbnail_url,
+                },
+              ],
+            });
+            unmatchedMetadata.delete(meta.platformId);
+          }
+        }
+
+        // Stop if we've found a video outside our date range
+        shouldContinue = !hasVideoOutsideRange;
       }
 
       return {
