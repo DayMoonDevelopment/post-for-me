@@ -5,15 +5,15 @@ import type {
   PlatformPostsResponse,
   SocialAccount,
   SocialProviderAppCredentials,
+  PlatformPostMetadata,
 } from '../lib/dto/global.dto';
 import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import type {
   TikTokTokenResponse,
   TikTokVideoListResponse,
-  TikTokVideo,
-  TikTokPublishStatusResponse,
   TikTokVideoQueryResponse,
+  TikTokVideo,
 } from './tiktok.types';
 
 @Injectable({ scope: Scope.REQUEST })
@@ -126,33 +126,25 @@ export class TikTokService implements SocialPlatformService {
   async getAccountPosts({
     account,
     platformIds,
+    platformPostsMetadata,
     limit,
     cursor,
     includeMetrics = false,
   }: {
     account: SocialAccount;
     platformIds?: string[];
+    platformPostsMetadata?: PlatformPostMetadata[];
     limit: number;
     cursor?: string;
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
-      let videoIds: string[] | undefined;
       const safeLimit = Math.min(limit, 20);
 
-      // If platformIds are provided, fetch the video IDs from publish IDs
-      if (platformIds && platformIds.length > 0) {
-        videoIds = await this.getVideoIdsFromPublishIds({
-          publishIds: platformIds,
-          account,
-        });
-        // If we have specific video IDs, use the video query endpoint
-        if (!videoIds || videoIds.length == 0) {
-          return { posts: [], count: 0, has_more: false };
-        }
-
-        return await this.queryVideosByIds({
-          videoIds,
+      // If platformPostsMetadata is provided, use caption and date matching
+      if (platformPostsMetadata && platformPostsMetadata.length > 0) {
+        return await this.matchVideosByMetadata({
+          metadata: platformPostsMetadata,
           account,
           includeMetrics,
         });
@@ -165,6 +157,40 @@ export class TikTokService implements SocialPlatformService {
       const fields = includeMetrics
         ? `${baseFields},${metricsFields}`
         : baseFields;
+
+      // If platformIds are provided, use the video query endpoint with filters
+      if (platformIds && platformIds.length > 0) {
+        const response = await axios.post<TikTokVideoQueryResponse>(
+          `${this.apiUrl}video/query/?fields=${fields}`,
+          {
+            filters: {
+              video_ids: platformIds,
+            },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${account.access_token}`,
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+          },
+        );
+
+        const data = response.data;
+        const videos = data.data?.videos || [];
+        const posts: PlatformPost[] = videos.map((video) =>
+          this.mapVideoToPlatformPost(
+            video,
+            account.social_provider_user_id,
+            includeMetrics,
+          ),
+        );
+
+        return {
+          posts,
+          count: posts.length,
+          has_more: false,
+        };
+      }
 
       // Otherwise, use the video list endpoint to get recent videos
       const response = await axios.post<TikTokVideoListResponse>(
@@ -182,8 +208,6 @@ export class TikTokService implements SocialPlatformService {
       );
 
       const data = response.data;
-      console.log(data);
-
       const videos = data.data?.videos || [];
       const posts: PlatformPost[] = videos.map((video) =>
         this.mapVideoToPlatformPost(
@@ -216,24 +240,61 @@ export class TikTokService implements SocialPlatformService {
   }
 
   /**
-   * Gets video IDs from publish IDs using the publish status endpoint
+   * Matches videos by caption and posted date metadata
+   * Paginates through videos until all matches are found or we've gone past the date range
+   * Matches are based on caption similarity and timestamp (within 1 hour)
    */
-  private async getVideoIdsFromPublishIds({
-    publishIds,
+  private async matchVideosByMetadata({
+    metadata,
     account,
+    includeMetrics = false,
   }: {
-    publishIds: string[];
+    metadata: PlatformPostMetadata[];
     account: SocialAccount;
-  }): Promise<string[]> {
-    const statusUrl = `${this.apiUrl}post/publish/status/fetch/`;
+    includeMetrics?: boolean;
+  }): Promise<PlatformPostsResponse> {
+    // Find the date range from all posts
+    const dates = metadata.map((m) => new Date(m.postedAt).getTime());
 
-    // Fetch all publish statuses in parallel
-    const statusPromises = publishIds.map(async (publishId) => {
-      try {
-        const response = await axios.post<TikTokPublishStatusResponse>(
-          statusUrl,
+    if (dates.length === 0) {
+      console.warn('No valid posted dates provided for video matching');
+      return { posts: [], count: 0, has_more: false };
+    }
+
+    const minDate = Math.min(...dates);
+
+    // Add buffer of 1 hour on each side
+    const bufferMs = 60 * 60 * 1000; // 1 hour in milliseconds
+    const minTimestamp = Math.floor((minDate - bufferMs) / 1000);
+
+    // Build fields list based on whether metrics are requested
+    const baseFields =
+      'id,create_time,cover_image_url,share_url,duration,title,video_description,embed_link';
+    const metricsFields = 'like_count,comment_count,share_count,view_count';
+    const fields = includeMetrics
+      ? `${baseFields},${metricsFields}`
+      : baseFields;
+
+    try {
+      const matchedPosts: PlatformPost[] = [];
+      let cursor: number | undefined = undefined;
+      let hasMore = true;
+      let shouldContinue = true;
+
+      // Keep track of which metadata items we've matched
+      const unmatchedMetadata = new Set(
+        metadata
+          .filter((m) => m.caption && m.postedAt)
+          .map((m) => m.platformId),
+      );
+
+      // Paginate through videos until we find all matches or reach videos outside our date range
+      while (hasMore && shouldContinue && unmatchedMetadata.size > 0) {
+        const response = await axios.post<TikTokVideoListResponse>(
+          `${this.apiUrl}video/list/?fields=${fields}`,
           {
-            publish_id: publishId,
+            max_count: 20,
+            cursor: cursor,
           },
           {
             headers: {
@@ -243,89 +304,93 @@ export class TikTokService implements SocialPlatformService {
           },
         );
 
-        const statusData = response.data;
+        const data: TikTokVideoListResponse = response.data;
 
-        console.log(response.data);
-        if ((statusData.data.publicaly_available_post_id?.length || 0) > 0) {
-          return statusData.data.publicaly_available_post_id[0].toString();
+        const videos: TikTokVideo[] = data.data?.videos || [];
+        hasMore = data.data?.has_more || false;
+        cursor = data.data?.cursor;
+
+        // Check if any videos in this batch are older than our minimum date
+        // If so, we can stop paginating as videos are returned in reverse chronological order
+        const hasVideoOutsideRange = videos.some((video: TikTokVideo) => {
+          if (!video.create_time) return false;
+          return video.create_time < minTimestamp;
+        });
+
+        // Try to match videos in this batch
+        for (const meta of metadata) {
+          // Skip if we've already matched this metadata
+          if (!unmatchedMetadata.has(meta.platformId)) continue;
+
+          const targetTime = new Date(meta.postedAt).getTime();
+          const normalizedCaption = this.normalizeCaption(meta.caption);
+
+          // Find matching video in this batch
+          const matchedVideo = videos.find((video: TikTokVideo) => {
+            if (!video.create_time) return false;
+
+            const videoTime = video.create_time * 1000; // Convert to milliseconds
+            const timeDiff = Math.abs(videoTime - targetTime);
+
+            // Check if within 1 hour
+            if (timeDiff > bufferMs) return false;
+
+            // Check if caption matches
+            const videoCaption = this.normalizeCaption(
+              video.title || video.video_description || '',
+            );
+
+            return this.captionsMatch(normalizedCaption, videoCaption);
+          });
+
+          if (matchedVideo) {
+            matchedPosts.push(
+              this.mapVideoToPlatformPost(
+                matchedVideo,
+                account.social_provider_user_id,
+                includeMetrics,
+              ),
+            );
+            unmatchedMetadata.delete(meta.platformId);
+          }
         }
 
-        return null;
-      } catch (error) {
-        console.error(
-          `Failed to fetch status for publish_id ${publishId}:`,
-          error,
-        );
-
-        if (error instanceof AxiosError) {
-          console.error(error.response?.data);
-        }
-        return null;
+        // Stop if we've found a video outside our date range
+        shouldContinue = !hasVideoOutsideRange;
       }
-    });
 
-    const videoIds = await Promise.all(statusPromises);
+      return {
+        posts: matchedPosts,
+        count: matchedPosts.length,
+        has_more: false,
+      };
+    } catch (error) {
+      console.error('Error matching TikTok videos by metadata');
+      if (error instanceof AxiosError) {
+        console.error(error.response?.data);
+      } else {
+        console.error(error);
+      }
 
-    // Filter out null values and return only valid video IDs
-    return videoIds.filter((id): id is string => id !== null);
+      return {
+        posts: [],
+        count: 0,
+        has_more: false,
+      };
+    }
   }
 
   /**
-   * Queries specific videos by their IDs
+   * Normalizes a caption for comparison by trimming and converting to lowercase
    */
-  private async queryVideosByIds({
-    videoIds,
-    account,
-    includeMetrics = false,
-  }: {
-    videoIds: string[];
-    account: SocialAccount;
-    includeMetrics?: boolean;
-  }): Promise<PlatformPostsResponse> {
-    // Build fields list based on whether metrics are requested
-    const baseFields =
-      'id,create_time,cover_image_url,share_url,duration,title,embed_link';
-    const metricsFields = 'like_count,comment_count,share_count,view_count';
-    const fields = includeMetrics
-      ? `${baseFields},${metricsFields}`
-      : baseFields;
+  private normalizeCaption(caption: string): string {
+    return caption.trim().toLowerCase();
+  }
 
-    const response = await axios.post<TikTokVideoQueryResponse>(
-      `${this.apiUrl}video/query/?fields=${fields}`,
-      {
-        filters: {
-          video_ids: videoIds,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          'Content-Type': 'application/json; charset=UTF-8',
-        },
-      },
-    );
-
-    const data = response.data;
-
-    if (data.error) {
-      throw new Error(
-        `TikTok API error: ${data.error.message} (${data.error.code})`,
-      );
-    }
-
-    const videos = data.data?.videos || [];
-    const posts: PlatformPost[] = videos.map((video) =>
-      this.mapVideoToPlatformPost(
-        video,
-        account.social_provider_user_id,
-        includeMetrics,
-      ),
-    );
-
-    return {
-      posts,
-      count: posts.length,
-      has_more: false,
-    };
+  /**
+   * Checks if two captions match (exact match after normalization)
+   */
+  private captionsMatch(caption1: string, caption2: string): boolean {
+    return caption1 === caption2;
   }
 }

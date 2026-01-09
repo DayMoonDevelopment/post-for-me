@@ -44,4 +44,13 @@ export class SocialPostQueryDto extends BasePaginatedQueryDto {
   })
   @IsOptional()
   external_id?: string[];
+
+  @ApiProperty({
+    description: 'Filter by social account ID. Multiple values imply OR logic.',
+    required: false,
+    type: 'array',
+    items: { type: 'string' },
+  })
+  @IsOptional()
+  social_account_id?: string[];
 }

@@ -533,7 +533,8 @@ export class SocialPostsService {
     queryParams: SocialPostQueryDto,
     projectId: string,
   ): PaginatedRequestQuery<SocialPostDto> {
-    const { offset, limit, platform, status, external_id } = queryParams;
+    const { offset, limit, platform, status, external_id, social_account_id } =
+      queryParams;
 
     const query = this.supabaseService.supabaseClient
       .from('social_posts')
@@ -584,6 +585,28 @@ export class SocialPostsService {
       query.in(
         'social_post_provider_connections.social_provider_connections.provider',
         values.map((v) => v as ProviderTypeEnum),
+      );
+    }
+
+    if (social_account_id) {
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof social_account_id === 'string': {
+          values.push(...(social_account_id as string).split(','));
+          break;
+        }
+        case Array.isArray(social_account_id):
+          values.push(...social_account_id);
+          break;
+        default:
+          values.push(social_account_id);
+          break;
+      }
+
+      query.in(
+        'social_post_provider_connections.social_provider_connections.id',
+        values,
       );
     }
 

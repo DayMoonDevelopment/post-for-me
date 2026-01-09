@@ -59,31 +59,6 @@ export interface TikTokTokenResponse {
 }
 
 /**
- * TikTok publish status response
- */
-export interface TikTokPublishStatusResponse {
-  data: {
-    status: string;
-    publicaly_available_post_id: number[];
-    fail_reason?: string;
-  };
-  error?: {
-    code: string;
-    message: string;
-    log_id?: string;
-  };
-}
-
-/**
- * TikTok video query request body
- */
-export interface TikTokVideoQueryRequest {
-  filters: {
-    video_ids: string[];
-  };
-}
-
-/**
  * TikTok video query response
  */
 export interface TikTokVideoQueryResponse {
@@ -95,4 +70,24 @@ export interface TikTokVideoQueryResponse {
     message: string;
     log_id?: string;
   };
+}
+
+/**
+ * TikTok video search request filters
+ */
+export interface TikTokVideoSearchFilters {
+  video_ids?: string[];
+  create_date_filter?: {
+    min: number; // Unix timestamp
+    max: number; // Unix timestamp
+  };
+}
+
+/**
+ * TikTok video search request body
+ */
+export interface TikTokVideoSearchRequest {
+  filters: TikTokVideoSearchFilters;
+  max_count?: number;
+  cursor?: number;
 }

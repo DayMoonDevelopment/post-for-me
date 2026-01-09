@@ -209,6 +209,7 @@ export class YouTubeService implements SocialPlatformService {
   }: {
     account: SocialAccount;
     platformIds?: string[];
+    platformPostsMetadata?: any;
     limit: number;
     cursor?: string;
     includeMetrics?: boolean;

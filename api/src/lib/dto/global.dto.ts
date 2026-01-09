@@ -66,3 +66,9 @@ export interface PlatformPostsResponse {
   cursor?: string;
   has_more: boolean;
 }
+
+export interface PlatformPostMetadata {
+  platformId: string;
+  caption: string;
+  postedAt: string;
+}
