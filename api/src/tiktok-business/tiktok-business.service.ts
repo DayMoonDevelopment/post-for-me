@@ -117,13 +117,7 @@ export class TikTokBusinessService implements SocialPlatformService {
 
     // If platformIds are provided, query for specific videos using filters
     if (platformIds && platformIds.length > 0) {
-      // Extract item_id from the platformIds (format: v_pub_url~v2.{item_id})
-      const itemIds = platformIds.map((id) => {
-        const match = id.match(/v_pub_url~v2\.(.+)/);
-        return match ? match[1] : id;
-      });
-
-      const getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=${fields}&filters={"item_ids":${JSON.stringify(itemIds)}}`;
+      const getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=${fields}&filters={"video_ids":${JSON.stringify(platformIds)}}`;
 
       const videoResponse = await axios.get(getVideosUrl, {
         headers: {
@@ -157,7 +151,7 @@ export class TikTokBusinessService implements SocialPlatformService {
         posts: data.data.videos.map(
           (v): PlatformPost => ({
             provider: 'tiktok_business',
-            id: `v_pub_url~v2.${v.item_id}`,
+            id: v.item_id,
             url: v.share_url,
             account_id: account.social_provider_user_id,
             caption: v.caption,
@@ -244,7 +238,7 @@ export class TikTokBusinessService implements SocialPlatformService {
       posts: data.data.videos.map(
         (v): PlatformPost => ({
           provider: 'tiktok_business',
-          id: `v_pub_url~v2.${v.item_id}`,
+          id: v.item_id,
           url: v.share_url,
           account_id: account.social_provider_user_id,
           caption: v.caption,
@@ -411,7 +405,7 @@ export class TikTokBusinessService implements SocialPlatformService {
           if (matchedVideo) {
             matchedPosts.push({
               provider: 'tiktok_business',
-              id: `v_pub_url~v2.${matchedVideo.item_id}`,
+              id: matchedVideo.item_id,
               url: matchedVideo.share_url,
               account_id: account.social_provider_user_id,
               caption: matchedVideo.caption,
