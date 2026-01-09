@@ -89,6 +89,7 @@ export class TikTokBusinessService implements SocialPlatformService {
 
   async getAccountPosts({
     account,
+    platformIds,
     platformPostsMetadata,
     limit,
     cursor,
@@ -113,6 +114,97 @@ export class TikTokBusinessService implements SocialPlatformService {
     // Build fields list based on whether metrics are requested
     const fields = this.buildFieldsList(includeMetrics);
     const safeLimit = Math.min(limit, 20);
+
+    // If platformIds are provided, query for specific videos using filters
+    if (platformIds && platformIds.length > 0) {
+      // Extract item_id from the platformIds (format: v_pub_url~v2.{item_id})
+      const itemIds = platformIds.map((id) => {
+        const match = id.match(/v_pub_url~v2\.(.+)/);
+        return match ? match[1] : id;
+      });
+
+      const getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=${fields}&filters={"item_ids":${JSON.stringify(itemIds)}}`;
+
+      const videoResponse = await axios.get(getVideosUrl, {
+        headers: {
+          'Access-Token': account.access_token,
+        },
+      });
+
+      const data = videoResponse.data as {
+        code: number;
+        message: string;
+        data: {
+          cursor: number;
+          has_more: boolean;
+          videos: (TikTokBusinessMetricsDto & {
+            item_id: string;
+            share_url: string;
+            caption: string;
+            embed_url: string;
+            thumbnail_url: string;
+            create_time?: number;
+          })[];
+        };
+      };
+
+      if (data.code != 0 && data.code != 20001) {
+        throw new Error(`Unable to get posts, message: ${data.message}`);
+      }
+
+      const response: PlatformPostsResponse = {
+        has_more: false,
+        posts: data.data.videos.map(
+          (v): PlatformPost => ({
+            provider: 'tiktok_business',
+            id: `v_pub_url~v2.${v.item_id}`,
+            url: v.share_url,
+            account_id: account.social_provider_user_id,
+            caption: v.caption,
+            posted_at: v.create_time
+              ? new Date(v.create_time * 1000).toISOString()
+              : undefined,
+            metrics: includeMetrics
+              ? {
+                  likes: v.likes,
+                  comments: v.comments,
+                  shares: v.shares,
+                  favorites: v.favorites,
+                  reach: v.reach,
+                  video_views: v.video_views,
+                  total_time_watched: v.total_time_watched,
+                  average_time_watched: v.average_time_watched,
+                  full_video_watched_rate: v.full_video_watched_rate,
+                  new_followers: v.new_followers,
+                  profile_views: v.profile_views,
+                  website_clicks: v.website_clicks,
+                  phone_number_clicks: v.phone_number_clicks,
+                  lead_submissions: v.lead_submissions,
+                  app_download_clicks: v.app_download_clicks,
+                  email_clicks: v.email_clicks,
+                  address_clicks: v.address_clicks,
+                  video_view_retention: v.video_view_retention,
+                  impression_sources: v.impression_sources,
+                  audience_types: v.audience_types,
+                  audience_genders: v.audience_genders,
+                  audience_countries: v.audience_countries,
+                  audience_cities: v.audience_cities,
+                  engagement_likes: v.engagement_likes,
+                }
+              : undefined,
+            media: [
+              {
+                url: v.embed_url,
+                thumbnail_url: v.thumbnail_url,
+              },
+            ],
+          }),
+        ),
+        count: data.data.videos.length,
+      };
+
+      return response;
+    }
 
     let getVideosUrl = `${this.apiUrl}business/video/list/?business_id=${account.social_provider_user_id}&fields=${fields}&max_count=${safeLimit}`;
 

@@ -12,6 +12,7 @@ import { SupabaseService } from '../supabase/supabase.service';
 import type {
   TikTokTokenResponse,
   TikTokVideoListResponse,
+  TikTokVideoQueryResponse,
   TikTokVideo,
 } from './tiktok.types';
 
@@ -124,6 +125,7 @@ export class TikTokService implements SocialPlatformService {
 
   async getAccountPosts({
     account,
+    platformIds,
     platformPostsMetadata,
     limit,
     cursor,
@@ -155,6 +157,40 @@ export class TikTokService implements SocialPlatformService {
       const fields = includeMetrics
         ? `${baseFields},${metricsFields}`
         : baseFields;
+
+      // If platformIds are provided, use the video query endpoint with filters
+      if (platformIds && platformIds.length > 0) {
+        const response = await axios.post<TikTokVideoQueryResponse>(
+          `${this.apiUrl}video/query/?fields=${fields}`,
+          {
+            filters: {
+              video_ids: platformIds,
+            },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${account.access_token}`,
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+          },
+        );
+
+        const data = response.data;
+        const videos = data.data?.videos || [];
+        const posts: PlatformPost[] = videos.map((video) =>
+          this.mapVideoToPlatformPost(
+            video,
+            account.social_provider_user_id,
+            includeMetrics,
+          ),
+        );
+
+        return {
+          posts,
+          count: posts.length,
+          has_more: false,
+        };
+      }
 
       // Otherwise, use the video list endpoint to get recent videos
       const response = await axios.post<TikTokVideoListResponse>(
