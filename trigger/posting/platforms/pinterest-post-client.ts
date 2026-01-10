@@ -313,10 +313,145 @@ export class PinterestPostClient extends PostClient {
       attempts++;
     }
 
-    return {
+    const mediaSource: any = {
       source_type: "video_id",
       media_id: mediaId,
-      cover_image_key_frame_time: Math.round((coverImageTimestamp || 0) / 1000),
     };
+
+    // Add custom cover image if provided, otherwise use timestamp
+    if (medium.thumbnail_url) {
+      try {
+        const coverImageId = await this.#uploadCoverImage({
+          account,
+          thumbnailUrl: medium.thumbnail_url,
+        });
+        mediaSource.cover_image_media_id = coverImageId;
+      } catch (error) {
+        console.error("Failed to upload cover image:", error);
+        // Fallback to timestamp if cover image upload fails
+        if (coverImageTimestamp) {
+          mediaSource.cover_image_key_frame_time = Math.round(
+            coverImageTimestamp / 1000
+          );
+        }
+      }
+    } else if (coverImageTimestamp) {
+      mediaSource.cover_image_key_frame_time = Math.round(
+        coverImageTimestamp / 1000
+      );
+    }
+
+    return mediaSource;
+  }
+
+  async #uploadCoverImage({
+    account,
+    thumbnailUrl,
+  }: {
+    account: SocialAccount;
+    thumbnailUrl: string;
+  }): Promise<string> {
+    let mediaUrl = "https://api.pinterest.com/v5/media";
+    if (account.social_provider_metadata?.is_sandbox) {
+      mediaUrl = "https://api-sandbox.pinterest.com/v5/media";
+    }
+
+    // Register cover image upload
+    const registerResponse = await axios.post(
+      mediaUrl,
+      {
+        media_type: "image",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    this.#responses.push({
+      coverImageRegisterResponse: registerResponse.data,
+    });
+
+    const coverMediaId = registerResponse.data.media_id;
+    const { upload_url, upload_parameters } = registerResponse.data;
+
+    // Get the cover image file
+    const coverImageFile = await this.getFile({
+      url: thumbnailUrl,
+      type: "image",
+    });
+
+    const coverImageBuffer = Buffer.from(await coverImageFile.arrayBuffer());
+
+    // Create form data for cover image
+    const form = new FormData();
+    form.append("Content-Type", "multipart/form-data");
+
+    Object.entries(upload_parameters).forEach(([key, value]) => {
+      if (key !== "Content-Type") {
+        form.append(key, value);
+      }
+    });
+
+    form.append("file", coverImageBuffer, {
+      filename: coverImageFile.name,
+      contentType: coverImageFile.type,
+    });
+
+    this.#requests.push({
+      uploadCoverImageRequest: { thumbnail: thumbnailUrl },
+    });
+
+    const uploadResponse = await axios.post(upload_url, form, {
+      headers: {
+        ...form.getHeaders(),
+      },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+    });
+
+    this.#responses.push({
+      coverImageUploadResponse: uploadResponse.status,
+    });
+
+    if (uploadResponse.status !== 204) {
+      throw new Error(
+        `Cover image upload failed with status: ${uploadResponse.status}`
+      );
+    }
+
+    // Wait for cover image processing
+    let coverStatus;
+    let attempts = 0;
+    const maxAttempts = 10;
+    let delay = 2000;
+
+    while (attempts < maxAttempts) {
+      const statusResponse = await axios.get(`${mediaUrl}/${coverMediaId}`, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+        },
+      });
+
+      this.#responses.push({
+        coverImageStatusResponse: statusResponse.data,
+      });
+
+      coverStatus = statusResponse.data.status;
+
+      if (coverStatus === "succeeded") {
+        break;
+      } else if (coverStatus === "failed") {
+        throw new Error("Cover image processing failed");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay *= 1.2;
+      attempts++;
+    }
+
+    return coverMediaId;
   }
 }
