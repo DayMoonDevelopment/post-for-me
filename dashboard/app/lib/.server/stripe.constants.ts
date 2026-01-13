@@ -4,6 +4,7 @@ export const STRIPE_API_PRODUCT_ID = process.env?.STRIPE_API_PRODUCT_ID || "";
 export const STRIPE_CREDS_ADDON_PRODUCT_ID =
   process.env?.STRIPE_CREDS_ADDON_PRODUCT_ID || "";
 export const STRIPE_METER_EVENT_ID = process.env?.STRIPE_METER_EVENT_ID || "";
+export const STRIPE_CANCELLED_STATUSES = ["canceled", "unpaid"];
 
 // New pricing model product IDs
 export const STRIPE_PRICING_TIER_1K_PRODUCT_ID =
