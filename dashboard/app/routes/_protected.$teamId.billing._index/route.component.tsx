@@ -28,6 +28,7 @@ export function Component() {
   const {
     team,
     subscription,
+    hasSubscription,
     hasActiveSubscription,
     hasCredsAddon,
     portalUrl,
@@ -35,6 +36,7 @@ export function Component() {
     upcomingInvoice,
     planInfo,
     isLegacyPlan,
+    cancelAt,
     pricingTiers,
   } = useLoaderData<typeof loader>();
 
@@ -53,23 +55,34 @@ export function Component() {
         </p>
       </div>
 
-      {/* Only show subscription status card if there is an active subscription */}
-      {hasActiveSubscription ? (
+      {/* Show subscription details if a manageable subscription exists */}
+      {hasSubscription ? (
         <div className={`gap-6 ${isLegacyPlan ? "grid md:grid-cols-2" : ""}`}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 Subscription Status
-                <Badge
-                  variant="default"
-                  className="bg-green-100 text-green-800"
-                >
-                  <CheckmarkSmallIcon className="w-3 h-3 mr-1" />
-                  Active
-                </Badge>
+                {hasActiveSubscription ? (
+                  <Badge
+                    variant="default"
+                    className="bg-green-100 text-green-800"
+                  >
+                    <CheckmarkSmallIcon className="w-3 h-3 mr-1" />
+                    Active
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    <CrossSmallIcon className="w-3 h-3 mr-1" />
+                    {subscription?.status === "past_due"
+                      ? "Payment Issue"
+                      : "Inactive"}
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
-                Your subscription is active and ready to use
+                {hasActiveSubscription
+                  ? "Your subscription is active and ready to use"
+                  : "Manage your subscription to resolve billing issues or restart."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -111,13 +124,22 @@ export function Component() {
                   </>
                 ) : null}
 
+                {cancelAt ? (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Cancels on:</span>
+                    <span>
+                      {new Date(cancelAt * 1000).toLocaleDateString()}
+                    </span>
+                  </div>
+                ) : null}
+
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Billing email:</span>
                   <span>{team.billing_email || "Not set"}</span>
                 </div>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 space-y-2">
                 {portalUrl ? (
                   <Button asChild className="w-full">
                     <a href={portalUrl}>Manage Subscription</a>
@@ -194,8 +216,8 @@ export function Component() {
         </div>
       ) : null}
 
-      {/* Show pricing tiers for legacy plans or no subscription */}
-      {(isLegacyPlan || !hasActiveSubscription) &&
+      {/* Show pricing tiers for legacy plans or no subscription/canceled */}
+      {(isLegacyPlan || !hasSubscription) &&
       pricingTiers.length > 0 &&
       selectedTier ? (
         <>
