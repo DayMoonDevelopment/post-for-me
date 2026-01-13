@@ -8,7 +8,7 @@ const UNKEY_API_ID = process.env.UNKEY_API_ID!;
 const TMP_KEY_PREFIX = process.env.TMP_KEY_PREFIX || "pfm_tmp";
 
 export const unkeyTmpKeyCleanup = schedules.task({
-  cron: "0 */1 * * *",
+  //  cron: "0 */1 * * *",
   id: "unkey-tmp-key-cleanup",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },

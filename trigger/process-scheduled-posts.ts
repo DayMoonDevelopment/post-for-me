@@ -6,11 +6,11 @@ import { Database } from "@post-for-me/db";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 export const processScheduledPosts = schedules.task({
-  cron: "*/2 * * * *",
+  // cron: "*/2 * * * *",
   id: "process-scheduled-posts",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
@@ -47,7 +47,7 @@ export const processScheduledPosts = schedules.task({
               provider_connection_id,
               provider_data
             )
-            `
+            `,
         )
         .eq("status", "scheduled")
         .lte("post_at", new Date().toISOString())
@@ -90,7 +90,7 @@ export const processScheduledPosts = schedules.task({
               post: typedPost,
             },
           };
-        })
+        }),
       );
 
       logger.info("Scheduled posts triggered", { result });
