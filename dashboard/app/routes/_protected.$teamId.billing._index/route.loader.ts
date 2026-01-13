@@ -1,7 +1,6 @@
 import { stripe } from "~/lib/.server/stripe";
 import { withSupabase } from "~/lib/.server/supabase";
 import {
-  STRIPE_API_PRODUCT_ID,
   STRIPE_CREDS_ADDON_PRODUCT_ID,
   PRICING_TIERS,
 } from "~/lib/.server/stripe.constants";
@@ -36,41 +35,49 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
     request.url,
   ).toString();
 
-  let subscription = null;
+  let subscription: Stripe.Subscription | null = null;
+  let hasSubscription = false;
   let hasActiveSubscription = false;
   let hasCredsAddon = false;
   let hasCredsAccess = false;
-  let portalUrl = null;
-  let checkoutUrl = null;
+  let portalUrl: string | null = null;
+  let checkoutUrl: string | null = null;
   let upcomingInvoice: Stripe.Invoice | null = null;
   let planInfo = null;
   let isLegacyPlan = false;
   let isNewPricingPlan = false;
+  let cancelAt: number | null = null;
 
   if (team.data.stripe_customer_id) {
+    // Fetch the most recent subscription, but ignore statuses we can't update.
     const subscriptions = await stripe.subscriptions.list({
       customer: team.data.stripe_customer_id,
-      status: "active",
+      status: "all",
+      limit: 1,
       expand: ["data.items.data.price"],
     });
 
-    subscription = subscriptions.data[0] || null;
+    const latestSubscription = subscriptions.data[0] || null;
 
-    if (subscription) {
+    if (
+      latestSubscription &&
+      latestSubscription.status !== "canceled" &&
+      latestSubscription.status !== "unpaid"
+    ) {
+      subscription = latestSubscription;
+      hasSubscription = true;
       planInfo = getSubscriptionPlanInfo(subscription);
       isLegacyPlan = planInfo.isLegacy;
       isNewPricingPlan = planInfo.isNewPricing;
 
       hasActiveSubscription =
-        isLegacyPlan ||
-        isNewPricingPlan ||
-        subscription.items.data.some(
-          (item) => item.price.product === STRIPE_API_PRODUCT_ID,
-        );
+        subscription.status === "active" || subscription.status === "trialing";
 
       hasCredsAccess = subscription.items.data.some(
         (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID,
       );
+
+      cancelAt = subscription.cancel_at;
 
       const schedules = await stripe.subscriptionSchedules.list({
         customer: team.data.stripe_customer_id,
@@ -88,17 +95,14 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
       } catch (error) {
         console.error(error);
       }
-    }
 
-    if (hasActiveSubscription) {
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: team.data.stripe_customer_id,
         return_url: teamDashboardUrl,
       });
       portalUrl = portalSession.url;
     } else {
-      // No active subscription - show new pricing checkout
-      // Default to first tier if available
+      // No manageable subscription exists - show new pricing checkout
       const defaultTier = PRICING_TIERS[0];
       if (defaultTier) {
         const product = await stripe.products.retrieve(defaultTier.productId);
@@ -159,6 +163,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
   return {
     team: team.data,
     subscription,
+    hasSubscription,
     hasActiveSubscription,
     hasCredsAddon,
     portalUrl,
@@ -168,6 +173,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
     planInfo,
     isLegacyPlan,
     isNewPricingPlan,
+    cancelAt,
     pricingTiers: PRICING_TIERS,
   };
 });
