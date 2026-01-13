@@ -81,9 +81,13 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
           ? false
           : hasCredsAccess;
 
-      upcomingInvoice = await stripe.invoices.createPreview({
-        subscription: subscription.id,
-      });
+      try {
+        upcomingInvoice = await stripe.invoices.createPreview({
+          subscription: subscription.id,
+        });
+      } catch (error) {
+        console.error(error);
+      }
     }
 
     if (hasActiveSubscription) {
