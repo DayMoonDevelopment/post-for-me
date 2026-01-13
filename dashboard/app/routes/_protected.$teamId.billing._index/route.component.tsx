@@ -73,12 +73,9 @@ export function Component() {
                 ) : (
                   <Badge variant="secondary">
                     <CrossSmallIcon className="w-3 h-3 mr-1" />
-                    {subscription?.status === "past_due" ||
-                    subscription?.status === "unpaid"
+                    {subscription?.status === "past_due"
                       ? "Payment Issue"
-                      : subscription?.status === "canceled"
-                        ? "Canceled"
-                        : "Inactive"}
+                      : "Inactive"}
                   </Badge>
                 )}
               </CardTitle>
@@ -110,7 +107,9 @@ export function Component() {
                     </div>
                     {planInfo.postLimit ? (
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Post Limit:</span>
+                        <span className="text-muted-foreground">
+                          Post Limit:
+                        </span>
                         <span>{planInfo.postLimit.toLocaleString()} posts</span>
                       </div>
                     ) : null}
@@ -128,7 +127,9 @@ export function Component() {
                 {cancelAt ? (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Cancels on:</span>
-                    <span>{new Date(cancelAt * 1000).toLocaleDateString()}</span>
+                    <span>
+                      {new Date(cancelAt * 1000).toLocaleDateString()}
+                    </span>
                   </div>
                 ) : null}
 
@@ -148,19 +149,6 @@ export function Component() {
                     Unable to load billing
                   </Button>
                 )}
-
-                {/* Allow scheduling cancellation from within the app */}
-                {subscription &&
-                subscription.status !== "canceled" &&
-                !subscription.cancel_at_period_end &&
-                !subscription.cancel_at ? (
-                  <Form method="post">
-                    <input type="hidden" name="action" value="schedule_cancel" />
-                    <Button type="submit" variant="destructive" className="w-full">
-                      Cancel subscription (at period end)
-                    </Button>
-                  </Form>
-                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -229,7 +217,7 @@ export function Component() {
       ) : null}
 
       {/* Show pricing tiers for legacy plans or no subscription/canceled */}
-      {(isLegacyPlan || !hasSubscription || subscription?.status === "canceled") &&
+      {(isLegacyPlan || !hasSubscription) &&
       pricingTiers.length > 0 &&
       selectedTier ? (
         <>
