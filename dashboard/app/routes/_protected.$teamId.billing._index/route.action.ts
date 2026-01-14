@@ -1,5 +1,6 @@
 import { redirect } from "react-router";
 import { z } from "zod";
+import type Stripe from "stripe";
 
 import { stripe } from "~/lib/.server/stripe";
 import { withSupabase } from "~/lib/.server/supabase";
@@ -9,19 +10,20 @@ import {
   PRICING_TIERS,
 } from "~/lib/.server/stripe.constants";
 
-const addonActionSchema = z.object({
-  action: z.enum(["add_addon", "remove_addon"]),
-});
+type BillingTeam = {
+  id: string;
+  name: string;
+  stripe_customer_id: string | null;
+  billing_email: string | null;
+};
 
-const checkoutActionSchema = z.object({
-  action: z.literal("create_checkout"),
-  tierIndex: z.string(),
-});
-
-const upgradeActionSchema = z.object({
-  action: z.literal("upgrade_from_legacy"),
-  tierIndex: z.string(),
-});
+type ActionDeps = {
+  request: Request;
+  teamId: string;
+  currentUserId: string;
+  team: BillingTeam;
+  formData: FormData;
+};
 
 export const action = withSupabase(async ({ supabase, params, request }) => {
   const { teamId } = params;
@@ -51,171 +53,249 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
   const formData = await request.formData();
   const action = formData.get("action");
 
-  // Handle upgrade from legacy plan
-  if (action === "upgrade_from_legacy") {
-    if (!team.data.stripe_customer_id) {
-      return new Response("No billing setup found", { status: 400 });
-    }
+  const deps: ActionDeps = {
+    request,
+    teamId,
+    currentUserId: currentUser.data.user.id,
+    team: team.data,
+    formData,
+  };
 
-    const upgradeResult = upgradeActionSchema.safeParse({
-      action: formData.get("action"),
-      tierIndex: formData.get("tierIndex"),
-    });
+  switch (action) {
+    case "upgrade_from_legacy":
+      return handleUpgradeFromLegacy(deps);
+    case "create_checkout":
+      return handleCreateCheckout(deps);
+    default:
+      return handleAddonActions(deps);
+  }
+});
 
-    if (!upgradeResult.success) {
-      return new Response("Invalid upgrade action", { status: 400 });
-    }
+// Helper functions
+function getDefaultPriceId(product: Stripe.Product): string {
+  const defaultPrice = product.default_price;
 
-    const tierIndex = parseInt(upgradeResult.data.tierIndex);
-    const selectedTier = PRICING_TIERS[tierIndex];
-
-    if (!selectedTier) {
-      return new Response("Invalid tier selected", { status: 400 });
-    }
-
-    try {
-      // Get the active subscription
-      const subscriptions = await stripe.subscriptions.list({
-        customer: team.data.stripe_customer_id,
-        status: "active",
-        expand: ["data.items.data.price"],
-      });
-
-      const subscription = subscriptions.data[0];
-
-      if (!subscription) {
-        return new Response("No active subscription found", { status: 400 });
-      }
-
-      // Find the legacy API product item and addon item
-      const legacyApiItem = subscription.items.data.find(
-        (item) => item.price.product === STRIPE_API_PRODUCT_ID
-      );
-
-      const addonItem = subscription.items.data.find(
-        (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID
-      );
-
-      if (!legacyApiItem) {
-        return new Response("No legacy subscription item found", { status: 400 });
-      }
-
-      // Get the new product
-      const newProduct = await stripe.products.retrieve(selectedTier.productId);
-
-      // Remove any active subscription schedules first
-      const schedules = await stripe.subscriptionSchedules.list({
-        customer: team.data.stripe_customer_id,
-      });
-
-      for (const schedule of schedules.data.filter(
-        (s) => s.status === "active"
-      )) {
-        await stripe.subscriptionSchedules.release(schedule.id);
-      }
-
-      // Update the subscription: remove legacy items and add new plan
-      const itemsToRemove = [legacyApiItem.id];
-      if (addonItem) {
-        itemsToRemove.push(addonItem.id);
-      }
-
-      await stripe.subscriptions.update(subscription.id, {
-        items: [
-          // Remove legacy product and addon
-          ...itemsToRemove.map((id) => ({ id, deleted: true })),
-          // Add new pricing tier product
-          {
-            price: newProduct.default_price as string,
-            quantity: 1,
-          },
-        ],
-        proration_behavior: "always_invoice",
-        metadata: {
-          ...subscription.metadata,
-          upgraded_from_legacy: new Date().toISOString(),
-          upgraded_by: currentUser.data.user.id,
-        },
-      });
-
-      const redirectUrl = new URL(`/${teamId}/billing`, request.url);
-      redirectUrl.searchParams.set("toast_type", "success");
-      redirectUrl.searchParams.set(
-        "toast",
-        `Successfully upgraded to Pro plan with ${selectedTier.posts.toLocaleString()} posts/month`
-      );
-
-      return redirect(redirectUrl.toString());
-    } catch (error) {
-      console.error("Error upgrading from legacy plan:", error);
-
-      const redirectUrl = new URL(`/${teamId}/billing`, request.url);
-      redirectUrl.searchParams.set("toast_type", "error");
-      redirectUrl.searchParams.set(
-        "toast",
-        "Failed to upgrade subscription. Please try again."
-      );
-
-      return redirect(redirectUrl.toString());
-    }
+  if (!defaultPrice) {
+    throw new Error("Stripe product has no default price");
   }
 
-  // Handle checkout creation
-  if (action === "create_checkout") {
-    const checkoutResult = checkoutActionSchema.safeParse({
-      action: formData.get("action"),
-      tierIndex: formData.get("tierIndex"),
-    });
-
-    if (!checkoutResult.success) {
-      return new Response("Invalid checkout action", { status: 400 });
-    }
-
-    const tierIndex = parseInt(checkoutResult.data.tierIndex);
-    const selectedTier = PRICING_TIERS[tierIndex];
-
-    if (!selectedTier) {
-      return new Response("Invalid tier selected", { status: 400 });
-    }
-
-    const product = await stripe.products.retrieve(selectedTier.productId);
-    const teamDashboardUrl = new URL(`/${teamId}/billing`, request.url).toString();
-
-    try {
-      const checkoutSession = await stripe.checkout.sessions.create({
-        customer: team.data.stripe_customer_id || undefined,
-        customer_email: team.data.stripe_customer_id ? undefined : team.data.billing_email || undefined,
-        mode: "subscription",
-        line_items: [
-          {
-            price: product.default_price as string,
-            quantity: 1,
-          },
-        ],
-        client_reference_id: teamId,
-        metadata: {
-          team_id: teamId,
-          team_name: team.data.name,
-          created_by: currentUser.data.user.id,
-        },
-        success_url: new URL(
-          `/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
-          request.url,
-        ).toString(),
-        cancel_url: teamDashboardUrl,
-      });
-
-      return redirect(checkoutSession.url!);
-    } catch (error) {
-      console.error("Error creating checkout session:", error);
-      return new Response("Failed to create checkout session", { status: 500 });
-    }
+  if (typeof defaultPrice === "string") {
+    return defaultPrice;
   }
 
-  // Handle addon actions
-  if (!team.data.stripe_customer_id) {
+  return defaultPrice.id;
+}
+
+async function handleUpgradeFromLegacy({
+  request,
+  teamId,
+  currentUserId,
+  team,
+  formData,
+}: ActionDeps) {
+  if (!team.stripe_customer_id) {
     return new Response("No billing setup found", { status: 400 });
   }
+
+  const upgradeActionSchema = z.object({
+    action: z.literal("upgrade_from_legacy"),
+    tierIndex: z.string(),
+  });
+
+  const upgradeResult = upgradeActionSchema.safeParse({
+    action: formData.get("action"),
+    tierIndex: formData.get("tierIndex"),
+  });
+
+  if (!upgradeResult.success) {
+    return new Response("Invalid upgrade action", { status: 400 });
+  }
+
+  const tierIndex = parseInt(upgradeResult.data.tierIndex);
+  const selectedTier = PRICING_TIERS[tierIndex];
+
+  if (!selectedTier) {
+    return new Response("Invalid tier selected", { status: 400 });
+  }
+
+  try {
+    // Get the most recent subscription regardless of status
+    const subscriptions = await stripe.subscriptions.list({
+      customer: team.stripe_customer_id,
+      status: "all",
+      limit: 1,
+      expand: ["data.items.data.price"],
+    });
+
+    const subscription = subscriptions.data[0];
+
+    if (
+      !subscription ||
+      subscription.status === "canceled" ||
+      subscription.status === "unpaid"
+    ) {
+      return new Response("No manageable subscription found", {
+        status: 400,
+      });
+    }
+
+    // Find the legacy API product item and addon item
+    const legacyApiItem = subscription.items.data.find(
+      (item) => item.price.product === STRIPE_API_PRODUCT_ID,
+    );
+
+    const addonItem = subscription.items.data.find(
+      (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID,
+    );
+
+    if (!legacyApiItem) {
+      return new Response("No legacy subscription item found", {
+        status: 400,
+      });
+    }
+
+    // Get the new product
+    const newProduct = await stripe.products.retrieve(selectedTier.productId);
+
+    // Remove any active subscription schedules first
+    const schedules = await stripe.subscriptionSchedules.list({
+      customer: team.stripe_customer_id,
+    });
+
+    for (const schedule of schedules.data.filter(
+      (s) => s.status === "active",
+    )) {
+      await stripe.subscriptionSchedules.release(schedule.id);
+    }
+
+    // Update the subscription: remove legacy items and add new plan
+    const itemsToRemove = [legacyApiItem.id];
+    if (addonItem) {
+      itemsToRemove.push(addonItem.id);
+    }
+
+    await stripe.subscriptions.update(subscription.id, {
+      items: [
+        // Remove legacy product and addon
+        ...itemsToRemove.map((id) => ({ id, deleted: true })),
+        // Add new pricing tier product
+        {
+          price: getDefaultPriceId(newProduct),
+          quantity: 1,
+        },
+      ],
+      proration_behavior: "always_invoice",
+      metadata: {
+        ...subscription.metadata,
+        upgraded_from_legacy: new Date().toISOString(),
+        upgraded_by: currentUserId,
+      },
+    });
+
+    const redirectUrl = new URL(`/${teamId}/billing`, request.url);
+    redirectUrl.searchParams.set("toast_type", "success");
+    redirectUrl.searchParams.set(
+      "toast",
+      `Successfully upgraded to Pro plan with ${selectedTier.posts.toLocaleString()} posts/month`,
+    );
+
+    return redirect(redirectUrl.toString());
+  } catch (error) {
+    console.error("Error upgrading from legacy plan:", error);
+
+    const redirectUrl = new URL(`/${teamId}/billing`, request.url);
+    redirectUrl.searchParams.set("toast_type", "error");
+    redirectUrl.searchParams.set(
+      "toast",
+      "Failed to upgrade subscription. Please try again.",
+    );
+
+    return redirect(redirectUrl.toString());
+  }
+}
+
+async function handleCreateCheckout({
+  request,
+  teamId,
+  currentUserId,
+  team,
+  formData,
+}: ActionDeps) {
+  const checkoutActionSchema = z.object({
+    action: z.literal("create_checkout"),
+    tierIndex: z.string(),
+  });
+
+  const checkoutResult = checkoutActionSchema.safeParse({
+    action: formData.get("action"),
+    tierIndex: formData.get("tierIndex"),
+  });
+
+  if (!checkoutResult.success) {
+    return new Response("Invalid checkout action", { status: 400 });
+  }
+
+  const tierIndex = parseInt(checkoutResult.data.tierIndex);
+  const selectedTier = PRICING_TIERS[tierIndex];
+
+  if (!selectedTier) {
+    return new Response("Invalid tier selected", { status: 400 });
+  }
+
+  const product = await stripe.products.retrieve(selectedTier.productId);
+  const teamDashboardUrl = new URL(
+    `/${teamId}/billing`,
+    request.url,
+  ).toString();
+
+  try {
+    const checkoutSession = await stripe.checkout.sessions.create({
+      customer: team.stripe_customer_id || undefined,
+      customer_email: team.stripe_customer_id
+        ? undefined
+        : team.billing_email || undefined,
+      mode: "subscription",
+      line_items: [
+        {
+          price: getDefaultPriceId(product),
+          quantity: 1,
+        },
+      ],
+      client_reference_id: teamId,
+      metadata: {
+        team_id: teamId,
+        team_name: team.name,
+        created_by: currentUserId,
+      },
+      success_url: new URL(
+        `/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
+        request.url,
+      ).toString(),
+      cancel_url: teamDashboardUrl,
+    });
+
+    return redirect(checkoutSession.url!);
+  } catch (error) {
+    console.error("Error creating checkout session:", error);
+    return new Response("Failed to create checkout session", {
+      status: 500,
+    });
+  }
+}
+
+async function handleAddonActions({
+  request,
+  teamId,
+  team,
+  formData,
+}: Omit<ActionDeps, "currentUserId">) {
+  if (!team.stripe_customer_id) {
+    return new Response("No billing setup found", { status: 400 });
+  }
+
+  const addonActionSchema = z.object({
+    action: z.enum(["add_addon", "remove_addon"]),
+  });
 
   const result = addonActionSchema.safeParse({
     action: formData.get("action"),
@@ -228,39 +308,48 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
   const { action: actionType } = result.data;
 
   try {
-    // Get the active subscription
+    // Get the most recent subscription regardless of status
     const subscriptions = await stripe.subscriptions.list({
-      customer: team.data.stripe_customer_id,
-      status: "active",
+      customer: team.stripe_customer_id,
+      status: "all",
+      limit: 1,
       expand: ["data.items.data.price"],
     });
 
-    const subscription = subscriptions.data[0];
+    const subscription: Stripe.Subscription | undefined = subscriptions.data[0];
 
-    if (!subscription) {
-      return new Response("No active subscription found", { status: 400 });
+    if (
+      !subscription ||
+      subscription.status === "canceled" ||
+      subscription.status === "unpaid"
+    ) {
+      return new Response("No manageable subscription found", {
+        status: 400,
+      });
     }
 
     // Get the addon product
     const addonProduct = await stripe.products.retrieve(
-      STRIPE_CREDS_ADDON_PRODUCT_ID
+      STRIPE_CREDS_ADDON_PRODUCT_ID,
     );
     const mainProduct = await stripe.products.retrieve(STRIPE_API_PRODUCT_ID);
+
+    const mainDefaultPriceId = getDefaultPriceId(mainProduct);
 
     switch (actionType) {
       case "add_addon": {
         // Check if addon is already present
         const hasAddon = subscription.items.data.some(
-          (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID
+          (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID,
         );
 
         if (hasAddon) {
           const schedules = await stripe.subscriptionSchedules.list({
-            customer: team.data.stripe_customer_id,
+            customer: team.stripe_customer_id,
           });
 
           for (const schedule of schedules.data.filter(
-            (s) => s.status === "active"
+            (s) => s.status === "active",
           )) {
             await stripe.subscriptionSchedules.release(schedule.id);
           }
@@ -269,7 +358,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
 
         await stripe.subscriptionItems.create({
           subscription: subscription.id,
-          price: addonProduct.default_price as string,
+          price: getDefaultPriceId(addonProduct),
           proration_behavior: "always_invoice",
         });
 
@@ -277,7 +366,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
       }
       case "remove_addon": {
         const addonItem = subscription.items.data.find(
-          (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID
+          (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID,
         );
 
         if (!addonItem) {
@@ -285,7 +374,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
         }
 
         const schedules = await stripe.subscriptionSchedules.list({
-          customer: team.data.stripe_customer_id,
+          customer: team.stripe_customer_id,
         });
 
         const schedule =
@@ -302,7 +391,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
               start_date: schedule.phases[0].start_date,
               items: [
                 {
-                  price: mainProduct.default_price as string,
+                  price: mainDefaultPriceId,
                 },
                 {
                   price: addonItem.price.id,
@@ -316,7 +405,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
               start_date: addonItem.current_period_end,
               items: [
                 {
-                  price: mainProduct.default_price as string,
+                  price: mainDefaultPriceId,
                 },
               ],
               proration_behavior: "none",
@@ -334,7 +423,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
       "toast",
       actionType === "add_addon"
         ? "Quickstart Project addon added successfully"
-        : "Quickstart Project addon removed successfully"
+        : "Quickstart Project addon removed successfully",
     );
 
     return redirect(redirectUrl.toString());
@@ -345,9 +434,9 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
     redirectUrl.searchParams.set("toast_type", "error");
     redirectUrl.searchParams.set(
       "toast",
-      "Failed to update addon. Please try again."
+      "Failed to update addon. Please try again.",
     );
 
     return redirect(redirectUrl.toString());
   }
-});
+}

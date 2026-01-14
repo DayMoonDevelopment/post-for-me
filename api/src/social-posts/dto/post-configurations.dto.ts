@@ -103,6 +103,15 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   location?: string;
+
+  @ApiProperty({
+    description:
+      'Instagram trial reel type, when passed will be created as a trial reel. If manual the trial reel can be manually graduated in the native app. If perfomance the trial reel will be automatically graduated if the trial reel performs well.',
+    enum: ['manual', 'performance'],
+    nullable: true,
+    required: false,
+  })
+  trial_reel_type?: string;
 }
 
 export class TiktokConfigurationDto extends BaseConfigurationDto {
@@ -614,6 +623,15 @@ export class AccountConfigurationDetailsDto {
     default: true,
   })
   share_to_feed?: boolean;
+
+  @ApiProperty({
+    description:
+      'Instagram trial reel type, when passed will be created as a trial reel. If manual the trial reel can be manually graduated in the native app. If perfomance the trial reel will be automatically graduated if the trial reel performs well.',
+    enum: ['manual', 'performance'],
+    nullable: true,
+    required: false,
+  })
+  trial_reel_type?: string;
 }
 
 export class AccountConfigurationDto {
