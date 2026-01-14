@@ -334,6 +334,9 @@ export class InstagramPostClient extends PostClient {
       product_tags?: any[];
       location_id?: string;
       user_tags?: any[];
+      trial_params?: {
+        graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
+      };
     } = {
       [isVideo ? "video_url" : "image_url"]: signedUrl,
       caption: caption,
@@ -346,6 +349,18 @@ export class InstagramPostClient extends PostClient {
         break;
       default:
         createMediaParams.media_type = isVideo ? "REELS" : "IMAGE";
+
+        if (
+          createMediaParams.media_type === "REELS" &&
+          platformConfig?.trial_reel_type
+        ) {
+          createMediaParams.trial_params = {
+            graduation_strategy:
+              platformConfig.trial_reel_type === "performance"
+                ? "SS_PERFORMANCE"
+                : "MANUAL",
+          };
+        }
 
         if (thumbnailUrl) {
           createMediaParams.cover_url = thumbnailUrl;

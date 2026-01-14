@@ -122,6 +122,7 @@ export interface InstagramConfiguration {
   collaborators?: string[];
   share_to_feed?: boolean;
   location?: string;
+  trial_reel_type?: string;
 }
 
 export interface TiktokConfiguration {
