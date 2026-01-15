@@ -132,6 +132,16 @@ export class YouTubePostClient extends PostClient {
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       console.log("Video uploaded. ID:", videoId, "URL:", videoUrl);
 
+      // Upload custom thumbnail if provided
+      if (videoId && medium.thumbnail_url) {
+        try {
+          await this.#uploadThumbnail(youtube, videoId, medium);
+        } catch (thumbnailError) {
+          console.error("Failed to upload thumbnail:", thumbnailError);
+          // Don't fail the entire post if thumbnail upload fails
+        }
+      }
+
       return {
         success: true,
         post_id: postId,
@@ -182,6 +192,50 @@ export class YouTubePostClient extends PostClient {
 
     // Trim to 100 characters
     return sanitized.slice(0, 100);
+  }
+
+  async #uploadThumbnail(
+    youtube: youtube_v3.Youtube,
+    videoId: string,
+    medium: PostMedia,
+  ): Promise<void> {
+    if (!medium.thumbnail_url) {
+      return;
+    }
+
+    try {
+      // Get the thumbnail file
+      const thumbnailFile = await this.getFile({
+        url: medium.thumbnail_url,
+        type: "image",
+      });
+
+      const thumbnailBuffer = Buffer.from(await thumbnailFile.arrayBuffer());
+      const thumbnailStream = new Readable();
+      thumbnailStream.push(thumbnailBuffer);
+      thumbnailStream.push(null);
+
+      this.#requests.push({
+        thumbnailUploadRequest: {
+          videoId,
+          thumbnail: medium.thumbnail_url,
+        },
+      });
+
+      const thumbnailResponse = await youtube.thumbnails.set({
+        videoId: videoId,
+        media: {
+          body: thumbnailStream,
+          mimeType: thumbnailFile.type || "image/jpeg",
+        },
+      });
+
+      this.#responses.push({ thumbnailResponse: thumbnailResponse.data });
+      console.log("Thumbnail uploaded successfully for video:", videoId);
+    } catch (error) {
+      console.error("Error uploading thumbnail:", error);
+      throw error;
+    }
   }
 
   #sanitizeYouTubeDescription(description: string): string | null {

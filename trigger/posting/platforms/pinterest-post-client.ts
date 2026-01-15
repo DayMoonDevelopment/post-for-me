@@ -22,18 +22,18 @@ export class PinterestPostClient extends PostClient {
   #appCredentials: PlatformAppCredentials;
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
     this.#appCredentials = appCredentials;
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     // Create Basic Auth header
     const credentials = Buffer.from(
-      `${this.#appCredentials.app_id}:${this.#appCredentials.app_secret}`
+      `${this.#appCredentials.app_id}:${this.#appCredentials.app_secret}`,
     ).toString("base64");
 
     const params = new URLSearchParams({
@@ -234,7 +234,7 @@ export class PinterestPostClient extends PostClient {
           Authorization: `Bearer ${account.access_token}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     this.#responses.push({ registerMediaResponse: registerMediaResponse.data });
@@ -313,10 +313,20 @@ export class PinterestPostClient extends PostClient {
       attempts++;
     }
 
-    return {
+    const mediaSource: any = {
       source_type: "video_id",
       media_id: mediaId,
-      cover_image_key_frame_time: Math.round((coverImageTimestamp || 0) / 1000),
     };
+
+    // Add custom cover image if provided, otherwise use timestamp
+    if (medium.thumbnail_url) {
+      mediaSource.cover_image_url = medium.thumbnail_url;
+    } else if (coverImageTimestamp) {
+      mediaSource.cover_image_key_frame_time = Math.round(
+        coverImageTimestamp / 1000,
+      );
+    }
+
+    return mediaSource;
   }
 }

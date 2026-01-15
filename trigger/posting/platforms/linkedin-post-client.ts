@@ -22,7 +22,7 @@ export class LinkedInPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
     this.#clientId = appCredentials.app_id;
@@ -30,7 +30,7 @@ export class LinkedInPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
     this.#requests.push({ refreshRequest: tokenUrl });
@@ -53,7 +53,7 @@ export class LinkedInPostClient extends PostClient {
 
     if (!response.ok) {
       throw new Error(
-        `Failed to refresh LinkedIn token: ${data.error_description}`
+        `Failed to refresh LinkedIn token: ${data.error_description}`,
       );
     }
 
@@ -123,7 +123,7 @@ export class LinkedInPostClient extends PostClient {
 
       if (!response.ok) {
         throw new Error(
-          `LinkedIn API error: ${response.status} ${response.statusText}`
+          `LinkedIn API error: ${response.status} ${response.statusText}`,
         );
       }
 
@@ -144,7 +144,7 @@ export class LinkedInPostClient extends PostClient {
     } catch (error) {
       console.error(
         `Failed to post to linked for account: ${account.id}`,
-        error
+        error,
       );
       return {
         success: false,
@@ -231,7 +231,7 @@ export class LinkedInPostClient extends PostClient {
             ],
           },
         }),
-      }
+      },
     );
 
     const registerData = await registerResponse.json();
@@ -244,7 +244,7 @@ export class LinkedInPostClient extends PostClient {
       ].uploadUrl;
     const asset = registerData.value.asset;
 
-    // Step 2: Upload the image
+    // Step 2: Upload the video/image
     const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
       headers: {
@@ -256,19 +256,21 @@ export class LinkedInPostClient extends PostClient {
 
     if (!uploadResponse.ok) {
       throw new Error(
-        `Failed to upload image: ${uploadResponse.status} ${uploadResponse.statusText}`
+        `Failed to upload media: ${uploadResponse.status} ${uploadResponse.statusText}`,
       );
     }
 
     this.#responses.push({ uploadResponse: uploadResponse.status });
 
-    return {
+    const mediaObject: any = {
       status: "READY",
       description: {
         text: caption.substring(0, 200),
       },
       media: asset,
     };
+
+    return mediaObject;
   }
 
   async #processMedia({
@@ -305,7 +307,12 @@ export class LinkedInPostClient extends PostClient {
           this.#requests.push({ processMedia: medium });
           const file = await this.getFile(medium);
           uploadedMedia.push(
-            await this.#createMedia({ file, caption, authorUrn, account })
+            await this.#createMedia({
+              file,
+              caption,
+              authorUrn,
+              account,
+            }),
           );
 
           if (i === 0 && medium.type === "video") {

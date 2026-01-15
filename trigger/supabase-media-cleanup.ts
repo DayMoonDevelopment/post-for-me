@@ -4,7 +4,7 @@ import { logger, schedules } from "@trigger.dev/sdk";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 const storageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/post-media`;
@@ -47,7 +47,7 @@ export const supabaseMediaCleanup = schedules.task({
       const oldFiles = files.filter(
         (file) =>
           new Date(file.created_at) < oneDayAgo &&
-          file.metadata?.mimetype !== "text/plain"
+          file.metadata?.mimetype !== "text/plain",
       );
 
       if (oldFiles.length === 0) {
@@ -83,7 +83,7 @@ export const supabaseMediaCleanup = schedules.task({
           .like("url", `%${storageUrl}%`)
           .range(
             scheduledPostOffset,
-            scheduledPostOffset + scheduledPostLimit - 1
+            scheduledPostOffset + scheduledPostLimit - 1,
           );
 
       if (scheduledPostError) {
