@@ -133,7 +133,7 @@ export class YouTubePostClient extends PostClient {
       console.log("Video uploaded. ID:", videoId, "URL:", videoUrl);
 
       // Upload custom thumbnail if provided
-      if (medium.thumbnail_url) {
+      if (videoId && medium.thumbnail_url) {
         try {
           await this.#uploadThumbnail(youtube, videoId, medium);
         } catch (thumbnailError) {
@@ -197,7 +197,7 @@ export class YouTubePostClient extends PostClient {
   async #uploadThumbnail(
     youtube: youtube_v3.Youtube,
     videoId: string,
-    medium: PostMedia
+    medium: PostMedia,
   ): Promise<void> {
     if (!medium.thumbnail_url) {
       return;
