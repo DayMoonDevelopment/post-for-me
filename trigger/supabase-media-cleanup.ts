@@ -10,7 +10,7 @@ const supabaseClient = createClient<Database>(
 const storageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/post-media`;
 
 export const supabaseMediaCleanup = schedules.task({
-  //  cron: "0 */1 * * *",
+  cron: "0 */1 * * *",
   id: "supbase-media-cleanup",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
