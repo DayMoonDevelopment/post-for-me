@@ -22,7 +22,7 @@ export class LinkedInPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
     this.#clientId = appCredentials.app_id;
@@ -30,7 +30,7 @@ export class LinkedInPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
     this.#requests.push({ refreshRequest: tokenUrl });
@@ -53,7 +53,7 @@ export class LinkedInPostClient extends PostClient {
 
     if (!response.ok) {
       throw new Error(
-        `Failed to refresh LinkedIn token: ${data.error_description}`
+        `Failed to refresh LinkedIn token: ${data.error_description}`,
       );
     }
 
@@ -123,7 +123,7 @@ export class LinkedInPostClient extends PostClient {
 
       if (!response.ok) {
         throw new Error(
-          `LinkedIn API error: ${response.status} ${response.statusText}`
+          `LinkedIn API error: ${response.status} ${response.statusText}`,
         );
       }
 
@@ -144,7 +144,7 @@ export class LinkedInPostClient extends PostClient {
     } catch (error) {
       console.error(
         `Failed to post to linked for account: ${account.id}`,
-        error
+        error,
       );
       return {
         success: false,
@@ -179,13 +179,11 @@ export class LinkedInPostClient extends PostClient {
     caption,
     authorUrn,
     account,
-    medium,
   }: {
     file: File;
     caption: string;
     authorUrn: string;
     account: SocialAccount;
-    medium?: PostMedia;
   }): Promise<any> {
     const isVideo = file.type.startsWith("video/");
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -233,7 +231,7 @@ export class LinkedInPostClient extends PostClient {
             ],
           },
         }),
-      }
+      },
     );
 
     const registerData = await registerResponse.json();
@@ -258,7 +256,7 @@ export class LinkedInPostClient extends PostClient {
 
     if (!uploadResponse.ok) {
       throw new Error(
-        `Failed to upload media: ${uploadResponse.status} ${uploadResponse.statusText}`
+        `Failed to upload media: ${uploadResponse.status} ${uploadResponse.statusText}`,
       );
     }
 
@@ -272,98 +270,7 @@ export class LinkedInPostClient extends PostClient {
       media: asset,
     };
 
-    // Upload custom thumbnail if this is a video and thumbnail_url is provided
-    if (isVideo && medium?.thumbnail_url) {
-      try {
-        const thumbnailAsset = await this.#uploadThumbnail({
-          thumbnailUrl: medium.thumbnail_url,
-          authorUrn,
-          account,
-        });
-        mediaObject.thumbnails = [
-          {
-            thumbnail: thumbnailAsset,
-          },
-        ];
-      } catch (thumbnailError) {
-        console.error("Failed to upload thumbnail:", thumbnailError);
-        // Don't fail the entire post if thumbnail upload fails
-      }
-    }
-
     return mediaObject;
-  }
-
-  async #uploadThumbnail({
-    thumbnailUrl,
-    authorUrn,
-    account,
-  }: {
-    thumbnailUrl: string;
-    authorUrn: string;
-    account: SocialAccount;
-  }): Promise<string> {
-    // Get the thumbnail file
-    const thumbnailFile = await this.getFile({
-      url: thumbnailUrl,
-      type: "image",
-    });
-
-    const thumbnailBuffer = Buffer.from(await thumbnailFile.arrayBuffer());
-
-    // Register thumbnail upload
-    const registerResponse = await fetch(
-      "https://api.linkedin.com/v2/assets?action=registerUpload",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          registerUploadRequest: {
-            recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-            owner: authorUrn,
-            serviceRelationships: [
-              {
-                relationshipType: "OWNER",
-                identifier: "urn:li:userGeneratedContent",
-              },
-            ],
-          },
-        }),
-      }
-    );
-
-    const registerData = await registerResponse.json();
-
-    this.#responses.push({ thumbnailRegisterResponse: registerData });
-
-    const uploadUrl =
-      registerData.value.uploadMechanism[
-        "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
-      ].uploadUrl;
-    const thumbnailAsset = registerData.value.asset;
-
-    // Upload the thumbnail
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        "Content-Type": thumbnailFile.type,
-      },
-      body: thumbnailBuffer,
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error(
-        `Failed to upload thumbnail: ${uploadResponse.status} ${uploadResponse.statusText}`
-      );
-    }
-
-    this.#responses.push({ thumbnailUploadResponse: uploadResponse.status });
-
-    return thumbnailAsset;
   }
 
   async #processMedia({
@@ -400,7 +307,12 @@ export class LinkedInPostClient extends PostClient {
           this.#requests.push({ processMedia: medium });
           const file = await this.getFile(medium);
           uploadedMedia.push(
-            await this.#createMedia({ file, caption, authorUrn, account, medium })
+            await this.#createMedia({
+              file,
+              caption,
+              authorUrn,
+              account,
+            }),
           );
 
           if (i === 0 && medium.type === "video") {
