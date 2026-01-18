@@ -40,6 +40,7 @@ import { UpdateSocialAccountDto } from './dto/update-social-account.dto';
 import { CreateSocialAccountDto } from './dto/create-social-account.dto';
 import { tasks } from '@trigger.dev/sdk';
 import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
@@ -50,6 +51,7 @@ export class SocialAccountsController {
     private readonly socialAccountsService: SocialAccountsService,
     private readonly paginationService: PaginationService,
     private readonly socialProviderAppCredentialsService: SocialProviderAppCredentialsService,
+    private readonly supabaseService: SupabaseService,
   ) {}
 
   @Get()
@@ -142,6 +144,20 @@ export class SocialAccountsController {
     @Body() createAuthUrlInput: CreateSocialAccountProviderAuthUrlDto,
     @User() user: RequestUser,
   ): Promise<SocialAccountProviderAuthUrlDto> {
+    const project = await this.supabaseService.supabaseClient
+      .from('projects')
+      .select('is_system')
+      .eq('id', user.projectId)
+      .single();
+
+    const isSystem = project.data?.is_system || false;
+
+    if (createAuthUrlInput.redirect_url_override && isSystem) {
+      throw new HttpException(
+        'Redirect URL Override is not allowed for Quickstart Projects, please set the Project Redirect URL using the dahsboard instead.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     let socialProviderAppCredentials: SocialProviderAppCredentialsDto | null =
       null;
 
@@ -218,6 +234,7 @@ export class SocialAccountsController {
       externalId: createAuthUrlInput.external_id,
       redirectUrlOverride: createAuthUrlInput.redirect_url_override || null,
       permissions: createAuthUrlInput.permissions || ['posts'],
+      isSystem,
     });
 
     return {

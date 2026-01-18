@@ -191,6 +191,7 @@ export class SocialAccountsService {
     externalId,
     redirectUrlOverride,
     permissions,
+    isSystem,
   }: {
     projectId: string;
     appCredentials: SocialProviderAppCredentialsDto;
@@ -198,14 +199,8 @@ export class SocialAccountsService {
     externalId: string | undefined;
     redirectUrlOverride: string | undefined | null;
     permissions: string[];
+    isSystem: boolean;
   }): Promise<string | undefined> {
-    const project = await this.supabaseService.supabaseClient
-      .from('projects')
-      .select('is_system')
-      .eq('id', projectId)
-      .single();
-
-    const isSystem = project.data?.is_system || false;
     const authUrl = await generateAuthUrl({
       projectId,
       isSystem,
