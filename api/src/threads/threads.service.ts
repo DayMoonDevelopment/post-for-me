@@ -41,6 +41,13 @@ interface ThreadsRefreshTokenResponse {
   expires_in: number;
 }
 
+interface ThreadsInsightsResponse {
+  data: {
+    name: string;
+    values: { value: number }[];
+  }[];
+}
+
 @Injectable({ scope: Scope.REQUEST })
 export class ThreadsService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
@@ -92,14 +99,11 @@ export class ThreadsService implements SocialPlatformService {
 
   async getAccountPosts({
     account,
-    platformIds,
     limit,
     cursor,
     includeMetrics = false,
   }: {
     account: SocialAccount;
-    platformIds?: string[];
-    platformPostsMetadata?: any;
     limit: number;
     cursor?: string;
     includeMetrics?: boolean;
@@ -121,18 +125,59 @@ export class ThreadsService implements SocialPlatformService {
         },
       );
 
-      const posts: PlatformPost[] = (response.data.data ?? []).map(
-        (thread) => ({
+      const postsPromises = (response.data.data ?? []).map(async (thread) => {
+        const post: PlatformPost = {
           provider: 'threads',
           id: thread.id,
           account_id: account.social_provider_user_id,
           caption: thread.text ?? '',
           url: thread.permalink ?? '',
+          posted_at: thread.timestamp,
           media: thread.media_url
             ? [{ url: thread.media_url, thumbnail_url: thread.thumbnail_url }]
             : [],
-        }),
-      );
+        };
+
+        if (includeMetrics) {
+          try {
+            const insightsRes = await axios.get<ThreadsInsightsResponse>(
+              `https://graph.threads.net/v1.0/${thread.id}/insights`,
+              {
+                params: {
+                  access_token: account.access_token,
+                  metric: 'likes,replies,reposts,quotes,shares,views',
+                },
+              },
+            );
+
+            if (insightsRes.data.data) {
+              const metrics: { [key: string]: number } = {};
+              insightsRes.data.data.forEach((metric) => {
+                if (metric.values.length > 0) {
+                  metrics[metric.name] = metric.values[0].value;
+                }
+              });
+              post.metrics = {
+                likes: metrics.likes || 0,
+                replies: metrics.replies || 0,
+                reposts: metrics.reposts || 0,
+                quotes: metrics.quotes || 0,
+                shares: metrics.shares || 0,
+                views: metrics.views || 0,
+              };
+            }
+          } catch (error) {
+            console.error(
+              `Error fetching insights for post ${thread.id}:`,
+              error,
+            );
+          }
+        }
+
+        return post;
+      });
+
+      const posts = await Promise.all(postsPromises);
 
       return {
         posts,
