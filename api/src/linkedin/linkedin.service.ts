@@ -5,6 +5,7 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
+import { LinkedInPostMetrics } from './dto/linkedin-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable({ scope: Scope.REQUEST })
@@ -76,9 +77,7 @@ export class LinkedInService implements SocialPlatformService {
     return account;
   }
 
-  getAccountPosts({
-    platformIds,
-  }: {
+  async getAccountPosts(params: {
     account: SocialAccount;
     platformIds?: string[];
     platformPostsMetadata?: any;
@@ -86,41 +85,141 @@ export class LinkedInService implements SocialPlatformService {
     cursor?: string;
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
+    const { account, platformIds, includeMetrics } = params;
+    /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
     try {
-      // LinkedIn API has limited post retrieval capabilities
-      // This is a placeholder implementation
-
-      // These variables would be used in a future implementation
-      // const safeLimit = Math.min(limit, 50);
-      // const authorUrn =
-      //   (account.social_provider_metadata as { connection_type?: string })?.connection_type === 'page'
-      //     ? `urn:li:organization:${account.social_provider_user_id}`
-      //     : `urn:li:person:${account.social_provider_user_id}`;
-
       if (platformIds && platformIds.length > 0) {
         // Fetch specific posts - LinkedIn doesn't have a direct endpoint
         // Would need to use specific post URNs
-        return Promise.resolve({
+        return {
           posts: [],
           count: 0,
           has_more: false,
-        });
+        };
       }
 
-      // LinkedIn doesn't provide a simple "get my posts" endpoint
-      // This would require more complex implementation
-      return Promise.resolve({
-        posts: [],
-        count: 0,
-        has_more: false,
+      const metadata = account.social_provider_metadata as {
+        connection_type?: string;
+      };
+      const authorUrn =
+        metadata?.connection_type === 'page'
+          ? `urn:li:company:${account.social_provider_user_id}`
+          : `urn:li:person:${account.social_provider_user_id}`;
+
+      const encodedAuthorUrn = encodeURIComponent(authorUrn);
+      let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}`;
+      if (params.cursor) {
+        url += `&start=${encodeURIComponent(params.cursor)}`;
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+        },
       });
+
+      if (!response.ok) {
+        throw new Error(`LinkedIn API error: ${response.statusText}`);
+      }
+
+      const data: any = await response.json();
+      const posts: any[] = data.elements || [];
+      const paging = data.paging || {};
+      const totalCount = paging.count || posts.length;
+      const cursor = paging.start;
+
+      const platformPostsPromises = posts.map(async (post) => {
+        const postUrn: string = post.id || post.urn;
+        const content = post.content;
+        const textObj = post.text;
+        const createdObj = post.created;
+
+        let metrics: LinkedInPostMetrics | undefined;
+        if (includeMetrics) {
+          // Fetch post analytics
+          const analyticsUrl = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+          const analyticsResponse = await fetch(analyticsUrl, {
+            headers: {
+              Authorization: `Bearer ${account.access_token}`,
+            },
+          });
+
+          if (analyticsResponse.ok) {
+            const analyticsData: any = await analyticsResponse.json();
+            metrics = {
+              impression: analyticsData.impressionCount,
+              membersReached: analyticsData.uniqueImpressionsCount,
+              reshare: analyticsData.shareCount,
+              reaction: analyticsData.likeCount,
+              comment: analyticsData.commentCount,
+            };
+          }
+
+          // Check if post has video
+          if (
+            content?.['com.linkedin.ugc.ShareContent']?.media?.[0]?.[
+              'com.linkedin.ugc.Media'
+            ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
+          ) {
+            const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+            const videoResponse = await fetch(videoAnalyticsUrl, {
+              headers: {
+                Authorization: `Bearer ${account.access_token}`,
+              },
+            });
+
+            if (videoResponse.ok) {
+              const videoData: any = await videoResponse.json();
+              if (metrics) {
+                metrics.videoPlay = videoData.views?.[0]?.totalViews;
+                metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
+                metrics.videoWatchTime = videoData.views?.[0]?.totalWatchTime;
+              }
+            }
+          }
+        }
+
+        const media = [];
+        if (content?.['com.linkedin.ugc.ShareContent']?.media) {
+          for (const mediaItem of content['com.linkedin.ugc.ShareContent']
+            .media) {
+            const mediaObj = mediaItem['com.linkedin.ugc.Media'];
+            if (mediaObj?.thumbnails) {
+              media.push({
+                url: mediaObj.thumbnails[0].url,
+                thumbnail_url: mediaObj.thumbnails[0].url,
+              });
+            }
+          }
+        }
+
+        return {
+          provider: 'linkedin',
+          id: postUrn,
+          account_id: account.id,
+          caption: textObj?.text || '',
+          url: `https://www.linkedin.com/posts/${postUrn.split(':').pop()}`,
+          posted_at: createdObj?.time,
+          media,
+          metrics,
+        };
+      });
+
+      const platformPosts = await Promise.all(platformPostsPromises);
+
+      return {
+        posts: platformPosts as any,
+        count: posts.length,
+        cursor,
+        has_more: totalCount > posts.length,
+      };
     } catch (error) {
       console.error('Error fetching LinkedIn posts:', error);
-      return Promise.resolve({
+      return {
         posts: [],
         count: 0,
         has_more: false,
-      });
+      };
     }
   }
 }
