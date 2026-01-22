@@ -77,6 +77,58 @@ export class LinkedInService implements SocialPlatformService {
     return account;
   }
 
+  private async getPostMetrics(
+    account: SocialAccount,
+    postUrn: string,
+    content: any,
+  ): Promise<LinkedInPostMetricsDto | undefined> {
+    /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+    // Fetch post analytics
+    const analyticsUrl = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+    const analyticsResponse = await fetch(analyticsUrl, {
+      headers: {
+        Authorization: `Bearer ${account.access_token}`,
+      },
+    });
+
+    let metrics: LinkedInPostMetricsDto | undefined;
+    if (analyticsResponse.ok) {
+      const analyticsData: any = await analyticsResponse.json();
+      metrics = {
+        impression: analyticsData.impressionCount,
+        membersReached: analyticsData.uniqueImpressionsCount,
+        reshare: analyticsData.shareCount,
+        reaction: analyticsData.likeCount,
+        comment: analyticsData.commentCount,
+      };
+    }
+
+    // Check if post has video
+    if (
+      content?.['com.linkedin.ugc.ShareContent']?.media?.[0]?.[
+        'com.linkedin.ugc.Media'
+      ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
+    ) {
+      const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+      const videoResponse = await fetch(videoAnalyticsUrl, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+        },
+      });
+
+      if (videoResponse.ok) {
+        const videoData: any = await videoResponse.json();
+        if (metrics) {
+          metrics.videoPlay = videoData.views?.[0]?.totalViews;
+          metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
+          metrics.videoWatchTime = videoData.views?.[0]?.totalWatchTime;
+        }
+      }
+    }
+
+    return metrics;
+  }
+
   async getAccountPosts(params: {
     account: SocialAccount;
     platformIds?: string[];
@@ -88,45 +140,61 @@ export class LinkedInService implements SocialPlatformService {
     const { account, platformIds, includeMetrics } = params;
     /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
     try {
+      let posts: any[] = [];
+      let paging: any = {};
+      let isBatch = false;
       if (platformIds && platformIds.length > 0) {
-        // Fetch specific posts - LinkedIn doesn't have a direct endpoint
-        // Would need to use specific post URNs
-        return {
-          posts: [],
-          count: 0,
-          has_more: false,
+        // Fetch specific posts using Batch Get Posts method
+        const encodedIds = platformIds
+          .map((id) => encodeURIComponent(id))
+          .join(',');
+        const url = `https://api.linkedin.com/rest/posts?ids=List(${encodedIds})`;
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${account.access_token}`,
+            'X-RestLi-Method': 'BATCH_GET',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`LinkedIn API error: ${response.statusText}`);
+        }
+
+        const data: any = await response.json();
+        posts = data.elements || [];
+        isBatch = true;
+      } else {
+        const metadata = account.social_provider_metadata as {
+          connection_type?: string;
         };
+        const authorUrn =
+          metadata?.connection_type === 'page'
+            ? `urn:li:company:${account.social_provider_user_id}`
+            : `urn:li:person:${account.social_provider_user_id}`;
+
+        const encodedAuthorUrn = encodeURIComponent(authorUrn);
+        let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}`;
+        if (params.cursor) {
+          url += `&start=${encodeURIComponent(params.cursor)}`;
+        }
+
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${account.access_token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`LinkedIn API error: ${response.statusText}`);
+        }
+
+        const data: any = await response.json();
+        posts = data.elements || [];
+        paging = data.paging || {};
       }
 
-      const metadata = account.social_provider_metadata as {
-        connection_type?: string;
-      };
-      const authorUrn =
-        metadata?.connection_type === 'page'
-          ? `urn:li:company:${account.social_provider_user_id}`
-          : `urn:li:person:${account.social_provider_user_id}`;
-
-      const encodedAuthorUrn = encodeURIComponent(authorUrn);
-      let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}`;
-      if (params.cursor) {
-        url += `&start=${encodeURIComponent(params.cursor)}`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`LinkedIn API error: ${response.statusText}`);
-      }
-
-      const data: any = await response.json();
-      const posts: any[] = data.elements || [];
-      const paging = data.paging || {};
-      const totalCount = paging.count || posts.length;
-      const cursor = paging.start;
+      const totalCount = isBatch ? posts.length : paging.count || posts.length;
+      const cursor = isBatch ? undefined : paging.start;
 
       const platformPostsPromises = posts.map(async (post) => {
         const postUrn: string = post.id || post.urn;
@@ -134,50 +202,9 @@ export class LinkedInService implements SocialPlatformService {
         const textObj = post.text;
         const createdObj = post.created;
 
-        let metrics: LinkedInPostMetricsDto | undefined;
-        if (includeMetrics) {
-          // Fetch post analytics
-          const analyticsUrl = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
-          const analyticsResponse = await fetch(analyticsUrl, {
-            headers: {
-              Authorization: `Bearer ${account.access_token}`,
-            },
-          });
-
-          if (analyticsResponse.ok) {
-            const analyticsData: any = await analyticsResponse.json();
-            metrics = {
-              impression: analyticsData.impressionCount,
-              membersReached: analyticsData.uniqueImpressionsCount,
-              reshare: analyticsData.shareCount,
-              reaction: analyticsData.likeCount,
-              comment: analyticsData.commentCount,
-            };
-          }
-
-          // Check if post has video
-          if (
-            content?.['com.linkedin.ugc.ShareContent']?.media?.[0]?.[
-              'com.linkedin.ugc.Media'
-            ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
-          ) {
-            const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
-            const videoResponse = await fetch(videoAnalyticsUrl, {
-              headers: {
-                Authorization: `Bearer ${account.access_token}`,
-              },
-            });
-
-            if (videoResponse.ok) {
-              const videoData: any = await videoResponse.json();
-              if (metrics) {
-                metrics.videoPlay = videoData.views?.[0]?.totalViews;
-                metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
-                metrics.videoWatchTime = videoData.views?.[0]?.totalWatchTime;
-              }
-            }
-          }
-        }
+        const metrics = includeMetrics
+          ? await this.getPostMetrics(account, postUrn, content)
+          : undefined;
 
         const media = [];
         if (content?.['com.linkedin.ugc.ShareContent']?.media) {
