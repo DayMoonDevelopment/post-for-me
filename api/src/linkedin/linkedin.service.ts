@@ -5,7 +5,7 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
-import { LinkedInPostMetrics } from './dto/linkedin-post-metrics.dto';
+import { LinkedInPostMetricsDto } from './dto/linkedin-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable({ scope: Scope.REQUEST })
@@ -134,7 +134,7 @@ export class LinkedInService implements SocialPlatformService {
         const textObj = post.text;
         const createdObj = post.created;
 
-        let metrics: LinkedInPostMetrics | undefined;
+        let metrics: LinkedInPostMetricsDto | undefined;
         if (includeMetrics) {
           // Fetch post analytics
           const analyticsUrl = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;

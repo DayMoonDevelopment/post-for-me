@@ -6,6 +6,7 @@ import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto'
 import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
 import { TwitterPostMetricsDto } from 'src/twitter/dto/twitter-post-metrics.dto';
 import { ThreadsPostMetricsDto } from 'src/threads/dto/threads-post-metrics.dto';
+import { LinkedInPostMetricsDto } from 'src/linkedin/dto/linkedin-post-metrics.dto';
 
 export class PlatformPostDto {
   @ApiProperty({ description: 'Social media platform name' })
@@ -80,6 +81,7 @@ export class PlatformPostDto {
       { $ref: getSchemaPath(FacebookPostMetricsDto) },
       { $ref: getSchemaPath(TwitterPostMetricsDto) },
       { $ref: getSchemaPath(ThreadsPostMetricsDto) },
+      { $ref: getSchemaPath(LinkedInPostMetricsDto) },
     ],
   })
   metrics?:

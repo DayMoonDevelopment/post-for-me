@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class LinkedInPostMetrics {
+export class LinkedInPostMetricsDto {
   @ApiProperty({
     description: 'Number of impressions of the requested entity',
     required: false,
