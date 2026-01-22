@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
 import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
-import { TikTokBusinessMetricsDto } from 'src/social-account-feeds/dto/platform-post-metrics.dto';
+import { ThreadsPostMetricsDto } from 'src/threads/dto/threads-post-metrics.dto';
+import { TikTokBusinessMetricsDto } from 'src/tiktok-business/dto/tiktok-business-post-metrics.dto';
 import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
 import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
 
@@ -57,7 +58,8 @@ export interface PlatformPost {
     | TikTokBusinessMetricsDto
     | TikTokPostMetricsDto
     | InstagramPostMetricsDto
-    | YouTubePostMetricsDto;
+    | YouTubePostMetricsDto
+    | ThreadsPostMetricsDto;
 }
 
 export interface PlatformPostsResponse {

@@ -14,8 +14,15 @@ interface ThreadsPost {
   text?: string;
   permalink?: string;
   timestamp?: string;
-  media_type?: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+  media_type?:
+    | 'TEXT_POST'
+    | 'IMAGE'
+    | 'VIDEO'
+    | 'CAROUSEL_ALBUM'
+    | 'AUDIO'
+    | 'REPOST_FACADE';
   media_url?: string;
+  thumbnail?: string;
 }
 
 interface ThreadsPostsResponse {
@@ -100,73 +107,13 @@ export class ThreadsService implements SocialPlatformService {
     try {
       const safeLimit = Math.min(limit, 25);
 
-      if (platformIds && platformIds.length > 0) {
-        // Fetch specific threads by ID
-        const threadPromises = platformIds.map((id) =>
-          axios.get<ThreadsPost>(`https://graph.threads.net/v1.0/${id}`, {
-            params: {
-              fields: 'id,text,permalink,timestamp,media_type,media_url',
-              access_token: account.access_token,
-            },
-          }),
-        );
-
-        const responses = await Promise.all(threadPromises);
-        const posts: PlatformPost[] = responses.map((response) => {
-          const thread = response.data;
-          return {
-            provider: 'threads',
-            id: thread.id,
-            account_id: account.social_provider_user_id,
-            caption: thread.text ?? '',
-            url: thread.permalink ?? '',
-            media: thread.media_url
-              ? [{ url: thread.media_url, thumbnail_url: thread.media_url }]
-              : [],
-            metrics: includeMetrics
-              ? {
-                  likes: 0,
-                  comments: 0,
-                  shares: 0,
-                  favorites: 0,
-                  reach: 0,
-                  video_views: 0,
-                  total_time_watched: 0,
-                  average_time_watched: 0,
-                  full_video_watched_rate: 0,
-                  new_followers: 0,
-                  profile_views: 0,
-                  website_clicks: 0,
-                  phone_number_clicks: 0,
-                  lead_submissions: 0,
-                  app_download_clicks: 0,
-                  email_clicks: 0,
-                  address_clicks: 0,
-                  video_view_retention: [],
-                  impression_sources: [],
-                  audience_types: [],
-                  audience_genders: [],
-                  audience_countries: [],
-                  audience_cities: [],
-                  engagement_likes: [],
-                }
-              : undefined,
-          };
-        });
-
-        return {
-          posts,
-          count: posts.length,
-          has_more: false,
-        };
-      }
-
       // Fetch threads from user's profile
       const response = await axios.get<ThreadsPostsResponse>(
-        `https://graph.threads.net/v1.0/me/threads`,
+        `https://graph.threads.net/v1.0/${account.social_provider_user_id}/threads`,
         {
           params: {
-            fields: 'id,text,permalink,timestamp,media_type,media_url',
+            fields:
+              'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
             access_token: account.access_token,
             limit: safeLimit,
             after: cursor,
@@ -182,7 +129,7 @@ export class ThreadsService implements SocialPlatformService {
           caption: thread.text ?? '',
           url: thread.permalink ?? '',
           media: thread.media_url
-            ? [{ url: thread.media_url, thumbnail_url: thread.media_url }]
+            ? [{ url: thread.media_url, thumbnail_url: thread.thumbnail_url }]
             : [],
           metrics: includeMetrics
             ? {
@@ -218,7 +165,7 @@ export class ThreadsService implements SocialPlatformService {
       return {
         posts,
         count: posts.length,
-        has_more: !!response.data.paging?.next,
+        has_more: !!response.data.paging?.cursors?.after,
         cursor: response.data.paging?.cursors?.after,
       };
     } catch (error) {
