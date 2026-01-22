@@ -76,6 +76,43 @@ export class ThreadsService implements SocialPlatformService {
     };
   }
 
+  private async addMetricsToPost(
+    post: PlatformPost,
+    threadId: string,
+    accessToken: string,
+  ): Promise<void> {
+    try {
+      const insightsRes = await axios.get<ThreadsInsightsResponse>(
+        `https://graph.threads.net/v1.0/${threadId}/insights`,
+        {
+          params: {
+            access_token: accessToken,
+            metric: 'likes,replies,reposts,quotes,shares,views',
+          },
+        },
+      );
+
+      if (insightsRes.data.data) {
+        const metrics: { [key: string]: number } = {};
+        insightsRes.data.data.forEach((metric) => {
+          if (metric.values.length > 0) {
+            metrics[metric.name] = metric.values[0].value;
+          }
+        });
+        post.metrics = {
+          likes: metrics.likes || 0,
+          replies: metrics.replies || 0,
+          reposts: metrics.reposts || 0,
+          quotes: metrics.quotes || 0,
+          shares: metrics.shares || 0,
+          views: metrics.views || 0,
+        };
+      }
+    } catch (error) {
+      console.error(`Error fetching insights for post ${threadId}:`, error);
+    }
+  }
+
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
     const refreshResponse = await axios.get<ThreadsRefreshTokenResponse>(
       'https://graph.threads.net/refresh_access_token',
@@ -101,89 +138,99 @@ export class ThreadsService implements SocialPlatformService {
     account,
     limit,
     cursor,
+    platformIds,
     includeMetrics = false,
   }: {
     account: SocialAccount;
     limit: number;
     cursor?: string;
+    platformIds?: string[];
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
-      const safeLimit = Math.min(limit, 25);
+      let postsPromises: Promise<PlatformPost>[];
+      let responseData: ThreadsPostsResponse | undefined;
 
-      // Fetch threads from user's profile
-      const response = await axios.get<ThreadsPostsResponse>(
-        `https://graph.threads.net/v1.0/${account.social_provider_user_id}/threads`,
-        {
-          params: {
-            fields:
-              'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
-            access_token: account.access_token,
-            limit: safeLimit,
-            after: cursor,
-          },
-        },
-      );
-
-      const postsPromises = (response.data.data ?? []).map(async (thread) => {
-        const post: PlatformPost = {
-          provider: 'threads',
-          id: thread.id,
-          account_id: account.social_provider_user_id,
-          caption: thread.text ?? '',
-          url: thread.permalink ?? '',
-          posted_at: thread.timestamp,
-          media: thread.media_url
-            ? [{ url: thread.media_url, thumbnail_url: thread.thumbnail_url }]
-            : [],
-        };
-
-        if (includeMetrics) {
-          try {
-            const insightsRes = await axios.get<ThreadsInsightsResponse>(
-              `https://graph.threads.net/v1.0/${thread.id}/insights`,
-              {
-                params: {
-                  access_token: account.access_token,
-                  metric: 'likes,replies,reposts,quotes,shares,views',
-                },
+      if (platformIds && platformIds.length > 0) {
+        // Fetch specific threads by IDs
+        postsPromises = platformIds.map(async (platformId) => {
+          const threadResponse = await axios.get<ThreadsPost>(
+            `https://graph.threads.net/v1.0/${platformId}`,
+            {
+              params: {
+                fields:
+                  'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
+                access_token: account.access_token,
               },
-            );
+            },
+          );
 
-            if (insightsRes.data.data) {
-              const metrics: { [key: string]: number } = {};
-              insightsRes.data.data.forEach((metric) => {
-                if (metric.values.length > 0) {
-                  metrics[metric.name] = metric.values[0].value;
-                }
-              });
-              post.metrics = {
-                likes: metrics.likes || 0,
-                replies: metrics.replies || 0,
-                reposts: metrics.reposts || 0,
-                quotes: metrics.quotes || 0,
-                shares: metrics.shares || 0,
-                views: metrics.views || 0,
-              };
-            }
-          } catch (error) {
-            console.error(
-              `Error fetching insights for post ${thread.id}:`,
-              error,
-            );
+          const thread = threadResponse.data;
+          const post: PlatformPost = {
+            provider: 'threads',
+            id: thread.id,
+            account_id: account.social_provider_user_id,
+            caption: thread.text ?? '',
+            url: thread.permalink ?? '',
+            posted_at: thread.timestamp,
+            media: thread.media_url
+              ? [{ url: thread.media_url, thumbnail_url: thread.thumbnail_url }]
+              : [],
+          };
+
+          if (includeMetrics) {
+            await this.addMetricsToPost(post, thread.id, account.access_token);
           }
-        }
 
-        return post;
-      });
+          return post;
+        });
+      } else {
+        const safeLimit = Math.min(limit, 25);
+
+        // Fetch threads from user's profile
+        const response = await axios.get<ThreadsPostsResponse>(
+          `https://graph.threads.net/v1.0/${account.social_provider_user_id}/threads`,
+          {
+            params: {
+              fields:
+                'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
+              access_token: account.access_token,
+              limit: safeLimit,
+              after: cursor,
+            },
+          },
+        );
+
+        responseData = response.data;
+
+        postsPromises = (responseData.data ?? []).map(async (thread) => {
+          const post: PlatformPost = {
+            provider: 'threads',
+            id: thread.id,
+            account_id: account.social_provider_user_id,
+            caption: thread.text ?? '',
+            url: thread.permalink ?? '',
+            posted_at: thread.timestamp,
+            media: thread.media_url
+              ? [{ url: thread.media_url, thumbnail_url: thread.thumbnail_url }]
+              : [],
+          };
+
+          if (includeMetrics) {
+            await this.addMetricsToPost(post, thread.id, account.access_token);
+          }
+
+          return post;
+        });
+      }
 
       const posts = await Promise.all(postsPromises);
 
       return {
         posts,
         count: posts.length,
-        has_more: !!response.data.paging?.cursors?.after,
-        cursor: response.data.paging?.cursors?.after,
+        has_more: responseData ? !!responseData.paging?.cursors?.after : false,
+        cursor: responseData?.paging?.cursors?.after,
       };
     } catch (error) {
       console.error('Error fetching Threads posts:', error);
