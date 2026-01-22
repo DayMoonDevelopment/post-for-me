@@ -4,6 +4,7 @@ import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metric
 import { ThreadsPostMetricsDto } from 'src/threads/dto/threads-post-metrics.dto';
 import { TikTokBusinessMetricsDto } from 'src/tiktok-business/dto/tiktok-business-post-metrics.dto';
 import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
+import { TwitterPostMetricsDto } from 'src/twitter/dto/twitter-post-metrics.dto';
 import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
 
 export class DeleteEntityResponseDto {
@@ -58,6 +59,7 @@ export interface PlatformPost {
     | TikTokBusinessMetricsDto
     | TikTokPostMetricsDto
     | InstagramPostMetricsDto
+    | TwitterPostMetricsDto
     | YouTubePostMetricsDto
     | ThreadsPostMetricsDto;
 }
