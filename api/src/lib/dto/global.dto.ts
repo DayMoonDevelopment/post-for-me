@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { BlueskyPostMetricsDto } from 'src/bluesky/dto/bluesky-post-metrics.dto';
 import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
 import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
 import { LinkedInPostMetricsDto } from 'src/linkedin/dto/linkedin-post-metrics.dto';
@@ -63,6 +64,7 @@ export interface PlatformPost {
     | LinkedInPostMetricsDto
     | TwitterPostMetricsDto
     | YouTubePostMetricsDto
+    | BlueskyPostMetricsDto
     | ThreadsPostMetricsDto;
 }
 
