@@ -104,11 +104,31 @@ export class BlueskyService implements SocialPlatformService {
       });
 
       if (platformIds && platformIds.length > 0) {
-        // Bluesky uses URIs for posts, not simple IDs
-        // This would need proper AT Protocol URI handling
+        const safeIds = platformIds.slice(0, 25);
+        const postsResponse = await this.agent.getPosts({
+          uris: safeIds,
+        });
+
+        const posts: PlatformPost[] = postsResponse.data.posts.map((post) => ({
+          provider: 'bluesky',
+          id: post.uri,
+          account_id: post.author.did,
+          caption: (post.record as { text?: string })?.text || '',
+          url: `https://bsky.app/profile/${post.author.did}/post/${post.uri.split('/').pop()}`,
+          media: [],
+          metrics: includeMetrics
+            ? {
+                replyCount: post.replyCount || 0,
+                likeCount: post.likeCount || 0,
+                repostCount: post.repostCount || 0,
+                quoteCount: post.quoteCount || 0,
+              }
+            : undefined,
+        }));
+
         return {
-          posts: [],
-          count: 0,
+          posts,
+          count: posts.length,
           has_more: false,
         };
       }
@@ -125,9 +145,9 @@ export class BlueskyService implements SocialPlatformService {
         return {
           provider: 'bluesky',
           id: post.uri,
-          account_id: account.social_provider_user_id,
+          account_id: post.author.did,
           caption: (post.record as { text?: string })?.text || '',
-          url: `https://bsky.app/profile/${account.social_provider_user_id}/post/${post.uri.split('/').pop()}`,
+          url: `https://bsky.app/profile/${post.author.did}/post/${post.uri.split('/').pop()}`,
           media: [],
           metrics: includeMetrics
             ? {
