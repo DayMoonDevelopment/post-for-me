@@ -93,5 +93,7 @@ export class PlatformPostDto {
     | YouTubePostMetricsDto
     | FacebookPostMetricsDto
     | TwitterPostMetricsDto
-    | ThreadsPostMetricsDto;
+    | ThreadsPostMetricsDto
+    | LinkedInPostMetricsDto
+    | BlueskyPostMetricsDto;
 }
