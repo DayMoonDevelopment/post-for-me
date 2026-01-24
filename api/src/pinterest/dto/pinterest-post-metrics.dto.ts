@@ -1,97 +1,107 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class PinterestPostMetricsDto {
+export class PinterestMetricsWindowDto {
   @ApiProperty({
     description: 'Number of times the Pin was shown (impressions)',
     required: false,
   })
-  IMPRESSION?: number;
+  impression?: number;
 
   @ApiProperty({
     description:
       'Number of clicks from the Pin to an external destination (outbound clicks)',
     required: false,
   })
-  OUTBOUND_CLICK?: number;
+  outbound_click?: number;
 
   @ApiProperty({
     description:
       'Number of clicks on the Pin to view it in closeup (Pin clicks)',
     required: false,
   })
-  PIN_CLICK?: number;
+  pin_click?: number;
 
   @ApiProperty({
     description: 'Number of saves of the Pin',
     required: false,
   })
-  SAVE?: number;
-
-  @ApiProperty({
-    description: 'Save rate for the Pin (saves divided by impressions)',
-    required: false,
-  })
-  SAVE_RATE?: number;
+  save?: number;
 
   @ApiProperty({
     description: 'Number of comments on the Pin',
     required: false,
   })
-  TOTAL_COMMENTS?: number;
+  comment?: number;
 
   @ApiProperty({
     description: 'Total number of reactions on the Pin',
     required: false,
   })
-  TOTAL_REACTIONS?: number;
+  reaction?: number;
 
   @ApiProperty({
     description: 'Number of follows driven from the Pin',
     required: false,
+    nullable: true,
   })
-  USER_FOLLOW?: number;
+  user_follow?: number | null;
 
   @ApiProperty({
     description: "Number of visits to the author's profile driven from the Pin",
     required: false,
+    nullable: true,
   })
-  PROFILE_VISIT?: number;
+  profile_visit?: number | null;
 
   @ApiProperty({
-    description:
-      'Number of video views that meet the MRC viewability standard (video MRC views)',
+    description: 'Number of video views',
     required: false,
   })
-  VIDEO_MRC_VIEW?: number;
+  video_views?: number;
 
   @ApiProperty({
     description: 'Number of video views of at least 10 seconds',
     required: false,
   })
-  VIDEO_10S_VIEW?: number;
+  video_10s_views?: number;
 
   @ApiProperty({
     description: 'Number of video views that reached 95% completion',
     required: false,
   })
-  QUARTILE_95_PERCENT_VIEW?: number;
+  video_p95_views?: number;
 
   @ApiProperty({
-    description:
-      'Total watch time where at least 50% of the video was in view (seconds)',
+    description: 'Total watch time for the video',
     required: false,
   })
-  VIDEO_V50_WATCH_TIME?: number;
+  video_total_time?: number;
 
   @ApiProperty({
-    description: 'Number of video starts for the Pin',
+    description: 'Average watch time for the video',
     required: false,
   })
-  VIDEO_START?: number;
+  video_average_time?: number;
 
   @ApiProperty({
-    description: 'Average video watch time for the Pin (seconds)',
+    description: 'The last time Pinterest updated these metrics',
     required: false,
   })
-  VIDEO_AVG_WATCH_TIME?: number;
+  last_updated?: string;
+}
+
+export class PinterestPostMetricsDto {
+  @ApiProperty({
+    description: 'Last 90 days of Pin metrics',
+    required: false,
+    type: PinterestMetricsWindowDto,
+  })
+  '90d'?: PinterestMetricsWindowDto;
+
+  @ApiProperty({
+    description: 'Lifetime Pin metrics',
+    required: false,
+    type: PinterestMetricsWindowDto,
+  })
+  lifetime_metrics?: PinterestMetricsWindowDto;
 }
