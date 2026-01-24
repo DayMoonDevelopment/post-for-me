@@ -9,6 +9,19 @@ import type {
 import { TwitterApi } from 'twitter-api-v2';
 import { SupabaseService } from '../supabase/supabase.service';
 
+type TwitterMediaVariant = {
+  bit_rate?: number;
+  content_type?: string;
+  url?: string;
+};
+
+type TwitterMedia = {
+  media_key: string;
+  url?: string;
+  preview_image_url?: string;
+  variants?: TwitterMediaVariant[];
+};
+
 @Injectable({ scope: Scope.REQUEST })
 export class TwitterService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
@@ -58,59 +71,6 @@ export class TwitterService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
-      type TwitterMediaVariant = {
-        bit_rate?: number;
-        content_type?: string;
-        url?: string;
-      };
-
-      type TwitterMedia = {
-        media_key: string;
-        url?: string;
-        preview_image_url?: string;
-        variants?: TwitterMediaVariant[];
-      };
-
-      type TwitterIncludes = {
-        media?: TwitterMedia[];
-      };
-
-      const isRecord = (value: unknown): value is Record<string, unknown> =>
-        typeof value === 'object' && value !== null;
-
-      const isTwitterMedia = (value: unknown): value is TwitterMedia => {
-        if (!isRecord(value)) return false;
-        return typeof value.media_key === 'string';
-      };
-
-      const getIncludes = (
-        tweetsResponse: unknown,
-      ): TwitterIncludes | undefined => {
-        if (!isRecord(tweetsResponse)) return undefined;
-
-        const directIncludes = tweetsResponse.includes;
-        if (isRecord(directIncludes)) return directIncludes as TwitterIncludes;
-
-        const data = tweetsResponse.data;
-        if (!isRecord(data)) return undefined;
-
-        const nestedIncludes = data.includes;
-        if (!isRecord(nestedIncludes)) return undefined;
-
-        return nestedIncludes as TwitterIncludes;
-      };
-
-      const buildMediaIndex = (
-        tweetsResponse: unknown,
-      ): Map<string, TwitterMedia> => {
-        const includes = getIncludes(tweetsResponse);
-        const media = includes?.media ?? [];
-
-        return new Map(
-          media.filter(isTwitterMedia).map((m) => [m.media_key, m]),
-        );
-      };
-
       const pickBestVideoVariantUrl = (
         variants: TwitterMediaVariant[] | undefined,
       ): string | undefined => {
@@ -128,13 +88,13 @@ export class TwitterService implements SocialPlatformService {
 
       const extractTweetMedia = (
         tweet: { attachments?: { media_keys?: string[] } },
-        mediaIndex: Map<string, TwitterMedia>,
+        twitterMedia: TwitterMedia[],
       ): { url: string; thumbnail_url?: string }[] => {
         const mediaKeys = tweet.attachments?.media_keys ?? [];
 
         return mediaKeys
           .map((mediaKey) => {
-            const media = mediaIndex.get(mediaKey);
+            const media = twitterMedia.find((m) => m.media_key == mediaKey);
             if (!media) return null;
 
             const url =
@@ -184,7 +144,7 @@ export class TwitterService implements SocialPlatformService {
           'media.fields': ['url', 'preview_image_url', 'type', 'variants'],
         });
 
-        const mediaIndex = buildMediaIndex(tweets);
+        const media = tweets.includes?.media || [];
 
         const posts: PlatformPost[] = (tweets.data || []).map((tweet) => ({
           provider: 'x',
@@ -192,7 +152,7 @@ export class TwitterService implements SocialPlatformService {
           account_id: account.social_provider_user_id,
           caption: tweet.text,
           url: `https://twitter.com/user/status/${tweet.id}`,
-          media: extractTweetMedia(tweet, mediaIndex),
+          media: extractTweetMedia(tweet, media),
           metrics: includeMetrics
             ? {
                 public_metrics: tweet.public_metrics
@@ -261,7 +221,7 @@ export class TwitterService implements SocialPlatformService {
         },
       );
 
-      const mediaIndex = buildMediaIndex(tweets);
+      const media = tweets.data.includes?.media || [];
 
       const posts: PlatformPost[] = tweets.data.data.map((tweet) => ({
         provider: 'x',
@@ -269,7 +229,7 @@ export class TwitterService implements SocialPlatformService {
         account_id: account.social_provider_user_id,
         caption: tweet.text,
         url: `https://twitter.com/user/status/${tweet.id}`,
-        media: extractTweetMedia(tweet, mediaIndex),
+        media: extractTweetMedia(tweet, media),
         metrics: includeMetrics
           ? {
               public_metrics: tweet.public_metrics

@@ -4,16 +4,14 @@ import type {
   PlatformPost,
   PlatformPostsResponse,
   SocialAccount,
-  SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
 import { AtpAgent } from '@atproto/api';
-import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class BlueskyService implements SocialPlatformService {
   private agent: AtpAgent;
 
-  constructor(private readonly supabaseService: SupabaseService) {
+  constructor() {
     this.agent = new AtpAgent({
       service: 'https://bsky.social',
     });
