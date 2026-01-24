@@ -6,21 +6,8 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
-import { TwitterApi } from 'twitter-api-v2';
+import { TwitterApi, MediaVariantsV2, MediaObjectV2 } from 'twitter-api-v2';
 import { SupabaseService } from '../supabase/supabase.service';
-
-type TwitterMediaVariant = {
-  bit_rate?: number;
-  content_type?: string;
-  url?: string;
-};
-
-type TwitterMedia = {
-  media_key: string;
-  url?: string;
-  preview_image_url?: string;
-  variants?: TwitterMediaVariant[];
-};
 
 @Injectable({ scope: Scope.REQUEST })
 export class TwitterService implements SocialPlatformService {
@@ -71,52 +58,6 @@ export class TwitterService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
-      const pickBestVideoVariantUrl = (
-        variants: TwitterMediaVariant[] | undefined,
-      ): string | undefined => {
-        if (!variants || variants.length === 0) return undefined;
-
-        const mp4Variants = variants.filter(
-          (v) => typeof v.url === 'string' && v.content_type === 'video/mp4',
-        );
-        if (mp4Variants.length === 0) return undefined;
-
-        return mp4Variants.sort(
-          (a, b) => (b.bit_rate || 0) - (a.bit_rate || 0),
-        )[0]?.url;
-      };
-
-      const extractTweetMedia = (
-        tweet: { attachments?: { media_keys?: string[] } },
-        twitterMedia: TwitterMedia[],
-      ): { url: string; thumbnail_url?: string }[] => {
-        const mediaKeys = tweet.attachments?.media_keys ?? [];
-
-        return mediaKeys
-          .map((mediaKey) => {
-            const media = twitterMedia.find((m) => m.media_key == mediaKey);
-            if (!media) return null;
-
-            const url =
-              media.url ||
-              pickBestVideoVariantUrl(media.variants) ||
-              media.preview_image_url;
-            if (!url) return null;
-
-            const thumbnailUrl =
-              media.preview_image_url && media.preview_image_url !== url
-                ? media.preview_image_url
-                : undefined;
-
-            return thumbnailUrl
-              ? { url, thumbnail_url: thumbnailUrl }
-              : { url };
-          })
-          .filter(
-            (m): m is { url: string; thumbnail_url?: string } => m !== null,
-          );
-      };
-
       const twitterClient = new TwitterApi({
         appKey: this.appCredentials.appId,
         appSecret: this.appCredentials.appSecret,
@@ -152,7 +93,7 @@ export class TwitterService implements SocialPlatformService {
           account_id: account.social_provider_user_id,
           caption: tweet.text,
           url: `https://twitter.com/user/status/${tweet.id}`,
-          media: extractTweetMedia(tweet, media),
+          media: this.extractTweetMedia(tweet, media),
           metrics: includeMetrics
             ? {
                 public_metrics: tweet.public_metrics
@@ -229,7 +170,7 @@ export class TwitterService implements SocialPlatformService {
         account_id: account.social_provider_user_id,
         caption: tweet.text,
         url: `https://twitter.com/user/status/${tweet.id}`,
-        media: extractTweetMedia(tweet, media),
+        media: this.extractTweetMedia(tweet, media),
         metrics: includeMetrics
           ? {
               public_metrics: tweet.public_metrics
@@ -283,5 +224,46 @@ export class TwitterService implements SocialPlatformService {
         has_more: false,
       };
     }
+  }
+
+  pickBestVideoVariantUrl(
+    variants: MediaVariantsV2[] | undefined,
+  ): string | undefined {
+    if (!variants || variants.length === 0) return undefined;
+
+    const mp4Variants = variants.filter(
+      (v) => typeof v.url === 'string' && v.content_type === 'video/mp4',
+    );
+    if (mp4Variants.length === 0) return undefined;
+
+    return mp4Variants.sort((a, b) => (b.bit_rate || 0) - (a.bit_rate || 0))[0]
+      ?.url;
+  }
+
+  extractTweetMedia(
+    tweet: { attachments?: { media_keys?: string[] } },
+    twitterMedia: MediaObjectV2[],
+  ): { url: string; thumbnail_url?: string }[] {
+    const mediaKeys = tweet.attachments?.media_keys ?? [];
+
+    return mediaKeys
+      .map((mediaKey) => {
+        const media = twitterMedia.find((m) => m.media_key == mediaKey);
+        if (!media) return null;
+
+        const url =
+          media.url ||
+          this.pickBestVideoVariantUrl(media.variants) ||
+          media.preview_image_url;
+        if (!url) return null;
+
+        const thumbnailUrl =
+          media.preview_image_url && media.preview_image_url !== url
+            ? media.preview_image_url
+            : undefined;
+
+        return thumbnailUrl ? { url, thumbnail_url: thumbnailUrl } : { url };
+      })
+      .filter((m): m is { url: string; thumbnail_url?: string } => m !== null);
   }
 }
