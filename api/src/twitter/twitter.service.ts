@@ -58,6 +58,105 @@ export class TwitterService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
+      type TwitterMediaVariant = {
+        bit_rate?: number;
+        content_type?: string;
+        url?: string;
+      };
+
+      type TwitterMedia = {
+        media_key: string;
+        url?: string;
+        preview_image_url?: string;
+        variants?: TwitterMediaVariant[];
+      };
+
+      type TwitterIncludes = {
+        media?: TwitterMedia[];
+      };
+
+      const isRecord = (value: unknown): value is Record<string, unknown> =>
+        typeof value === 'object' && value !== null;
+
+      const isTwitterMedia = (value: unknown): value is TwitterMedia => {
+        if (!isRecord(value)) return false;
+        return typeof value.media_key === 'string';
+      };
+
+      const getIncludes = (
+        tweetsResponse: unknown,
+      ): TwitterIncludes | undefined => {
+        if (!isRecord(tweetsResponse)) return undefined;
+
+        const directIncludes = tweetsResponse.includes;
+        if (isRecord(directIncludes)) return directIncludes as TwitterIncludes;
+
+        const data = tweetsResponse.data;
+        if (!isRecord(data)) return undefined;
+
+        const nestedIncludes = data.includes;
+        if (!isRecord(nestedIncludes)) return undefined;
+
+        return nestedIncludes as TwitterIncludes;
+      };
+
+      const buildMediaIndex = (
+        tweetsResponse: unknown,
+      ): Map<string, TwitterMedia> => {
+        const includes = getIncludes(tweetsResponse);
+        const media = includes?.media ?? [];
+
+        return new Map(
+          media.filter(isTwitterMedia).map((m) => [m.media_key, m]),
+        );
+      };
+
+      const pickBestVideoVariantUrl = (
+        variants: TwitterMediaVariant[] | undefined,
+      ): string | undefined => {
+        if (!variants || variants.length === 0) return undefined;
+
+        const mp4Variants = variants.filter(
+          (v) => typeof v.url === 'string' && v.content_type === 'video/mp4',
+        );
+        if (mp4Variants.length === 0) return undefined;
+
+        return mp4Variants.sort(
+          (a, b) => (b.bit_rate || 0) - (a.bit_rate || 0),
+        )[0]?.url;
+      };
+
+      const extractTweetMedia = (
+        tweet: { attachments?: { media_keys?: string[] } },
+        mediaIndex: Map<string, TwitterMedia>,
+      ): { url: string; thumbnail_url?: string }[] => {
+        const mediaKeys = tweet.attachments?.media_keys ?? [];
+
+        return mediaKeys
+          .map((mediaKey) => {
+            const media = mediaIndex.get(mediaKey);
+            if (!media) return null;
+
+            const url =
+              media.url ||
+              pickBestVideoVariantUrl(media.variants) ||
+              media.preview_image_url;
+            if (!url) return null;
+
+            const thumbnailUrl =
+              media.preview_image_url && media.preview_image_url !== url
+                ? media.preview_image_url
+                : undefined;
+
+            return thumbnailUrl
+              ? { url, thumbnail_url: thumbnailUrl }
+              : { url };
+          })
+          .filter(
+            (m): m is { url: string; thumbnail_url?: string } => m !== null,
+          );
+      };
+
       const twitterClient = new TwitterApi({
         appKey: this.appCredentials.appId,
         appSecret: this.appCredentials.appSecret,
@@ -82,8 +181,10 @@ export class TwitterService implements SocialPlatformService {
               ]
             : ['created_at', 'attachments', 'entities'],
           expansions: ['attachments.media_keys'],
-          'media.fields': ['url', 'preview_image_url'],
+          'media.fields': ['url', 'preview_image_url', 'type', 'variants'],
         });
+
+        const mediaIndex = buildMediaIndex(tweets);
 
         const posts: PlatformPost[] = (tweets.data || []).map((tweet) => ({
           provider: 'x',
@@ -91,7 +192,7 @@ export class TwitterService implements SocialPlatformService {
           account_id: account.social_provider_user_id,
           caption: tweet.text,
           url: `https://twitter.com/user/status/${tweet.id}`,
-          media: [],
+          media: extractTweetMedia(tweet, mediaIndex),
           metrics: includeMetrics
             ? {
                 public_metrics: tweet.public_metrics
@@ -155,10 +256,12 @@ export class TwitterService implements SocialPlatformService {
               ]
             : ['created_at', 'attachments', 'entities'],
           expansions: ['attachments.media_keys'],
-          'media.fields': ['url', 'preview_image_url'],
+          'media.fields': ['url', 'preview_image_url', 'type', 'variants'],
           pagination_token: cursor,
         },
       );
+
+      const mediaIndex = buildMediaIndex(tweets);
 
       const posts: PlatformPost[] = tweets.data.data.map((tweet) => ({
         provider: 'x',
@@ -166,7 +269,7 @@ export class TwitterService implements SocialPlatformService {
         account_id: account.social_provider_user_id,
         caption: tweet.text,
         url: `https://twitter.com/user/status/${tweet.id}`,
-        media: [],
+        media: extractTweetMedia(tweet, mediaIndex),
         metrics: includeMetrics
           ? {
               public_metrics: tweet.public_metrics

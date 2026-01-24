@@ -11,7 +11,6 @@ import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class BlueskyService implements SocialPlatformService {
-  appCredentials: SocialProviderAppCredentials;
   private agent: AtpAgent;
 
   constructor(private readonly supabaseService: SupabaseService) {
@@ -20,27 +19,7 @@ export class BlueskyService implements SocialPlatformService {
     });
   }
 
-  async initService(projectId: string): Promise<void> {
-    const { data: appCredentials, error: appCredentialsError } =
-      await this.supabaseService.supabaseServiceRole
-        .from('social_provider_app_credentials')
-        .select()
-        .eq('project_id', projectId)
-        .eq('provider', 'bluesky')
-        .single();
-
-    if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
-      throw new Error('No app credentials found for platform');
-    }
-
-    this.appCredentials = {
-      appId: appCredentials.app_id || '',
-      appSecret: appCredentials.app_secret || '',
-      provider: appCredentials.provider,
-      projectId: appCredentials.project_id,
-    };
-  }
+  async initService(): Promise<void> {}
 
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
     try {
