@@ -8,6 +8,7 @@ import { TwitterPostMetricsDto } from 'src/twitter/dto/twitter-post-metrics.dto'
 import { ThreadsPostMetricsDto } from 'src/threads/dto/threads-post-metrics.dto';
 import { LinkedInPostMetricsDto } from 'src/linkedin/dto/linkedin-post-metrics.dto';
 import { BlueskyPostMetricsDto } from 'src/bluesky/dto/bluesky-post-metrics.dto';
+import { PinterestPostMetricsDto } from 'src/pinterest/dto/pinterest-post-metrics.dto';
 
 export class PlatformPostDto {
   @ApiProperty({ description: 'Social media platform name' })
@@ -84,6 +85,7 @@ export class PlatformPostDto {
       { $ref: getSchemaPath(ThreadsPostMetricsDto) },
       { $ref: getSchemaPath(LinkedInPostMetricsDto) },
       { $ref: getSchemaPath(BlueskyPostMetricsDto) },
+      { $ref: getSchemaPath(PinterestPostMetricsDto) },
     ],
   })
   metrics?:
@@ -95,5 +97,6 @@ export class PlatformPostDto {
     | TwitterPostMetricsDto
     | ThreadsPostMetricsDto
     | LinkedInPostMetricsDto
+    | PinterestPostMetricsDto
     | BlueskyPostMetricsDto;
 }

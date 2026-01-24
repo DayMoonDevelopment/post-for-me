@@ -3,6 +3,7 @@ import { BlueskyPostMetricsDto } from 'src/bluesky/dto/bluesky-post-metrics.dto'
 import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
 import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
 import { LinkedInPostMetricsDto } from 'src/linkedin/dto/linkedin-post-metrics.dto';
+import { PinterestPostMetricsDto } from 'src/pinterest/dto/pinterest-post-metrics.dto';
 import { ThreadsPostMetricsDto } from 'src/threads/dto/threads-post-metrics.dto';
 import { TikTokBusinessMetricsDto } from 'src/tiktok-business/dto/tiktok-business-post-metrics.dto';
 import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
@@ -65,6 +66,7 @@ export interface PlatformPost {
     | TwitterPostMetricsDto
     | YouTubePostMetricsDto
     | BlueskyPostMetricsDto
+    | PinterestPostMetricsDto
     | ThreadsPostMetricsDto;
 }
 
