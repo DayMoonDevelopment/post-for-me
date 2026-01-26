@@ -21,6 +21,7 @@ export class InstagramPostClient extends PostClient {
   #maxFileSize = 8 * 1024 * 1024;
   #minAspectRatio = 4 / 5;
   #maxAspectRatio = 1.91;
+  #storiesMinAspectRatio = 9 / 16;
   #localSupabaseClient;
   #addedMedia: any[] = [];
   #requests: any[] = [];
@@ -41,7 +42,7 @@ export class InstagramPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
 
@@ -50,12 +51,12 @@ export class InstagramPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     try {
       if (account.social_provider_metadata?.connection_type == "instagram") {
         console.log(
-          `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`
+          `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`,
         );
         this.#requests.push({
           refreshRequest: "https://graph.instagram.com/refresh_access_token",
@@ -71,7 +72,7 @@ export class InstagramPostClient extends PostClient {
               grant_type: "ig_refresh_token",
               access_token: account.access_token,
             },
-          }
+          },
         );
 
         this.#responses.push({ refreshResponse: response.data });
@@ -87,7 +88,7 @@ export class InstagramPostClient extends PostClient {
         } else {
           console.error(
             "Invalid response from direct Instagram token refresh:",
-            response.data
+            response.data,
           );
           throw new Error("Failed to refresh Instagram token");
         }
@@ -108,7 +109,7 @@ export class InstagramPostClient extends PostClient {
           `https://graph.facebook.com/v20.0/oauth/access_token`,
           {
             params: refreshTokenParams,
-          }
+          },
         );
 
         this.#responses.push({ refreshResponse: response.data });
@@ -124,7 +125,7 @@ export class InstagramPostClient extends PostClient {
         } else {
           console.error(
             "Invalid response from Instagram token refresh:",
-            response.data
+            response.data,
           );
           throw new Error("Failed to refresh Instagram token");
         }
@@ -132,11 +133,11 @@ export class InstagramPostClient extends PostClient {
     } catch (error) {
       console.error(
         "Error refreshing Instagram token:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
       if (error.response && error.response.status === 400) {
         console.error(
-          "Token refresh failed. User needs to reconnect their account."
+          "Token refresh failed. User needs to reconnect their account.",
         );
       }
       throw error;
@@ -158,8 +159,6 @@ export class InstagramPostClient extends PostClient {
   }): Promise<PostResult> {
     try {
       const sanitizedCaption = this.#sanitizeCaption(caption);
-
-      const collaborators = platformConfig?.collaborators?.slice(0, 3);
 
       let containerId = null;
       if (media.length == 1) {
@@ -204,11 +203,11 @@ export class InstagramPostClient extends PostClient {
             {
               creation_id: containerId,
               access_token: account.access_token,
-            }
+            },
           );
           if (publishResponse.data.error) {
             throw new Error(
-              `Failed to publish: ${publishResponse.data.error.message}`
+              `Failed to publish: ${publishResponse.data.error.message}`,
             );
           }
 
@@ -218,7 +217,7 @@ export class InstagramPostClient extends PostClient {
         } catch (error) {
           if (error.response?.status === 400) {
             console.log(
-              `Bad Request With Error: ${error.response?.data?.error?.message}`
+              `Bad Request With Error: ${error.response?.data?.error?.message}`,
             );
             console.log("Waiting 5 secs");
             await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -233,7 +232,7 @@ export class InstagramPostClient extends PostClient {
 
       if (!platformId) {
         throw new Error(
-          "Unknown Error: Unable to publish media, please try again."
+          "Unknown Error: Unable to publish media, please try again.",
         );
       }
 
@@ -309,13 +308,21 @@ export class InstagramPostClient extends PostClient {
     let signedUrl = "";
     let thumbnailUrl: string | undefined = "";
     if (!isVideo) {
-      const transformedImage = await this.#transformImage({ medium });
+      const transformedImage = await this.#transformImage({
+        medium,
+        options: {
+          placement: platformConfig?.placement,
+        },
+      });
       signedUrl = transformedImage.signedUrl!;
     } else {
       signedUrl = await this.getSignedUrlForFile(medium);
       if (medium.thumbnail_url) {
         const transformedThumbnail = await this.#transformImage({
           medium: { url: medium.thumbnail_url, type: "image" },
+          options: {
+            placement: platformConfig?.placement,
+          },
         });
         thumbnailUrl = transformedThumbnail.signedUrl;
       }
@@ -408,13 +415,13 @@ export class InstagramPostClient extends PostClient {
     this.#requests.push({ createMediaRequest: createMediaParams });
     const createMediaResponse = await axios.post(
       `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
-      createMediaParams
+      createMediaParams,
     );
 
     this.#responses.push({ createMediaResponse: createMediaResponse.data });
     if (createMediaResponse.data.error) {
       throw new Error(
-        `Failed to create media container: ${createMediaResponse.data.error.message}`
+        `Failed to create media container: ${createMediaResponse.data.error.message}`,
       );
     }
 
@@ -442,7 +449,7 @@ export class InstagramPostClient extends PostClient {
               fields: "status_code",
               access_token: account.access_token,
             },
-          }
+          },
         );
 
         this.#responses.push({ statusResponse: statusResponse.data });
@@ -459,7 +466,7 @@ export class InstagramPostClient extends PostClient {
           console.log(
             `Media not ready. Waiting for ${
               delay / 1000
-            } seconds before retrying...`
+            } seconds before retrying...`,
           );
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -555,14 +562,14 @@ export class InstagramPostClient extends PostClient {
         });
         const itemResponse = await axios.post(
           `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
-          itemPayload
+          itemPayload,
         );
 
         this.#responses.push({ createCarouselItemResponse: itemResponse.data });
 
         if (itemResponse.data.error) {
           throw new Error(
-            `Failed to create item container: ${itemResponse.data.error.message}`
+            `Failed to create item container: ${itemResponse.data.error.message}`,
           );
         }
 
@@ -577,7 +584,7 @@ export class InstagramPostClient extends PostClient {
           while (attempt < maxAttempts) {
             attempt++;
             console.log(
-              `Checking media status, attempt ${attempt}/${maxAttempts}`
+              `Checking media status, attempt ${attempt}/${maxAttempts}`,
             );
 
             this.#requests.push({
@@ -592,7 +599,7 @@ export class InstagramPostClient extends PostClient {
                   fields: "status_code",
                   access_token: account.access_token,
                 },
-              }
+              },
             );
 
             this.#responses.push({ statusResponse: statusResponse.data });
@@ -609,7 +616,7 @@ export class InstagramPostClient extends PostClient {
               console.log(
                 `Media not ready. Waiting for ${
                   delay / 1000
-                } seconds before retrying...`
+                } seconds before retrying...`,
               );
               await new Promise((resolve) => setTimeout(resolve, delay));
             }
@@ -657,14 +664,14 @@ export class InstagramPostClient extends PostClient {
     });
     const carouselResponse = await axios.post(
       `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
-      carouselPayload
+      carouselPayload,
     );
 
     this.#responses.push({ createCarouselResponse: carouselResponse.data });
 
     if (carouselResponse.data.error) {
       throw new Error(
-        `Failed to create carousel container: ${carouselResponse.data.error.message}`
+        `Failed to create carousel container: ${carouselResponse.data.error.message}`,
       );
     }
 
@@ -693,14 +700,14 @@ export class InstagramPostClient extends PostClient {
           fields: "permalink,media_type",
           access_token: account.access_token,
         },
-      }
+      },
     );
 
     this.#responses.push({ getPostUrlResponse: mediaResponse.data });
 
     if (mediaResponse.data.error) {
       throw new Error(
-        `Failed to fetch media details: ${mediaResponse.data.error.message}`
+        `Failed to fetch media details: ${mediaResponse.data.error.message}`,
       );
     }
 
@@ -729,6 +736,7 @@ export class InstagramPostClient extends PostClient {
         width: number | null | undefined;
         height: number | null | undefined;
       };
+      placement?: InstagramConfiguration["placement"];
     };
   }): Promise<{
     signedUrl: string | undefined;
@@ -754,6 +762,12 @@ export class InstagramPostClient extends PostClient {
     const aspectRatio = width / height;
     let targetWidth = metadata.width;
     let targetHeight = metadata.height;
+
+    const minAspectRatio =
+      options?.placement === "stories"
+        ? this.#storiesMinAspectRatio
+        : this.#minAspectRatio;
+
     if (options?.firstImage?.width && options?.firstImage?.height) {
       const firstImageRatio =
         options?.firstImage?.width / options?.firstImage?.height;
@@ -766,9 +780,9 @@ export class InstagramPostClient extends PostClient {
       if (aspectRatio > this.#maxAspectRatio) {
         // Too wide → crop width to fit 1.91:1
         targetWidth = Math.round(height * this.#maxAspectRatio);
-      } else if (aspectRatio < this.#minAspectRatio) {
-        // Too tall → crop height to fit 4:5
-        targetHeight = Math.round(width / this.#minAspectRatio);
+      } else if (aspectRatio < minAspectRatio) {
+        // Too tall → crop height to fit min aspect ratio
+        targetHeight = Math.round(width / minAspectRatio);
       }
     }
 
@@ -808,7 +822,7 @@ export class InstagramPostClient extends PostClient {
     if (processedImageUploadError) {
       console.error("Error Processing Image", processedImageUploadError);
       throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`
+        `Error Processing Image: ${processedImageUploadError.message}`,
       );
     }
 
@@ -886,7 +900,7 @@ export class InstagramPostClient extends PostClient {
       // Remove excess/duplicate hashtags (from end to beginning to preserve indices)
       if (hashtagsToRemove.length > 0) {
         console.log(
-          `Removing ${hashtagsToRemove.length} excess/duplicate hashtags`
+          `Removing ${hashtagsToRemove.length} excess/duplicate hashtags`,
         );
 
         // Sort by index descending to remove from end first
@@ -896,7 +910,7 @@ export class InstagramPostClient extends PostClient {
           // Remove the hashtag and any trailing spaces
           const beforeHashtag = cleanedCaption.substring(0, toRemove.index);
           const afterHashtag = cleanedCaption.substring(
-            toRemove.index + toRemove.length
+            toRemove.index + toRemove.length,
           );
 
           // Also remove trailing space if it exists
@@ -909,7 +923,7 @@ export class InstagramPostClient extends PostClient {
     // Handle mentions similarly
     if (mentionMatches.length > maxMentions) {
       console.log(
-        `Too many mentions (${mentionMatches.length}), limiting to ${maxMentions}`
+        `Too many mentions (${mentionMatches.length}), limiting to ${maxMentions}`,
       );
 
       // Remove excess mentions from the end
@@ -921,7 +935,7 @@ export class InstagramPostClient extends PostClient {
       for (const match of mentionsToRemove) {
         const beforeMention = cleanedCaption.substring(0, match.index);
         const afterMention = cleanedCaption.substring(
-          match.index + match[0].length
+          match.index + match[0].length,
         );
         const trimmedAfter = afterMention.replace(/^[ \t]+/, "");
         cleanedCaption = beforeMention + trimmedAfter;
@@ -939,7 +953,7 @@ export class InstagramPostClient extends PostClient {
     // Trim if over character limit
     if (cleanedCaption.length > maxLength) {
       console.log(
-        `Caption too long: ${cleanedCaption.length} chars, trimming to ${maxLength}`
+        `Caption too long: ${cleanedCaption.length} chars, trimming to ${maxLength}`,
       );
 
       let trimmedCaption = cleanedCaption.substring(0, maxLength);
