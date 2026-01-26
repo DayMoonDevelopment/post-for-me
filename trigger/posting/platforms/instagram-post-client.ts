@@ -736,7 +736,7 @@ export class InstagramPostClient extends PostClient {
         width: number | null | undefined;
         height: number | null | undefined;
       };
-      placement?: InstagramConfiguration["placement"];
+      placement?: string;
     };
   }): Promise<{
     signedUrl: string | undefined;
