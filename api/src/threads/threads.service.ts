@@ -233,7 +233,7 @@ export class ThreadsService implements SocialPlatformService {
         cursor: responseData?.paging?.cursors?.after,
       };
     } catch (error) {
-      console.error('Error fetching Threads posts:', error);
+      console.error('Error fetching Threads posts:', error.response.data);
       return {
         posts: [],
         count: 0,
