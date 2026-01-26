@@ -124,7 +124,9 @@ bun run typecheck
 ## API Endpoints
 
 ### Authentication
+
 All endpoints require an API key in the `Authorization` header:
+
 ```
 Authorization: Bearer your_api_key
 ```
@@ -146,11 +148,13 @@ Authorization: Bearer your_api_key
 - **`GET /social-post-results`** - Retrieve post analytics and metrics
 
 ### Documentation
+
 Interactive API documentation is available at `/docs` when running the server.
 
 ## Social Platform Integrations
 
 ### Supported Platforms
+
 - **Facebook** - Pages and personal profiles
 - **Instagram** - Business and creator accounts
 - **TikTok** - Business accounts via TikTok for Business API
@@ -160,6 +164,7 @@ Interactive API documentation is available at `/docs` when running the server.
 - **Bluesky** - Personal accounts via AT Protocol
 
 ### OAuth Flow
+
 1. Client requests authorization URL from `/social-provider-connections/auth-url`
 2. User completes OAuth flow on platform
 3. Platform redirects to callback with authorization code
@@ -188,6 +193,7 @@ The API integrates with Trigger.dev for background processing:
 ## Database Schema
 
 Key tables:
+
 - **`users`** - User accounts and profiles
 - **`teams`** - Team/organization management
 - **`projects`** - Multi-tenant project organization
@@ -208,19 +214,10 @@ docker build -f api/Dockerfile -t post-for-me-api .
 docker run --rm -p 3000:3000 --env-file .env post-for-me-api
 ```
 
-### Platform Deployment
-
-The API can be deployed to:
-- Railway (recommended)
-- Render
-- Fly.io
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-
 ### Environment Variables
 
 Ensure all required environment variables are set in your deployment platform:
+
 - Database credentials
 - Social platform API keys
 - Unkey configuration
