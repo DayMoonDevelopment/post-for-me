@@ -134,9 +134,9 @@ export class SocialPostsService {
     }
 
     // Validate account configuration media URLs
-    if (post.account_configurations) {
+    if (Array.isArray(post.account_configurations)) {
       for (const accountConfig of post.account_configurations) {
-        if (accountConfig.configuration?.media) {
+        if (accountConfig?.configuration?.media) {
           for (const media of accountConfig.configuration.media) {
             const urlValidation = this.validateMediaUrl(media.url);
             errors.push(
@@ -390,11 +390,16 @@ export class SocialPostsService {
       );
     }
 
-    if (post.account_configurations) {
+    if (Array.isArray(post.account_configurations)) {
       for (const accountConfig of post.account_configurations) {
-        if (accountConfig.configuration?.media) {
+        const platformConfig = accountConfig?.configuration;
+        if (!platformConfig) {
+          continue;
+        }
+
+        if (platformConfig.media) {
           postMedia.push(
-            ...accountConfig.configuration.media.map((media) => ({
+            ...platformConfig.media.map((media) => ({
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
@@ -405,7 +410,6 @@ export class SocialPostsService {
           );
         }
 
-        const platformConfig = accountConfig.configuration;
         postConfigurations.push({
           caption: platformConfig.caption,
           provider_connection_id: accountConfig.social_account_id,
