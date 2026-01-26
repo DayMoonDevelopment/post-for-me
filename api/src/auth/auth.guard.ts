@@ -86,10 +86,6 @@ export class AuthGuard implements CanActivate {
 
       return true; // Access granted
     } catch (error: unknown) {
-      console.error(
-        '[validateRequest] Authentication failed:',
-        error instanceof Error ? error.message : 'Unknown error',
-      ); // Re-throw UnauthorizedException or let specific errors bubble up
       if (error instanceof UnauthorizedException) {
         throw error;
       }
