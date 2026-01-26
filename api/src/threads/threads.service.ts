@@ -189,7 +189,7 @@ export class ThreadsService implements SocialPlatformService {
 
         // Fetch threads from user's profile
         const response = await axios.get<ThreadsPostsResponse>(
-          `https://graph.threads.net/v1.0/${account.social_provider_user_id}/threads`,
+          `https://graph.threads.net/v1.0/me/threads`,
           {
             params: {
               fields:
@@ -233,7 +233,7 @@ export class ThreadsService implements SocialPlatformService {
         cursor: responseData?.paging?.cursors?.after,
       };
     } catch (error) {
-      console.error('Error fetching Threads posts:', error.response.data);
+      console.error('Error fetching Threads posts:', error);
       return {
         posts: [],
         count: 0,
