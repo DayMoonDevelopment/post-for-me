@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { SupabaseService } from 'src/supabase/supabase.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { WebhookDto } from './dto/webhook.dto';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ConfigService } from '@nestjs/config';
-import type { SocialProviderAppCredentialsDto } from 'src/social-provider-app-credentials/dto/social-provider-app-credentials.dto';
+import type { SocialProviderAppCredentialsDto } from '../../social-provider-app-credentials/dto/social-provider-app-credentials.dto';
 import { TwitterApi, type TwitterApiTokens } from 'twitter-api-v2';
 import { google } from 'googleapis';
 import type { SupabaseService } from '../../supabase/supabase.service';

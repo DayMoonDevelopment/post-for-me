@@ -1,9 +1,9 @@
 import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
 import { TikTokBusinessMetricsDto } from './platform-post-metrics.dto';
-import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
-import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
-import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
-import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
+import { TikTokPostMetricsDto } from '../../tiktok/dto/tiktok-post-metrics.dto';
+import { InstagramPostMetricsDto } from '../../instagram/dto/instagram-post-metrics.dto';
+import { YouTubePostMetricsDto } from '../../youtube/dto/youtube-post-metrics.dto';
+import { FacebookPostMetricsDto } from '../../facebook/dto/facebook-post-metrics.dto';
 
 export class PlatformPostDto {
   @ApiProperty({ description: 'Social media platform name' })

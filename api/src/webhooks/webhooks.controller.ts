@@ -17,13 +17,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Protect } from 'src/auth/protect.decorator';
-import { User } from 'src/auth/user.decorator';
-import { RequestUser } from 'src/auth/user.interface';
-import { Paginated } from 'src/pagination/paginated.decorator';
-import { PaginationService } from 'src/pagination/pagination.service';
+import { Protect } from '../auth/protect.decorator';
+import { User } from '../auth/user.decorator';
+import { RequestUser } from '../auth/user.interface';
+import { Paginated } from '../pagination/paginated.decorator';
+import { PaginationService } from '../pagination/pagination.service';
 import { WebhookDto } from './dto/webhook.dto';
-import { PaginatedResponse } from 'src/pagination/pagination-response.interface';
+import { PaginatedResponse } from '../pagination/pagination-response.interface';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';
 import { WebhookQueryDto } from './dto/webhook-query.dto';
