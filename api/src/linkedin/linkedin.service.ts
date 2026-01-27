@@ -27,6 +27,151 @@ export class LinkedInService implements SocialPlatformService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private getRestHeaders(accessToken: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      'Linkedin-Version': this.apiVersion,
+      // LinkedIn Rest.li requires this for many endpoints (and is harmless
+      // where not strictly required).
+      'X-Restli-Protocol-Version': '2.0.0',
+    };
+  }
+
+  private getMediaTypeFromUrn(mediaUrn: string): 'image' | 'video' | undefined {
+    const urn = mediaUrn.toLowerCase();
+    if (urn.includes(':image:')) {
+      return 'image';
+    }
+    if (urn.includes(':video:')) {
+      return 'video';
+    }
+    return undefined;
+  }
+
+  private async batchGetImages(
+    account: SocialAccount,
+    imageUrns: string[],
+  ): Promise<Map<string, { url: string; thumbnail_url?: string }>> {
+    const resolved = new Map<string, { url: string; thumbnail_url?: string }>();
+
+    if (imageUrns.length === 0) {
+      return resolved;
+    }
+
+    const encodedIds = imageUrns.map((id) => encodeURIComponent(id)).join(',');
+    const url = `https://api.linkedin.com/rest/images?ids=List(${encodedIds})`;
+    const response = await fetch(url, {
+      headers: {
+        ...this.getRestHeaders(account.access_token),
+        'X-RestLi-Method': 'BATCH_GET',
+      },
+    });
+
+    const data: any = await response.json();
+    if (!response.ok) {
+      console.error('Error batch getting LinkedIn images', data);
+      return resolved;
+    }
+
+    const results = data?.results;
+    if (!results || typeof results !== 'object') {
+      return resolved;
+    }
+
+    for (const [urn, value] of Object.entries<any>(results)) {
+      const downloadUrl = value?.downloadUrl;
+      if (typeof downloadUrl === 'string' && downloadUrl.length > 0) {
+        resolved.set(urn, {
+          url: downloadUrl,
+          thumbnail_url: downloadUrl,
+        });
+      }
+    }
+
+    return resolved;
+  }
+
+  private async batchGetVideos(
+    account: SocialAccount,
+    videoUrns: string[],
+  ): Promise<Map<string, { url: string; thumbnail_url?: string }>> {
+    const resolved = new Map<string, { url: string; thumbnail_url?: string }>();
+
+    if (videoUrns.length === 0) {
+      return resolved;
+    }
+
+    const encodedIds = videoUrns.map((id) => encodeURIComponent(id)).join(',');
+    const url = `https://api.linkedin.com/rest/videos?ids=List(${encodedIds})`;
+    const response = await fetch(url, {
+      headers: {
+        ...this.getRestHeaders(account.access_token),
+        'X-RestLi-Method': 'BATCH_GET',
+      },
+    });
+
+    const data: any = await response.json();
+    if (!response.ok) {
+      console.error('Error batch getting LinkedIn videos', data);
+      return resolved;
+    }
+
+    const results = data?.results;
+    if (!results || typeof results !== 'object') {
+      return resolved;
+    }
+
+    for (const [urn, value] of Object.entries<any>(results)) {
+      const downloadUrl = value?.downloadUrl;
+      const thumbnail = value?.thumbnail;
+      if (typeof downloadUrl === 'string' && downloadUrl.length > 0) {
+        resolved.set(urn, {
+          url: downloadUrl,
+          thumbnail_url: typeof thumbnail === 'string' ? thumbnail : undefined,
+        });
+      }
+    }
+
+    return resolved;
+  }
+
+  private async resolvePostMediaFromContent(
+    account: SocialAccount,
+    posts: any[],
+  ): Promise<Map<string, { url: string; thumbnail_url?: string }>> {
+    const imageUrns = new Set<string>();
+    const videoUrns = new Set<string>();
+
+    for (const post of posts) {
+      const mediaId: unknown = post?.content?.media?.id;
+      if (typeof mediaId !== 'string' || mediaId.length === 0) {
+        continue;
+      }
+
+      const mediaType = this.getMediaTypeFromUrn(mediaId);
+      if (mediaType === 'image') {
+        imageUrns.add(mediaId);
+      } else if (mediaType === 'video') {
+        videoUrns.add(mediaId);
+      }
+    }
+
+    const [images, videos] = await Promise.all([
+      this.batchGetImages(account, [...imageUrns]),
+      this.batchGetVideos(account, [...videoUrns]),
+    ]);
+
+    const resolved = new Map<string, { url: string; thumbnail_url?: string }>();
+    for (const [k, v] of images.entries()) {
+      resolved.set(k, v);
+    }
+    for (const [k, v] of videos.entries()) {
+      resolved.set(k, v);
+    }
+
+    return resolved;
+  }
+
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
       await this.supabaseService.supabaseServiceRole
@@ -111,42 +256,42 @@ export class LinkedInService implements SocialPlatformService {
       },
     });
 
-    let metrics: LinkedInPostMetricsDto | undefined = undefined;
+    let metrics: LinkedInPostMetricsDto = {};
     const analyticsData: any = await analyticsResponse.json();
 
-    if (!analyticsResponse.ok) {
-      console.error('Error getting post analytics', analyticsData);
-      return metrics;
+    if (analyticsResponse.ok) {
+      const stats = Array.isArray(analyticsData?.elements)
+        ? analyticsData.elements?.[0]?.totalShareStatistics
+        : analyticsData;
+
+      if (!stats) {
+        return undefined;
+      }
+
+      metrics = {
+        clickCount: stats.clickCount,
+        commentCount: stats.commentCount,
+        engagement: stats.engagement,
+        impressionCount: stats.impressionCount,
+        likeCount: stats.likeCount,
+        shareCount: stats.shareCount,
+      };
     }
 
-    const stats = Array.isArray(analyticsData?.elements)
-      ? analyticsData.elements?.[0]?.totalShareStatistics
-      : analyticsData;
-
-    if (!stats) {
-      return undefined;
-    }
-
-    metrics = {
-      clickCount: stats.clickCount,
-      commentCount: stats.commentCount,
-      engagement: stats.engagement,
-      impressionCount: stats.impressionCount,
-      likeCount: stats.likeCount,
-      shareCount: stats.shareCount,
-    };
-
-    // Check if post has video
-    if (
+    const contentMediaId: unknown = content?.media?.id;
+    const hasVideo =
+      (typeof contentMediaId === 'string' &&
+        this.getMediaTypeFromUrn(contentMediaId) === 'video') ||
       content?.['com.linkedin.ugc.ShareContent']?.media?.[0]?.[
         'com.linkedin.ugc.Media'
-      ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
-    ) {
+      ]?.mediaType === 'urn:li:digitalmediaMediaType:video';
+
+    // Check if post has video
+    if (hasVideo) {
       const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
       const videoResponse = await fetch(videoAnalyticsUrl, {
         headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          'Linkedin-Version': this.apiVersion,
+          ...this.getRestHeaders(account.access_token),
         },
       });
 
@@ -235,6 +380,13 @@ export class LinkedInService implements SocialPlatformService {
       const totalCount = isBatch ? posts.length : paging.count || posts.length;
       const cursor = isBatch ? undefined : paging.start;
 
+      // Resolve media from the modern Posts API response shape:
+      //   { content: { media: { id: 'urn:li:image:...' | 'urn:li:video:...' } } }
+      const resolvedContentMedia = await this.resolvePostMediaFromContent(
+        account,
+        posts,
+      );
+
       const platformPostsPromises = posts.map(async (post, index) => {
         const postUrn: string = post.id || post.urn;
         const content = post.content;
@@ -261,15 +413,31 @@ export class LinkedInService implements SocialPlatformService {
           : undefined;
 
         const media = [];
+
+        const contentMediaId: unknown = content?.media?.id;
+        if (typeof contentMediaId === 'string') {
+          const resolved = resolvedContentMedia.get(contentMediaId);
+          if (resolved) {
+            media.push(resolved);
+          }
+        }
+
         if (content?.['com.linkedin.ugc.ShareContent']?.media) {
           for (const mediaItem of content['com.linkedin.ugc.ShareContent']
             .media) {
             const mediaObj = mediaItem['com.linkedin.ugc.Media'];
             if (mediaObj?.thumbnails) {
-              media.push({
-                url: mediaObj.thumbnails[0].url,
-                thumbnail_url: mediaObj.thumbnails[0].url,
-              });
+              const url = mediaObj.thumbnails[0].url;
+              if (
+                typeof url === 'string' &&
+                url.length > 0 &&
+                !media.some((m) => m.url === url)
+              ) {
+                media.push({
+                  url,
+                  thumbnail_url: url,
+                });
+              }
             }
           }
         }
