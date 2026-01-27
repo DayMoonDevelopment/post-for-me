@@ -95,6 +95,15 @@ export class LinkedInService implements SocialPlatformService {
     return `${paramName}=List(${encodedIds})`;
   }
 
+  private getIndexedArrayQueryParams(
+    paramName: string,
+    urns: string[],
+  ): string {
+    return urns
+      .map((urn, index) => `${paramName}[${index}]=${encodeURIComponent(urn)}`)
+      .join('&');
+  }
+
   private toLinkedInMetrics(stats: any): LinkedInPostMetricsDto {
     /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
     return {
@@ -121,7 +130,10 @@ export class LinkedInService implements SocialPlatformService {
       return metricsByUrn;
     }
 
-    const urnParam = this.getListOrSingleQueryParam(urnParamName, urns);
+    const urnParam =
+      urnParamName === 'ugcPosts'
+        ? this.getIndexedArrayQueryParams(urnParamName, urns)
+        : this.getListOrSingleQueryParam(urnParamName, urns);
     const analyticsUrl = `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${authorUrn}&${urnParam}`;
     const analyticsResponse = await fetch(analyticsUrl, {
       headers: {
