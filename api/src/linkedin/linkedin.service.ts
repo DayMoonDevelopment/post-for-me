@@ -7,12 +7,21 @@ import type {
 } from '../lib/dto/global.dto';
 import { LinkedInPostMetricsDto } from './dto/linkedin-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable({ scope: Scope.REQUEST })
 export class LinkedInService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  apiVersion: string;
+
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+  ) {
+    this.apiVersion =
+      this.configService.get<string>('LinkedInVersion') || '202601';
+  }
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
@@ -153,6 +162,7 @@ export class LinkedInService implements SocialPlatformService {
           headers: {
             Authorization: `Bearer ${account.access_token}`,
             'X-RestLi-Method': 'BATCH_GET',
+            'Linkedin-Version': this.apiVersion,
           },
         });
 
@@ -169,11 +179,11 @@ export class LinkedInService implements SocialPlatformService {
         };
         const authorUrn =
           metadata?.connection_type === 'page'
-            ? `urn:li:company:${account.social_provider_user_id}`
+            ? `urn:li:organization:${account.social_provider_user_id}`
             : `urn:li:person:${account.social_provider_user_id}`;
 
         const encodedAuthorUrn = encodeURIComponent(authorUrn);
-        let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}`;
+        let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}&q=author`;
         if (params.cursor) {
           url += `&start=${encodeURIComponent(params.cursor)}`;
         }
@@ -181,14 +191,16 @@ export class LinkedInService implements SocialPlatformService {
         const response = await fetch(url, {
           headers: {
             Authorization: `Bearer ${account.access_token}`,
+            'Linkedin-Version': this.apiVersion,
           },
         });
 
+        const data: any = await response.json();
         if (!response.ok) {
+          console.error('Error fetching LinkedIn API posts', data);
           throw new Error(`LinkedIn API error: ${response.statusText}`);
         }
 
-        const data: any = await response.json();
         posts = data.elements || [];
         paging = data.paging || {};
       }
@@ -199,7 +211,6 @@ export class LinkedInService implements SocialPlatformService {
       const platformPostsPromises = posts.map(async (post) => {
         const postUrn: string = post.id || post.urn;
         const content = post.content;
-        const textObj = post.text;
         const createdObj = post.created;
 
         const metrics = includeMetrics
@@ -224,7 +235,7 @@ export class LinkedInService implements SocialPlatformService {
           provider: 'linkedin',
           id: postUrn,
           account_id: account.id,
-          caption: textObj?.text || '',
+          caption: post.commentary || '',
           url: `https://www.linkedin.com/posts/${postUrn.split(':').pop()}`,
           posted_at: createdObj?.time,
           media,
