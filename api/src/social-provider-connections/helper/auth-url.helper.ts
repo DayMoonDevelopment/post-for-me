@@ -417,7 +417,7 @@ export async function generateAuthUrl({
         );
 
         if (permissions.includes('feeds')) {
-          scopes.push('rw_organization_admin');
+          scopes.push(...['r_member_postAnalytics', 'rw_organization_admin']);
         }
       }
 
