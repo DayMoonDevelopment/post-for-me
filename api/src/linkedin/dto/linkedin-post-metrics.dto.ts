@@ -39,22 +39,29 @@ export class LinkedInPostMetricsDto {
 
   @ApiProperty({
     description:
-      "Video plays count with play-pause cycles for at least 2 seconds. Auto-looping videos are counted as one when loaded. Each subsequent auto-looped play doesn't increase this metric. Analytics data for this metric won't be available after one year of post creation",
+      "VIDEO_VIEW: Video views with play-pause cycles for at least 3 seconds. Auto-looping videos are counted as one when loaded. Each subsequent auto-looped play doesn't increase this metric. Analytics data for this metric won't be available after six months",
     required: false,
   })
-  videoPlay?: number;
+  videoView?: number;
 
   @ApiProperty({
     description:
-      "Unique viewers who made engaged plays on the video. Auto-looping videos are counted as one when loaded. Each subsequent auto-looped play doesn't increase this metric. Analytics data for this metric won't be available after one year of post creation",
+      "VIEWER: Unique viewers who made engaged plays on the video. Auto-looping videos are counted as one when loaded. Each subsequent auto-looped play doesn't increase this metric. Analytics data for this metric won't be available after six months",
     required: false,
   })
-  videoViewer?: number;
+  viewer?: number;
 
   @ApiProperty({
     description:
-      'The total time the video was watched, in milliseconds. Video auto-looping will continue to increase this metric for each subsequent play',
+      'TIME_WATCHED: The time the video was watched in milliseconds. Video auto-looping will continue to increase this metric for each subsequent play',
     required: false,
   })
-  videoWatchTime?: number;
+  timeWatched?: number;
+
+  @ApiProperty({
+    description:
+      'TIME_WATCHED_FOR_VIDEO_VIEWS: The time watched in milliseconds for video play-pause cycles that are at least 3 seconds. Video auto-looping will continue to increase this metric for each subsequent play. Analytics data for this metric will be available for six months',
+    required: false,
+  })
+  timeWatchedForVideoViews?: number;
 }

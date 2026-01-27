@@ -22,6 +22,18 @@ type LinkedInVideoEntity = {
   thumbnail?: string;
 };
 
+type LinkedInVideoAnalyticsType =
+  | 'VIDEO_VIEW'
+  | 'VIEWER'
+  | 'TIME_WATCHED'
+  | 'TIME_WATCHED_FOR_VIDEO_VIEWS';
+
+type LinkedInVideoAnalyticsResponse = {
+  elements?: Array<{
+    value?: unknown;
+  }>;
+};
+
 type LinkedInPostElement = {
   content?: {
     media?: {
@@ -52,9 +64,6 @@ export class LinkedInService implements SocialPlatformService {
     return {
       Authorization: `Bearer ${accessToken}`,
       'Linkedin-Version': this.apiVersion,
-      // LinkedIn Rest.li requires this for many endpoints (and is harmless
-      // where not strictly required).
-      'X-Restli-Protocol-Version': '2.0.0',
     };
   }
 
@@ -85,6 +94,7 @@ export class LinkedInService implements SocialPlatformService {
       headers: {
         ...this.getRestHeaders(account.access_token),
         'X-RestLi-Method': 'BATCH_GET',
+        'X-Restli-Protocol-Version': '2.0.0',
       },
     });
 
@@ -128,6 +138,7 @@ export class LinkedInService implements SocialPlatformService {
     const response = await fetch(url, {
       headers: {
         ...this.getRestHeaders(account.access_token),
+        'X-Restli-Protocol-Version': '2.0.0',
         'X-RestLi-Method': 'BATCH_GET',
       },
     });
@@ -274,15 +285,16 @@ export class LinkedInService implements SocialPlatformService {
     const analyticsUrl = `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${authorUrn}&${urnPrefix}=${encodeURIComponent(postUrn)}`;
     const analyticsResponse = await fetch(analyticsUrl, {
       headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        'Linkedin-Version': this.apiVersion,
+        ...this.getRestHeaders(account.access_token),
       },
     });
 
     let metrics: LinkedInPostMetricsDto = {};
     const analyticsData: any = await analyticsResponse.json();
 
-    if (analyticsResponse.ok) {
+    if (!analyticsResponse.ok) {
+      console.error('Error getting LinkedIn Post metrics', analyticsData);
+    } else {
       const stats = Array.isArray(analyticsData?.elements)
         ? analyticsData.elements?.[0]?.totalShareStatistics
         : analyticsData;
@@ -311,25 +323,52 @@ export class LinkedInService implements SocialPlatformService {
 
     // Check if post has video
     if (hasVideo) {
-      const videoAnalyticsUrl = `https://api.linkedin.com/rest/videoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}&aggregation=ALL&&type=TIME_WATCHED`;
-      console.log(videoAnalyticsUrl);
-      const videoResponse = await fetch(videoAnalyticsUrl, {
-        headers: {
-          ...this.getRestHeaders(account.access_token),
-        },
-      });
+      const fetchMetric = async (
+        type: LinkedInVideoAnalyticsType,
+      ): Promise<number | undefined> => {
+        const videoAnalyticsUrl = `https://api.linkedin.com/rest/videoAnalytics?q=entity&entity=${encodeURIComponent(
+          postUrn,
+        )}&aggregation=ALL&type=${type}`;
+        const videoResponse = await fetch(videoAnalyticsUrl, {
+          headers: {
+            ...this.getRestHeaders(account.access_token),
+          },
+        });
 
-      const videoData: any = await videoResponse.json();
-      if (!videoResponse.ok) {
-        console.error('Error getting video metrics');
-        console.dir(videoData, { depth: null });
-        return metrics;
-      }
-      console.log(videoData);
+        const videoData =
+          (await videoResponse.json()) as unknown as LinkedInVideoAnalyticsResponse;
+        if (!videoResponse.ok) {
+          console.error('Error getting LinkedIn video metric', {
+            postUrn,
+            type,
+            videoData,
+          });
+          return undefined;
+        }
 
-      metrics.videoPlay = videoData.views?.[0]?.totalViews;
-      metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
-      metrics.videoWatchTime = videoData.views?.[0]?.totalWatchTime;
+        const value = videoData.elements?.[0]?.value;
+        if (typeof value === 'number') {
+          return value;
+        }
+        if (typeof value === 'string') {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : undefined;
+        }
+        return undefined;
+      };
+
+      const [videoView, viewer, timeWatched, timeWatchedForVideoViews] =
+        await Promise.all([
+          fetchMetric('VIDEO_VIEW'),
+          fetchMetric('VIEWER'),
+          fetchMetric('TIME_WATCHED'),
+          fetchMetric('TIME_WATCHED_FOR_VIDEO_VIEWS'),
+        ]);
+
+      metrics.videoView = videoView;
+      metrics.viewer = viewer;
+      metrics.timeWatched = timeWatched;
+      metrics.timeWatchedForVideoViews = timeWatchedForVideoViews;
     }
 
     return metrics;
