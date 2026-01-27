@@ -94,12 +94,12 @@ export class LinkedInService implements SocialPlatformService {
   ): Promise<LinkedInPostMetricsDto | undefined> {
     /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
 
-    const urnPrefix: string = postUrn.includes('ugcPost') ? 'ugc:' : 'share:';
-    const fullUrn = `(${urnPrefix}${encodeURIComponent(postUrn)})`;
+    const urnPrefix: string = postUrn.includes('ugcPost')
+      ? 'ugcPosts'
+      : 'shares';
+
     // Fetch post analytics
-    //const analyticsUrl = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?entity=${fullUrn}&q=entity&queryType=IMPRESSION&aggregation=TOTAL`;
-    const analyticsUrl = `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${authorUrn}&shares=${encodeURIComponent(postUrn)}`;
-    console.log(analyticsUrl);
+    const analyticsUrl = `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${authorUrn}&${urnPrefix}=${encodeURIComponent(postUrn)}`;
     const analyticsResponse = await fetch(analyticsUrl, {
       headers: {
         Authorization: `Bearer ${account.access_token}`,
@@ -115,12 +115,20 @@ export class LinkedInService implements SocialPlatformService {
       return metrics;
     }
 
+    const stats = Array.isArray(analyticsData?.elements)
+      ? analyticsData.elements?.[0]?.totalShareStatistics
+      : analyticsData;
+
+    if (!stats) {
+      return undefined;
+    }
+
     metrics = {
-      impression: analyticsData.impressionCount,
-      membersReached: analyticsData.uniqueImpressionsCount,
-      reshare: analyticsData.shareCount,
-      reaction: analyticsData.likeCount,
-      comment: analyticsData.commentCount,
+      impression: stats.impressionCount,
+      membersReached: stats.uniqueImpressionsCount,
+      reshare: stats.shareCount,
+      reaction: stats.likeCount,
+      comment: stats.commentCount,
     };
 
     // Check if post has video
@@ -129,7 +137,7 @@ export class LinkedInService implements SocialPlatformService {
         'com.linkedin.ugc.Media'
       ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
     ) {
-      const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(fullUrn)}`;
+      const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
       const videoResponse = await fetch(videoAnalyticsUrl, {
         headers: {
           Authorization: `Bearer ${account.access_token}`,
