@@ -9,6 +9,27 @@ import { LinkedInPostMetricsDto } from './dto/linkedin-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { ConfigService } from '@nestjs/config';
 
+type LinkedInBatchGetResponse<T> = {
+  results?: Record<string, T>;
+};
+
+type LinkedInImageEntity = {
+  downloadUrl?: string;
+};
+
+type LinkedInVideoEntity = {
+  downloadUrl?: string;
+  thumbnail?: string;
+};
+
+type LinkedInPostElement = {
+  content?: {
+    media?: {
+      id?: string;
+    };
+  };
+};
+
 @Injectable({ scope: Scope.REQUEST })
 export class LinkedInService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
@@ -67,18 +88,19 @@ export class LinkedInService implements SocialPlatformService {
       },
     });
 
-    const data: any = await response.json();
+    const data =
+      (await response.json()) as unknown as LinkedInBatchGetResponse<LinkedInImageEntity>;
     if (!response.ok) {
       console.error('Error batch getting LinkedIn images', data);
       return resolved;
     }
 
-    const results = data?.results;
-    if (!results || typeof results !== 'object') {
+    const results = data.results;
+    if (!results) {
       return resolved;
     }
 
-    for (const [urn, value] of Object.entries<any>(results)) {
+    for (const [urn, value] of Object.entries(results)) {
       const downloadUrl = value?.downloadUrl;
       if (typeof downloadUrl === 'string' && downloadUrl.length > 0) {
         resolved.set(urn, {
@@ -110,18 +132,19 @@ export class LinkedInService implements SocialPlatformService {
       },
     });
 
-    const data: any = await response.json();
+    const data =
+      (await response.json()) as unknown as LinkedInBatchGetResponse<LinkedInVideoEntity>;
     if (!response.ok) {
       console.error('Error batch getting LinkedIn videos', data);
       return resolved;
     }
 
-    const results = data?.results;
-    if (!results || typeof results !== 'object') {
+    const results = data.results;
+    if (!results) {
       return resolved;
     }
 
-    for (const [urn, value] of Object.entries<any>(results)) {
+    for (const [urn, value] of Object.entries(results)) {
       const downloadUrl = value?.downloadUrl;
       const thumbnail = value?.thumbnail;
       if (typeof downloadUrl === 'string' && downloadUrl.length > 0) {
@@ -137,13 +160,13 @@ export class LinkedInService implements SocialPlatformService {
 
   private async resolvePostMediaFromContent(
     account: SocialAccount,
-    posts: any[],
+    posts: LinkedInPostElement[],
   ): Promise<Map<string, { url: string; thumbnail_url?: string }>> {
     const imageUrns = new Set<string>();
     const videoUrns = new Set<string>();
 
     for (const post of posts) {
-      const mediaId: unknown = post?.content?.media?.id;
+      const mediaId = post.content?.media?.id;
       if (typeof mediaId !== 'string' || mediaId.length === 0) {
         continue;
       }
@@ -288,7 +311,8 @@ export class LinkedInService implements SocialPlatformService {
 
     // Check if post has video
     if (hasVideo) {
-      const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+      const videoAnalyticsUrl = `https://api.linkedin.com/rest/videoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}&aggregation=ALL&&type=TIME_WATCHED`;
+      console.log(videoAnalyticsUrl);
       const videoResponse = await fetch(videoAnalyticsUrl, {
         headers: {
           ...this.getRestHeaders(account.access_token),
@@ -297,9 +321,11 @@ export class LinkedInService implements SocialPlatformService {
 
       const videoData: any = await videoResponse.json();
       if (!videoResponse.ok) {
-        console.error('Error getting video metrics', videoData);
+        console.error('Error getting video metrics');
+        console.dir(videoData, { depth: null });
         return metrics;
       }
+      console.log(videoData);
 
       metrics.videoPlay = videoData.views?.[0]?.totalViews;
       metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
@@ -384,7 +410,7 @@ export class LinkedInService implements SocialPlatformService {
       //   { content: { media: { id: 'urn:li:image:...' | 'urn:li:video:...' } } }
       const resolvedContentMedia = await this.resolvePostMediaFromContent(
         account,
-        posts,
+        posts as LinkedInPostElement[],
       );
 
       const platformPostsPromises = posts.map(async (post, index) => {
