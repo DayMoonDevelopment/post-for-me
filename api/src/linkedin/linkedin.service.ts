@@ -86,27 +86,44 @@ export class LinkedInService implements SocialPlatformService {
     return account;
   }
 
-  private getListOrSingleQueryParam(paramName: string, urns: string[]): string {
-    if (urns.length === 1) {
-      return `${paramName}=${encodeURIComponent(urns[0])}`;
+  private async getPostMetrics(
+    account: SocialAccount,
+    postUrn: string,
+    content: any,
+    authorUrn: string,
+  ): Promise<LinkedInPostMetricsDto | undefined> {
+    /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+
+    const urnPrefix: string = postUrn.includes('ugcPost')
+      ? 'ugcPosts'
+      : 'shares';
+
+    // Fetch post analytics
+    const analyticsUrl = `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${authorUrn}&${urnPrefix}=${encodeURIComponent(postUrn)}`;
+    const analyticsResponse = await fetch(analyticsUrl, {
+      headers: {
+        Authorization: `Bearer ${account.access_token}`,
+        'Linkedin-Version': this.apiVersion,
+      },
+    });
+
+    let metrics: LinkedInPostMetricsDto | undefined = undefined;
+    const analyticsData: any = await analyticsResponse.json();
+
+    if (!analyticsResponse.ok) {
+      console.error('Error getting post analytics', analyticsData);
+      return metrics;
     }
 
-    const encodedIds = urns.map((urn) => encodeURIComponent(urn)).join('%2C');
-    return `${paramName}=List(${encodedIds})`;
-  }
+    const stats = Array.isArray(analyticsData?.elements)
+      ? analyticsData.elements?.[0]?.totalShareStatistics
+      : analyticsData;
 
-  private getIndexedArrayQueryParams(
-    paramName: string,
-    urns: string[],
-  ): string {
-    return urns
-      .map((urn, index) => `${paramName}[${index}]=${encodeURIComponent(urn)}`)
-      .join('&');
-  }
+    if (!stats) {
+      return undefined;
+    }
 
-  private toLinkedInMetrics(stats: any): LinkedInPostMetricsDto {
-    /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-    return {
+    metrics = {
       clickCount: stats.clickCount,
       commentCount: stats.commentCount,
       engagement: stats.engagement,
@@ -114,103 +131,33 @@ export class LinkedInService implements SocialPlatformService {
       likeCount: stats.likeCount,
       shareCount: stats.shareCount,
     };
-  }
 
-  private async getOrganizationalEntityShareStatistics(params: {
-    account: SocialAccount;
-    authorUrn: string;
-    urns: string[];
-    urnParamName: 'shares' | 'ugcPosts';
-  }): Promise<Map<string, LinkedInPostMetricsDto>> {
-    const { account, authorUrn, urns, urnParamName } = params;
-    /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+    // Check if post has video
+    if (
+      content?.['com.linkedin.ugc.ShareContent']?.media?.[0]?.[
+        'com.linkedin.ugc.Media'
+      ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
+    ) {
+      const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+      const videoResponse = await fetch(videoAnalyticsUrl, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+          'Linkedin-Version': this.apiVersion,
+        },
+      });
 
-    const metricsByUrn = new Map<string, LinkedInPostMetricsDto>();
-    if (urns.length === 0) {
-      return metricsByUrn;
-    }
-
-    const urnParam =
-      urnParamName === 'ugcPosts'
-        ? this.getIndexedArrayQueryParams(urnParamName, urns)
-        : this.getListOrSingleQueryParam(urnParamName, urns);
-    const analyticsUrl = `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${authorUrn}&${urnParam}`;
-    const analyticsResponse = await fetch(analyticsUrl, {
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        'Linkedin-Version': this.apiVersion,
-        'X-Restli-Protocol-Version': '2.0.0',
-      },
-    });
-
-    const analyticsData: any = await analyticsResponse.json();
-    if (!analyticsResponse.ok) {
-      console.error('Error getting post analytics', analyticsData);
-      return metricsByUrn;
-    }
-
-    const elements = Array.isArray(analyticsData?.elements)
-      ? analyticsData.elements
-      : analyticsData
-        ? [analyticsData]
-        : [];
-
-    for (const element of elements) {
-      const urn: string | undefined =
-        element?.share || element?.ugcPost || element?.id || element?.urn;
-      const stats: any = element?.totalShareStatistics;
-
-      if (!urn || !stats) {
-        continue;
+      const videoData: any = await videoResponse.json();
+      if (!videoResponse.ok) {
+        console.error('Error getting video metrics', videoData);
+        return metrics;
       }
 
-      metricsByUrn.set(urn, this.toLinkedInMetrics(stats));
+      metrics.videoPlay = videoData.views?.[0]?.totalViews;
+      metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
+      metrics.videoWatchTime = videoData.views?.[0]?.totalWatchTime;
     }
 
-    // Some LinkedIn responses (especially when requesting a single ID) may
-    // return a stats object without the URN included. If we only asked for one
-    // URN and didn't get a mappable element, attach the stats to the request URN.
-    if (metricsByUrn.size === 0 && urns.length === 1) {
-      const stats: any = analyticsData?.totalShareStatistics || analyticsData;
-      if (stats?.clickCount !== undefined) {
-        metricsByUrn.set(urns[0], this.toLinkedInMetrics(stats));
-      }
-    }
-
-    return metricsByUrn;
-  }
-
-  private async getVideoMetrics(
-    account: SocialAccount,
-    postUrn: string,
-  ): Promise<
-    | {
-        videoPlay?: number;
-        videoViewer?: number;
-        videoWatchTime?: number;
-      }
-    | undefined
-  > {
-    /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-    const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
-    const videoResponse = await fetch(videoAnalyticsUrl, {
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        'Linkedin-Version': this.apiVersion,
-      },
-    });
-
-    const videoData: any = await videoResponse.json();
-    if (!videoResponse.ok) {
-      console.error('Error getting video metrics', videoData);
-      return undefined;
-    }
-
-    return {
-      videoPlay: videoData.views?.[0]?.totalViews,
-      videoViewer: videoData.views?.[0]?.uniqueViews,
-      videoWatchTime: videoData.views?.[0]?.totalWatchTime,
-    };
+    return metrics;
   }
 
   async getAccountPosts(params: {
@@ -284,57 +231,19 @@ export class LinkedInService implements SocialPlatformService {
       const totalCount = isBatch ? posts.length : paging.count || posts.length;
       const cursor = isBatch ? undefined : paging.start;
 
-      const postIds = posts.map((p) => (p.id || p.urn) as string);
-      const shareUrns: string[] = postIds.filter((id) => id.includes('share'));
-      const ugcUrns: string[] = postIds.filter((id) => id.includes('ugcPost'));
-
-      const metricsByUrn = new Map<string, LinkedInPostMetricsDto>();
-      if (includeMetrics) {
-        const [sharesMap, ugcMap] = await Promise.all([
-          this.getOrganizationalEntityShareStatistics({
-            account,
-            authorUrn: encodedAuthorUrn,
-            urns: shareUrns,
-            urnParamName: 'shares',
-          }),
-          this.getOrganizationalEntityShareStatistics({
-            account,
-            authorUrn: encodedAuthorUrn,
-            urns: ugcUrns,
-            urnParamName: 'ugcPosts',
-          }),
-        ]);
-
-        for (const [urn, metrics] of sharesMap.entries()) {
-          metricsByUrn.set(urn, metrics);
-        }
-        for (const [urn, metrics] of ugcMap.entries()) {
-          metricsByUrn.set(urn, metrics);
-        }
-      }
-
       const platformPostsPromises = posts.map(async (post) => {
         const postUrn: string = post.id || post.urn;
         const content = post.content;
         const createdObj = post.created;
 
-        const metrics = includeMetrics ? metricsByUrn.get(postUrn) : undefined;
-
-        // Check if post has video
-        if (
-          includeMetrics &&
-          metrics &&
-          content?.['com.linkedin.ugc.ShareContent']?.media?.[0]?.[
-            'com.linkedin.ugc.Media'
-          ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
-        ) {
-          const videoMetrics = await this.getVideoMetrics(account, postUrn);
-          if (videoMetrics) {
-            metrics.videoPlay = videoMetrics.videoPlay;
-            metrics.videoViewer = videoMetrics.videoViewer;
-            metrics.videoWatchTime = videoMetrics.videoWatchTime;
-          }
-        }
+        const metrics = includeMetrics
+          ? await this.getPostMetrics(
+              account,
+              postUrn,
+              content,
+              encodedAuthorUrn,
+            )
+          : undefined;
 
         const media = [];
         if (content?.['com.linkedin.ugc.ShareContent']?.media) {
