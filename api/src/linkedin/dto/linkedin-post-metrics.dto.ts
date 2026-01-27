@@ -2,35 +2,40 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class LinkedInPostMetricsDto {
   @ApiProperty({
-    description: 'Number of impressions of the requested entity',
+    description: 'Number of clicks',
     required: false,
   })
-  impression?: number;
+  clickCount?: number;
 
   @ApiProperty({
-    description:
-      'Number of members reached, post viewers or unique impressions count metric',
+    description: 'Number of comments',
     required: false,
   })
-  membersReached?: number;
+  commentCount?: number;
 
   @ApiProperty({
-    description: 'Number of reshares/reposts of the requested entity',
+    description: 'Engagement rate',
     required: false,
   })
-  reshare?: number;
+  engagement?: number;
 
   @ApiProperty({
-    description: 'Number of reactions of the requested entity',
+    description: 'Number of impressions',
     required: false,
   })
-  reaction?: number;
+  impressionCount?: number;
 
   @ApiProperty({
-    description: 'Number of comments of the requested entity',
+    description: 'Number of likes',
     required: false,
   })
-  comment?: number;
+  likeCount?: number;
+
+  @ApiProperty({
+    description: 'Number of shares',
+    required: false,
+  })
+  shareCount?: number;
 
   @ApiProperty({
     description:

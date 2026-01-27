@@ -124,11 +124,12 @@ export class LinkedInService implements SocialPlatformService {
     }
 
     metrics = {
-      impression: stats.impressionCount,
-      membersReached: stats.uniqueImpressionsCount,
-      reshare: stats.shareCount,
-      reaction: stats.likeCount,
-      comment: stats.commentCount,
+      clickCount: stats.clickCount,
+      commentCount: stats.commentCount,
+      engagement: stats.engagement,
+      impressionCount: stats.impressionCount,
+      likeCount: stats.likeCount,
+      shareCount: stats.shareCount,
     };
 
     // Check if post has video
