@@ -415,6 +415,10 @@ export async function generateAuthUrl({
               ]
             : ['openid', 'w_member_social', 'profile email']),
         );
+
+        if (permissions.includes('feeds')) {
+          scopes.push('rw_organization_admin');
+        }
       }
 
       const scope = scopes.join(' ');

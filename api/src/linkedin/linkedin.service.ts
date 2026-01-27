@@ -90,27 +90,38 @@ export class LinkedInService implements SocialPlatformService {
     account: SocialAccount,
     postUrn: string,
     content: any,
+    authorUrn: string,
   ): Promise<LinkedInPostMetricsDto | undefined> {
     /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+
+    const urnPrefix: string = postUrn.includes('ugcPost') ? 'ugc:' : 'share:';
+    const fullUrn = `(${urnPrefix}${encodeURIComponent(postUrn)})`;
     // Fetch post analytics
-    const analyticsUrl = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+    //const analyticsUrl = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?entity=${fullUrn}&q=entity&queryType=IMPRESSION&aggregation=TOTAL`;
+    const analyticsUrl = `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${authorUrn}&shares=${encodeURIComponent(postUrn)}`;
+    console.log(analyticsUrl);
     const analyticsResponse = await fetch(analyticsUrl, {
       headers: {
         Authorization: `Bearer ${account.access_token}`,
+        'Linkedin-Version': this.apiVersion,
       },
     });
 
-    let metrics: LinkedInPostMetricsDto | undefined;
-    if (analyticsResponse.ok) {
-      const analyticsData: any = await analyticsResponse.json();
-      metrics = {
-        impression: analyticsData.impressionCount,
-        membersReached: analyticsData.uniqueImpressionsCount,
-        reshare: analyticsData.shareCount,
-        reaction: analyticsData.likeCount,
-        comment: analyticsData.commentCount,
-      };
+    let metrics: LinkedInPostMetricsDto | undefined = undefined;
+    const analyticsData: any = await analyticsResponse.json();
+
+    if (!analyticsResponse.ok) {
+      console.error('Error getting post analytics', analyticsData);
+      return metrics;
     }
+
+    metrics = {
+      impression: analyticsData.impressionCount,
+      membersReached: analyticsData.uniqueImpressionsCount,
+      reshare: analyticsData.shareCount,
+      reaction: analyticsData.likeCount,
+      comment: analyticsData.commentCount,
+    };
 
     // Check if post has video
     if (
@@ -118,21 +129,23 @@ export class LinkedInService implements SocialPlatformService {
         'com.linkedin.ugc.Media'
       ]?.mediaType === 'urn:li:digitalmediaMediaType:video'
     ) {
-      const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(postUrn)}`;
+      const videoAnalyticsUrl = `https://api.linkedin.com/rest/memberCreatorVideoAnalytics?q=entity&entity=${encodeURIComponent(fullUrn)}`;
       const videoResponse = await fetch(videoAnalyticsUrl, {
         headers: {
           Authorization: `Bearer ${account.access_token}`,
+          'Linkedin-Version': this.apiVersion,
         },
       });
 
-      if (videoResponse.ok) {
-        const videoData: any = await videoResponse.json();
-        if (metrics) {
-          metrics.videoPlay = videoData.views?.[0]?.totalViews;
-          metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
-          metrics.videoWatchTime = videoData.views?.[0]?.totalWatchTime;
-        }
+      const videoData: any = await videoResponse.json();
+      if (!videoResponse.ok) {
+        console.error('Error getting video metrics', videoData);
+        return metrics;
       }
+
+      metrics.videoPlay = videoData.views?.[0]?.totalViews;
+      metrics.videoViewer = videoData.views?.[0]?.uniqueViews;
+      metrics.videoWatchTime = videoData.views?.[0]?.totalWatchTime;
     }
 
     return metrics;
@@ -152,6 +165,16 @@ export class LinkedInService implements SocialPlatformService {
       let posts: any[] = [];
       let paging: any = {};
       let isBatch = false;
+      const metadata = account.social_provider_metadata as {
+        connection_type?: string;
+      };
+      const authorUrn =
+        metadata?.connection_type === 'page'
+          ? `urn:li:organization:${account.social_provider_user_id}`
+          : `urn:li:person:${account.social_provider_user_id}`;
+
+      const encodedAuthorUrn = encodeURIComponent(authorUrn);
+
       if (platformIds && platformIds.length > 0) {
         // Fetch specific posts using Batch Get Posts method
         const encodedIds = platformIds
@@ -174,15 +197,6 @@ export class LinkedInService implements SocialPlatformService {
         posts = data.elements || [];
         isBatch = true;
       } else {
-        const metadata = account.social_provider_metadata as {
-          connection_type?: string;
-        };
-        const authorUrn =
-          metadata?.connection_type === 'page'
-            ? `urn:li:organization:${account.social_provider_user_id}`
-            : `urn:li:person:${account.social_provider_user_id}`;
-
-        const encodedAuthorUrn = encodeURIComponent(authorUrn);
         let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}&q=author`;
         if (params.cursor) {
           url += `&start=${encodeURIComponent(params.cursor)}`;
@@ -214,7 +228,12 @@ export class LinkedInService implements SocialPlatformService {
         const createdObj = post.created;
 
         const metrics = includeMetrics
-          ? await this.getPostMetrics(account, postUrn, content)
+          ? await this.getPostMetrics(
+              account,
+              postUrn,
+              content,
+              encodedAuthorUrn,
+            )
           : undefined;
 
         const media = [];
