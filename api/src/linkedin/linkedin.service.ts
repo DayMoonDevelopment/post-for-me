@@ -23,6 +23,10 @@ export class LinkedInService implements SocialPlatformService {
       this.configService.get<string>('LinkedInVersion') || '202601';
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
       await this.supabaseService.supabaseServiceRole
@@ -231,10 +235,21 @@ export class LinkedInService implements SocialPlatformService {
       const totalCount = isBatch ? posts.length : paging.count || posts.length;
       const cursor = isBatch ? undefined : paging.start;
 
-      const platformPostsPromises = posts.map(async (post) => {
+      const platformPostsPromises = posts.map(async (post, index) => {
         const postUrn: string = post.id || post.urn;
         const content = post.content;
         const createdObj = post.created;
+
+        // Stagger metrics requests slightly so we don't fan out a burst of
+        // requests at the exact same time.
+        if (includeMetrics) {
+          const baseDelayMs = 150;
+          const maxDelayMs = 2000;
+          const delayMs = Math.min(index * baseDelayMs, maxDelayMs);
+          if (delayMs > 0) {
+            await this.sleep(delayMs);
+          }
+        }
 
         const metrics = includeMetrics
           ? await this.getPostMetrics(
