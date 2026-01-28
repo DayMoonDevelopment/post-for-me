@@ -13,7 +13,7 @@ Note: Currently the following platforms are supported:
  - **TikTok Business**, 
  - **Youtube**
  - **Threads**, If using our Quickstart project then metrics are currently unavailable.
- - **Twitter (X) **
+ - **X (Twitter)**
  - **Bluesky**, Bluesky does not expose views or impressions through their API.
  - **Pinterest**
  - **LinkedIn**, metrics are only available for company pages. LinkedIn has currently stopped giving permission for personal page analytics, we are on the waitlist for when they resume.
