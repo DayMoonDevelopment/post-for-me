@@ -415,7 +415,7 @@ export class SocialAccountFeedsService {
           break;
       }
 
-      postResultsQuery.in('social_posts.external_post_id', values);
+      postResultsQuery.in('social_posts.external_id', values);
       executePostsQuery = true;
     }
 
