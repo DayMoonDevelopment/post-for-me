@@ -4,43 +4,20 @@ import type {
   PlatformPost,
   PlatformPostsResponse,
   SocialAccount,
-  SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
 import { AtpAgent } from '@atproto/api';
-import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class BlueskyService implements SocialPlatformService {
-  appCredentials: SocialProviderAppCredentials;
   private agent: AtpAgent;
 
-  constructor(private readonly supabaseService: SupabaseService) {
+  constructor() {
     this.agent = new AtpAgent({
       service: 'https://bsky.social',
     });
   }
 
-  async initService(projectId: string): Promise<void> {
-    const { data: appCredentials, error: appCredentialsError } =
-      await this.supabaseService.supabaseServiceRole
-        .from('social_provider_app_credentials')
-        .select()
-        .eq('project_id', projectId)
-        .eq('provider', 'bluesky')
-        .single();
-
-    if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
-      throw new Error('No app credentials found for platform');
-    }
-
-    this.appCredentials = {
-      appId: appCredentials.app_id || '',
-      appSecret: appCredentials.app_secret || '',
-      provider: appCredentials.provider,
-      projectId: appCredentials.project_id,
-    };
-  }
+  async initService(): Promise<void> {}
 
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
     try {
@@ -104,11 +81,31 @@ export class BlueskyService implements SocialPlatformService {
       });
 
       if (platformIds && platformIds.length > 0) {
-        // Bluesky uses URIs for posts, not simple IDs
-        // This would need proper AT Protocol URI handling
+        const safeIds = platformIds.slice(0, 25);
+        const postsResponse = await this.agent.getPosts({
+          uris: safeIds,
+        });
+
+        const posts: PlatformPost[] = postsResponse.data.posts.map((post) => ({
+          provider: 'bluesky',
+          id: post.uri,
+          account_id: post.author.did,
+          caption: (post.record as { text?: string })?.text || '',
+          url: `https://bsky.app/profile/${post.author.did}/post/${post.uri.split('/').pop()}`,
+          media: [],
+          metrics: includeMetrics
+            ? {
+                replyCount: post.replyCount || 0,
+                likeCount: post.likeCount || 0,
+                repostCount: post.repostCount || 0,
+                quoteCount: post.quoteCount || 0,
+              }
+            : undefined,
+        }));
+
         return {
-          posts: [],
-          count: 0,
+          posts,
+          count: posts.length,
           has_more: false,
         };
       }
@@ -125,36 +122,16 @@ export class BlueskyService implements SocialPlatformService {
         return {
           provider: 'bluesky',
           id: post.uri,
-          account_id: account.social_provider_user_id,
+          account_id: post.author.did,
           caption: (post.record as { text?: string })?.text || '',
-          url: `https://bsky.app/profile/${account.social_provider_user_id}/post/${post.uri.split('/').pop()}`,
+          url: `https://bsky.app/profile/${post.author.did}/post/${post.uri.split('/').pop()}`,
           media: [],
           metrics: includeMetrics
             ? {
-                likes: post.likeCount || 0,
-                comments: post.replyCount || 0,
-                shares: post.repostCount || 0,
-                favorites: 0,
-                reach: 0,
-                video_views: 0,
-                total_time_watched: 0,
-                average_time_watched: 0,
-                full_video_watched_rate: 0,
-                new_followers: 0,
-                profile_views: 0,
-                website_clicks: 0,
-                phone_number_clicks: 0,
-                lead_submissions: 0,
-                app_download_clicks: 0,
-                email_clicks: 0,
-                address_clicks: 0,
-                video_view_retention: [],
-                impression_sources: [],
-                audience_types: [],
-                audience_genders: [],
-                audience_countries: [],
-                audience_cities: [],
-                engagement_likes: [],
+                replyCount: post.replyCount || 0,
+                likeCount: post.likeCount || 0,
+                repostCount: post.repostCount || 0,
+                quoteCount: post.quoteCount || 0,
               }
             : undefined,
         };

@@ -1,8 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { BlueskyPostMetricsDto } from 'src/bluesky/dto/bluesky-post-metrics.dto';
 import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
 import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
-import { TikTokBusinessMetricsDto } from 'src/social-account-feeds/dto/platform-post-metrics.dto';
+import { LinkedInPostMetricsDto } from 'src/linkedin/dto/linkedin-post-metrics.dto';
+import { PinterestPostMetricsDto } from 'src/pinterest/dto/pinterest-post-metrics.dto';
+import { ThreadsPostMetricsDto } from 'src/threads/dto/threads-post-metrics.dto';
+import { TikTokBusinessMetricsDto } from 'src/tiktok-business/dto/tiktok-business-post-metrics.dto';
 import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
+import { TwitterPostMetricsDto } from 'src/twitter/dto/twitter-post-metrics.dto';
 import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
 
 export class DeleteEntityResponseDto {
@@ -51,13 +56,18 @@ export interface PlatformPost {
   caption: string;
   url: string;
   posted_at?: string;
-  media: { url: string; thumbnail_url: string }[];
+  media: { url: string; thumbnail_url?: string }[];
   metrics?:
     | FacebookPostMetricsDto
     | TikTokBusinessMetricsDto
     | TikTokPostMetricsDto
     | InstagramPostMetricsDto
-    | YouTubePostMetricsDto;
+    | LinkedInPostMetricsDto
+    | TwitterPostMetricsDto
+    | YouTubePostMetricsDto
+    | BlueskyPostMetricsDto
+    | PinterestPostMetricsDto
+    | ThreadsPostMetricsDto;
 }
 
 export interface PlatformPostsResponse {
