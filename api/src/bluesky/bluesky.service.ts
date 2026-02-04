@@ -7,9 +7,13 @@ import type {
 } from '../lib/dto/global.dto';
 import { AtpAgent } from '@atproto/api';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Injectable({ scope: Scope.REQUEST })
 export class BlueskyService implements SocialPlatformService {
   private agent: AtpAgent;
+
+  private readonly logger = new AppLogger(BlueskyService.name);
 
   constructor() {
     this.agent = new AtpAgent({
@@ -31,7 +35,13 @@ export class BlueskyService implements SocialPlatformService {
 
       return account;
     } catch (error) {
-      console.error('Failed to resume Bluesky session', error);
+      this.logger.warnWithMeta(
+        'bluesky resume session failed; falling back to login',
+        {
+          accountId: account.id,
+          error,
+        },
+      );
 
       // Try to login with app password
       const accountMeatadata = account.social_provider_metadata as {
@@ -144,7 +154,10 @@ export class BlueskyService implements SocialPlatformService {
         cursor: feed.data.cursor,
       };
     } catch (error) {
-      console.error('Error fetching Bluesky posts:', error);
+      this.logger.errorWithMeta('bluesky posts fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+      });
       return {
         posts: [],
         count: 0,

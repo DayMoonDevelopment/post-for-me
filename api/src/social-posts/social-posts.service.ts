@@ -17,12 +17,16 @@ import { Database, Json } from '@post-for-me/db';
 import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from 'src/social-post-meters/social-post-meters.service';
 
+import { AppLogger } from '../logger/app-logger';
+
 type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
 
 type PostStatusEnum = Database['public']['Enums']['social_post_status'];
 
 @Injectable()
 export class SocialPostsService {
+  private readonly logger = new AppLogger(SocialPostsService.name);
+
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly socialPostMetersService: SocialPostMetersService,
@@ -425,7 +429,16 @@ export class SocialPostsService {
         .insert(postMedia);
 
     if (insertPostMediaError) {
-      console.error(insertPostMediaError);
+      this.logger.errorWithMeta(
+        'failed to insert social_post_media',
+        undefined,
+        {
+          postId: data.id,
+          projectId,
+          supabase_error: insertPostMediaError,
+          media_count: postMedia.length,
+        },
+      );
     }
 
     const { error: insertPostConfigurationsError } =
@@ -463,7 +476,16 @@ export class SocialPostsService {
         );
 
     if (insertPostConfigurationsError) {
-      console.error(insertPostConfigurationsError);
+      this.logger.errorWithMeta(
+        'failed to insert social_post_configurations',
+        undefined,
+        {
+          postId: data.id,
+          projectId,
+          supabase_error: insertPostConfigurationsError,
+          config_count: postConfigurations.length,
+        },
+      );
     }
 
     if (!post.scheduled_at) {
@@ -696,7 +718,11 @@ export class SocialPostsService {
         .delete()
         .eq('post_id', postId);
     } catch (e) {
-      console.log(`Error deleting post provider connections: ${e}`);
+      this.logger.warnWithMeta('failed to delete post provider connections', {
+        postId,
+        projectId,
+        error: e,
+      });
     }
 
     try {
@@ -705,7 +731,11 @@ export class SocialPostsService {
         .delete()
         .eq('post_id', postId);
     } catch (e) {
-      console.log(`Error deleting post media: ${e}`);
+      this.logger.warnWithMeta('failed to delete post media', {
+        postId,
+        projectId,
+        error: e,
+      });
     }
 
     try {
@@ -714,7 +744,14 @@ export class SocialPostsService {
         .delete()
         .eq('post_id', postId);
     } catch (e) {
-      console.log(`Error deleting post provider configurations: ${e}`);
+      this.logger.warnWithMeta(
+        'failed to delete post provider configurations',
+        {
+          postId,
+          projectId,
+          error: e,
+        },
+      );
     }
     try {
       await this.supabaseService.supabaseClient
@@ -723,7 +760,11 @@ export class SocialPostsService {
         .eq('id', postId)
         .eq('project_id', projectId);
     } catch (e) {
-      console.log(`Error deleting post: ${e}`);
+      this.logger.warnWithMeta('failed to delete post before recreation', {
+        postId,
+        projectId,
+        error: e,
+      });
     }
 
     return this.createPost({
@@ -756,7 +797,10 @@ export class SocialPostsService {
 
       return { success: true };
     } catch (err) {
-      console.error(err);
+      this.logger.errorWithMeta('deletePost failed', err, {
+        postId,
+        projectId,
+      });
       return { success: false };
     }
   }
@@ -798,7 +842,9 @@ export class SocialPostsService {
 
       await tasks.trigger('process-post', { index: 0, post });
     } catch (error) {
-      console.log(error);
+      this.logger.errorWithMeta('triggerPost failed', error, {
+        postId,
+      });
       throw new Error('Something went wrong with processing the post.');
     }
   }

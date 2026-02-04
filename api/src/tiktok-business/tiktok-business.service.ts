@@ -11,11 +11,15 @@ import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import { TikTokBusinessMetricsDto } from './dto/tiktok-business-post-metrics.dto';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Injectable({ scope: Scope.REQUEST })
 export class TikTokBusinessService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
   tokenUrl: string;
   apiUrl: string;
+
+  private readonly logger = new AppLogger(TikTokBusinessService.name);
 
   constructor(private readonly supabaseService: SupabaseService) {
     this.tokenUrl =
@@ -33,7 +37,14 @@ export class TikTokBusinessService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta(
+        'missing tiktok_business app credentials',
+        undefined,
+        {
+          projectId,
+          supabase_error: appCredentialsError,
+        },
+      );
       throw new Error('No app credentials found for platform');
     }
 
@@ -306,7 +317,12 @@ export class TikTokBusinessService implements SocialPlatformService {
     const dates = metadata.map((m) => new Date(m.postedAt).getTime());
 
     if (dates.length === 0) {
-      console.warn('No valid posted dates provided for video matching');
+      this.logger.warnWithMeta(
+        'no valid posted dates provided for video matching',
+        {
+          platform: 'tiktok_business',
+        },
+      );
       return { posts: [], count: 0, has_more: false };
     }
 
@@ -462,12 +478,14 @@ export class TikTokBusinessService implements SocialPlatformService {
         has_more: false,
       };
     } catch (error) {
-      console.error('Error matching TikTok Business videos by metadata');
-      if (error instanceof AxiosError) {
-        console.error(error.response?.data);
-      } else {
-        console.error(error);
-      }
+      this.logger.errorWithMeta(
+        'tiktok_business matchVideosByMetadata failed',
+        error,
+        {
+          response_data:
+            error instanceof AxiosError ? error.response?.data : undefined,
+        },
+      );
 
       return {
         posts: [],
