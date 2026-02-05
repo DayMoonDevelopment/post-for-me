@@ -180,6 +180,8 @@ export const processPost = task({
         throw new Error("API Key is invalid");
       }
 
+      const isYouTubeOnly = accounts.every((a) => a.provider == "youtube");
+
       logger.info("Getting Stripe Customer Id");
       const { data: project, error: projectError } = await supabaseClient
         .from("projects")
@@ -251,7 +253,7 @@ export const processPost = task({
           (medium) => medium.type === "video",
         );
 
-        if (postVideos.length > 0) {
+        if (!isYouTubeOnly && postVideos.length > 0) {
           logger.info("Processing Videos");
           const processVideosResult = await tasks.batchTriggerAndWait(
             "ffmpeg-process-video",
