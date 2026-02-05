@@ -136,7 +136,7 @@ export const postToPlatform = task({
   retry: {
     maxAttempts: 2,
     outOfMemory: {
-      machine: "medium-1x",
+      machine: "medium-2x",
     },
   },
   machine: "small-2x",
