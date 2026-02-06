@@ -58,6 +58,7 @@ export interface Post {
     thumbnail_timestamp_ms: number | null;
     provider: Provider | null;
     provider_connection_id: string | null;
+    skip_processing: boolean | null;
   }[];
   social_post_configurations: {
     caption: string | null;
@@ -96,6 +97,7 @@ export interface PostMedia {
   thumbnail_timestamp_ms?: number | null;
   type: string;
   tags?: UserTag[] | null;
+  skip_processing?: boolean | null;
 }
 
 export interface AccountConfiguration {
