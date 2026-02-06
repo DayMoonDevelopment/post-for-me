@@ -222,6 +222,7 @@ export const processPost = task({
         thumbnail_url: string;
         thumbnail_timestamp_ms?: number | null;
         type: string;
+        skip_processing?: boolean | null;
       }[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
         logger.info("Localizing Media", { media: post.social_post_media });
@@ -236,6 +237,7 @@ export const processPost = task({
                 url: medium.url,
                 thumbnail_url: medium.thumbnail_url,
                 thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
+                skip_processing: medium.skip_processing,
               },
             },
           })),
@@ -253,11 +255,13 @@ export const processPost = task({
           (medium) => medium.type === "video",
         );
 
-        if (!isYouTubeOnly && postVideos.length > 0) {
+        const videosToProcess = postVideos.filter((m) => !m.skip_processing);
+
+        if (!isYouTubeOnly && videosToProcess.length > 0) {
           logger.info("Processing Videos");
           const processVideosResult = await tasks.batchTriggerAndWait(
             "ffmpeg-process-video",
-            postVideos.map((video) => ({
+            videosToProcess.map((video) => ({
               payload: {
                 medium: video,
               },

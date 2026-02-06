@@ -9,13 +9,13 @@ import { v4 as uuidv4 } from "uuid";
 // Single Supabase client instance
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 // Helper function to determine media type
 const getMediaType = (
   contentType: string,
-  fileExtension: string
+  fileExtension: string,
 ): "image" | "video" => {
   const imageTypes = [
     "image/jpeg",
@@ -183,7 +183,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
       contentType = headerContentType;
       logger.info(
         "Using valid content type from headers, skipping byte detection",
-        { contentType }
+        { contentType },
       );
     }
   } catch (error) {
@@ -200,7 +200,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
 
       if (!partialResponse.ok || partialResponse.status !== 206) {
         throw new Error(
-          `Partial Response Not Valid: ${partialResponse.statusText}`
+          `Partial Response Not Valid: ${partialResponse.statusText}`,
         );
       }
 
@@ -361,7 +361,7 @@ export const processPostMedium = task({
       if (thumbnail_url) {
         thumbnailResult = await streamDownloadAndUpload(
           thumbnail_url,
-          "thumbnail"
+          "thumbnail",
         );
       }
 
