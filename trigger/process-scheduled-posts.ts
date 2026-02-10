@@ -10,7 +10,7 @@ const supabaseClient = createClient<Database>(
 );
 
 export const processScheduledPosts = schedules.task({
-  cron: "*/2 * * * *",
+  cron: { pattern: "*/2 * * * *", environments: ["PRODUCTION"] },
   id: "process-scheduled-posts",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
@@ -39,7 +39,8 @@ export const processScheduledPosts = schedules.task({
               thumbnail_timestamp_ms,
               provider,
               provider_connection_id,
-              tags
+              tags,
+              skip_processing
             ),
             social_post_configurations (
               caption,

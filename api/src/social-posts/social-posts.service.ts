@@ -326,6 +326,7 @@ export class SocialPostsService {
       post_id: string;
       provider_connection_id?: string | undefined;
       provider?: Provider;
+      skip_processing?: boolean | null;
     }[] = [];
 
     const postConfigurations: {
@@ -345,6 +346,7 @@ export class SocialPostsService {
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
             post_id: data.id,
             tags: media.tags,
+            skip_processing: media.skip_processing,
           };
         }),
       );
@@ -360,6 +362,7 @@ export class SocialPostsService {
               thumbnail_url?: string;
               thumbnail_timestamp_ms?: number;
               tags: any[];
+              skip_processing?: boolean | null;
             }[];
           },
         ]) => {
@@ -370,6 +373,7 @@ export class SocialPostsService {
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
                 tags: media.tags,
+                skip_processing: media.skip_processing,
                 post_id: data.id,
                 provider: provider as Provider,
               })) as Array<{
@@ -378,6 +382,7 @@ export class SocialPostsService {
                 thumbnail_timestamp_ms?: number;
                 post_id: string;
                 tags: any[];
+                skip_processing?: boolean | null;
                 provider: Provider;
               }>),
             );
@@ -410,6 +415,7 @@ export class SocialPostsService {
               post_id: data.id,
               provider_connection_id: accountConfig.social_account_id,
               tags: media.tags,
+              skip_processing: media.skip_processing,
             })),
           );
         }
@@ -528,7 +534,8 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
-          tags
+          tags,
+          skip_processing
         ),
         social_post_configurations (
          caption,
@@ -578,7 +585,8 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
-          tags
+          tags,
+          skip_processing
         ),
         social_post_configurations (
          caption,
@@ -821,14 +829,15 @@ export class SocialPostsService {
                 *
               )
             ),
-            social_post_media (
-              url,
-              thumbnail_url,
-              thumbnail_timestamp_ms,
-              provider,
-              provider_connection_id,
-              tags
-            ),
+        social_post_media (
+          url,
+          thumbnail_url,
+          thumbnail_timestamp_ms,
+          provider,
+          provider_connection_id,
+          tags,
+          skip_processing
+        ),
             social_post_configurations (
               caption,
               provider,
@@ -879,6 +888,7 @@ export class SocialPostsService {
       provider: Provider | null;
       provider_connection_id: string | null;
       tags: Json;
+      skip_processing: boolean | null;
     }>;
     social_post_configurations: Array<{
       caption: string | null;
@@ -895,6 +905,7 @@ export class SocialPostsService {
         thumbnail_url: media.thumbnail_url,
         thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
         tags: media.tags as any[],
+        skip_processing: media.skip_processing,
       }));
 
     const accountConfigurations = data.social_post_configurations
@@ -914,6 +925,7 @@ export class SocialPostsService {
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
                 tags: media.tags as any[],
+                skip_processing: media.skip_processing,
               })),
             ...configData,
           },
@@ -946,6 +958,7 @@ export class SocialPostsService {
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
               tags: media.tags as any[],
+              skip_processing: media.skip_processing,
             })),
           ...(config.provider_data as PlatformConfiguration),
         };
