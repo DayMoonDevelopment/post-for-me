@@ -10,9 +10,13 @@ import { CreateSocialPostPreviewDto } from './dto/create-post-preview.dto';
 import { SocialPostPreviewDto } from './dto/post-preview.dto';
 import { SocialPostPreviewsService } from './social-posts-previews.service';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Controller('social-post-previews')
 @ApiTags('Social Post Previews')
 export class SocialPostPreviewsController {
+  private readonly logger = new AppLogger(SocialPostPreviewsController.name);
+
   constructor(
     private readonly socialPostsPreviewService: SocialPostPreviewsService,
   ) {}
@@ -48,7 +52,7 @@ export class SocialPostPreviewsController {
         createPreviewInput,
       );
     } catch (error) {
-      console.error(error);
+      this.logger.errorWithMeta('createPreviews failed', error);
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,

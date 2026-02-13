@@ -9,9 +9,13 @@ import type {
 import { TwitterApi, MediaVariantsV2, MediaObjectV2 } from 'twitter-api-v2';
 import { SupabaseService } from '../supabase/supabase.service';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Injectable({ scope: Scope.REQUEST })
 export class TwitterService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
+
+  private readonly logger = new AppLogger(TwitterService.name);
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
@@ -25,7 +29,10 @@ export class TwitterService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta('missing x app credentials', undefined, {
+        projectId,
+        supabase_error: appCredentialsError,
+      });
       throw new Error('No app credentials found for platform');
     }
 
@@ -217,7 +224,10 @@ export class TwitterService implements SocialPlatformService {
         cursor: tweets.meta.next_token,
       };
     } catch (error) {
-      console.error('Error fetching Twitter/X posts:', error);
+      this.logger.errorWithMeta('x posts fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+      });
       return {
         posts: [],
         count: 0,
