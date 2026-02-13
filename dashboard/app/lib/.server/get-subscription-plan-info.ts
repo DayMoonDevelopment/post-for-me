@@ -19,7 +19,7 @@ export type PlanInfo = {
  * Extract plan information from a Stripe subscription
  */
 export function getSubscriptionPlanInfo(
-  subscription: Stripe.Subscription | null
+  subscription: Stripe.Subscription | null,
 ): PlanInfo {
   if (!subscription) {
     return {
@@ -27,23 +27,6 @@ export function getSubscriptionPlanInfo(
       isNewPricing: false,
       productId: null,
       planName: null,
-      postLimit: null,
-      price: null,
-      includesSystemCredentials: false,
-    };
-  }
-
-  // Check if subscription has legacy product
-  const hasLegacyProduct = subscription.items.data.some(
-    (item) => item.price.product === STRIPE_API_PRODUCT_ID
-  );
-
-  if (hasLegacyProduct) {
-    return {
-      isLegacy: true,
-      isNewPricing: false,
-      productId: STRIPE_API_PRODUCT_ID,
-      planName: "Legacy Plan",
       postLimit: null,
       price: null,
       includesSystemCredentials: false,
@@ -67,6 +50,23 @@ export function getSubscriptionPlanInfo(
         };
       }
     }
+  }
+
+  // Check if subscription has legacy product
+  const hasLegacyProduct = subscription.items.data.some(
+    (item) => item.price.product === STRIPE_API_PRODUCT_ID,
+  );
+
+  if (hasLegacyProduct) {
+    return {
+      isLegacy: true,
+      isNewPricing: false,
+      productId: STRIPE_API_PRODUCT_ID,
+      planName: "Legacy Plan",
+      postLimit: null,
+      price: null,
+      includesSystemCredentials: false,
+    };
   }
 
   // Unknown subscription type
