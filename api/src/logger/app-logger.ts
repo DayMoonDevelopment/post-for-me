@@ -1,4 +1,4 @@
-import { ConsoleLogger } from '@nestjs/common';
+import { ConsoleLogger, type ConsoleLoggerOptions } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 
@@ -103,14 +103,22 @@ function severityForLevel(
 
 export class AppLogger extends ConsoleLogger {
   private readonly otelLogger = logs.getLogger('app');
+  private readonly logToConsole: boolean;
 
-  constructor(context?: string) {
-    super(context ?? 'App');
+  constructor(
+    context?: string,
+    options?: ConsoleLoggerOptions & { logToConsole?: boolean },
+  ) {
+    const { logToConsole = false, ...consoleOptions } = options ?? {};
+    super(context ?? 'App', consoleOptions);
+    this.logToConsole = logToConsole;
   }
 
   override log(message: unknown, context?: string): void {
     this.emit('log', message, undefined, context);
-    super.log(message as never, context);
+    if (this.logToConsole) {
+      super.log(message as never, context);
+    }
   }
 
   override error(
@@ -124,37 +132,51 @@ export class AppLogger extends ConsoleLogger {
         : undefined;
     const ctx = stack ? context : stackOrContext;
     this.emit('error', message, stack, ctx);
-    super.error(message as never, stackOrContext, context);
+    if (this.logToConsole) {
+      super.error(message as never, stackOrContext, context);
+    }
   }
 
   override warn(message: unknown, context?: string): void {
     this.emit('warn', message, undefined, context);
-    super.warn(message as never, context);
+    if (this.logToConsole) {
+      super.warn(message as never, context);
+    }
   }
 
   override debug(message: unknown, context?: string): void {
     this.emit('debug', message, undefined, context);
-    super.debug(message as never, context);
+    if (this.logToConsole) {
+      super.debug(message as never, context);
+    }
   }
 
   override verbose(message: unknown, context?: string): void {
     this.emit('verbose', message, undefined, context);
-    super.verbose(message as never, context);
+    if (this.logToConsole) {
+      super.verbose(message as never, context);
+    }
   }
 
   info(message: string, meta?: LogMeta): void {
     this.emit('log', message, undefined, this.context, meta);
-    super.log(message as never);
+    if (this.logToConsole) {
+      super.log(message as never);
+    }
   }
 
   warnWithMeta(message: string, meta?: LogMeta): void {
     this.emit('warn', message, undefined, this.context, meta);
-    super.warn(message as never);
+    if (this.logToConsole) {
+      super.warn(message as never);
+    }
   }
 
   debugWithMeta(message: string, meta?: LogMeta): void {
     this.emit('debug', message, undefined, this.context, meta);
-    super.debug(message as never);
+    if (this.logToConsole) {
+      super.debug(message as never);
+    }
   }
 
   errorWithMeta(message: string, error?: unknown, meta?: LogMeta): void {
@@ -170,7 +192,9 @@ export class AppLogger extends ConsoleLogger {
         : {}),
     };
     this.emit('error', message, err?.stack, this.context, attrs);
-    super.error(message as never, err?.stack);
+    if (this.logToConsole) {
+      super.error(message as never, err?.stack);
+    }
   }
 
   private emit(
@@ -209,7 +233,7 @@ export class AppLogger extends ConsoleLogger {
         attributes: attributes as never,
       });
     } catch {
-      // OTel is intentionally best-effort; ConsoleLogger handles local output.
+      // OTel is intentionally best-effort; ConsoleLogger handles local output when enabled.
     }
   }
 }
