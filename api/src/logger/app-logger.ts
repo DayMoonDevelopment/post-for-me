@@ -117,7 +117,7 @@ export class AppLogger extends ConsoleLogger {
   override log(message: unknown, context?: string): void {
     this.emit('log', message, undefined, context);
     if (this.logToConsole) {
-      super.log(message as never, context);
+      super.log(message, context);
     }
   }
 
@@ -133,49 +133,49 @@ export class AppLogger extends ConsoleLogger {
     const ctx = stack ? context : stackOrContext;
     this.emit('error', message, stack, ctx);
     if (this.logToConsole) {
-      super.error(message as never, stackOrContext, context);
+      super.error(message, stackOrContext, context);
     }
   }
 
   override warn(message: unknown, context?: string): void {
     this.emit('warn', message, undefined, context);
     if (this.logToConsole) {
-      super.warn(message as never, context);
+      super.warn(message, context);
     }
   }
 
   override debug(message: unknown, context?: string): void {
     this.emit('debug', message, undefined, context);
     if (this.logToConsole) {
-      super.debug(message as never, context);
+      super.debug(message, context);
     }
   }
 
   override verbose(message: unknown, context?: string): void {
     this.emit('verbose', message, undefined, context);
     if (this.logToConsole) {
-      super.verbose(message as never, context);
+      super.verbose(message, context);
     }
   }
 
   info(message: string, meta?: LogMeta): void {
     this.emit('log', message, undefined, this.context, meta);
     if (this.logToConsole) {
-      super.log(message as never);
+      super.log(message);
     }
   }
 
   warnWithMeta(message: string, meta?: LogMeta): void {
     this.emit('warn', message, undefined, this.context, meta);
     if (this.logToConsole) {
-      super.warn(message as never);
+      super.warn(message);
     }
   }
 
   debugWithMeta(message: string, meta?: LogMeta): void {
     this.emit('debug', message, undefined, this.context, meta);
     if (this.logToConsole) {
-      super.debug(message as never);
+      super.debug(message);
     }
   }
 
@@ -193,7 +193,7 @@ export class AppLogger extends ConsoleLogger {
     };
     this.emit('error', message, err?.stack, this.context, attrs);
     if (this.logToConsole) {
-      super.error(message as never, err?.stack);
+      super.error(message, err?.stack);
     }
   }
 
@@ -230,7 +230,7 @@ export class AppLogger extends ConsoleLogger {
         severityNumber: severityForLevel(level),
         severityText: level.toUpperCase(),
         body,
-        attributes: attributes as never,
+        attributes: attributes,
       });
     } catch {
       // OTel is intentionally best-effort; ConsoleLogger handles local output when enabled.
