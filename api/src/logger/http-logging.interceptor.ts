@@ -40,7 +40,7 @@ function getOrSetRequestId(req: Request, res: Response): string | undefined {
 
 @Injectable()
 export class HttpLoggingInterceptor implements NestInterceptor {
-  private readonly logger = new AppLogger(HttpLoggingInterceptor.name);
+  constructor(private readonly logger: AppLogger) {}
 
   intercept(context: ExecutionContext, next: CallHandler) {
     const http = context.switchToHttp();

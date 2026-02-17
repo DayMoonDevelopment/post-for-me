@@ -34,11 +34,10 @@ import { AppLogger } from '../logger/app-logger';
 @ApiBearerAuth()
 @Protect()
 export class SocialPostResultsController {
-  private readonly logger = new AppLogger(SocialPostResultsController.name);
-
   constructor(
     private readonly postResultsService: PostResultsService,
     private readonly paginationService: PaginationService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get()

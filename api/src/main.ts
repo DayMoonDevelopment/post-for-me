@@ -1,4 +1,4 @@
-import { shutdownTelemetry } from './telemetry/init';
+import './telemetry/init';
 
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -21,18 +21,21 @@ import { socialPostPreviewControllerDescription } from './social-posts-previews/
 import { socialAccountFeedsControllerDescription } from './social-account-feeds/docs/social-account-feeds-controller.md';
 
 import { AppLogger } from './logger/app-logger';
-import { HttpLoggingInterceptor } from './logger/http-logging.interceptor';
 
 async function bootstrap() {
   const app: NestExpressApplication = await NestFactory.create(AppModule, {
-    logger: new AppLogger('Nest'),
+    bufferLogs: true,
   });
+
+  const logger = app.get(AppLogger);
+  logger.setContext('Nest');
+  app.useLogger(logger);
+  app.flushLogs();
 
   const handleShutdown = async (signal: string) => {
     try {
       await app.close();
     } finally {
-      await shutdownTelemetry();
       process.exit(signal === 'SIGINT' ? 130 : 0);
     }
   };
@@ -40,8 +43,6 @@ async function bootstrap() {
   ['SIGINT', 'SIGTERM'].forEach((signal) => {
     process.on(signal, () => void handleShutdown(signal));
   });
-
-  app.useGlobalInterceptors(new HttpLoggingInterceptor());
 
   app.enableVersioning({
     type: VersioningType.URI,

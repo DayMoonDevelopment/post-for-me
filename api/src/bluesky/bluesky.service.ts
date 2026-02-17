@@ -13,9 +13,7 @@ import { AppLogger } from '../logger/app-logger';
 export class BlueskyService implements SocialPlatformService {
   private agent: AtpAgent;
 
-  private readonly logger = new AppLogger(BlueskyService.name);
-
-  constructor() {
+  constructor(private readonly logger: AppLogger) {
     this.agent = new AtpAgent({
       service: 'https://bsky.social',
     });

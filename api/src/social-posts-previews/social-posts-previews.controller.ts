@@ -15,10 +15,9 @@ import { AppLogger } from '../logger/app-logger';
 @Controller('social-post-previews')
 @ApiTags('Social Post Previews')
 export class SocialPostPreviewsController {
-  private readonly logger = new AppLogger(SocialPostPreviewsController.name);
-
   constructor(
     private readonly socialPostsPreviewService: SocialPostPreviewsService,
+    private readonly logger: AppLogger,
   ) {}
 
   @ApiResponse({

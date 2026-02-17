@@ -69,9 +69,10 @@ export class YouTubeService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
   private oauth2Client: any = null;
 
-  private readonly logger = new AppLogger(YouTubeService.name);
-
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =

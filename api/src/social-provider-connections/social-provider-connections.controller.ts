@@ -49,13 +49,12 @@ import { AppLogger } from '../logger/app-logger';
 @ApiBearerAuth()
 @Protect()
 export class SocialAccountsController {
-  private readonly logger = new AppLogger(SocialAccountsController.name);
-
   constructor(
     private readonly socialAccountsService: SocialAccountsService,
     private readonly paginationService: PaginationService,
     private readonly socialProviderAppCredentialsService: SocialProviderAppCredentialsService,
     private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get()

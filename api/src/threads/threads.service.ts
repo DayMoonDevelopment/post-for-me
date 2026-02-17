@@ -54,9 +54,10 @@ interface ThreadsInsightsResponse {
 export class ThreadsService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  private readonly logger = new AppLogger(ThreadsService.name);
-
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =

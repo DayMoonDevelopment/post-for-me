@@ -15,9 +15,10 @@ import { AppLogger } from '../logger/app-logger';
 export class TwitterService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  private readonly logger = new AppLogger(TwitterService.name);
-
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =

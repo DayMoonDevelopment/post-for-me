@@ -50,11 +50,10 @@ export class LinkedInService implements SocialPlatformService {
 
   apiVersion: string;
 
-  private readonly logger = new AppLogger(LinkedInService.name);
-
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly configService: ConfigService,
+    private readonly logger: AppLogger,
   ) {
     this.apiVersion =
       this.configService.get<string>('LinkedInVersion') || '202601';

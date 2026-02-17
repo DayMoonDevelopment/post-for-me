@@ -23,11 +23,10 @@ declare module 'express' {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly logger = new AppLogger(AuthGuard.name);
-
   constructor(
     private supabaseService: SupabaseService,
     @Inject('UNKEY_INSTANCE') private unkey: Unkey,
+    private readonly logger: AppLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

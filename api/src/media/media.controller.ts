@@ -20,9 +20,10 @@ import { AppLogger } from '../logger/app-logger';
 @ApiBearerAuth()
 @Protect()
 export class MediaController {
-  private readonly logger = new AppLogger(MediaController.name);
-
-  constructor(private readonly mediaService: MediaService) {}
+  constructor(
+    private readonly mediaService: MediaService,
+    private readonly logger: AppLogger,
+  ) {}
 
   @ApiOperation({
     summary: 'Upload media',

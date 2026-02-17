@@ -25,11 +25,10 @@ type PostStatusEnum = Database['public']['Enums']['social_post_status'];
 
 @Injectable()
 export class SocialPostsService {
-  private readonly logger = new AppLogger(SocialPostsService.name);
-
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly socialPostMetersService: SocialPostMetersService,
+    private readonly logger: AppLogger,
   ) {}
 
   async getPostData(postId: string): Promise<any> {

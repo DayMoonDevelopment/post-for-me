@@ -37,11 +37,10 @@ import { AppLogger } from '../logger/app-logger';
 @ApiBearerAuth()
 @Protect()
 export class WebhooksController {
-  private readonly logger = new AppLogger(WebhooksController.name);
-
   constructor(
     private readonly webhooksService: WebhooksService,
     private readonly paginationService: PaginationService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get()

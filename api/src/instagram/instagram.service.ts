@@ -24,9 +24,10 @@ import { AppLogger } from '../logger/app-logger';
 export class InstagramService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  private readonly logger = new AppLogger(InstagramService.name);
-
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise

@@ -26,8 +26,6 @@ import { AppLogger } from '../logger/app-logger';
 export class SocialAccountFeedsService {
   platformsToAlwaysRefresh = ['youtube', 'bluesky'];
 
-  private readonly logger = new AppLogger(SocialAccountFeedsService.name);
-
   constructor(
     private readonly supabaseService: SupabaseService,
     @Inject(REQUEST) private request: Request,
@@ -41,6 +39,7 @@ export class SocialAccountFeedsService {
     private readonly threadsService: ThreadsService,
     private readonly twitterService: TwitterService,
     private readonly blueskyService: BlueskyService,
+    private readonly logger: AppLogger,
   ) {}
 
   generateNextUrl(

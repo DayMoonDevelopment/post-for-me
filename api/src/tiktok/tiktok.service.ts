@@ -24,9 +24,10 @@ export class TikTokService implements SocialPlatformService {
   tokenUrl: string;
   apiUrl: string;
 
-  private readonly logger = new AppLogger(TikTokService.name);
-
-  constructor(private readonly supabaseService: SupabaseService) {
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {
     this.tokenUrl = 'https://open.tiktokapis.com/v2/oauth/token/';
     this.apiUrl = 'https://open.tiktokapis.com/v2/';
   }

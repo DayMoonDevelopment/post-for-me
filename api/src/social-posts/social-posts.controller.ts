@@ -43,12 +43,11 @@ import { AppLogger } from '../logger/app-logger';
 @ApiBearerAuth()
 @Protect()
 export class SocialPostsController {
-  private readonly logger = new AppLogger(SocialPostsController.name);
-
   constructor(
     private readonly postsService: SocialPostsService,
     private readonly paginationService: PaginationService,
     private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Paginated(SocialPostDto, { name: 'posts' })

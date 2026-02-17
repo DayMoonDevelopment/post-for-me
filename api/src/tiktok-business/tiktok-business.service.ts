@@ -19,9 +19,10 @@ export class TikTokBusinessService implements SocialPlatformService {
   tokenUrl: string;
   apiUrl: string;
 
-  private readonly logger = new AppLogger(TikTokBusinessService.name);
-
-  constructor(private readonly supabaseService: SupabaseService) {
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {
     this.tokenUrl =
       'https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/refresh_token/';
     this.apiUrl = 'https://business-api.tiktok.com/open_api/v1.3/';

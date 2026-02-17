@@ -56,10 +56,9 @@ import { AppLogger } from '../logger/app-logger';
   BlueskyPostMetricsDto,
 )
 export class SocialAccountFeedsController {
-  private readonly logger = new AppLogger(SocialAccountFeedsController.name);
-
   constructor(
     private readonly socialPostFeedService: SocialAccountFeedsService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get(':social_account_id')
