@@ -21,13 +21,14 @@ import { socialPostPreviewControllerDescription } from './social-posts-previews/
 import { socialAccountFeedsControllerDescription } from './social-account-feeds/docs/social-account-feeds-controller.md';
 
 import { AppLogger } from './logger/app-logger';
+import { LoggerModule } from './logger/logger.module';
 
 async function bootstrap() {
   const app: NestExpressApplication = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
 
-  const logger = app.get(AppLogger);
+  const logger = await app.select(LoggerModule).resolve(AppLogger);
   logger.setContext('Nest');
   app.useLogger(logger);
   app.flushLogs();
