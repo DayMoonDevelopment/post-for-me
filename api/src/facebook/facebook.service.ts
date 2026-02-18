@@ -17,11 +17,16 @@ import type {
 } from './facebook.types';
 import { FacebookPostMetricsDto } from './dto/facebook-post-metrics.dto';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Injectable({ scope: Scope.REQUEST })
 export class FacebookService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
@@ -33,7 +38,10 @@ export class FacebookService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta('missing facebook app credentials', undefined, {
+        projectId,
+        supabase_error: appCredentialsError,
+      });
       throw new Error('No app credentials found for platform');
     }
 
@@ -71,7 +79,9 @@ export class FacebookService implements SocialPlatformService {
 
       return account;
     } catch (error) {
-      console.error('Error refreshing Facebook token:', error);
+      this.logger.errorWithMeta('facebook token refresh failed', error, {
+        accountId: account.id,
+      });
       throw error;
     }
   }
@@ -150,7 +160,10 @@ export class FacebookService implements SocialPlatformService {
         cursor: feedResponse.paging?.cursors?.after,
       };
     } catch (error) {
-      console.error('Error fetching Facebook posts:', error);
+      this.logger.errorWithMeta('facebook posts fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+      });
       return {
         posts: [],
         count: 0,
@@ -522,10 +535,12 @@ export class FacebookService implements SocialPlatformService {
 
       return metrics;
     } catch (error) {
-      console.error('Error fetching Facebook post insights');
-      if (error instanceof AxiosError) {
-        console.error(error.response?.data);
-      }
+      this.logger.warnWithMeta('facebook post insights fetch failed', {
+        postId,
+        response_data:
+          error instanceof AxiosError ? error.response?.data : undefined,
+        error,
+      });
 
       // Return empty metrics object on error
       return {};

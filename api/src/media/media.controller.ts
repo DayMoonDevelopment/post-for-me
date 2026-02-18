@@ -13,12 +13,17 @@ import { CreateUploadUrlResponseDto } from './dto/create-upload-url-response.dto
 import { createUploadUrlDescription } from './docs/create-upload-url.md';
 import type { RequestUser } from '../auth/user.interface';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Controller('media')
 @ApiTags('Media')
 @ApiBearerAuth()
 @Protect()
 export class MediaController {
-  constructor(private readonly mediaService: MediaService) {}
+  constructor(
+    private readonly mediaService: MediaService,
+    private readonly logger: AppLogger,
+  ) {}
 
   @ApiOperation({
     summary: 'Upload media',
@@ -35,7 +40,9 @@ export class MediaController {
     try {
       return await this.mediaService.createUploadUrl(user.projectId);
     } catch (e) {
-      console.error('/media/create-upload-url', e);
+      this.logger.errorWithMeta('createUploadUrl failed', e, {
+        projectId: user.projectId,
+      });
       throw new HttpException(
         'Failed to create upload url',
         HttpStatus.INTERNAL_SERVER_ERROR,

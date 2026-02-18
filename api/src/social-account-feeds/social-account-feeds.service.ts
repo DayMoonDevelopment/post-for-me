@@ -20,9 +20,12 @@ import { BlueskyService } from '../bluesky/bluesky.service';
 import { differenceInDays } from 'date-fns';
 import { PlatformPostDto } from './dto/platform-post.dto';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Injectable()
 export class SocialAccountFeedsService {
   platformsToAlwaysRefresh = ['youtube', 'bluesky'];
+
   constructor(
     private readonly supabaseService: SupabaseService,
     @Inject(REQUEST) private request: Request,
@@ -36,6 +39,7 @@ export class SocialAccountFeedsService {
     private readonly threadsService: ThreadsService,
     private readonly twitterService: TwitterService,
     private readonly blueskyService: BlueskyService,
+    private readonly logger: AppLogger,
   ) {}
 
   generateNextUrl(
@@ -150,7 +154,15 @@ export class SocialAccountFeedsService {
         .single();
 
     if (accountError || !account) {
-      console.error(accountError);
+      this.logger.errorWithMeta(
+        'unable to fetch social provider connection',
+        undefined,
+        {
+          accountId,
+          projectId,
+          supabase_error: accountError,
+        },
+      );
       throw new Error('Unable to fetch account');
     }
 

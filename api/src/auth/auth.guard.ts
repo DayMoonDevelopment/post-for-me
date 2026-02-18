@@ -11,6 +11,8 @@ import type { Request } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import type { RequestUser } from './user.interface';
 
+import { AppLogger } from '../logger/app-logger';
+
 // Augment Express Request type (good practice)
 declare module 'express' {
   interface Request {
@@ -24,6 +26,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private supabaseService: SupabaseService,
     @Inject('UNKEY_INSTANCE') private unkey: Unkey,
+    private readonly logger: AppLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -106,13 +109,17 @@ export class AuthGuard implements CanActivate {
       !authorization.startsWith('Bearer ')
     ) {
       // Consider throwing UnauthorizedException here too for malformed header
-      console.warn('Malformed Authorization header');
+      this.logger.warnWithMeta('malformed Authorization header', {
+        'http.request.header.authorization': 'invalid',
+      });
       return null;
     }
 
     const parts: string[] = authorization.split(' ');
     if (parts.length !== 2 || !parts[1]) {
-      console.warn('Malformed Bearer token structure');
+      this.logger.warnWithMeta('malformed Bearer token structure', {
+        'http.request.header.authorization': 'invalid',
+      });
       return null; // Or throw
     }
 
@@ -161,12 +168,10 @@ export class AuthGuard implements CanActivate {
 
       if (!userId || !projectId) {
         // Valid token but missing the required user identifier
-        console.warn(
-          `[validateBearerToken] Valid token found but missing ownerId for token starting with: ${token.substring(
-            0,
-            8,
-          )}...`,
-        );
+        this.logger.warnWithMeta('valid token missing required identifiers', {
+          token_prefix: `${token.substring(0, 8)}...`,
+          unkey_key_id: response.data.keyId,
+        });
         return { valid: false }; // Treat as invalid for our purpose
       }
 
@@ -180,10 +185,7 @@ export class AuthGuard implements CanActivate {
         planType,
       };
     } catch (error) {
-      console.error(
-        '[validateBearerToken] Error during token verification:',
-        error,
-      );
+      this.logger.errorWithMeta('unkey token verification error', error);
       return { valid: false }; // Failed validation due to error
     }
   }

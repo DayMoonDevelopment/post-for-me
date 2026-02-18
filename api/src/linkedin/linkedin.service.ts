@@ -9,6 +9,8 @@ import { LinkedInPostMetricsDto } from './dto/linkedin-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { ConfigService } from '@nestjs/config';
 
+import { AppLogger } from '../logger/app-logger';
+
 type LinkedInBatchGetResponse<T> = {
   results?: Record<string, T>;
 };
@@ -51,6 +53,7 @@ export class LinkedInService implements SocialPlatformService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly configService: ConfigService,
+    private readonly logger: AppLogger,
   ) {
     this.apiVersion =
       this.configService.get<string>('LinkedInVersion') || '202601';
@@ -101,7 +104,10 @@ export class LinkedInService implements SocialPlatformService {
     const data =
       (await response.json()) as unknown as LinkedInBatchGetResponse<LinkedInImageEntity>;
     if (!response.ok) {
-      console.error('Error batch getting LinkedIn images', data);
+      this.logger.warnWithMeta('linkedin batch get images failed', {
+        status: response.status,
+        data,
+      });
       return resolved;
     }
 
@@ -146,7 +152,10 @@ export class LinkedInService implements SocialPlatformService {
     const data =
       (await response.json()) as unknown as LinkedInBatchGetResponse<LinkedInVideoEntity>;
     if (!response.ok) {
-      console.error('Error batch getting LinkedIn videos', data);
+      this.logger.warnWithMeta('linkedin batch get videos failed', {
+        status: response.status,
+        data,
+      });
       return resolved;
     }
 
@@ -216,7 +225,10 @@ export class LinkedInService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta('missing linkedin app credentials', undefined, {
+        projectId,
+        supabase_error: appCredentialsError,
+      });
       throw new Error('No app credentials found for platform');
     }
 
@@ -293,7 +305,10 @@ export class LinkedInService implements SocialPlatformService {
     const analyticsData: any = await analyticsResponse.json();
 
     if (!analyticsResponse.ok) {
-      console.error('Error getting LinkedIn Post metrics', analyticsData);
+      this.logger.warnWithMeta('linkedin post metrics fetch failed', {
+        status: analyticsResponse.status,
+        analyticsData,
+      });
     } else {
       const stats = Array.isArray(analyticsData?.elements)
         ? analyticsData.elements?.[0]?.totalShareStatistics
@@ -338,7 +353,8 @@ export class LinkedInService implements SocialPlatformService {
         const videoData =
           (await videoResponse.json()) as unknown as LinkedInVideoAnalyticsResponse;
         if (!videoResponse.ok) {
-          console.error('Error getting LinkedIn video metric', {
+          this.logger.warnWithMeta('linkedin video metric fetch failed', {
+            status: videoResponse.status,
             postUrn,
             type,
             videoData,
@@ -434,7 +450,10 @@ export class LinkedInService implements SocialPlatformService {
 
         const data: any = await response.json();
         if (!response.ok) {
-          console.error('Error fetching LinkedIn API posts', data);
+          this.logger.warnWithMeta('linkedin posts api error', {
+            status: response.status,
+            data,
+          });
           throw new Error(`LinkedIn API error: ${response.statusText}`);
         }
 
@@ -528,7 +547,10 @@ export class LinkedInService implements SocialPlatformService {
         has_more: totalCount > posts.length,
       };
     } catch (error) {
-      console.error('Error fetching LinkedIn posts:', error);
+      this.logger.errorWithMeta('linkedin posts fetch exception', error, {
+        accountId: account.id,
+        includeMetrics,
+      });
       return {
         posts: [],
         count: 0,

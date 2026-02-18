@@ -42,6 +42,8 @@ import { tasks } from '@trigger.dev/sdk';
 import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
 import { SupabaseService } from '../supabase/supabase.service';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
 @ApiBearerAuth()
@@ -52,6 +54,7 @@ export class SocialAccountsController {
     private readonly paginationService: PaginationService,
     private readonly socialProviderAppCredentialsService: SocialProviderAppCredentialsService,
     private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get()
@@ -66,7 +69,10 @@ export class SocialAccountsController {
         query,
       );
     } catch (e) {
-      console.error('/social-accounts', e);
+      this.logger.errorWithMeta('getAllSocialAccounts failed', e, {
+        projectId: user.projectId,
+        query,
+      });
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -109,7 +115,10 @@ export class SocialAccountsController {
         projectId: user.projectId,
       });
     } catch (e) {
-      console.error('/social-accounts/:id', e);
+      this.logger.errorWithMeta('getSocialAccount failed', e, {
+        projectId: user.projectId,
+        socialAccountId: params.id,
+      });
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -298,7 +307,10 @@ export class SocialAccountsController {
 
       return updatedAccount;
     } catch (error) {
-      console.error(`Error updating social account ${id}:`, error);
+      this.logger.errorWithMeta('updateSocialAccount failed', error, {
+        projectId: user.projectId,
+        socialAccountId: id,
+      });
       if (error instanceof HttpException) {
         throw error;
       }
@@ -368,7 +380,10 @@ export class SocialAccountsController {
         status: 'disconnected',
       };
     } catch (error) {
-      console.error(`Error disconnecting social account ${id}:`, error);
+      this.logger.errorWithMeta('disconnectSocialAccount failed', error, {
+        projectId: user.projectId,
+        socialAccountId: id,
+      });
       if (error instanceof HttpException) {
         throw error;
       }
@@ -421,7 +436,9 @@ export class SocialAccountsController {
 
       return createdSocialAccount;
     } catch (error) {
-      console.error(error);
+      this.logger.errorWithMeta('createSocialAccount failed', error, {
+        projectId: user.projectId,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
   }

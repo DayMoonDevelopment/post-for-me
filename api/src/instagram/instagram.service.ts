@@ -18,11 +18,16 @@ import type {
   InstagramInsight,
 } from './instagram.types';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
@@ -48,7 +53,14 @@ export class InstagramService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta(
+        'missing instagram app credentials',
+        undefined,
+        {
+          projectId,
+          supabase_error: appCredentialsError,
+        },
+      );
       throw new Error('No app credentials found for platform');
     }
 
@@ -70,7 +82,14 @@ export class InstagramService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta(
+        'missing instagram_w_facebook app credentials',
+        undefined,
+        {
+          projectId,
+          supabase_error: appCredentialsError,
+        },
+      );
       throw new Error('No app credentials found for platform');
     }
 
@@ -137,7 +156,11 @@ export class InstagramService implements SocialPlatformService {
 
       return account;
     } catch (error) {
-      console.error('Error refreshing Instagram token:', error);
+      this.logger.errorWithMeta('instagram token refresh failed', error, {
+        accountId: account.id,
+        response_data:
+          error instanceof AxiosError ? error.response?.data : undefined,
+      });
       throw error;
     }
   }
@@ -332,14 +355,12 @@ export class InstagramService implements SocialPlatformService {
       // Log but don't throw - we'll return the post without insights
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      console.debug(
-        `Could not fetch insights for media ${mediaId}:`,
+      this.logger.debugWithMeta('instagram insights fetch failed', {
+        mediaId,
         errorMessage,
-      );
-
-      if (error instanceof AxiosError) {
-        console.error(error.response?.data);
-      }
+        response_data:
+          error instanceof AxiosError ? error.response?.data : undefined,
+      });
 
       return undefined;
     }
@@ -460,11 +481,12 @@ export class InstagramService implements SocialPlatformService {
         cursor: response.data.paging?.cursors?.after,
       };
     } catch (error) {
-      if (error instanceof AxiosError) {
-        console.error(error.response?.data);
-      } else {
-        console.error('unkown error', error);
-      }
+      this.logger.errorWithMeta('instagram posts fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+        response_data:
+          error instanceof AxiosError ? error.response?.data : undefined,
+      });
 
       return {
         posts: [],

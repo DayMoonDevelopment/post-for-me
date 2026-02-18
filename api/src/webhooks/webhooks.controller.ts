@@ -30,6 +30,8 @@ import { WebhookQueryDto } from './dto/webhook-query.dto';
 import { WebhooksService } from './webhooks.service';
 import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Controller('webhooks')
 @ApiTags('Webhooks')
 @ApiBearerAuth()
@@ -38,6 +40,7 @@ export class WebhooksController {
   constructor(
     private readonly webhooksService: WebhooksService,
     private readonly paginationService: PaginationService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get()
@@ -55,7 +58,10 @@ export class WebhooksController {
         query,
       );
     } catch (error) {
-      console.error('[getAllWebhooks] Error:', error);
+      this.logger.errorWithMeta('getAllWebhooks failed', error, {
+        projectId: user.projectId,
+        query,
+      });
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -98,7 +104,10 @@ export class WebhooksController {
         projectId: user.projectId,
       });
     } catch (error) {
-      console.error('[getWebhook] Error:', error);
+      this.logger.errorWithMeta('getWebhook failed', error, {
+        projectId: user.projectId,
+        webhookId: params.id,
+      });
       throw new HttpException(
         'Internal Server Error',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -149,7 +158,9 @@ export class WebhooksController {
 
       return createdWebhook;
     } catch (error) {
-      console.error('[createWebhook] Error:', error);
+      this.logger.errorWithMeta('createWebhook failed', error, {
+        projectId: user.projectId,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
   }
@@ -204,7 +215,10 @@ export class WebhooksController {
 
       return updatedWebhook;
     } catch (error) {
-      console.error('[updateWebhook] Error:', error);
+      this.logger.errorWithMeta('updateWebhook failed', error, {
+        projectId: user.projectId,
+        webhookId: params.id,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
   }
@@ -250,7 +264,10 @@ export class WebhooksController {
       });
       return deleteResponse;
     } catch (error) {
-      console.error('[deleteWebhook] Error:', error);
+      this.logger.errorWithMeta('deleteWebhook failed', error, {
+        projectId: user.projectId,
+        webhookId: params.id,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
   }

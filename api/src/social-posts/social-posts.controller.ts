@@ -36,6 +36,8 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { tasks } from '@trigger.dev/sdk';
 import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Controller('social-posts')
 @ApiTags('Social Posts')
 @ApiBearerAuth()
@@ -45,6 +47,7 @@ export class SocialPostsController {
     private readonly postsService: SocialPostsService,
     private readonly paginationService: PaginationService,
     private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Paginated(SocialPostDto, { name: 'posts' })
@@ -58,7 +61,10 @@ export class SocialPostsController {
         query,
       );
     } catch (e) {
-      console.error('[getAllPosts] Error:', e);
+      this.logger.errorWithMeta('getAllPosts failed', e, {
+        projectId: user.projectId,
+        query,
+      });
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -98,7 +104,10 @@ export class SocialPostsController {
     try {
       post = await this.postsService.getPostById(params.id, user.projectId);
     } catch (error) {
-      console.error('[getPost] Error:', error);
+      this.logger.errorWithMeta('getPost failed', error, {
+        projectId: user.projectId,
+        postId: params.id,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
 
@@ -175,7 +184,11 @@ export class SocialPostsController {
       });
       return createPosts;
     } catch (error) {
-      console.error('[createPosts] Error:', error);
+      this.logger.errorWithMeta('createPosts failed', error, {
+        projectId: user.projectId,
+        teamId: user.teamId,
+        isSystem,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
   }
@@ -261,7 +274,12 @@ export class SocialPostsController {
         isSystem,
       });
     } catch (error) {
-      console.error('[updatePost] Error:', error);
+      this.logger.errorWithMeta('updatePost failed', error, {
+        projectId: user.projectId,
+        teamId: user.teamId,
+        postId: params.id,
+        isSystem,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
 
@@ -329,7 +347,10 @@ export class SocialPostsController {
       });
       return deleteResponse;
     } catch (error) {
-      console.error('[deletePost] Error:', error);
+      this.logger.errorWithMeta('deletePost failed', error, {
+        projectId: user.projectId,
+        postId: params.id,
+      });
       throw new HttpException('Internal Server Error', 500);
     }
   }
