@@ -25,16 +25,16 @@ import { PlatformPostDto } from './dto/platform-post.dto';
 import { PlatformPostQueryDto } from './dto/platform-post-query.dto';
 import { SocialAccountFeedsService } from './social-account-feeds.service';
 import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-response.dto';
-import { TikTokBusinessMetricsDto } from 'src/tiktok-business/dto/tiktok-business-post-metrics.dto';
-import { TikTokPostMetricsDto } from 'src/tiktok/dto/tiktok-post-metrics.dto';
-import { InstagramPostMetricsDto } from 'src/instagram/dto/instagram-post-metrics.dto';
-import { YouTubePostMetricsDto } from 'src/youtube/dto/youtube-post-metrics.dto';
-import { FacebookPostMetricsDto } from 'src/facebook/dto/facebook-post-metrics.dto';
-import { TwitterPostMetricsDto } from 'src/twitter/dto/twitter-post-metrics.dto';
-import { ThreadsPostMetricsDto } from 'src/threads/dto/threads-post-metrics.dto';
-import { LinkedInPostMetricsDto } from 'src/linkedin/dto/linkedin-post-metrics.dto';
-import { PinterestPostMetricsDto } from 'src/pinterest/dto/pinterest-post-metrics.dto';
-import { BlueskyPostMetricsDto } from 'src/bluesky/dto/bluesky-post-metrics.dto';
+import { TikTokBusinessMetricsDto } from '../tiktok-business/dto/tiktok-business-post-metrics.dto';
+import { TikTokPostMetricsDto } from '../tiktok/dto/tiktok-post-metrics.dto';
+import { InstagramPostMetricsDto } from '../instagram/dto/instagram-post-metrics.dto';
+import { YouTubePostMetricsDto } from '../youtube/dto/youtube-post-metrics.dto';
+import { FacebookPostMetricsDto } from '../facebook/dto/facebook-post-metrics.dto';
+import { TwitterPostMetricsDto } from '../twitter/dto/twitter-post-metrics.dto';
+import { ThreadsPostMetricsDto } from '../threads/dto/threads-post-metrics.dto';
+import { LinkedInPostMetricsDto } from '../linkedin/dto/linkedin-post-metrics.dto';
+import { PinterestPostMetricsDto } from '../pinterest/dto/pinterest-post-metrics.dto';
+import { BlueskyPostMetricsDto } from '../bluesky/dto/bluesky-post-metrics.dto';
 
 @Controller('social-account-feeds')
 @ApiTags('Social Account Feeds')
