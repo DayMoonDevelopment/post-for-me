@@ -49,43 +49,6 @@ function parseOtelHeaders(value: string | undefined): Record<string, string> {
   return headers;
 }
 
-function getBooleanEnv(
-  config: ConfigService,
-  name: string,
-  defaultValue: boolean,
-): boolean {
-  const raw = config.get<string>(name);
-  if (raw === undefined) {
-    return defaultValue;
-  }
-  const v = raw.trim().toLowerCase();
-  if (v === '1' || v === 'true' || v === 'yes' || v === 'on') {
-    return true;
-  }
-  if (v === '0' || v === 'false' || v === 'no' || v === 'off') {
-    return false;
-  }
-  return defaultValue;
-}
-
-function getOtelUrl(
-  config: ConfigService,
-  explicit: string | undefined,
-  defaultPath: string,
-): string | undefined {
-  if (explicit && explicit.trim().length > 0) {
-    return explicit.trim();
-  }
-
-  const base = config.get<string>('OTEL_EXPORTER_OTLP_ENDPOINT');
-  if (!base || base.trim().length === 0) {
-    return undefined;
-  }
-
-  const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
-  return `${normalized}${defaultPath}`;
-}
-
 export async function shutdownTelemetry(): Promise<void> {
   const errors: unknown[] = [];
 
@@ -113,21 +76,13 @@ export function startTelemetry(config: ConfigService): void {
   }
   started = true;
 
-  const enabled = getBooleanEnv(config, 'OTEL_ENABLED', true);
+  const enabled = config.get<boolean>('OTEL_ENABLED');
   if (!enabled) {
     return;
   }
 
-  const traceUrl = getOtelUrl(
-    config,
-    config.get<string>('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
-    '/v1/traces',
-  );
-  const logUrl = getOtelUrl(
-    config,
-    config.get<string>('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'),
-    '/v1/logs',
-  );
+  const traceUrl = config.get<string>('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT');
+  const logUrl = config.get<string>('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT');
 
   // If no exporters are configured, keep OpenTelemetry disabled by default.
   if (!traceUrl && !logUrl) {
@@ -138,26 +93,12 @@ export function startTelemetry(config: ConfigService): void {
     .get<string>('OTEL_DIAG_LOG_LEVEL')
     ?.trim()
     .toUpperCase();
-  if (diagLevel) {
-    const mapped: DiagLogLevel | undefined =
-      diagLevel === 'ALL'
-        ? DiagLogLevel.ALL
-        : diagLevel === 'ERROR'
-          ? DiagLogLevel.ERROR
-          : diagLevel === 'WARN'
-            ? DiagLogLevel.WARN
-            : diagLevel === 'INFO'
-              ? DiagLogLevel.INFO
-              : diagLevel === 'DEBUG'
-                ? DiagLogLevel.DEBUG
-                : diagLevel === 'VERBOSE'
-                  ? DiagLogLevel.VERBOSE
-                  : diagLevel === 'NONE'
-                    ? DiagLogLevel.NONE
-                    : undefined;
-    if (mapped !== undefined) {
-      diag.setLogger(new DiagConsoleLogger(), mapped);
-    }
+
+  const mapped: DiagLogLevel | undefined =
+    DiagLogLevel[diagLevel as keyof typeof DiagLogLevel];
+
+  if (mapped !== undefined) {
+    diag.setLogger(new DiagConsoleLogger(), mapped);
   }
 
   const serviceName =
@@ -201,11 +142,7 @@ export function startTelemetry(config: ConfigService): void {
       getNodeAutoInstrumentations({
         // Avoid noisy fs spans by default. Can be re-enabled via env.
         '@opentelemetry/instrumentation-fs': {
-          enabled: getBooleanEnv(
-            config,
-            'OTEL_INSTRUMENTATION_FS_ENABLED',
-            false,
-          ),
+          enabled: config.get<boolean>('OTEL_INSTRUMENTATION_FS_ENABLED'),
         },
       }),
     ],
