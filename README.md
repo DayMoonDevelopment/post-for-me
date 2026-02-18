@@ -65,7 +65,6 @@ bun install
 3. **Environment Configuration**
 
    Set up environment variables for both API and Dashboard:
-
    - Copy `.env.example` files in each app directory
    - Configure Supabase, social media API keys, and other required services
 

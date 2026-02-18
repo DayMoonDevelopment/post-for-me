@@ -15,7 +15,7 @@ import {
 } from './dto/post-configurations.dto';
 import { Database, Json } from '@post-for-me/db';
 import { PostValidation } from './dto/post-validation.dto';
-import { SocialPostMetersService } from 'src/social-post-meters/social-post-meters.service';
+import { SocialPostMetersService } from '../social-post-meters/social-post-meters.service';
 
 import { AppLogger } from '../logger/app-logger';
 

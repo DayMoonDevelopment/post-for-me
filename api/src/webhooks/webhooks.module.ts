@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { WebhooksController } from './webhooks.controller';
 import { WebhooksService } from './webhooks.service';
-import { PaginationModule } from 'src/pagination/pagination.module';
+import { PaginationModule } from '../pagination/pagination.module';
 
 @Module({
   imports: [PaginationModule],

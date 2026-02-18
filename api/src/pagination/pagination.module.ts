@@ -1,4 +1,3 @@
-// src/pagination/pagination.module.ts
 import { Module, Scope } from '@nestjs/common';
 import { PaginationService } from './pagination.service';
 
