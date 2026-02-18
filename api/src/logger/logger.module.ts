@@ -28,10 +28,8 @@ function parseBoolean(value: string | undefined): boolean | undefined {
       scope: Scope.TRANSIENT,
       inject: [ConfigService, { token: INQUIRER, optional: true }],
       useFactory: (config: ConfigService, inquirer?: object) => {
-        const nodeEnv = config.get<string>('NODE_ENV');
-        const defaultLogToConsole = !nodeEnv || nodeEnv === 'development';
         const configured = parseBoolean(config.get<string>('LOG_TO_CONSOLE'));
-        const logToConsole = configured ?? defaultLogToConsole;
+        const logToConsole = configured ?? false;
 
         const context =
           inquirer &&
