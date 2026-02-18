@@ -2,6 +2,7 @@
 
 A modern social media automation platform built with NestJS, React Router, and Supabase. Post For Me allows users to schedule and automate posts across multiple social media platforms including Twitter/X, Bluesky, and more.
 
+test
 **[Visit Post for Me →](https://www.postforme.dev)**
 
 ## 🏗️ Architecture
@@ -65,7 +66,6 @@ bun install
 3. **Environment Configuration**
 
    Set up environment variables for both API and Dashboard:
-
    - Copy `.env.example` files in each app directory
    - Configure Supabase, social media API keys, and other required services
 
