@@ -1,4 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
+import axios from 'axios';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -6,7 +7,7 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
-import axios from 'axios';
+import type { PinterestPostMetricsDto } from './dto/pinterest-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 
 // Pinterest API Types
@@ -35,6 +36,7 @@ interface PinterestPin {
   board_id?: string;
   created_at?: string;
   note?: string;
+  pin_metrics?: PinterestPostMetricsDto;
 }
 
 interface PinterestPinsResponse {
@@ -149,6 +151,11 @@ export class PinterestService implements SocialPlatformService {
             headers: {
               Authorization: `Bearer ${account.access_token}`,
             },
+            params: includeMetrics
+              ? {
+                  pin_metrics: true,
+                }
+              : undefined,
           }),
         );
 
@@ -167,34 +174,7 @@ export class PinterestService implements SocialPlatformService {
                 thumbnail_url: pin.media?.images?.['400x300']?.url || '',
               },
             ],
-            metrics: includeMetrics
-              ? {
-                  likes: 0,
-                  comments: 0,
-                  shares: 0,
-                  favorites: 0,
-                  reach: 0,
-                  video_views: 0,
-                  total_time_watched: 0,
-                  average_time_watched: 0,
-                  full_video_watched_rate: 0,
-                  new_followers: 0,
-                  profile_views: 0,
-                  website_clicks: 0,
-                  phone_number_clicks: 0,
-                  lead_submissions: 0,
-                  app_download_clicks: 0,
-                  email_clicks: 0,
-                  address_clicks: 0,
-                  video_view_retention: [],
-                  impression_sources: [],
-                  audience_types: [],
-                  audience_genders: [],
-                  audience_countries: [],
-                  audience_cities: [],
-                  engagement_likes: [],
-                }
-              : undefined,
+            metrics: includeMetrics ? pin.pin_metrics : undefined,
           };
         });
 
@@ -213,6 +193,7 @@ export class PinterestService implements SocialPlatformService {
         params: {
           page_size: safeLimit,
           bookmark: cursor,
+          pin_metrics: includeMetrics ? true : undefined,
         },
       });
 
@@ -229,34 +210,7 @@ export class PinterestService implements SocialPlatformService {
               thumbnail_url: pin.media?.images?.['400x300']?.url || '',
             },
           ],
-          metrics: includeMetrics
-            ? {
-                likes: 0,
-                comments: 0,
-                shares: 0,
-                favorites: 0,
-                reach: 0,
-                video_views: 0,
-                total_time_watched: 0,
-                average_time_watched: 0,
-                full_video_watched_rate: 0,
-                new_followers: 0,
-                profile_views: 0,
-                website_clicks: 0,
-                phone_number_clicks: 0,
-                lead_submissions: 0,
-                app_download_clicks: 0,
-                email_clicks: 0,
-                address_clicks: 0,
-                video_view_retention: [],
-                impression_sources: [],
-                audience_types: [],
-                audience_genders: [],
-                audience_countries: [],
-                audience_cities: [],
-                engagement_likes: [],
-              }
-            : undefined,
+          metrics: includeMetrics ? pin.pin_metrics : undefined,
         }),
       );
 

@@ -415,6 +415,10 @@ export async function generateAuthUrl({
               ]
             : ['openid', 'w_member_social', 'profile email']),
         );
+
+        if (permissions.includes('feeds')) {
+          scopes.push(...['r_member_postAnalytics', 'rw_organization_admin']);
+        }
       }
 
       const scope = scopes.join(' ');
@@ -466,6 +470,10 @@ export async function generateAuthUrl({
         scopes.push(...providerData.threads.permission_overrides);
       } else {
         scopes.push(...['threads_basic', 'threads_content_publish']);
+
+        if (permissions.includes('feeds')) {
+          scopes.push('threads_manage_insights');
+        }
       }
 
       const authParams = new URLSearchParams([

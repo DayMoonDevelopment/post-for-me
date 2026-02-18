@@ -345,7 +345,7 @@ export class SocialAccountFeedsService {
         await this.twitterService.initService(projectId);
         return this.twitterService;
       case 'bluesky':
-        await this.blueskyService.initService(projectId);
+        await this.blueskyService.initService();
         return this.blueskyService;
     }
     throw new Error('Unable to create platform service');

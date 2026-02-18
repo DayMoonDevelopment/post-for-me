@@ -321,9 +321,9 @@ export class PinterestPostClient extends PostClient {
     // Add custom cover image if provided, otherwise use timestamp
     if (medium.thumbnail_url) {
       mediaSource.cover_image_url = medium.thumbnail_url;
-    } else if (coverImageTimestamp) {
+    } else {
       mediaSource.cover_image_key_frame_time = Math.round(
-        coverImageTimestamp / 1000,
+        (coverImageTimestamp || 0) / 1000,
       );
     }
 

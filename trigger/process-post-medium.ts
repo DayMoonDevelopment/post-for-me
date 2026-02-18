@@ -9,13 +9,13 @@ import { v4 as uuidv4 } from "uuid";
 // Single Supabase client instance
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 // Helper function to determine media type
 const getMediaType = (
   contentType: string,
-  fileExtension: string
+  fileExtension: string,
 ): "image" | "video" => {
   const imageTypes = [
     "image/jpeg",
@@ -183,7 +183,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
       contentType = headerContentType;
       logger.info(
         "Using valid content type from headers, skipping byte detection",
-        { contentType }
+        { contentType },
       );
     }
   } catch (error) {
@@ -200,7 +200,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
 
       if (!partialResponse.ok || partialResponse.status !== 206) {
         throw new Error(
-          `Partial Response Not Valid: ${partialResponse.statusText}`
+          `Partial Response Not Valid: ${partialResponse.statusText}`,
         );
       }
 
@@ -323,6 +323,7 @@ export const processPostMedium = task({
       provider,
       provider_connection_id,
       thumbnail_timestamp_ms,
+      skip_processing,
     },
   }: {
     medium: {
@@ -331,6 +332,7 @@ export const processPostMedium = task({
       url: string;
       thumbnail_url?: string | null;
       thumbnail_timestamp_ms?: number | null;
+      skip_processing?: boolean | null;
     };
   }): Promise<{
     provider?: string | null;
@@ -339,6 +341,7 @@ export const processPostMedium = task({
     thumbnail_url: string;
     thumbnail_timestamp_ms?: number | null;
     type: string;
+    skip_processing?: boolean | null;
   }> => {
     logger.info("Starting media processing", { url, thumbnail_url });
 
@@ -358,7 +361,7 @@ export const processPostMedium = task({
       if (thumbnail_url) {
         thumbnailResult = await streamDownloadAndUpload(
           thumbnail_url,
-          "thumbnail"
+          "thumbnail",
         );
       }
 
@@ -373,6 +376,7 @@ export const processPostMedium = task({
         provider: provider,
         provider_connection_id: provider_connection_id,
         thumbnail_timestamp_ms: thumbnail_timestamp_ms,
+        skip_processing: skip_processing,
       };
 
       logger.info("Media processing completed successfully", result);

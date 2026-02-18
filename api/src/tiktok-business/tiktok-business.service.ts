@@ -9,7 +9,7 @@ import type {
 } from '../lib/dto/global.dto';
 import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
-import { TikTokBusinessMetricsDto } from '../social-account-feeds/dto/platform-post-metrics.dto';
+import { TikTokBusinessMetricsDto } from './dto/tiktok-business-post-metrics.dto';
 
 @Injectable({ scope: Scope.REQUEST })
 export class TikTokBusinessService implements SocialPlatformService {

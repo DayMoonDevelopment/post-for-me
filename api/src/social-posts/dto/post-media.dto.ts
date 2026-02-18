@@ -65,4 +65,14 @@ export class SocialPostMediaDto {
     isArray: true,
   })
   tags?: UserTagDto[] | null;
+
+  @ApiProperty({
+    description:
+      "If true the media will not be processed at all and instead be posted as is, this may increase chance of post failure if media does not meet platform's requirements. Best used for larger files.",
+    nullable: true,
+    required: false,
+    type: Boolean,
+    default: false,
+  })
+  skip_processing?: boolean | null;
 }

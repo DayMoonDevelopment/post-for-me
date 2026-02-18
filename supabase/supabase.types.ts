@@ -227,6 +227,7 @@ export type Database = {
           post_id: string
           provider: Database["public"]["Enums"]["social_provider"] | null
           provider_connection_id: string | null
+          skip_processing: boolean | null
           tags: Json | null
           thumbnail_timestamp_ms: number | null
           thumbnail_url: string | null
@@ -241,6 +242,7 @@ export type Database = {
           post_id: string
           provider?: Database["public"]["Enums"]["social_provider"] | null
           provider_connection_id?: string | null
+          skip_processing?: boolean | null
           tags?: Json | null
           thumbnail_timestamp_ms?: number | null
           thumbnail_url?: string | null
@@ -255,6 +257,7 @@ export type Database = {
           post_id?: string
           provider?: Database["public"]["Enums"]["social_provider"] | null
           provider_connection_id?: string | null
+          skip_processing?: boolean | null
           tags?: Json | null
           thumbnail_timestamp_ms?: number | null
           thumbnail_url?: string | null
