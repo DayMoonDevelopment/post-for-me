@@ -1,4 +1,11 @@
 /* eslint-disable @typescript-eslint/require-await */
+import { randomUUID } from "crypto";
+import { createWriteStream } from "fs";
+import * as fsp from "fs/promises";
+import os from "os";
+import path from "path";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   BlueskyConfiguration,
@@ -119,5 +126,50 @@ export class PostClient {
       console.error("Error generating signed URL:", error);
       throw new Error("Failed to generate signed URL for file");
     }
+  }
+
+  protected async downloadToTempFile(
+    url: string,
+    opts?: {
+      prefix?: string;
+      filename?: string;
+    },
+  ): Promise<{ filePath: string; mimeType: string; size: number }> {
+    const res = await fetch(url);
+    if (!res.ok || !res.body) {
+      throw new Error(
+        `Failed to download media: ${res.status} ${res.statusText}`,
+      );
+    }
+
+    const mimeType =
+      res.headers.get("content-type") || "application/octet-stream";
+
+    const urlName = new URL(url).pathname.split("/").pop() || "file";
+    const rawName = opts?.filename || urlName;
+    const safeName = rawName
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .slice(0, 120);
+
+    const prefix = (opts?.prefix || "pfm")
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .slice(0, 40);
+
+    const filePath = path.join(
+      os.tmpdir(),
+      `${prefix}_${Date.now()}_${randomUUID()}_${safeName}`,
+    );
+
+    const body: any = res.body;
+    const inputStream =
+      typeof body?.getReader === "function" ? Readable.fromWeb(body) : body;
+
+    await pipeline(inputStream, createWriteStream(filePath));
+    const stat = await fsp.stat(filePath);
+    return { filePath, mimeType, size: stat.size };
+  }
+
+  protected async unlinkQuiet(filePath: string): Promise<void> {
+    await fsp.unlink(filePath).catch(() => undefined);
   }
 }

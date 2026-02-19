@@ -175,18 +175,17 @@ export class LinkedInPostClient extends PostClient {
   }
 
   async #createMedia({
-    file,
+    medium,
     caption,
     authorUrn,
     account,
   }: {
-    file: File;
+    medium: PostMedia;
     caption: string;
     authorUrn: string;
     account: SocialAccount;
   }): Promise<any> {
-    const isVideo = file.type.startsWith("video/");
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const isVideo = medium.type === "video";
 
     this.#requests.push({
       registerRequest: {
@@ -244,14 +243,29 @@ export class LinkedInPostClient extends PostClient {
       ].uploadUrl;
     const asset = registerData.value.asset;
 
-    // Step 2: Upload the video/image
+    // Step 2: Stream upload the video/image (avoid buffering into memory)
+    const fileRes = await fetch(medium.url);
+    if (!fileRes.ok || !fileRes.body) {
+      throw new Error(
+        `Failed to download media for upload: ${fileRes.status} ${fileRes.statusText}`,
+      );
+    }
+
+    const contentType =
+      fileRes.headers.get("content-type") ||
+      (isVideo ? "video/mp4" : "image/jpeg");
+    const contentLength = fileRes.headers.get("content-length");
+
     const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${account.access_token}`,
-        "Content-Type": file.type,
+        "Content-Type": contentType,
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
       },
-      body: buffer,
+      body: fileRes.body,
+      // Required by Node/undici fetch for streaming request bodies.
+      duplex: "half",
     });
 
     if (!uploadResponse.ok) {
@@ -305,10 +319,9 @@ export class LinkedInPostClient extends PostClient {
         for (let i = 0; i < allowedMedia.length; i++) {
           const medium = allowedMedia[i];
           this.#requests.push({ processMedia: medium });
-          const file = await this.getFile(medium);
           uploadedMedia.push(
             await this.#createMedia({
-              file,
+              medium,
               caption,
               authorUrn,
               account,

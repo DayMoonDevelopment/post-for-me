@@ -2,7 +2,10 @@ import { Database } from "@post-for-me/db";
 import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 import fetch from "node-fetch";
+import * as fs from "fs";
+import os from "os";
 import path from "path";
+import { pipeline } from "stream/promises";
 import { Upload } from "tus-js-client";
 import { v4 as uuidv4 } from "uuid";
 
@@ -233,30 +236,36 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
     logger.log("Failed to download", { response });
     throw new Error(`Failed to download file: ${response.statusText}`);
   }
-
-  const buffer = await response.arrayBuffer();
-
   if (!response.body) {
     throw new Error("No response body available for streaming");
   }
 
-  const contentLength = response.headers.get("content-length");
   const fileExtension = getFileExtension(fileUrl, contentType);
-  const fileName = `${prefix}_${uuidv4()}`;
+  const fileName = `${prefix}_${uuidv4()}${fileExtension}`;
   const mediaType = getMediaType(contentType, fileExtension);
 
   logger.info(`Streaming upload to Supabase: ${fileName}`, {
     contentType,
     mediaType,
-    contentLength: contentLength ? `${contentLength} bytes` : "unknown",
+    contentLength: response.headers.get("content-length")
+      ? `${response.headers.get("content-length")} bytes`
+      : "unknown",
   });
 
   const bucketName = "post-media";
 
-  await new Promise<void>((resolve, reject) => {
-    const upload = new Upload(Buffer.from(buffer), {
+  // Stream download into a temp file so we never hold the whole file in memory.
+  const tmpPath = path.join(os.tmpdir(), fileName);
+  await pipeline(response.body as any, fs.createWriteStream(tmpPath));
+  const stat = await fs.promises.stat(tmpPath);
+  const uploadSize = stat.size;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const upload = new Upload(fs.createReadStream(tmpPath) as any, {
       endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
       retryDelays: [0, 3000, 5000, 10000, 20000],
+      uploadSize,
       headers: {
         authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
         "x-upsert": "true",
@@ -278,20 +287,30 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
         logger.info("File uploaded succesfully", { bucketName, fileName });
         resolve();
       },
-    });
+      });
 
-    // Check if there are any previous uploads to continue.
-    return upload.findPreviousUploads().then(function (previousUploads) {
-      // Found previous uploads so we select the first one.
-      if (previousUploads.length) {
-        upload.resumeFromPreviousUpload(previousUploads[0]);
-      }
+      // Check if there are any previous uploads to continue.
+      return upload
+        .findPreviousUploads()
+        .catch(() => [])
+        .then(function (previousUploads) {
+          // Found previous uploads so we select the first one.
+          if (previousUploads.length) {
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+          }
 
-      // Start the upload
-      logger.info("Starting video upload", { bucketName, fileName });
-      upload.start();
+          // Start the upload
+          logger.info("Starting video upload", {
+            bucketName,
+            fileName,
+            uploadSize,
+          });
+          upload.start();
+        });
     });
-  });
+  } finally {
+    await fs.promises.unlink(tmpPath).catch(() => undefined);
+  }
 
   logger.info(`File streamed and uploaded successfully: ${fileName}`);
 

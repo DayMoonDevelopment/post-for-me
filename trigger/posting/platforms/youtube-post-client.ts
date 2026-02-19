@@ -4,7 +4,6 @@
 
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
-import { Readable } from "stream";
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
   PlatformAppCredentials,
@@ -80,14 +79,9 @@ export class YouTubePostClient extends PostClient {
         throw new Error("Only videos are supported for YouTube posts");
       }
 
-      const file = await this.getFile(medium);
-
-      const fileSize = (file as any)?.size as number | undefined;
-      if (!fileSize || fileSize <= 0) {
-        throw new Error("Could not determine YouTube upload file size");
-      }
-
-      const mimeType = (file as any)?.type || "video/mp4";
+      const { fileSize, mimeType } = await this.#getRemoteFileInfo(medium.url, {
+        fallbackMimeType: "video/mp4",
+      });
 
       // Trim and sanitize the caption
       const sanitizedCaption = this.#sanitizeYouTubeCaption(caption);
@@ -138,7 +132,7 @@ export class YouTubePostClient extends PostClient {
 
       const uploadedVideo = await this.#uploadResumableChunks({
         uploadUrl,
-        file,
+        fileUrl: medium.url,
         fileSize,
         mimeType,
         chunkSizeBytes: YouTubePostClient.DEFAULT_CHUNK_SIZE_BYTES,
@@ -239,13 +233,13 @@ export class YouTubePostClient extends PostClient {
 
   async #uploadResumableChunks({
     uploadUrl,
-    file,
+    fileUrl,
     fileSize,
     mimeType,
     chunkSizeBytes,
   }: {
     uploadUrl: string;
-    file: any;
+    fileUrl: string;
     fileSize: number;
     mimeType: string;
     chunkSizeBytes: number;
@@ -258,10 +252,33 @@ export class YouTubePostClient extends PostClient {
       const endInclusive = endExclusive - 1;
       const chunkLen = endExclusive - nextStart;
 
-      // Read only the next slice into memory.
-      const chunkBuf = Buffer.from(
-        await (file as any).slice(nextStart, endExclusive).arrayBuffer(),
-      );
+      // Fetch only the next chunk (Range request) into memory.
+      const range = `bytes=${nextStart}-${endInclusive}`;
+      const fileRes = await fetch(fileUrl, {
+        headers: {
+          Range: range,
+        },
+      });
+
+      if (!fileRes.ok) {
+        const bodyText = await this.#safeReadText(fileRes);
+        throw new Error(
+          `Failed to read video chunk from storage: ${fileRes.status} ${fileRes.statusText}. ${bodyText}`,
+        );
+      }
+
+      // If the upstream ignores Range requests, it may return the whole file (200).
+      // Bail out rather than accidentally buffering the entire video.
+      if (fileRes.status === 200 && chunkLen < fileSize) {
+        const upstreamLen = Number(fileRes.headers.get("content-length") || "");
+        if (!Number.isFinite(upstreamLen) || upstreamLen > chunkLen) {
+          throw new Error(
+            "Upstream did not honor Range requests; refusing to buffer entire video",
+          );
+        }
+      }
+
+      const chunkBuf = Buffer.from(await fileRes.arrayBuffer());
 
       const contentRange = `bytes ${nextStart}-${endInclusive}/${fileSize}`;
       const res = await this.#fetchWithRetry(uploadUrl, {
@@ -478,16 +495,13 @@ export class YouTubePostClient extends PostClient {
     }
 
     try {
-      // Get the thumbnail file
-      const thumbnailFile = await this.getFile({
-        url: medium.thumbnail_url,
-        type: "image",
-      });
-
-      const thumbnailBuffer = Buffer.from(await thumbnailFile.arrayBuffer());
-      const thumbnailStream = new Readable();
-      thumbnailStream.push(thumbnailBuffer);
-      thumbnailStream.push(null);
+      const res = await fetch(medium.thumbnail_url);
+      if (!res.ok || !res.body) {
+        const bodyText = await this.#safeReadText(res);
+        throw new Error(
+          `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
+        );
+      }
 
       this.#requests.push({
         thumbnailUploadRequest: {
@@ -499,8 +513,8 @@ export class YouTubePostClient extends PostClient {
       const thumbnailResponse = await youtube.thumbnails.set({
         videoId: videoId,
         media: {
-          body: thumbnailStream,
-          mimeType: thumbnailFile.type || "image/jpeg",
+          body: res.body as any,
+          mimeType: res.headers.get("content-type") || "image/jpeg",
         },
       });
 
@@ -510,6 +524,68 @@ export class YouTubePostClient extends PostClient {
       console.error("Error uploading thumbnail:", error);
       throw error;
     }
+  }
+
+  async #getRemoteFileInfo(
+    url: string,
+    opts?: { fallbackMimeType?: string },
+  ): Promise<{ fileSize: number; mimeType: string }> {
+    // Prefer HEAD for metadata.
+    try {
+      const head = await fetch(url, { method: "HEAD" });
+      if (head.ok) {
+        const size = Number(head.headers.get("content-length") || "");
+        const mimeType =
+          head.headers.get("content-type") ||
+          opts?.fallbackMimeType ||
+          "application/octet-stream";
+        if (Number.isFinite(size) && size > 0) {
+          return { fileSize: size, mimeType };
+        }
+      }
+    } catch {
+      // ignore and fall back
+    }
+
+    // Fallback: range request to read total size from Content-Range.
+    const res = await fetch(url, {
+      headers: {
+        Range: "bytes=0-0",
+      },
+    });
+
+    if (!res.ok) {
+      const bodyText = await this.#safeReadText(res);
+      throw new Error(
+        `Could not determine file size: ${res.status} ${res.statusText}. ${bodyText}`,
+      );
+    }
+
+    // Consume the tiny body to allow connection reuse.
+    await res.arrayBuffer().catch(() => undefined);
+
+    const contentRange =
+      res.headers.get("content-range") || res.headers.get("Content-Range");
+    const fileSize = this.#parseTotalSizeFromContentRange(contentRange);
+    const mimeType =
+      res.headers.get("content-type") ||
+      opts?.fallbackMimeType ||
+      "application/octet-stream";
+
+    if (!fileSize || fileSize <= 0) {
+      throw new Error("Could not determine YouTube upload file size");
+    }
+
+    return { fileSize, mimeType };
+  }
+
+  #parseTotalSizeFromContentRange(contentRange: string | null): number | null {
+    // Example: "bytes 0-0/12345"
+    if (!contentRange) return null;
+    const match = contentRange.match(/\/(\d+)$/);
+    if (!match) return null;
+    const total = Number(match[1]);
+    return Number.isFinite(total) ? total : null;
   }
 
   #sanitizeYouTubeDescription(description: string): string | null {
