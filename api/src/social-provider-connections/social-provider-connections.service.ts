@@ -29,7 +29,8 @@ export class SocialAccountsService {
     queryParams: SocialAccountQueryDto,
     projectId: string,
   ): PaginatedRequestQuery<SocialAccountDto> {
-    const { offset, limit, platform, username, external_id, id } = queryParams;
+    const { offset, limit, platform, username, external_id, id, status } =
+      queryParams;
 
     const query = this.supabaseService.supabaseClient
       .from('social_provider_connections')
@@ -112,6 +113,35 @@ export class SocialAccountsService {
           break;
       }
       query.in('social_provider_user_name', values);
+    }
+
+    if (status) {
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof status === 'string': {
+          values.push(...(status as string).split(','));
+          break;
+        }
+        case Array.isArray(status):
+          values.push(...status);
+          break;
+        default:
+          values.push(status);
+          break;
+      }
+
+      if (
+        values.indexOf('disconnected') > -1 &&
+        values.indexOf('connected') < 0
+      ) {
+        query.is('access_token', null);
+      } else if (
+        values.indexOf('connected') > -1 &&
+        values.indexOf('disconnected') < 0
+      ) {
+        query.not('access_token', 'is', null);
+      }
     }
 
     query.order('created_at', { ascending: false });
