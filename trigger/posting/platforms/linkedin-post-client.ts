@@ -264,6 +264,8 @@ export class LinkedInPostClient extends PostClient {
         ...(contentLength ? { "Content-Length": contentLength } : {}),
       },
       body: fileRes.body,
+      // Required by Node/undici fetch for streaming request bodies.
+      duplex: "half",
     });
 
     if (!uploadResponse.ok) {
