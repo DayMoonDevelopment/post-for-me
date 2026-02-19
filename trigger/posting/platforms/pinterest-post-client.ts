@@ -242,9 +242,15 @@ export class PinterestPostClient extends PostClient {
     const mediaId = registerMediaResponse.data.media_id;
     const { upload_url, upload_parameters } = registerMediaResponse.data;
 
-    const file = await this.getFile(medium);
-
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const fileUrl = await this.getSignedUrlForFile(medium);
+    const fileResponse = await axios.get(fileUrl, {
+      responseType: "stream",
+    });
+    const filename =
+      new URL(fileUrl).pathname.split("/").pop() || `video_${mediaId}.mp4`;
+    const contentType = fileResponse.headers["content-type"] || "video/mp4";
+    const knownLengthRaw = fileResponse.headers["content-length"];
+    const knownLength = knownLengthRaw ? Number(knownLengthRaw) : undefined;
 
     // Create form data
     const form = new FormData();
@@ -260,18 +266,35 @@ export class PinterestPostClient extends PostClient {
     });
 
     // Add the file last
-    const filename = file.name;
-    form.append("file", buffer, {
+    form.append("file", fileResponse.data, {
       filename,
-      contentType: "video/mp4",
+      contentType,
+      ...(Number.isFinite(knownLength as number) && (knownLength as number) > 0
+        ? { knownLength: knownLength as number }
+        : {}),
     });
 
     this.#requests.push({ uploadRequest: { file: medium } });
 
+    const headers: Record<string, string> = {
+      ...(form.getHeaders() as Record<string, string>),
+    };
+
+    // Best-effort Content-Length (helps some S3-compatible endpoints).
+    try {
+      const formLength = await new Promise<number>((resolve, reject) => {
+        form.getLength((err, length) => {
+          if (err) reject(err);
+          else resolve(length);
+        });
+      });
+      headers["Content-Length"] = String(formLength);
+    } catch {
+      // ignore
+    }
+
     const uploadResponse = await axios.post(upload_url, form, {
-      headers: {
-        ...form.getHeaders(),
-      },
+      headers,
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
     });

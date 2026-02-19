@@ -18,9 +18,7 @@ import {
 } from "../post.types";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
 import ffmpeg from "fluent-ffmpeg";
-import fs from "fs/promises";
-import os from "os";
-import path from "path";
+import { createReadStream } from "fs";
 import { logger, tasks } from "@trigger.dev/sdk/v3";
 
 export class BlueskyPostClient extends PostClient {
@@ -253,17 +251,14 @@ export class BlueskyPostClient extends PostClient {
       fileUrl = processedFile.output;
     }
 
-    const file = await this.getFile({ ...medium, url: fileUrl });
+    const remoteName =
+      new URL(fileUrl).pathname.split("/").pop() || "video.mp4";
 
-    const tempDir = os.tmpdir();
-
-    const inputPath = path.join(tempDir, file.name);
-    const videoBuffer = await file.arrayBuffer();
-
-    let buffer = Buffer.from(videoBuffer);
-
-    // Write original file first so we can process it
-    await fs.writeFile(inputPath, buffer);
+    const tmp = await this.downloadToTempFile(fileUrl, {
+      prefix: "bluesky_video",
+      filename: remoteName,
+    });
+    const inputPath = tmp.filePath;
 
     const metadata = await new Promise<any>((resolve, reject) => {
       ffmpeg.ffprobe(inputPath, (err: any, data: any) => {
@@ -281,24 +276,29 @@ export class BlueskyPostClient extends PostClient {
 
     const { width, height } = videoStream;
 
-    const uploadUrl = new URL(
-      "https://video.bsky.app/xrpc/app.bsky.video.uploadVideo"
-    );
-    uploadUrl.searchParams.append("did", this.#agent.session!.did);
-    uploadUrl.searchParams.append("name", file.name);
+    let uploadResponseData: unknown;
+    try {
+      const uploadUrl = new URL(
+        "https://video.bsky.app/xrpc/app.bsky.video.uploadVideo"
+      );
+      uploadUrl.searchParams.append("did", this.#agent.session!.did);
+      uploadUrl.searchParams.append("name", remoteName);
 
-    this.#requests.push({ uploadVideoRequest: uploadUrl });
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "video/mp4",
-        "Content-Length": buffer.length.toString(),
-      },
-      body: buffer,
-    });
+      this.#requests.push({ uploadVideoRequest: uploadUrl });
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": tmp.mimeType || "video/mp4",
+          "Content-Length": tmp.size.toString(),
+        },
+        body: createReadStream(inputPath) as any,
+      });
 
-    const uploadResponseData = await uploadResponse.json();
+      uploadResponseData = await uploadResponse.json();
+    } finally {
+      await this.unlinkQuiet(inputPath);
+    }
 
     this.#responses.push({ uploadVideoResponse: uploadResponseData });
 

@@ -171,12 +171,28 @@ export class TwitterPostClient extends PostClient {
     if (media.length == 1) {
       const medium = media[0];
       this.#requests.push({ uploadRequest: { file: medium } });
-      const file = await this.getFile(medium);
-      const buffer = Buffer.from(await file.arrayBuffer());
       const isVideo = medium.type === "video";
-      const mediaId = isVideo
-        ? await this.#uploadVideo({ twitterClient, file, buffer })
-        : await this.#uploadImage({ twitterClient, file, buffer });
+
+      let mediaId: string;
+      if (isVideo) {
+        const { filePath, mimeType } = await this.downloadToTempFile(
+          medium.url,
+          { prefix: "twitter" },
+        );
+        try {
+          mediaId = await this.#uploadVideo({
+            twitterClient,
+            filePath,
+            mimeType,
+          });
+        } finally {
+          await this.unlinkQuiet(filePath);
+        }
+      } else {
+        const file = await this.getFile(medium);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        mediaId = await this.#uploadImage({ twitterClient, file, buffer });
+      }
 
       this.#responses.push({ uploadResponse: { mediaId } });
       mediaIds.push(mediaId);
@@ -208,15 +224,15 @@ export class TwitterPostClient extends PostClient {
 
   async #uploadVideo({
     twitterClient,
-    file,
-    buffer,
+    filePath,
+    mimeType,
   }: {
     twitterClient: TwitterApi;
-    file: File;
-    buffer: Buffer;
+    filePath: string;
+    mimeType: string;
   }): Promise<string> {
-    const mediaId = await twitterClient.v1.uploadMedia(buffer, {
-      mimeType: file.type,
+    const mediaId = await twitterClient.v1.uploadMedia(filePath, {
+      mimeType,
       longVideo: true,
     });
 
