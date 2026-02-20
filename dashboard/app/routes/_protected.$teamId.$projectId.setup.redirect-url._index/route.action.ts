@@ -17,7 +17,7 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
 
   const updateResult = await supabase
     .from("projects")
-    .update({ auth_callback_url: authCallbackUrl || null })
+    .update({ auth_callback_url: authCallbackUrl?.trim() || null })
     .eq("id", projectId)
     .select("auth_callback_url")
     .single();
