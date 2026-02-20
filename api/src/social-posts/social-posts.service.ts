@@ -472,7 +472,7 @@ export class SocialPostsService {
       console.error(insertPostConfigurationsError);
     }
 
-    if (!post.scheduled_at) {
+    if (data.status === 'processing') {
       await this.triggerPost(data.id);
     }
 

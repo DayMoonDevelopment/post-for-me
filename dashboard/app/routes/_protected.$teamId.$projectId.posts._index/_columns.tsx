@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { useForm } from "~/hooks/use-form";
 import { ArrowUpDownIcon, MoreHorizontalIcon } from "lucide-react";
 
 import { Button } from "~/ui/button";
@@ -8,12 +10,116 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/ui/dialog";
 
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PostWithConnections } from "./_types";
 import { format } from "date-fns";
+
+function PostActionsCell({ post }: { post: PostWithConnections }) {
+  const { fetcher, isSubmitting } = useForm({ key: `delete-post-${post.id}` });
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  const canDelete = post.status === "draft" || post.status === "scheduled";
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.success) {
+      setIsDeleteOpen(false);
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            className="h-8 w-8 p-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="sr-only">Open menu</span>
+            <MoreHorizontalIcon className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(post.id);
+            }}
+          >
+            Copy post ID
+          </DropdownMenuItem>
+          {canDelete ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+                  e.stopPropagation();
+                  setIsDeleteOpen(true);
+                }}
+              >
+                <span className="text-destructive">Delete post</span>
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog
+        open={isDeleteOpen}
+        onOpenChange={(nextOpen) => {
+          if (!isSubmitting) setIsDeleteOpen(nextOpen);
+        }}
+      >
+        <DialogContent onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Delete this post?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the post. This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => setIsDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isSubmitting}
+              onClick={() => {
+                fetcher.submit(
+                  { action: "delete-post", postId: post.id },
+                  { method: "POST" }
+                );
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function badgeVariant(status: string) {
   switch (status) {
@@ -190,27 +296,7 @@ export const columns: ColumnDef<PostWithConnections>[] = [
     cell: ({ row }) => {
       const post = row.original;
 
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontalIcon className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={(e: React.MouseEvent<HTMLDivElement>) => {
-                e.stopPropagation();
-                navigator.clipboard.writeText(post.id);
-              }}
-            >
-              Copy post ID
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
+      return <PostActionsCell post={post} />;
     },
   },
 ];
