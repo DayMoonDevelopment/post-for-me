@@ -222,7 +222,7 @@ export function Component() {
                     loading={submitLoading}
                     value="delete"
                   >
-                    Delete Configuration
+                    Delete
                   </Button>
                 </>
               ) : (
