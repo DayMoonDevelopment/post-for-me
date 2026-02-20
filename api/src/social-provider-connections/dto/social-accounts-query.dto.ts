@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 import { BasePaginatedQueryDto } from '../../pagination/base-paginated-query.dto';
 
 export enum AccountStatus {
@@ -58,7 +58,6 @@ export class SocialAccountQueryDto extends BasePaginatedQueryDto {
     type: 'array',
     items: { type: 'string', enum: Object.values(AccountStatus) },
   })
-  @IsEnum(AccountStatus, { each: true })
   @IsOptional()
   status?: string[];
 }
