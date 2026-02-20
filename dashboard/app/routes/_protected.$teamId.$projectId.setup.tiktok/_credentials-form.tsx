@@ -35,6 +35,15 @@ export function CredentialsForm() {
   const { credential } = useLoaderData<Route.ComponentProps["loaderData"]>();
   const { fetcher, isSubmitting } = useFormFetcher({ withToast: true });
 
+  const [initialValues, setInitialValues] = useState<ProviderSetupFormValues>(
+    () => ({
+      app_id: credential?.appId || "",
+      app_secret: credential?.appSecret || "",
+    })
+  );
+
+  const [lastIntent, setLastIntent] = useState<"save" | "delete" | null>(null);
+
   // Determine if we have existing values
   const hasExistingValues = !!(credential?.appId || credential?.appSecret);
 
@@ -44,17 +53,21 @@ export function CredentialsForm() {
   const form = useForm<ProviderSetupFormValues>({
     resolver: zodResolver(providerSetupSchema),
     defaultValues: {
-      app_id: credential?.appId || "",
-      app_secret: credential?.appSecret || "",
+      app_id: initialValues.app_id,
+      app_secret: initialValues.app_secret,
     },
     disabled: !isEditMode,
   });
 
-  const onSubmit = (values: ProviderSetupFormValues) => {
-    console.log("HELLO", values);
-
+  const onSubmit = (values: ProviderSetupFormValues, event?: unknown) => {
     const formData = new FormData();
     formData.append("provider", "tiktok");
+
+    const submitter = (event as { nativeEvent?: SubmitEvent } | undefined)
+      ?.nativeEvent?.submitter as HTMLButtonElement | null;
+    const action = submitter?.value === "delete" ? "delete" : "save";
+    setLastIntent(action);
+    formData.append("action", action);
 
     if (values.app_id && values.app_id.trim() !== "") {
       formData.append("app_id", values.app_id);
@@ -76,8 +89,8 @@ export function CredentialsForm() {
   const handleCancel = () => {
     // Reset form to original values
     form.reset({
-      app_id: credential?.appId || "",
-      app_secret: credential?.appSecret || "",
+      app_id: initialValues.app_id,
+      app_secret: initialValues.app_secret,
     });
 
     setIsEditMode(false);
@@ -86,9 +99,19 @@ export function CredentialsForm() {
   // Handle successful submission
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
-      setIsEditMode(false);
+      if (lastIntent === "delete") {
+        const clearedValues = { app_id: "", app_secret: "" };
+        setInitialValues(clearedValues);
+        form.reset(clearedValues);
+        setIsEditMode(true);
+      } else {
+        const nextValues = form.getValues();
+        setInitialValues(nextValues);
+        form.reset(nextValues);
+        setIsEditMode(false);
+      }
     }
-  }, [fetcher.state, fetcher.data]);
+  }, [fetcher.state, fetcher.data, form, lastIntent]);
 
   const submitLoading = isSubmitting;
   const submitDisabled = !form.formState.isDirty || submitLoading;
@@ -118,9 +141,19 @@ export function CredentialsForm() {
 
         <div className="flex justify-end gap-2">
           {!isEditMode ? (
-            <Button type="button" variant="secondary" onClick={handleEdit}>
-              Edit
-            </Button>
+            <>
+              <Button type="button" variant="secondary" onClick={handleEdit}>
+                Edit
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                loading={submitLoading}
+                value="delete"
+              >
+                Delete
+              </Button>
+            </>
           ) : (
             <>
               <Button type="button" variant="ghost" onClick={handleCancel}>
