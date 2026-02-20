@@ -17,6 +17,25 @@ export const action = withSupabase(async ({ request, supabase, params }) => {
   }
 
   const formData = await request.formData();
+  const action = formData.get("action")?.toString();
+
+  if (action === "delete") {
+    const { error } = await supabase
+      .from("social_provider_app_credentials")
+      .delete()
+      .eq("project_id", projectId)
+      .eq("provider", provider as SocialProviderEnum);
+
+    if (error) {
+      return data({
+        success: false,
+        toast_msg: "Failed to delete credentials",
+      });
+    }
+
+    return data({ success: true });
+  }
+
   const appId = formData.get("app_id")?.toString() || "";
   const appSecret = formData.get("app_secret")?.toString() || "";
 

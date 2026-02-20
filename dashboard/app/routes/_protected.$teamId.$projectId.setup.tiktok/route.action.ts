@@ -17,8 +17,37 @@ export const action = withSupabase(
     }
 
     const formData = await request.formData();
+    const action = formData.get("action")?.toString();
+
+    if (action === "delete") {
+      const { error } = await supabase
+        .from("social_provider_app_credentials")
+        .delete()
+        .eq("project_id", projectId)
+        .eq("provider", provider as SocialProviderEnum);
+
+      if (error) {
+        return data({
+          success: false,
+          toast_msg: "There was an issue deleting your credentials.",
+        });
+      }
+
+      return data({
+        success: true,
+        toast_msg: "TikTok configuration deleted!",
+      });
+    }
+
     const appId = formData.get("app_id")?.toString() || "";
     const appSecret = formData.get("app_secret")?.toString() || "";
+
+    if (!appId.trim() && !appSecret.trim()) {
+      return data({
+        success: false,
+        toast_msg: "At least one credential is required.",
+      });
+    }
 
     try {
       const { success } = await processTikTokSettings(

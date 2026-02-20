@@ -2,6 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 import { BasePaginatedQueryDto } from '../../pagination/base-paginated-query.dto';
 
+export enum AccountStatus {
+  CONNECTED = 'connected',
+  DISCONNECTED = 'disconnected',
+}
 export class SocialAccountQueryDto extends BasePaginatedQueryDto {
   @ApiProperty({
     description:
@@ -46,4 +50,14 @@ export class SocialAccountQueryDto extends BasePaginatedQueryDto {
   @IsString({ each: true })
   @IsOptional()
   id?: string[];
+
+  @ApiProperty({
+    description:
+      'Filter by status. Multiple values imply OR logic (e.g., ?status=connected&status=disconnected).',
+    required: false,
+    type: 'array',
+    items: { type: 'string', enum: Object.values(AccountStatus) },
+  })
+  @IsOptional()
+  status?: string[];
 }
