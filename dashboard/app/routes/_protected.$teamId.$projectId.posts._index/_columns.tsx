@@ -189,7 +189,6 @@ export const columns: ColumnDef<PostWithConnections>[] = [
     enableHiding: false,
     cell: ({ row }) => {
       const post = row.original;
-
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
