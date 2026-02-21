@@ -16,7 +16,7 @@ export async function getFacebookSocialProviderConnection({
     throw Error("No code provided");
   }
 
-  const tokenUrl = `https://graph.facebook.com/v20.0/oauth/access_token`;
+  const tokenUrl = `https://graph.facebook.com/v23.0/oauth/access_token`;
   const tokenParams = new URLSearchParams([
     ["client_id", appCredentials.appId!],
     ["client_secret", appCredentials.appSecret!],
@@ -30,6 +30,7 @@ export async function getFacebookSocialProviderConnection({
 
   const tokenData = await tokenResponse.json();
 
+  console.log(tokenData);
   const longLivedTokenParams = new URLSearchParams([
     ["grant_type", "fb_exchange_token"],
     ["client_id", appCredentials.appId!],
@@ -38,14 +39,14 @@ export async function getFacebookSocialProviderConnection({
   ]);
 
   const longLivedResponse = await fetch(
-    `${tokenUrl}?${longLivedTokenParams.toString()}`
+    `${tokenUrl}?${longLivedTokenParams.toString()}`,
   );
 
   const longLivedData = await longLivedResponse.json();
 
   const accessToken = longLivedData.access_token;
 
-  let accountsUrl = `https://graph.facebook.com/v20.0/me/accounts?fields=name,access_token,picture&limit=100&access_token=${accessToken}`;
+  let accountsUrl = `https://graph.facebook.com/v23.0/me/accounts?fields=name,access_token,picture&limit=100&access_token=${accessToken}`;
 
   const accounts: SocialProviderConnection[] = [];
 
