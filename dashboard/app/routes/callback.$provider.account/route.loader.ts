@@ -25,7 +25,7 @@ export const loader = withSupabase(async function ({
   if (!key) {
     return createResponse({
       isSuccess: false,
-      error: "Something went wrong",
+      error: "Auth state not set",
       isLoggedIn,
     });
   }
@@ -52,7 +52,7 @@ export const loader = withSupabase(async function ({
   if (!projectId || !provider) {
     return createResponse({
       isSuccess: false,
-      error: "Something went wrong",
+      error: "Project Id or Provider not found",
       isLoggedIn,
     });
   }
@@ -92,7 +92,7 @@ export const loader = withSupabase(async function ({
     console.error("Project not found");
     return createResponse({
       isSuccess: false,
-      error: "Something went wrong",
+      error: "Project not found",
       projectId,
       provider: normalizedProvider,
       isLoggedIn,
@@ -133,7 +133,7 @@ export const loader = withSupabase(async function ({
   if (!accounts || accounts.length === 0) {
     return createResponse({
       isSuccess: false,
-      error: "Something went wrong",
+      error: "No valid accounts found",
       teamId: project.team_id,
       projectId,
       provider: normalizedProvider,
