@@ -48,7 +48,7 @@ A robust NestJS API that provides secure endpoints for social media content mana
 
 ### Installation
 
-From the project root:
+From the project root :
 
 ```bash
 bun install --frozen-lockfile
