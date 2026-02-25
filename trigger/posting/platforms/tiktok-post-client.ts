@@ -491,22 +491,17 @@ export class TikTokPostClient extends PostClient {
 
     const imageBuffer = Buffer.from(response.data);
 
-    // Step 2: Get image metadata
+    // Step 2: Get image metadata and downscale so the short side is <= 1080
     const { width, height } = await sharp(imageBuffer).metadata();
-    let safeWidth = width || 0;
-    let safeHeight = height || 0;
+    let safeWidth = width;
+    let safeHeight = height;
 
-    if (safeWidth > safeHeight) {
-      // Landscape or square → limit width to 1080px
-      if (safeWidth > 1080) {
-        safeHeight = Math.round((1080 / safeWidth) * safeHeight);
-        safeWidth = 1080;
-      }
-    } else {
-      // Portrait → limit height to 1080px
-      if (safeHeight > 1080) {
-        safeWidth = Math.round((1080 / safeHeight) * safeWidth);
-        safeHeight = 1080;
+    if (safeWidth && safeHeight) {
+      const shortSide = Math.min(safeWidth, safeHeight);
+      if (shortSide > 1080) {
+        const scale = 1080 / shortSide;
+        safeWidth = Math.round(safeWidth * scale);
+        safeHeight = Math.round(safeHeight * scale);
       }
     }
 
