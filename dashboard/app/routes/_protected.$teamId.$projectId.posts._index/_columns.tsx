@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ArrowUpDownIcon, MoreHorizontalIcon } from "lucide-react";
 
@@ -8,8 +9,20 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/ui/dropdown-menu";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/ui/dialog";
+
+import { useForm as useFormFetcher } from "~/hooks/use-form";
 
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PostWithConnections } from "./_types";
@@ -189,27 +202,99 @@ export const columns: ColumnDef<PostWithConnections>[] = [
     enableHiding: false,
     cell: ({ row }) => {
       const post = row.original;
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontalIcon className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={(e: React.MouseEvent<HTMLDivElement>) => {
-                e.stopPropagation();
-                navigator.clipboard.writeText(post.id);
-              }}
-            >
-              Copy post ID
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
+      return <PostRowActions post={post} />;
     },
   },
 ];
+
+function PostRowActions({ post }: { post: PostWithConnections }) {
+  const canDelete = post.status === "draft" || post.status === "scheduled";
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const { fetcher, isSubmitting } = useFormFetcher({
+    withToast: true,
+    key: `delete-post-${post.id}`,
+  });
+
+  const wasSubmittingRef = useRef(false);
+  useEffect(() => {
+    if (wasSubmittingRef.current && !isSubmitting) {
+      setDeleteOpen(false);
+    }
+    wasSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <span className="sr-only">Open menu</span>
+            <MoreHorizontalIcon className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(post.id);
+            }}
+          >
+            Copy post ID
+          </DropdownMenuItem>
+          {canDelete ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+                  e.stopPropagation();
+                  setDeleteOpen(true);
+                }}
+              >
+                Delete
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(nextOpen) => {
+          if (isSubmitting) return;
+          setDeleteOpen(nextOpen);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this post?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the post. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <fetcher.Form method="post">
+            <input type="hidden" name="action" value="delete-post" />
+            <input type="hidden" name="postId" value={post.id} />
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleteOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" disabled={isSubmitting}>
+                {isSubmitting ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </fetcher.Form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
