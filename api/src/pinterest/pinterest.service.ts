@@ -10,6 +10,8 @@ import type {
 import type { PinterestPostMetricsDto } from './dto/pinterest-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 
+import { AppLogger } from '../logger/app-logger';
+
 // Pinterest API Types
 interface PinterestImageVariant {
   url: string;
@@ -56,7 +58,10 @@ interface PinterestTokenResponse {
 export class PinterestService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
@@ -68,7 +73,14 @@ export class PinterestService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta(
+        'missing pinterest app credentials',
+        undefined,
+        {
+          projectId,
+          supabase_error: appCredentialsError,
+        },
+      );
       throw new Error('No app credentials found for platform');
     }
 
@@ -221,7 +233,10 @@ export class PinterestService implements SocialPlatformService {
         cursor: response.data.bookmark,
       };
     } catch (error) {
-      console.error('Error fetching Pinterest pins:', error);
+      this.logger.errorWithMeta('pinterest pins fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+      });
       return {
         posts: [],
         count: 0,

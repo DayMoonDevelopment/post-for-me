@@ -14,14 +14,19 @@ import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-p
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 
+import { LoggerModule } from './logger/logger.module';
+import { TelemetryModule } from './telemetry/telemetry.module';
+
 @Module({
   imports: [
-    MediaModule,
-    SocialPostsModule,
-    SocialPostResultsModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    LoggerModule,
+    TelemetryModule,
+    MediaModule,
+    SocialPostsModule,
+    SocialPostResultsModule,
     SupabaseModule,
     UnkeyModule,
     SocialAccountsModule,

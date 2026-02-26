@@ -36,6 +36,8 @@ import { LinkedInPostMetricsDto } from '../linkedin/dto/linkedin-post-metrics.dt
 import { PinterestPostMetricsDto } from '../pinterest/dto/pinterest-post-metrics.dto';
 import { BlueskyPostMetricsDto } from '../bluesky/dto/bluesky-post-metrics.dto';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Controller('social-account-feeds')
 @ApiTags('Social Account Feeds')
 @ApiBearerAuth()
@@ -56,6 +58,7 @@ import { BlueskyPostMetricsDto } from '../bluesky/dto/bluesky-post-metrics.dto';
 export class SocialAccountFeedsController {
   constructor(
     private readonly socialPostFeedService: SocialAccountFeedsService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get(':social_account_id')
@@ -122,7 +125,11 @@ export class SocialAccountFeedsController {
         projectId: user.projectId,
       });
     } catch (e) {
-      console.error(e);
+      this.logger.errorWithMeta('getAccountFeed failed', e, {
+        projectId: user.projectId,
+        socialAccountId: params.social_account_id,
+        query,
+      });
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,

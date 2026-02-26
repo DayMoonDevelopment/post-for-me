@@ -16,13 +16,18 @@ import type {
   TikTokVideo,
 } from './tiktok.types';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Injectable({ scope: Scope.REQUEST })
 export class TikTokService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
   tokenUrl: string;
   apiUrl: string;
 
-  constructor(private readonly supabaseService: SupabaseService) {
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {
     this.tokenUrl = 'https://open.tiktokapis.com/v2/oauth/token/';
     this.apiUrl = 'https://open.tiktokapis.com/v2/';
   }
@@ -37,7 +42,10 @@ export class TikTokService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta('missing tiktok app credentials', undefined, {
+        projectId,
+        supabase_error: appCredentialsError,
+      });
       throw new Error('No app credentials found for platform');
     }
 
@@ -224,12 +232,12 @@ export class TikTokService implements SocialPlatformService {
         cursor: data.data?.cursor?.toString(),
       };
     } catch (error) {
-      console.error('Error getting TikTok posts');
-      if (error instanceof AxiosError) {
-        console.error(error.response?.data);
-      } else {
-        console.error(error);
-      }
+      this.logger.errorWithMeta('tiktok posts fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+        response_data:
+          error instanceof AxiosError ? error.response?.data : undefined,
+      });
 
       return {
         posts: [],
@@ -257,7 +265,12 @@ export class TikTokService implements SocialPlatformService {
     const dates = metadata.map((m) => new Date(m.postedAt).getTime());
 
     if (dates.length === 0) {
-      console.warn('No valid posted dates provided for video matching');
+      this.logger.warnWithMeta(
+        'no valid posted dates provided for video matching',
+        {
+          platform: 'tiktok',
+        },
+      );
       return { posts: [], count: 0, has_more: false };
     }
 
@@ -365,12 +378,12 @@ export class TikTokService implements SocialPlatformService {
         has_more: false,
       };
     } catch (error) {
-      console.error('Error matching TikTok videos by metadata');
-      if (error instanceof AxiosError) {
-        console.error(error.response?.data);
-      } else {
-        console.error(error);
-      }
+      this.logger.errorWithMeta('tiktok matchVideosByMetadata failed', error, {
+        accountId: account.id,
+        includeMetrics,
+        response_data:
+          error instanceof AxiosError ? error.response?.data : undefined,
+      });
 
       return {
         posts: [],

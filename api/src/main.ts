@@ -1,3 +1,5 @@
+import './telemetry/init';
+
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -18,8 +20,30 @@ import { webhookControllerDescription } from './webhooks/docs/webhooks-controlle
 import { socialPostPreviewControllerDescription } from './social-posts-previews/docs/social-posts-preview-controller.md';
 import { socialAccountFeedsControllerDescription } from './social-account-feeds/docs/social-account-feeds-controller.md';
 
+import { AppLogger } from './logger/app-logger';
+import { LoggerModule } from './logger/logger.module';
+
 async function bootstrap() {
-  const app: NestExpressApplication = await NestFactory.create(AppModule);
+  const app: NestExpressApplication = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
+
+  const logger = await app.select(LoggerModule).resolve(AppLogger);
+  logger.setContext('Nest');
+  app.useLogger(logger);
+  app.flushLogs();
+
+  const handleShutdown = async (signal: string) => {
+    try {
+      await app.close();
+    } finally {
+      process.exit(signal === 'SIGINT' ? 130 : 0);
+    }
+  };
+
+  ['SIGINT', 'SIGTERM'].forEach((signal) => {
+    process.on(signal, () => void handleShutdown(signal));
+  });
 
   app.enableVersioning({
     type: VersioningType.URI,

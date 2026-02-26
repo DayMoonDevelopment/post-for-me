@@ -9,6 +9,8 @@ import type {
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 
+import { AppLogger } from '../logger/app-logger';
+
 interface ThreadsPost {
   id: string;
   text?: string;
@@ -52,7 +54,10 @@ interface ThreadsInsightsResponse {
 export class ThreadsService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
@@ -64,7 +69,10 @@ export class ThreadsService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta('missing threads app credentials', undefined, {
+        projectId,
+        supabase_error: appCredentialsError,
+      });
       throw new Error('No app credentials found for platform');
     }
 
@@ -109,7 +117,9 @@ export class ThreadsService implements SocialPlatformService {
         };
       }
     } catch (error) {
-      console.error(`Error fetching insights for post ${threadId}:`, error);
+      this.logger.errorWithMeta('threads insights fetch failed', error, {
+        threadId,
+      });
     }
   }
 
@@ -233,7 +243,10 @@ export class ThreadsService implements SocialPlatformService {
         cursor: responseData?.paging?.cursors?.after,
       };
     } catch (error) {
-      console.error('Error fetching Threads posts:', error);
+      this.logger.errorWithMeta('threads posts fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+      });
       return {
         posts: [],
         count: 0,
