@@ -58,7 +58,7 @@ export const action = withSupabase(
             );
           }
 
-          return data({ success: true, toast_msg: "Post deleted." });
+           return data({ success: true, toast_msg: "Post has been deleted." });
         }
         default: {
           return data(

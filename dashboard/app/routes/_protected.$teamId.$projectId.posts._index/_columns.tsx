@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useRevalidator } from "react-router";
 import { ArrowUpDownIcon, MoreHorizontalIcon } from "lucide-react";
 
 import { Button } from "~/ui/button";
@@ -210,6 +210,7 @@ export const columns: ColumnDef<PostWithConnections>[] = [
 function PostRowActions({ post }: { post: PostWithConnections }) {
   const canDelete = post.status === "draft" || post.status === "scheduled";
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const revalidator = useRevalidator();
 
   const { fetcher, isSubmitting } = useFormFetcher({
     withToast: true,
@@ -219,13 +220,16 @@ function PostRowActions({ post }: { post: PostWithConnections }) {
   const wasSubmittingRef = useRef(false);
   useEffect(() => {
     if (wasSubmittingRef.current && !isSubmitting) {
+      if (fetcher.data?.success) {
+        revalidator.revalidate();
+      }
       setDeleteOpen(false);
     }
     wasSubmittingRef.current = isSubmitting;
-  }, [isSubmitting]);
+  }, [fetcher.data?.success, isSubmitting, revalidator]);
 
   return (
-    <>
+    <div data-row-click="ignore" onClick={(e) => e.stopPropagation()}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
@@ -295,6 +299,6 @@ function PostRowActions({ post }: { post: PostWithConnections }) {
           </fetcher.Form>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
