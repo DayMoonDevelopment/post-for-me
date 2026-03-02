@@ -4,30 +4,8 @@ import { withDashboardKey } from "~/lib/.server/api/api";
 import { withSupabase } from "~/lib/.server/supabase";
 import { API_URL } from "~/lib/.server/api/api.constants";
 
-import type { PostWithConnections } from "./_types";
-
-export interface PostsResponse {
-  data: PostWithConnections[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
 export const action = withSupabase(
-  withDashboardKey(async ({ request, apiKey, params, supabase }) => {
-    const { teamId, projectId } = params;
-
-    if (!teamId) {
-      throw new Error("Team code is required");
-    }
-
-    if (!projectId) {
-      throw new Error("Project ID is required");
-    }
-
+  withDashboardKey(async ({ request, apiKey, supabase }) => {
     const currentUser = await supabase.auth.getUser();
 
     if (!currentUser.data?.user) {
@@ -80,7 +58,7 @@ export const action = withSupabase(
             );
           }
 
-          return data({ success: true, toast_msg: "Post deleted." });
+           return data({ success: true, toast_msg: "Post has been deleted." });
         }
         default: {
           return data(
