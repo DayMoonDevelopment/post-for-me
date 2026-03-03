@@ -34,7 +34,7 @@ import type {
 } from "@tanstack/react-table";
 
 export function AccountFeedDataTable() {
-  const data = useLoaderData() as any;
+  const data = useLoaderData();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     [],

@@ -68,7 +68,7 @@ export const loader = withSupabase(
 
       const result = await response.json();
 
-      let posts = (result.data || []) as any[];
+      let posts = result.data || [];
       let meta = (result.meta || { limit, has_more: false }) as {
         limit: number;
         has_more: boolean;
@@ -80,8 +80,8 @@ export const loader = withSupabase(
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 30);
 
-        const filteredPosts = posts.filter((p) => {
-          const postedAt = (p as { posted_at?: string }).posted_at;
+        const filteredPosts = posts.filter((p: { posted_at?: string }) => {
+          const postedAt = p.posted_at;
           if (!postedAt) return false;
           const d = new Date(postedAt);
           if (Number.isNaN(d.getTime())) return false;
@@ -89,7 +89,10 @@ export const loader = withSupabase(
         });
 
         // If we had to filter anything out, all subsequent pages will be older.
-        if (filteredPosts.length === 0 || filteredPosts.length !== posts.length) {
+        if (
+          filteredPosts.length === 0 ||
+          filteredPosts.length !== posts.length
+        ) {
           meta = { ...meta, has_more: false };
         }
 
