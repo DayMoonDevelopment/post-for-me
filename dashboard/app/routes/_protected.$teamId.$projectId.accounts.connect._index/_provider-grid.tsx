@@ -59,7 +59,7 @@ function ProviderCard({
       disabled={!enabled}
       onClick={handleClick}
       className={cn(
-        "relative flex flex-col items-center justify-center p-4 min-h-[220px] rounded-lg border-2 border-dashed transition-all duration-200 text-muted-foreground border-muted-foreground-10 [&:not(:disabled)]:hover:border-accent [&:not(:disabled)]:hover:border-solid [&:not(:disabled)]:hover:text-foreground [&:not(:disabled)]:hover:cursor-pointer disabled:bg-muted disabled:border-none disabled:cursor-not-allowed disabled:opacity-50"
+        "relative flex flex-col items-center justify-center p-4 min-w-[100px] min-h-[220px] rounded-lg border-2 border-dashed transition-all duration-200 text-muted-foreground border-muted-foreground-10 [&:not(:disabled)]:hover:border-accent [&:not(:disabled)]:hover:border-solid [&:not(:disabled)]:hover:text-foreground [&:not(:disabled)]:hover:cursor-pointer disabled:bg-muted disabled:border-none disabled:cursor-not-allowed disabled:opacity-50",
       )}
     >
       <ProviderIcon
