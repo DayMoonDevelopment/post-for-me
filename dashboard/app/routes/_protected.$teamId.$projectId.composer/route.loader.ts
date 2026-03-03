@@ -34,6 +34,8 @@ export const loader = withSupabase(async ({ params, supabase }) => {
           id: social_provider_connection.id,
           username: social_provider_connection.social_provider_user_name,
           provider: social_provider_connection.provider,
+          profilePhotoUrl:
+            social_provider_connection.social_provider_profile_photo_url,
         })
       ) ?? [],
   });

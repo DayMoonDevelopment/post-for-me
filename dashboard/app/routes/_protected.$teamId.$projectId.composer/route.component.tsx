@@ -41,6 +41,7 @@ export function Component() {
         },
         youtube: {
           title: "",
+          privacy_status: "public",
         },
       },
       _disclose_content: false,
@@ -126,7 +127,7 @@ export function Component() {
               name="caption"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Caption</FormLabel>
+                  <FormLabel>Caption/Description</FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="Enter a caption for your post"

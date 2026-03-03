@@ -32,7 +32,7 @@ const providerColors = {
   instagram: "bg-pink-500",
   x: "bg-black",
   tiktok: "bg-black",
-  youtube: "bg-red-600",
+  youtube: "bg-[#FF0000]",
   pinterest: "bg-red-400",
   linkedin: "bg-blue-700",
   bluesky: "bg-sky-500",

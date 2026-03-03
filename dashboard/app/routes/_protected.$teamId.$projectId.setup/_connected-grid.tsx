@@ -32,27 +32,29 @@ export function ConnectedGrid() {
         <Link
           to={isSystem ? `system/${provider}` : `${provider}`}
           key={provider}
+          className="block"
         >
           <div
             className={
-              "flex flex-row items-center justify-between p-3 bg-card border rounded-lg"
+              "flex flex-col items-center text-center gap-3 p-4 bg-card border rounded-lg min-h-[240px]"
             }
           >
-            <h3 className="font-semibold text-sm flex flex-row items-center gap-1">
-              <BrandIcon
-                brand={`${provider.split("_")[0]}`}
-                className="size-3.5"
-              />
+            <BrandIcon
+              brand={`${provider.split("_")[0]}`}
+              className="h-[100px] w-[100px]"
+            />
+
+            <h3 className="font-semibold text-base leading-tight">
               {getProviderLabel(provider)}
             </h3>
 
             {status === "complete" ? (
-              <Badge variant="affirmative" size="sm">
+              <Badge variant="affirmative" size="sm" className="mt-auto">
                 <CircleFilledIcon />
                 Connected
               </Badge>
             ) : (
-              <Badge variant="highlight" size="sm">
+              <Badge variant="highlight" size="sm" className="mt-auto">
                 <TriangleExclamationIcon />
                 Incomplete
               </Badge>
@@ -61,26 +63,25 @@ export function ConnectedGrid() {
         </Link>
       ))}
 
-      <Link to="bluesky">
+      <Link to="bluesky" className="block">
         <div
           className={
-            "flex flex-row items-center justify-between p-3 bg-card border rounded-lg"
+            "flex flex-col items-center text-center gap-3 p-4 bg-card border rounded-lg min-h-[240px]"
           }
         >
-          <div>
-            <h3 className="font-semibold text-sm flex flex-row items-center gap-1">
-              <BrandIcon brand="bluesky" className="size-3.5" />
-              Bluesky
-              <Tooltip>
-                <TooltipTrigger>
-                  <CircleInfoIcon className="size-3.5" />
-                </TooltipTrigger>
-                <TooltipContent>No manual setup required</TooltipContent>
-              </Tooltip>
-            </h3>
-          </div>
+          <BrandIcon brand="bluesky" className="h-[100px] w-[100px]" />
 
-          <Badge variant="affirmative" size="sm">
+          <h3 className="font-semibold text-base leading-tight flex items-center justify-center gap-1">
+            Bluesky
+            <Tooltip>
+              <TooltipTrigger>
+                <CircleInfoIcon className="size-4" />
+              </TooltipTrigger>
+              <TooltipContent>No manual setup required</TooltipContent>
+            </Tooltip>
+          </h3>
+
+          <Badge variant="affirmative" size="sm" className="mt-auto">
             <CircleFilledIcon />
             Connected
           </Badge>

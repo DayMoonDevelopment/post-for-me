@@ -1,10 +1,12 @@
 import type { SVGProps } from "react";
 
-export const InstagramIcon = (props: SVGProps<SVGSVGElement>) => (
+export const InstagramIcon = ({ className, style, ...props }: SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
+    className={className}
+    style={{ color: "#E1306C", ...style }}
     {...props}
   >
     <path
