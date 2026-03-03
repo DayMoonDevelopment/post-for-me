@@ -42,6 +42,8 @@ export const loader = withSupabase(
       });
     }
 
+    const isYouTube = accountData.provider === "youtube";
+
     // Fetch posts from API
     try {
       const apiUrl = new URL(
@@ -66,10 +68,38 @@ export const loader = withSupabase(
 
       const result = await response.json();
 
+      let posts = (result.data || []) as any[];
+      let meta = (result.meta || { limit, has_more: false }) as {
+        limit: number;
+        has_more: boolean;
+        cursor?: string;
+        next?: string | null;
+      };
+
+      if (isYouTube) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+
+        const filteredPosts = posts.filter((p) => {
+          const postedAt = (p as { posted_at?: string }).posted_at;
+          if (!postedAt) return false;
+          const d = new Date(postedAt);
+          if (Number.isNaN(d.getTime())) return false;
+          return d >= cutoff;
+        });
+
+        // If we had to filter anything out, all subsequent pages will be older.
+        if (filteredPosts.length === 0 || filteredPosts.length !== posts.length) {
+          meta = { ...meta, has_more: false };
+        }
+
+        posts = filteredPosts;
+      }
+
       return data({
         success: true,
-        posts: result.data || [],
-        meta: result.meta || { limit, has_more: false },
+        posts,
+        meta,
         accountInfo: {
           id: accountData.id,
           provider: accountData.provider,
