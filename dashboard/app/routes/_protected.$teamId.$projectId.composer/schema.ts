@@ -34,6 +34,7 @@ export const formSchema = z
         youtube: z
           .object({
             title: z.string().optional(),
+            privacy_status: z.enum(["public", "private", "unlisted"]).optional(),
           })
           .optional(),
       })
