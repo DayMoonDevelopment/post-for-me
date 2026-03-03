@@ -97,7 +97,6 @@ export function Tabs() {
             value={platform.key}
             className="data-[state=active]:after:bg-primary relative rounded-none py-2 px-3 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none flex-shrink-0"
           >
-            <platform.icon className="size-4 mr-1 inline-block" />
             {platform.label}
           </TabsTrigger>
         ))}

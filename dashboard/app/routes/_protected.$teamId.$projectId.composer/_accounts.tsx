@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "~/ui/form";
 import { BrandIcon } from "~/components/brand-icon";
+import { Avatar, AvatarFallback, AvatarImage } from "~/ui/avatar";
 
 import type { FormSchema } from "./schema";
 import type { LoaderData } from "./types";
@@ -39,6 +40,7 @@ export function Accounts() {
     label: connection.username,
     provider: connection.provider,
     username: connection.username,
+    profilePhotoUrl: connection.profilePhotoUrl,
   }));
 
   // Helper function to update providers based on selected accounts
@@ -137,10 +139,18 @@ export function Accounts() {
                               }}
                             >
                               <div className="flex items-center space-x-2 flex-1">
-                                <BrandIcon
-                                  brand={account.provider.split("_")[0]}
-                                  className="h-4 w-4"
-                                />
+                                <Avatar className="h-5 w-5">
+                                  <AvatarImage
+                                    src={account.profilePhotoUrl || ""}
+                                    alt={account.username || "Account"}
+                                  />
+                                  <AvatarFallback>
+                                    <BrandIcon
+                                      brand={account.provider.split("_")[0]}
+                                      className="h-3.5 w-3.5"
+                                    />
+                                  </AvatarFallback>
+                                </Avatar>
                                 <span className="text-sm">
                                   {account.username}
                                 </span>
@@ -176,10 +186,18 @@ export function Accounts() {
                           variant="default"
                           className="flex items-center gap-2"
                         >
-                          <BrandIcon
-                            brand={account.provider.split("_")[0]}
-                            className="h-3 w-3"
-                          />
+                          <Avatar className="h-4 w-4">
+                            <AvatarImage
+                              src={account.profilePhotoUrl || ""}
+                              alt={account.username || "Account"}
+                            />
+                            <AvatarFallback>
+                              <BrandIcon
+                                brand={account.provider.split("_")[0]}
+                                className="h-3 w-3"
+                              />
+                            </AvatarFallback>
+                          </Avatar>
                           <span className="text-xs">{account.username}</span>
                           <button
                             type="button"
