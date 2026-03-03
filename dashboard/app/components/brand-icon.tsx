@@ -8,9 +8,10 @@ import {
   ThreadsIcon,
   TikTokIcon,
   XIcon,
-  YouTubeIcon,
   TriangleExclamationIcon,
 } from "icons";
+
+import { YouTubeImageIcon } from "~/components/youtube-icon";
 
 import { cn } from "~/lib/utils";
 
@@ -25,7 +26,7 @@ const brandIconMap = {
   tiktok: TikTokIcon,
   x: XIcon,
   twitter: XIcon, // Alias for X
-  youtube: YouTubeIcon,
+  youtube: YouTubeImageIcon,
 } as const;
 
 interface BrandIconProps {

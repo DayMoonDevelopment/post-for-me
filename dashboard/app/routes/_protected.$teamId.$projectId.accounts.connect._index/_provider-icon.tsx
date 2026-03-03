@@ -3,12 +3,13 @@ import {
   InstagramIcon,
   XIcon,
   TikTokIcon,
-  YouTubeIcon,
   PinterestIcon,
   LinkedInIcon,
   BlueskyIcon,
   ThreadsIcon,
 } from "icons";
+
+import { YouTubeImageIcon } from "~/components/youtube-icon";
 
 import { cn } from "~/lib/utils";
 
@@ -22,7 +23,7 @@ const icons: Record<string, React.FC<{ className?: string }>> = {
   instagram: InstagramIcon,
   x: XIcon,
   tiktok: TikTokIcon,
-  youtube: YouTubeIcon,
+  youtube: YouTubeImageIcon,
   pinterest: PinterestIcon,
   linkedin: LinkedInIcon,
   bluesky: BlueskyIcon,

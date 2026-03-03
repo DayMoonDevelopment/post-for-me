@@ -2,13 +2,14 @@ import {
   TikTokIcon,
   LinkedInIcon,
   BlueskyIcon,
-  YouTubeIcon,
   FacebookIcon,
   InstagramIcon,
   XIcon,
   PinterestIcon,
   ThreadsIcon,
 } from "icons";
+
+import { YouTubeImageIcon } from "~/components/youtube-icon";
 
 import {
   Tabs as TabsContainer,
@@ -57,7 +58,7 @@ const PLATFORMS: Platform[] = [
   {
     key: "youtube",
     label: "YouTube",
-    icon: YouTubeIcon,
+    icon: YouTubeImageIcon,
     tab: TabYouTube,
   },
   {
