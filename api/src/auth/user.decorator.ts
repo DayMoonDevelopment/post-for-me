@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import type { RequestUser } from './user.interface';
 
+import { AppLogger } from '../logger/app-logger';
+
+const logger = new AppLogger('UserDecorator');
+
 /**
  * @User() parameter decorator for Controller methods.
  * Extracts the user object ({ id: string }) attached to the request by the AuthGuard.
@@ -21,8 +25,8 @@ export const User = createParamDecorator(
     // Add a check for safety, although the guard should prevent this state
     if (!user || typeof user.id !== 'string') {
       // This indicates a potential issue: Guard didn't run or failed unexpectedly
-      console.error(
-        'FATAL: @User() decorator used without a valid user object on the request. Ensure AuthGuard is active and functioning correctly.',
+      logger.error(
+        '@User() used without valid request.user; ensure AuthGuard is active',
       );
       throw new InternalServerErrorException(
         'User information not available on request.',

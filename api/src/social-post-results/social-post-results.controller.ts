@@ -27,6 +27,8 @@ import type { RequestUser } from '../auth/user.interface';
 
 import { Protect } from '../auth/protect.decorator';
 
+import { AppLogger } from '../logger/app-logger';
+
 @Controller('social-post-results')
 @ApiTags('Social Post Results')
 @ApiBearerAuth()
@@ -35,6 +37,7 @@ export class SocialPostResultsController {
   constructor(
     private readonly postResultsService: PostResultsService,
     private readonly paginationService: PaginationService,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get()
@@ -49,7 +52,10 @@ export class SocialPostResultsController {
         query,
       );
     } catch (e) {
-      console.error('/post-results', e);
+      this.logger.errorWithMeta('getAllPostResults failed', e, {
+        projectId: user.projectId,
+        query,
+      });
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -93,7 +99,10 @@ export class SocialPostResultsController {
         user.projectId,
       );
     } catch (e) {
-      console.error('/post-results/:id', e);
+      this.logger.errorWithMeta('getPostResult failed', e, {
+        projectId: user.projectId,
+        postResultId: params.id,
+      });
       throw new HttpException(
         'Internal server error',
         HttpStatus.INTERNAL_SERVER_ERROR,

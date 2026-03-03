@@ -9,6 +9,8 @@ import type {
 import { google } from 'googleapis';
 import { SupabaseService } from '../supabase/supabase.service';
 
+import { AppLogger } from '../logger/app-logger';
+
 interface YouTubeVideo {
   id: string;
   snippet: {
@@ -67,7 +69,10 @@ export class YouTubeService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
   private oauth2Client: any = null;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly logger: AppLogger,
+  ) {}
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
@@ -79,7 +84,10 @@ export class YouTubeService implements SocialPlatformService {
         .single();
 
     if (!appCredentials || appCredentialsError) {
-      console.error(appCredentialsError);
+      this.logger.errorWithMeta('missing youtube app credentials', undefined, {
+        projectId,
+        supabase_error: appCredentialsError,
+      });
       throw new Error('No app credentials found for platform');
     }
 
@@ -192,10 +200,10 @@ export class YouTubeService implements SocialPlatformService {
       return {};
     } catch (error) {
       // Analytics API might fail due to permissions or video being too new
-      console.warn(
-        `Failed to fetch analytics for video ${videoId}:`,
-        error instanceof Error ? error.message : 'Unknown error',
-      );
+      this.logger.warnWithMeta('youtube analytics fetch failed', {
+        videoId,
+        error,
+      });
       return {};
     }
   }
@@ -390,7 +398,10 @@ export class YouTubeService implements SocialPlatformService {
         cursor: nextPageToken,
       };
     } catch (error) {
-      console.error('Error fetching YouTube posts:', error);
+      this.logger.errorWithMeta('youtube posts fetch failed', error, {
+        accountId: account.id,
+        includeMetrics,
+      });
       throw new Error(
         `Failed to fetch YouTube posts: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
