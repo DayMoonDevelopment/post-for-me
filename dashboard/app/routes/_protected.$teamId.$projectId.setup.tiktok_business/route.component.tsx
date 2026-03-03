@@ -21,21 +21,23 @@ export function Component() {
     <Dialog open onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BrandIcon brand="tiktok" className="size-5" />
-            Setup TikTok Business
-          </DialogTitle>
-          <DialogDescription>
-            {`Full integration coming soon. If interested in early accesss contact us at: `}
-            <Link
-              to={`mailto:postforme@daymoon.dev`}
-              target="_blank"
-              className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
-            >
-              postforme@daymoon.dev
-            </Link>
-            .
-          </DialogDescription>
+          <div className="flex flex-col items-center text-center gap-3">
+            <BrandIcon brand="tiktok" className="h-[100px] w-[100px]" />
+            <div className="space-y-1">
+              <DialogTitle>Setup TikTok Business</DialogTitle>
+              <DialogDescription>
+                {`Full integration coming soon. If interested in early accesss contact us at: `}
+                <Link
+                  to={`mailto:postforme@daymoon.dev`}
+                  target="_blank"
+                  className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
+                >
+                  postforme@daymoon.dev
+                </Link>
+                .
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
       </DialogContent>
     </Dialog>

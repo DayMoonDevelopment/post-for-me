@@ -45,10 +45,14 @@ export function UnstartedGrid() {
       {unstartedProviders.map((provider) => (
         <div
           key={`${provider}`}
-          className={"flex flex-col gap-4 p-3 bg-card border rounded-lg"}
+          className="flex flex-col items-center text-center gap-3 p-4 bg-card border rounded-lg min-h-[240px]"
         >
-          <h3 className="text-lg font-semibold flex flex-row items-center gap-1.5">
-            <BrandIcon brand={`${provider.split("_")[0]}`} className="size-5" />
+          <BrandIcon
+            brand={`${provider.split("_")[0]}`}
+            className="h-[100px] w-[100px]"
+          />
+
+          <h3 className="text-lg font-semibold leading-tight">
             {getProviderLabel(provider)}
           </h3>
 
@@ -56,17 +60,21 @@ export function UnstartedGrid() {
             <EnableCredsForm
               method="post"
               action={`system/${provider}`}
-              className="self-end"
+              className="mt-auto w-full"
             >
               {providersComingSoon.find((p) => p === provider) ? (
-                <Button disabled={true}>Coming Soon</Button>
+                <Button className="w-full" disabled={true}>
+                  Coming Soon
+                </Button>
               ) : (
-                <Button disabled={isSubmitting}>Enable</Button>
+                <Button className="w-full" disabled={isSubmitting}>
+                  Enable
+                </Button>
               )}
             </EnableCredsForm>
           ) : (
-            <Link to={`${provider}`} className="self-end">
-              <Button>Get Started</Button>
+            <Link to={`${provider}`} className="mt-auto w-full">
+              <Button className="w-full">Get Started</Button>
             </Link>
           )}
         </div>

@@ -23,21 +23,23 @@ export function Component() {
     <Dialog open onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BrandIcon brand="bluesky" className="size-5" />
-            Setup Bluesky
-          </DialogTitle>
-          <DialogDescription>
-            {`There is no manual setup required for connecting with Bluesky accounts. Learn more in the `}
-            <Link
-              to={setupGuideUrl}
-              target="_blank"
-              className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
-            >
-              setup guide
-            </Link>
-            .
-          </DialogDescription>
+          <div className="flex flex-col items-center text-center gap-3">
+            <BrandIcon brand="bluesky" className="h-[100px] w-[100px]" />
+            <div className="space-y-1">
+              <DialogTitle>Setup Bluesky</DialogTitle>
+              <DialogDescription>
+                {`There is no manual setup required for connecting with Bluesky accounts. Learn more in the `}
+                <Link
+                  to={setupGuideUrl}
+                  target="_blank"
+                  className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
+                >
+                  setup guide
+                </Link>
+                .
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
       </DialogContent>
     </Dialog>

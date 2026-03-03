@@ -282,14 +282,16 @@ export function SocialAuthForm({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <ProviderIcon provider={provider.id} className="w-5 h-5" />
-            <DialogTitle>Connect a {provider.name} Account</DialogTitle>
-          </div>
-          <DialogDescription>{provider.description}</DialogDescription>
-        </DialogHeader>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex flex-col items-center text-center gap-3">
+              <ProviderIcon provider={provider.id} className="h-[100px] w-[100px]" />
+              <div className="space-y-1">
+                <DialogTitle>Connect a {provider.name} Account</DialogTitle>
+                <DialogDescription>{provider.description}</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

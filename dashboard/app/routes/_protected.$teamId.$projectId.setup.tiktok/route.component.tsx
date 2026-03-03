@@ -29,21 +29,23 @@ export function Component() {
     <Dialog open onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md max-h-screen overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BrandIcon brand="tiktok" className="size-5" />
-            Setup TikTok
-          </DialogTitle>
-          <DialogDescription>
-            {`Learn more in the `}
-            <Link
-              to={setupGuideUrl}
-              target="_blank"
-              className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
-            >
-              setup guide
-            </Link>
-            .
-          </DialogDescription>
+          <div className="flex flex-col items-center text-center gap-3">
+            <BrandIcon brand="tiktok" className="h-[100px] w-[100px]" />
+            <div className="space-y-1">
+              <DialogTitle>Setup TikTok</DialogTitle>
+              <DialogDescription>
+                {`Learn more in the `}
+                <Link
+                  to={setupGuideUrl}
+                  target="_blank"
+                  className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
+                >
+                  setup guide
+                </Link>
+                .
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="w-full min-w-0">
