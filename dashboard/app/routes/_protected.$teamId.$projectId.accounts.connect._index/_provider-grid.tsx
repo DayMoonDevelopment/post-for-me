@@ -13,7 +13,7 @@ export function ProviderGrid({ onProviderSelect }: ProviderGridProps) {
   const providersRequiringAuth = getProvidersRequiringAuth();
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       {providers.map((provider) => (
         <ProviderCard
           key={provider.id}
@@ -59,12 +59,12 @@ function ProviderCard({
       disabled={!enabled}
       onClick={handleClick}
       className={cn(
-        "relative flex flex-col items-center justify-center p-4 aspect-square rounded-lg border-2 border-dashed transition-all duration-200 text-muted-foreground border-muted-foreground-10 [&:not(:disabled)]:hover:border-accent [&:not(:disabled)]:hover:border-solid [&:not(:disabled)]:hover:text-foreground [&:not(:disabled)]:hover:cursor-pointer disabled:bg-muted disabled:border-none disabled:cursor-not-allowed disabled:opacity-50"
+        "relative flex flex-col items-center justify-center p-4 min-h-[220px] rounded-lg border-2 border-dashed transition-all duration-200 text-muted-foreground border-muted-foreground-10 [&:not(:disabled)]:hover:border-accent [&:not(:disabled)]:hover:border-solid [&:not(:disabled)]:hover:text-foreground [&:not(:disabled)]:hover:cursor-pointer disabled:bg-muted disabled:border-none disabled:cursor-not-allowed disabled:opacity-50"
       )}
     >
       <ProviderIcon
         provider={providerId.split("-")[0]}
-        className="w-8 h-8 mb-2"
+        className="h-[100px] w-[100px] mb-3"
       />
       <span className="text-sm font-medium text-center leading-tight">
         {name}
