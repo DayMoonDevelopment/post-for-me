@@ -57,6 +57,12 @@ function getViews(metrics: PostMetrics | undefined): number {
   );
 }
 
+function getEngagement(metrics: PostMetrics | undefined): number {
+  return (
+    (metrics?.likes || 0) + (metrics?.comments || 0) + (metrics?.shares || 0)
+  );
+}
+
 export const columns: CustomColumnDef<PlatformPost>[] = [
   {
     label: "Posted At",
@@ -215,10 +221,21 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
   },
   {
     label: "Watch Time",
-    accessorKey: "metrics.total_time_watched",
-    header: "Watch Time",
+    id: "watch_time",
+    accessorFn: (row) => row.metrics?.total_time_watched ?? 0,
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Watch Time
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => {
-      const watchTime = row.original.metrics?.total_time_watched;
+      const watchTime = row.getValue("watch_time") as number;
       return (
         <div className="font-medium text-muted-foreground">
           {watchTime ? formatDuration(watchTime) : "N/A"}
@@ -229,13 +246,20 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
   {
     label: "Engagement",
     id: "engagement",
-    header: "Engagement",
+    accessorFn: (row) => getEngagement(row.metrics),
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Engagement
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => {
-      const metrics = row.original.metrics;
-      const engagement =
-        (metrics?.likes || 0) +
-        (metrics?.comments || 0) +
-        (metrics?.shares || 0);
+      const engagement = row.getValue("engagement") as number;
       return <div className="font-medium">{formatNumber(engagement)}</div>;
     },
   },
