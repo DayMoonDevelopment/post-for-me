@@ -40,7 +40,11 @@ export function AccountFeedDataTable() {
     [],
   );
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>({
+      engagement: false,
+      reach: false,
+      watch_time: false,
+    });
   const [rowSelection, setRowSelection] = React.useState({});
 
   const isYouTube = data.accountInfo?.provider === "youtube";
@@ -50,9 +54,7 @@ export function AccountFeedDataTable() {
 
     return columns.filter((col) => {
       if (col.id === "engagement") return false;
-      if ("accessorKey" in col && col.accessorKey === "metrics.reach") {
-        return false;
-      }
+      if (col.id === "reach") return false;
       return true;
     });
   }, [isYouTube]);
