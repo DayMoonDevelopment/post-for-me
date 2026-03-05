@@ -50,9 +50,7 @@ export function AccountFeedDataTable() {
 
     return columns.filter((col) => {
       if (col.id === "engagement") return false;
-      if ("accessorKey" in col && col.accessorKey === "metrics.reach") {
-        return false;
-      }
+      if (col.id === "reach") return false;
       return true;
     });
   }, [isYouTube]);

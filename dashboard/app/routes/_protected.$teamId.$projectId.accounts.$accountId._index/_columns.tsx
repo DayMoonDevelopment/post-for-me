@@ -2,6 +2,7 @@ import { ArrowUpDown } from "lucide-react";
 import { Button } from "~/ui/button";
 import { Badge } from "~/ui/badge";
 import type { PlatformPost } from "./_types";
+import type { PostMetrics } from "./_types";
 import type { ColumnDef } from "@tanstack/react-table";
 
 export type CustomColumnDef<TData, TValue = unknown> = ColumnDef<
@@ -45,10 +46,26 @@ function formatDuration(seconds: number | undefined): string {
   return `${Math.floor(seconds)}s`;
 }
 
+function getViews(metrics: PostMetrics | undefined): number {
+  return (
+    metrics?.video_views ||
+    metrics?.plays ||
+    metrics?.impressions ||
+    metrics?.views ||
+    metrics?.media_views ||
+    0
+  );
+}
+
 export const columns: CustomColumnDef<PlatformPost>[] = [
   {
     label: "Posted At",
-    accessorKey: "posted_at",
+    id: "posted_at",
+    accessorFn: (row) => {
+      if (!row.posted_at) return 0;
+      const d = new Date(row.posted_at);
+      return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+    },
     header: ({ column }) => {
       return (
         <Button
@@ -61,7 +78,7 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
       );
     },
     cell: ({ row }) => {
-      const date = row.getValue("posted_at") as string | undefined;
+      const date = row.original.posted_at;
       if (!date) return <div className="text-muted-foreground">N/A</div>;
       return <div>{new Date(date).toLocaleDateString()}</div>;
     },
@@ -98,7 +115,8 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
   },
   {
     label: "Likes",
-    accessorKey: "metrics.likes",
+    id: "likes",
+    accessorFn: (row) => row.metrics?.likes ?? 0,
     header: ({ column }) => {
       return (
         <Button
@@ -111,13 +129,14 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
       );
     },
     cell: ({ row }) => {
-      const likes = row.original.metrics?.likes;
+      const likes = row.getValue("likes") as number;
       return <div className="font-medium">{formatNumber(likes)}</div>;
     },
   },
   {
     label: "Comments",
-    accessorKey: "metrics.comments",
+    id: "comments",
+    accessorFn: (row) => row.metrics?.comments ?? 0,
     header: ({ column }) => {
       return (
         <Button
@@ -130,13 +149,14 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
       );
     },
     cell: ({ row }) => {
-      const comments = row.original.metrics?.comments;
+      const comments = row.getValue("comments") as number;
       return <div className="font-medium">{formatNumber(comments)}</div>;
     },
   },
   {
     label: "Shares",
-    accessorKey: "metrics.shares",
+    id: "shares",
+    accessorFn: (row) => row.metrics?.shares ?? 0,
     header: ({ column }) => {
       return (
         <Button
@@ -149,13 +169,14 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
       );
     },
     cell: ({ row }) => {
-      const shares = row.original.metrics?.shares;
+      const shares = row.getValue("shares") as number;
       return <div className="font-medium">{formatNumber(shares)}</div>;
     },
   },
   {
     label: "Views",
-    accessorKey: "metrics.video_views",
+    id: "views",
+    accessorFn: (row) => getViews(row.metrics),
     header: ({ column }) => {
       return (
         <Button
@@ -168,18 +189,14 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
       );
     },
     cell: ({ row }) => {
-      const views =
-        row.original.metrics?.video_views ||
-        row.original.metrics?.plays ||
-        row.original.metrics?.impressions ||
-        row.original.metrics?.views ||
-        row.original.metrics?.media_views;
+      const views = row.getValue("views") as number;
       return <div className="font-medium">{formatNumber(views)}</div>;
     },
   },
   {
     label: "Reach",
-    accessorKey: "metrics.reach",
+    id: "reach",
+    accessorFn: (row) => row.metrics?.reach ?? 0,
     header: ({ column }) => {
       return (
         <Button
@@ -192,7 +209,7 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
       );
     },
     cell: ({ row }) => {
-      const reach = row.original.metrics?.reach;
+      const reach = row.getValue("reach") as number;
       return <div className="font-medium">{formatNumber(reach)}</div>;
     },
   },
