@@ -40,7 +40,11 @@ export function AccountFeedDataTable() {
     [],
   );
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>({
+      engagement: false,
+      reach: false,
+      watch_time: false,
+    });
   const [rowSelection, setRowSelection] = React.useState({});
 
   const isYouTube = data.accountInfo?.provider === "youtube";
