@@ -13,6 +13,9 @@ jobs:
   deploy:
     name: Deploy Full App
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
 
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -69,6 +72,29 @@ jobs:
 
       - name: Install Railway CLI
         run: bun add -g @railway/cli
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: docker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/api:${{ github.sha }},ghcr.io/${{ github.repository }}/api:latest
+
+      - name: Deploy API to Unkey
+        id: todo
+        env:
+          UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
+          UNKEY_PROJECT_ID: proj_xxxx # not really a secret
+        run: bunx unkey deploy --env=production ghcr.io/${{ github.repository }}/api:${{ github.sha }}
 
       - name: Deploy API to Railway
         id: api
