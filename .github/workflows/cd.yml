@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat/ghcr-docker-build
 
 concurrency:
   group: cd-${{ github.workflow }}-${{ github.ref }}
