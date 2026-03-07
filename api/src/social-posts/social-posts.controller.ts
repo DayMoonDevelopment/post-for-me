@@ -99,7 +99,7 @@ export class SocialPostsController {
       post = await this.postsService.getPostById(params.id, user.projectId);
     } catch (error) {
       console.error('[getPost] Error:', error);
-      throw new HttpException('Internal Server Error', 500);
+      throw new HttpException('Post not found', 404);
     }
 
     if (!post) {
@@ -306,39 +306,38 @@ export class SocialPostsController {
     @Param() params: { id: string },
     @User() user: RequestUser,
   ): Promise<DeleteEntityResponseDto> {
+    let post: SocialPostDto | null = null;
+
     try {
-      const post = await this.postsService.getPostById(
-        params.id,
-        user.projectId,
-      );
-
-      if (!post) {
-        throw new HttpException('Post not found', 404);
-      }
-
-      if (post.status !== PostStatus.SCHEDULED) {
-        throw new HttpException('Can only delete scheduled posts', 400);
-      }
-
-      try {
-        const deleteResponse = await this.postsService.deletePost({
-          postId: params.id,
-          projectId: user.projectId,
-        });
-
-        await tasks.trigger(PROCESS_WEBHOOK_TASK, {
-          projectId: user.projectId,
-          eventType: 'social.post.deleted',
-          eventData: post,
-        });
-        return deleteResponse;
-      } catch (error) {
-        console.error('[deletePost] Error:', error);
-        throw new HttpException('Internal Server Error', 500);
-      }
+      post = await this.postsService.getPostById(params.id, user.projectId);
     } catch (error) {
       console.error(error);
       throw new HttpException('Post not found', 404);
+    }
+
+    if (!post) {
+      throw new HttpException('Post not found', 404);
+    }
+
+    if (post.status !== PostStatus.SCHEDULED) {
+      throw new HttpException('Can only delete scheduled posts', 400);
+    }
+
+    try {
+      const deleteResponse = await this.postsService.deletePost({
+        postId: params.id,
+        projectId: user.projectId,
+      });
+
+      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+        projectId: user.projectId,
+        eventType: 'social.post.deleted',
+        eventData: post,
+      });
+      return deleteResponse;
+    } catch (error) {
+      console.error('[deletePost] Error:', error);
+      throw new HttpException('Internal Server Error', 500);
     }
   }
 }
