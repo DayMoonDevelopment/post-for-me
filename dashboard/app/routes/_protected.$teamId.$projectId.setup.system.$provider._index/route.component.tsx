@@ -39,19 +39,24 @@ export function Component() {
   const submitDisabled = isSubmitting;
 
   return (
-    <Dialog open onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BrandIcon brand={provider.split("_")[0]} className="size-5" />
-            Manage {getProviderLabel(provider)}
-          </DialogTitle>
-          <DialogDescription>
-            {isEnabled
-              ? `Disabling ${getProviderLabel(provider)} will prevent accounts from being connected/refreshed. Scheduled posts will still be processed`
-              : `${getProviderLabel(provider)} is disabled, enable to begin connecting accounts`}
-          </DialogDescription>
-        </DialogHeader>
+      <Dialog open onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex flex-col items-center text-center gap-3">
+              <BrandIcon
+                brand={provider.split("_")[0]}
+                className="h-[100px] w-[100px]"
+              />
+              <div className="space-y-1">
+                <DialogTitle>Manage {getProviderLabel(provider)}</DialogTitle>
+                <DialogDescription>
+                  {isEnabled
+                    ? `Disabling ${getProviderLabel(provider)} will prevent accounts from being connected/refreshed. Scheduled posts will still be processed`
+                    : `${getProviderLabel(provider)} is disabled, enable to begin connecting accounts`}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
 
         <Form method="post">
           <div className="flex justify-end gap-2">

@@ -7,6 +7,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronDown } from "lucide-react";
+import { useLoaderData } from "react-router";
 
 import { Button } from "~/ui/button";
 import {
@@ -31,7 +32,6 @@ import type {
   SortingState,
   VisibilityState,
 } from "@tanstack/react-table";
-import { useLoaderData } from "react-router";
 
 export function AccountFeedDataTable() {
   const data = useLoaderData();
@@ -40,14 +40,30 @@ export function AccountFeedDataTable() {
     [],
   );
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>({
+      engagement: false,
+      reach: false,
+      watch_time: false,
+    });
   const [rowSelection, setRowSelection] = React.useState({});
+
+  const isYouTube = data.accountInfo?.provider === "youtube";
+
+  const tableColumns = React.useMemo(() => {
+    if (!isYouTube) return columns;
+
+    return columns.filter((col) => {
+      if (col.id === "engagement") return false;
+      if (col.id === "reach") return false;
+      return true;
+    });
+  }, [isYouTube]);
 
   const posts = React.useMemo(() => data.posts || [], [data.posts]);
 
   const table = useReactTable({
     data: posts,
-    columns: columns as CustomColumnDef<PlatformPost>[],
+    columns: tableColumns as CustomColumnDef<PlatformPost>[],
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
@@ -145,7 +161,7 @@ export function AccountFeedDataTable() {
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={columns.length}
+                  colSpan={tableColumns.length}
                   className="h-24 text-center"
                 >
                   No posts found for this account.

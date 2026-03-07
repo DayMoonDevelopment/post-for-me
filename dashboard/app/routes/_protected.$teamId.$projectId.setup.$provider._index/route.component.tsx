@@ -161,24 +161,29 @@ export function Component() {
 
   return (
     <Dialog open onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BrandIcon brand={provider.split("_")[0]} className="size-5" />
-            Setup {getProviderLabel(provider)}
-          </DialogTitle>
-          <DialogDescription>
-            {`Learn more in the `}
-            <Link
-              to={setupGuideUrl}
-              target="_blank"
-              className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
-            >
-              setup guide
-            </Link>
-            .
-          </DialogDescription>
-        </DialogHeader>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex flex-col items-center text-center gap-3">
+              <BrandIcon
+                brand={provider.split("_")[0]}
+                className="h-[100px] w-[100px]"
+              />
+              <div className="space-y-1">
+                <DialogTitle>Setup {getProviderLabel(provider)}</DialogTitle>
+                <DialogDescription>
+                  {`Learn more in the `}
+                  <Link
+                    to={setupGuideUrl}
+                    target="_blank"
+                    className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
+                  >
+                    setup guide
+                  </Link>
+                  .
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
 
         <Form {...form}>
           <form
