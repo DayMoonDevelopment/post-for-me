@@ -99,7 +99,7 @@ export class SocialPostsController {
       post = await this.postsService.getPostById(params.id, user.projectId);
     } catch (error) {
       console.error('[getPost] Error:', error);
-      throw new HttpException('Internal Server Error', 500);
+      throw new HttpException('Post not found', 404);
     }
 
     if (!post) {
@@ -306,7 +306,14 @@ export class SocialPostsController {
     @Param() params: { id: string },
     @User() user: RequestUser,
   ): Promise<DeleteEntityResponseDto> {
-    const post = await this.postsService.getPostById(params.id, user.projectId);
+    let post: SocialPostDto | null = null;
+
+    try {
+      post = await this.postsService.getPostById(params.id, user.projectId);
+    } catch (error) {
+      console.error(error);
+      throw new HttpException('Post not found', 404);
+    }
 
     if (!post) {
       throw new HttpException('Post not found', 404);
