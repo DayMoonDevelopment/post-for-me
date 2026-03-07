@@ -306,34 +306,39 @@ export class SocialPostsController {
     @Param() params: { id: string },
     @User() user: RequestUser,
   ): Promise<DeleteEntityResponseDto> {
-    const post = await this.postsService.getPostById(params.id, user.projectId);
-
-    if (!post) {
-      throw new HttpException('Post not found', 404);
-    }
-
-    if (
-      post.status !== PostStatus.SCHEDULED &&
-      post.status !== PostStatus.DRAFT
-    ) {
-      throw new HttpException('Can only delete draft or scheduled posts', 400);
-    }
-
     try {
-      const deleteResponse = await this.postsService.deletePost({
-        postId: params.id,
-        projectId: user.projectId,
-      });
+      const post = await this.postsService.getPostById(
+        params.id,
+        user.projectId,
+      );
 
-      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
-        projectId: user.projectId,
-        eventType: 'social.post.deleted',
-        eventData: post,
-      });
-      return deleteResponse;
+      if (!post) {
+        throw new HttpException('Post not found', 404);
+      }
+
+      if (post.status !== PostStatus.SCHEDULED) {
+        throw new HttpException('Can only delete scheduled posts', 400);
+      }
+
+      try {
+        const deleteResponse = await this.postsService.deletePost({
+          postId: params.id,
+          projectId: user.projectId,
+        });
+
+        await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+          projectId: user.projectId,
+          eventType: 'social.post.deleted',
+          eventData: post,
+        });
+        return deleteResponse;
+      } catch (error) {
+        console.error('[deletePost] Error:', error);
+        throw new HttpException('Internal Server Error', 500);
+      }
     } catch (error) {
-      console.error('[deletePost] Error:', error);
-      throw new HttpException('Internal Server Error', 500);
+      console.error(error);
+      throw new HttpException('Post not found', 404);
     }
   }
 }
