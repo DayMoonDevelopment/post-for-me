@@ -319,8 +319,11 @@ export class SocialPostsController {
       throw new HttpException('Post not found', 404);
     }
 
-    if (post.status !== PostStatus.SCHEDULED) {
-      throw new HttpException('Can only delete scheduled posts', 400);
+    if (
+      post.status !== PostStatus.SCHEDULED &&
+      post.status !== PostStatus.DRAFT
+    ) {
+      throw new HttpException('Can only delete scheduled or draft posts', 400);
     }
 
     try {
