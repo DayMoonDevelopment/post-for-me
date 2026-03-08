@@ -140,10 +140,27 @@ export function PostsDataTable({ data }: DataTableProps) {
                     tabIndex={0}
                     className="cursor-pointer"
                     data-state={row.getIsSelected() ? "selected" : undefined}
-                    onClick={() => navigate(`${post.id}`)}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement | null;
+
+                      if (!target) return;
+                      if (e.defaultPrevented) return;
+
+                      // Avoid row navigation when interacting with controls/links inside the row.
+                      if (
+                        target.closest(
+                          'a,button,input,textarea,select,[role="button"],[role="menuitem"],[data-row-click="ignore"]',
+                        )
+                      ) {
+                        return;
+                      }
+
+                      navigate(`${post.id}`);
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ")
-                        navigate(`${post.id}`);
+                      // Only navigate when the row itself has focus.
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "Enter" || e.key === " ") navigate(`${post.id}`);
                     }}
                   >
                     {row.getVisibleCells().map((cell) => (
