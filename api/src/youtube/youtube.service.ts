@@ -317,7 +317,10 @@ export class YouTubeService implements SocialPlatformService {
             provider: 'youtube',
             id: video.id,
             account_id: account.social_provider_user_id,
-            caption: video.snippet.title,
+            caption: video.snippet.description || video.snippet.title || '',
+            platform_data: {
+              title: video.snippet.title,
+            },
             url: `https://www.youtube.com/watch?v=${video.id}`,
             posted_at: video.snippet.publishedAt,
             media: [

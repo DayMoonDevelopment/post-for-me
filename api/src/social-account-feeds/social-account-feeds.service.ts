@@ -281,6 +281,7 @@ export class SocialAccountFeedsService {
           platform_post_id: p.id,
           media: p.media,
           caption: p.caption,
+          platform_data: p.platform_data || undefined,
           ...(includeMetrics && p.metrics ? { metrics: p.metrics } : {}),
           platform: p.provider!.toString(),
           social_account_id: socialAccount.id,
