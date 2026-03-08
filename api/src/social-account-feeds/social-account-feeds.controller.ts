@@ -36,7 +36,6 @@ import { LinkedInPostMetricsDto } from '../linkedin/dto/linkedin-post-metrics.dt
 import { PinterestPostMetricsDto } from '../pinterest/dto/pinterest-post-metrics.dto';
 import { BlueskyPostMetricsDto } from '../bluesky/dto/bluesky-post-metrics.dto';
 import { YouTubePostPlatformDataDto } from '../youtube/dto/youtube-post-platform-data.dto';
-import { TikTokPostPlatformDataDto } from '../tiktok/dto/tiktok-post-platform-data.dto';
 
 @Controller('social-account-feeds')
 @ApiTags('Social Account Feeds')
@@ -55,7 +54,6 @@ import { TikTokPostPlatformDataDto } from '../tiktok/dto/tiktok-post-platform-da
   PinterestPostMetricsDto,
   BlueskyPostMetricsDto,
   YouTubePostPlatformDataDto,
-  TikTokPostPlatformDataDto,
 )
 export class SocialAccountFeedsController {
   constructor(

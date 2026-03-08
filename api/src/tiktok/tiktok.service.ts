@@ -99,10 +99,7 @@ export class TikTokService implements SocialPlatformService {
       provider: 'tiktok',
       id: video.id,
       account_id: accountId,
-      caption: video.video_description || video.title || '',
-      platform_data: {
-        title: video.title || '',
-      },
+      caption: video.title || video.video_description || '',
       url: video.share_url || '',
       posted_at: video.create_time
         ? new Date(video.create_time * 1000).toISOString()
