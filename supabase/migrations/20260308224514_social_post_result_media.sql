@@ -16,7 +16,7 @@ CREATE OR REPLACE FUNCTION user_has_post_result_access(post_result_id text)
             SELECT
                 1
             FROM
-                social_posts spr
+                social_post_results spr
                 JOIN social_posts sp ON sp.id = spr.post_id
                 JOIN projects p ON p.id = sp.project_id
                 JOIN team_users tm ON p.team_id = tm.team_id
