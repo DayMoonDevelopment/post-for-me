@@ -116,24 +116,49 @@ export const loader = withSupabase(async function ({
     });
   }
 
-  const accounts = await addSocialAccountConnections({
-    projectId,
-    provider,
-    request,
-    supabaseServiceRole,
-    isSystem: project.is_system,
-    appCredentials: {
-      appId: providerAppCredentials?.app_id,
-      appSecret: providerAppCredentials?.app_secret,
-    },
-    externalId,
-    redirectUrlOverride,
-  });
+  try {
+    const accounts = await addSocialAccountConnections({
+      projectId,
+      provider,
+      request,
+      supabaseServiceRole,
+      isSystem: project.is_system,
+      appCredentials: {
+        appId: providerAppCredentials?.app_id,
+        appSecret: providerAppCredentials?.app_secret,
+      },
+      externalId,
+      redirectUrlOverride,
+    });
 
-  if (!accounts || accounts.length === 0) {
+    if (!accounts || accounts.length === 0) {
+      return createResponse({
+        isSuccess: false,
+        error: "No valid accounts found",
+        teamId: project.team_id,
+        projectId,
+        provider: normalizedProvider,
+        callbackUrl: project.auth_callback_url,
+        isLoggedIn,
+      });
+    }
+
+    return createResponse({
+      isSuccess: true,
+      teamId: project.team_id,
+      projectId,
+      provider: normalizedProvider,
+      accountIds: accounts.map((account) => account.id),
+      callbackUrl: project.auth_callback_url,
+      isLoggedIn,
+    });
+  } catch (error) {
+    console.error(error);
     return createResponse({
       isSuccess: false,
-      error: "No valid accounts found",
+      error:
+        (error as { message?: string })?.message ||
+        "Internal Error: Something went wrong",
       teamId: project.team_id,
       projectId,
       provider: normalizedProvider,
@@ -141,16 +166,6 @@ export const loader = withSupabase(async function ({
       isLoggedIn,
     });
   }
-
-  return createResponse({
-    isSuccess: true,
-    teamId: project.team_id,
-    projectId,
-    provider: normalizedProvider,
-    accountIds: accounts.map((account) => account.id),
-    callbackUrl: project.auth_callback_url,
-    isLoggedIn,
-  });
 });
 
 //Either return to component or redirect to project callback url
