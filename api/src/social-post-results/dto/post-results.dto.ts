@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { SocialPostMediaDto } from '../../social-posts/dto/post-media.dto';
 
 export class SocialPostResultDto {
   @ApiProperty({ description: 'The unique identifier of the post result' })
@@ -31,4 +32,12 @@ export class SocialPostResultDto {
     id: string | null;
     url: string | null;
   } | null;
+
+  @ApiProperty({
+    description: 'Array of media URLs associated with the post',
+    nullable: true,
+    isArray: true,
+    type: SocialPostMediaDto,
+  })
+  media?: SocialPostMediaDto[] | null;
 }
