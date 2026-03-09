@@ -263,30 +263,30 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
   try {
     await new Promise<void>((resolve, reject) => {
       const upload = new Upload(fs.createReadStream(tmpPath) as any, {
-      endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      uploadSize,
-      headers: {
-        authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        "x-upsert": "true",
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true, // Important if you want to allow re-uploading the same file https://github.com/tus/tus-js-client/blob/main/docs/api.md#removefingerprintonsuccess
-      metadata: {
-        bucketName: "post-media",
-        objectName: fileName,
-        contentType: contentType,
-        cacheControl: "3600",
-      },
-      chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
-      onError: function (error) {
-        logger.error("Failed uploading File", { error });
-        reject(error);
-      },
-      onSuccess: function () {
-        logger.info("File uploaded succesfully", { bucketName, fileName });
-        resolve();
-      },
+        endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        uploadSize,
+        headers: {
+          authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          "x-upsert": "true",
+        },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true, // Important if you want to allow re-uploading the same file https://github.com/tus/tus-js-client/blob/main/docs/api.md#removefingerprintonsuccess
+        metadata: {
+          bucketName: "post-media",
+          objectName: fileName,
+          contentType: contentType,
+          cacheControl: "3600",
+        },
+        chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
+        onError: function (error) {
+          logger.error("Failed uploading File", { error });
+          reject(error);
+        },
+        onSuccess: function () {
+          logger.info("File uploaded succesfully", { bucketName, fileName });
+          resolve();
+        },
       });
 
       // Check if there are any previous uploads to continue.
@@ -337,6 +337,7 @@ export const processPostMedium = task({
   machine: "medium-2x",
   run: async ({
     medium: {
+      id,
       url,
       thumbnail_url,
       provider,
@@ -346,6 +347,7 @@ export const processPostMedium = task({
     },
   }: {
     medium: {
+      id: string;
       provider?: string | null;
       provider_connection_id?: string | null;
       url: string;
@@ -355,6 +357,7 @@ export const processPostMedium = task({
     };
   }): Promise<{
     provider?: string | null;
+    id: string;
     provider_connection_id?: string | null;
     url: string;
     thumbnail_url: string;
@@ -389,6 +392,7 @@ export const processPostMedium = task({
       }
 
       const result = {
+        id: id,
         url: mediaResult.publicUrl,
         thumbnail_url: thumbnailResult?.publicUrl || "",
         type: mediaResult.mediaType,
