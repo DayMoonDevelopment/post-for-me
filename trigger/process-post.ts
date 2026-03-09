@@ -400,17 +400,39 @@ export const processPost = task({
             ...accountConfig?.provider_data,
           } as PlatformConfiguration;
 
-          bulkPostData.push({
-            stripeCustomerId: postData.stripe_customer_id,
-            platform: account.provider,
-            postId: postData.id,
-            account,
-            media,
-            caption,
-            platformConfig: platformData,
-            appCredentials,
-            projectId: post.project_id,
-          });
+          const isStoryPlacement =
+            "placement" in platformData &&
+            platformData.placement === "stories" &&
+            (account.provider === "instagram" ||
+              account.provider === "facebook");
+
+          if (isStoryPlacement && media.length > 1) {
+            for (const medium of media) {
+              bulkPostData.push({
+                stripeCustomerId: postData.stripe_customer_id,
+                platform: account.provider,
+                postId: postData.id,
+                account,
+                media: [medium],
+                caption,
+                platformConfig: platformData,
+                appCredentials,
+                projectId: post.project_id,
+              });
+            }
+          } else {
+            bulkPostData.push({
+              stripeCustomerId: postData.stripe_customer_id,
+              platform: account.provider,
+              postId: postData.id,
+              account,
+              media,
+              caption,
+              platformConfig: platformData,
+              appCredentials,
+              projectId: post.project_id,
+            });
+          }
 
           logger.info("Created Indidividual Post Configuration");
         } catch (error: any) {
