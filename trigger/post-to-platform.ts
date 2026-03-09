@@ -271,6 +271,21 @@ export const postToPlatform = task({
           success: insertedPostResult.success,
         },
       });
+
+      const { error: postResultMediaError } = await supabaseClient
+        .from("social_post_result_post_media")
+        .insert(
+          media.map((m) => ({
+            social_post_result_id: insertedPostResult.id,
+            social_post_media_id: m.id,
+          })),
+        );
+
+      if (postResultMediaError) {
+        logger.error("Failed to insert post result media", {
+          postResultMediaError,
+        });
+      }
     }
 
     logger.info("Posting complete", { ...postResult });
