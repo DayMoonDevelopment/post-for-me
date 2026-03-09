@@ -401,12 +401,9 @@ export const processPost = task({
           } as PlatformConfiguration;
 
           const isStoryPlacement =
-            "placement" in platformData &&
-            platformData.placement === "stories" &&
-            (account.provider === "instagram" ||
-              account.provider === "facebook");
+            (platformData as { placement?: string }).placement === "stories";
 
-          if (isStoryPlacement && media.length > 1) {
+          if (isStoryPlacement) {
             for (const medium of media) {
               bulkPostData.push({
                 stripeCustomerId: postData.stripe_customer_id,
