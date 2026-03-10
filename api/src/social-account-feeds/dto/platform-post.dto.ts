@@ -9,6 +9,7 @@ import { ThreadsPostMetricsDto } from '../../threads/dto/threads-post-metrics.dt
 import { LinkedInPostMetricsDto } from '../../linkedin/dto/linkedin-post-metrics.dto';
 import { BlueskyPostMetricsDto } from '../../bluesky/dto/bluesky-post-metrics.dto';
 import { PinterestPostMetricsDto } from '../../pinterest/dto/pinterest-post-metrics.dto';
+import { YouTubePostPlatformDataDto } from '../../youtube/dto/youtube-post-platform-data.dto';
 
 export class PlatformPostDto {
   @ApiProperty({ description: 'Social media platform name' })
@@ -99,4 +100,11 @@ export class PlatformPostDto {
     | LinkedInPostMetricsDto
     | PinterestPostMetricsDto
     | BlueskyPostMetricsDto;
+
+  @ApiProperty({
+    description: 'Platform-specific data for the post',
+    required: false,
+    oneOf: [{ $ref: getSchemaPath(YouTubePostPlatformDataDto) }],
+  })
+  platform_data?: YouTubePostPlatformDataDto;
 }

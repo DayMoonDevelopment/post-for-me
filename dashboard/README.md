@@ -57,6 +57,27 @@ bun run dev:dashboard
 
 The dashboard will be available at `http://localhost:5173`.
 
+### Proxying The Dev Server To A Public URL (Allowed Hosts)
+
+If you proxy your local Vite dev server to a public URL (e.g. ngrok / Cloudflare Tunnel), Vite will reject requests whose `Host` header isn\'t explicitly allowed.
+
+Set `ALLOWED_HOST` to the hostname(s) of your public URL:
+
+```env
+# Single host
+ALLOWED_HOST=my-tunnel.ngrok-free.app
+
+# Multiple hosts (comma or whitespace separated)
+# ALLOWED_HOST=my-tunnel.ngrok-free.app,dev.example.com
+
+# Subdomain wildcard (allows example.com and any subdomain)
+# ALLOWED_HOST=.example.com
+```
+
+Notes:
+- Prefer an explicit list; `ALLOWED_HOST=true` / `*` will allow any host and is not recommended.
+- You can put `ALLOWED_HOST=...` in `.env.local` or export it in your shell before running `bun run dev` / `bun run dev:dashboard`.
+
 ### Environment Setup
 
 Create a `.env.local` file with:
