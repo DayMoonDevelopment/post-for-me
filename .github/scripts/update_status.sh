@@ -5,7 +5,8 @@ TYPECHECK=$2
 SUPABASE=$3
 TRIGGER=$4
 API=$5
-DASHBOARD=$6
+UNKEY=$6
+DASHBOARD=$7
 
 DASHBOARD_URL="https://post-for-me-app.vercel.app/"
 
@@ -19,6 +20,7 @@ Typecheck    | ${TYPECHECK}
 Supabase     | ${SUPABASE}
 Trigger.dev  | ${TRIGGER}
 API          | ${API}
+UNKEY          | ${UNKEY}
 Dashboard    | ${DASHBOARD}
 \`\`\`
 EOF
