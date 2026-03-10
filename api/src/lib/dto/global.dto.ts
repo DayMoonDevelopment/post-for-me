@@ -9,6 +9,7 @@ import { TikTokBusinessMetricsDto } from '../../tiktok-business/dto/tiktok-busin
 import { TikTokPostMetricsDto } from '../../tiktok/dto/tiktok-post-metrics.dto';
 import { TwitterPostMetricsDto } from '../../twitter/dto/twitter-post-metrics.dto';
 import { YouTubePostMetricsDto } from '../../youtube/dto/youtube-post-metrics.dto';
+import { YouTubePostPlatformDataDto } from '../../youtube/dto/youtube-post-platform-data.dto';
 
 export class DeleteEntityResponseDto {
   @ApiProperty({ description: 'Whether or not the entity was deleted' })
@@ -57,6 +58,7 @@ export interface PlatformPost {
   url: string;
   posted_at?: string;
   media: { url: string; thumbnail_url?: string }[];
+  platform_data?: YouTubePostPlatformDataDto;
   metrics?:
     | FacebookPostMetricsDto
     | TikTokBusinessMetricsDto
