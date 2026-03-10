@@ -99,6 +99,7 @@ jobs:
         run: |
           curl -sL https://github.com/unkeyed/unkey/releases/latest/download/unkey_Linux_x86_64.tar.gz | tar xz
           ./unkey --version
+          ./unkey deploy --help
 
       - name: Deploy API to Unkey
         id: todo
