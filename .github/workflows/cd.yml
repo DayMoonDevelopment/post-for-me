@@ -105,7 +105,7 @@ jobs:
         id: unkey
         env:
           UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
-          UNKEY_PROJECT: postforme # change this to the slug of your project
+          UNKEY_PROJECT: post-for-me-api # project slug, not id
           UNKEY_APP: default # leave this as is until we allow multiple apps per project
         run: ./unkey deploy --env=production ghcr.io/${{ github.repository }}/api:${{ github.sha }}
 
