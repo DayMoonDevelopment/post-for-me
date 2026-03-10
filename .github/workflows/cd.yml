@@ -96,7 +96,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Install Unkey CLI
-        run: curl -sL https://github.com/unkeyed/unkey/releases/latest/download/unkey_Linux_x86_64.tar.gz | tar xz
+        run: |
+          curl -sL https://github.com/unkeyed/unkey/releases/latest/download/unkey_Linux_x86_64.tar.gz | tar xz
+          ./unkey --version
 
       - name: Deploy API to Unkey
         id: todo
