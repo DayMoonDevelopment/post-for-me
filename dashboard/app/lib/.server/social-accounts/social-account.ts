@@ -93,6 +93,34 @@ export async function addSocialAccountConnections({
     })),
   );
 
+  const socialProviderUserIds = connectionsToInsert
+    .map((connection) => connection.social_provider_user_id)
+    .filter((socialProviderUserId): socialProviderUserId is string =>
+      Boolean(socialProviderUserId),
+    );
+
+  if (socialProviderUserIds.length > 0) {
+    const { data: existingConnections, error: existingConnectionsError } =
+      await supabaseServiceRole
+        .from("social_provider_connections")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("provider", normalizedProvider as Provider)
+        .in("social_provider_user_id", socialProviderUserIds)
+        .not("access_token", "is", null)
+        .not("external_id", "is", null);
+
+    if (existingConnectionsError) {
+      throw existingConnectionsError;
+    }
+
+    if (existingConnections && existingConnections.length > 0) {
+      throw new Error(
+        "External id exists for the connected account, please disconnect the account first.",
+      );
+    }
+  }
+
   const { data: insertedConnections, error: connectionsError } =
     await supabaseServiceRole
       .from("social_provider_connections")
