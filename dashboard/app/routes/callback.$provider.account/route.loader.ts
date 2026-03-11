@@ -117,7 +117,7 @@ export const loader = withSupabase(async function ({
   }
 
   try {
-    const accounts = await addSocialAccountConnections({
+    const accountConnections = await addSocialAccountConnections({
       projectId,
       provider,
       request,
@@ -131,7 +131,10 @@ export const loader = withSupabase(async function ({
       redirectUrlOverride,
     });
 
-    if (!accounts || accounts.length === 0) {
+    const { successConnections, failedConnections, errors } =
+      accountConnections;
+
+    if (successConnections.length === 0 && failedConnections.length === 0) {
       return createResponse({
         isSuccess: false,
         error: "No valid accounts found",
@@ -139,16 +142,23 @@ export const loader = withSupabase(async function ({
         projectId,
         provider: normalizedProvider,
         callbackUrl: project.auth_callback_url,
+        errors,
+        failedAccountIds: failedConnections,
         isLoggedIn,
       });
     }
 
+    const isSuccess = successConnections.length > 0;
+
     return createResponse({
-      isSuccess: true,
+      isSuccess,
       teamId: project.team_id,
       projectId,
       provider: normalizedProvider,
-      accountIds: accounts.map((account) => account.id),
+      accountIds: successConnections,
+      failedAccountIds: failedConnections,
+      errors,
+      error: errors[0] ?? null,
       callbackUrl: project.auth_callback_url,
       isLoggedIn,
     });
@@ -177,6 +187,8 @@ const createResponse = ({
   error,
   callbackUrl,
   accountIds,
+  failedAccountIds,
+  errors,
   isLoggedIn,
 }: {
   teamId?: string;
@@ -184,6 +196,8 @@ const createResponse = ({
   provider?: string;
   isSuccess: boolean;
   accountIds?: string[];
+  failedAccountIds?: string[];
+  errors?: string[];
   error?: string | null;
   callbackUrl?: string | null | undefined;
   isLoggedIn?: boolean;
@@ -194,10 +208,15 @@ const createResponse = ({
       ["projectId", projectId || ""],
       ["isSuccess", isSuccess ? "true" : "false"],
       ["accountIds", accountIds?.join(",") || ""],
+      ["failedAccountIds", failedAccountIds?.join(",") || ""],
     ]);
 
     if (error) {
       authParams.append("error", error);
+    }
+
+    if (errors && errors.length > 0) {
+      authParams.append("errors", errors.join("|"));
     }
 
     return redirect(`${callbackUrl}?${authParams.toString()}`);
@@ -208,6 +227,9 @@ const createResponse = ({
     projectId,
     provider,
     isSuccess,
+    accountIds,
+    failedAccountIds,
+    errors,
     error,
     isLoggedIn,
   };
