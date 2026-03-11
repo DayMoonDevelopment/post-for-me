@@ -45,7 +45,13 @@ export async function addSocialAccountConnections({
   };
   externalId: string | undefined | null;
   redirectUrlOverride: string | undefined | null;
-}) {
+}): Promise<{
+  errors: string[];
+  failedConnections: string[];
+  successConnections: string[];
+}> {
+  const errors: string[] = [];
+  const failedConnections: string[] = [];
   const normalizedProvider =
     provider === "instagram_w_facebook" ? "instagram" : provider;
 
@@ -68,7 +74,7 @@ export async function addSocialAccountConnections({
       projectId,
     });
 
-  const connectionsToInsert = await Promise.all(
+  let connectionsToInsert = await Promise.all(
     socialProviderConnections.map(async (connection) => ({
       provider: normalizedProvider as Provider,
       project_id: projectId,
@@ -93,13 +99,10 @@ export async function addSocialAccountConnections({
     })),
   );
 
-  const socialProviderUserIds = connectionsToInsert
-    .map((connection) => connection.social_provider_user_id)
-    .filter((socialProviderUserId): socialProviderUserId is string =>
-      Boolean(socialProviderUserId),
+  if (externalId) {
+    const socialProviderUserIds = connectionsToInsert.map(
+      (c) => c.social_provider_user_id,
     );
-
-  if (socialProviderUserIds.length > 0) {
     const { data: existingConnections, error: existingConnectionsError } =
       await supabaseServiceRole
         .from("social_provider_connections")
@@ -108,17 +111,23 @@ export async function addSocialAccountConnections({
         .eq("provider", normalizedProvider as Provider)
         .in("social_provider_user_id", socialProviderUserIds)
         .not("access_token", "is", null)
-        .not("external_id", "is", null);
+        .not("external_id", "is", null)
+        .neq("external_id", externalId);
 
     if (existingConnectionsError) {
       throw existingConnectionsError;
     }
+    connectionsToInsert = connectionsToInsert.filter((c) =>
+      existingConnections.some((ec) => ec.id == c.social_provider_user_id),
+    );
 
-    if (existingConnections && existingConnections.length > 0) {
-      throw new Error(
-        "External id exists for the connected account, please disconnect the account first.",
-      );
-    }
+    failedConnections.push(...existingConnections.map((e) => e.id));
+
+    errors.push(
+      ...failedConnections.map(
+        (f) => `External Id already exists for account ${f}`,
+      ),
+    );
   }
 
   const { data: insertedConnections, error: connectionsError } =
@@ -157,8 +166,11 @@ export async function addSocialAccountConnections({
   if (connectionsError) {
     console.error(connectionsError);
   }
-
-  return insertedConnections;
+  return {
+    successConnections: insertedConnections?.map((i) => i.id) || [],
+    failedConnections,
+    errors,
+  };
 }
 
 async function getSocialProviderConnections(
