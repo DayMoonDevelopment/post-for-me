@@ -21,7 +21,20 @@ export const loader = withSupabase(async function ({
   if (!projectId || !provider) {
     return createResponse({
       isSuccess: false,
-      error: "Something went wrong",
+      errors: ["Project Id or Provider not found"],
+      isLoggedIn,
+    });
+  }
+
+  const key =
+    provider?.toLowerCase() === "x"
+      ? (url.searchParams.get("oauth_token") as string)
+      : (url.searchParams.get("state") as string);
+
+  if (!key) {
+    return createResponse({
+      isSuccess: false,
+      errors: ["Auth state not set"],
       isLoggedIn,
     });
   }
@@ -47,17 +60,12 @@ export const loader = withSupabase(async function ({
     console.error("Project not found");
     return createResponse({
       isSuccess: false,
-      error: "Something went wrong",
+      errors: ["Project not found"],
       projectId,
       provider,
       isLoggedIn,
     });
   }
-
-  const key =
-    provider?.toLowerCase() === "x"
-      ? (url.searchParams.get("oauth_token") as string)
-      : (url.searchParams.get("state") as string);
 
   const oauthData = await supabaseServiceRole
     .from("social_provider_connection_oauth_data")
@@ -101,56 +109,69 @@ export const loader = withSupabase(async function ({
       provider: normalizedProvider,
       teamId: project.team_id,
       isSuccess: false,
-      error: "No App Credentials set",
+      errors: ["No App Credentials set"],
       callbackUrl: project.auth_callback_url,
       isLoggedIn,
     });
   }
 
-  const accountConnections = await addSocialAccountConnections({
-    projectId,
-    provider,
-    request,
-    supabaseServiceRole,
-    isSystem: project.is_system,
-    appCredentials: {
-      appId: providerAppCredentials?.app_id,
-      appSecret: providerAppCredentials?.app_secret,
-    },
-    externalId,
-    redirectUrlOverride,
-  });
+  try {
+    const accountConnections = await addSocialAccountConnections({
+      projectId,
+      provider,
+      request,
+      supabaseServiceRole,
+      isSystem: project.is_system,
+      appCredentials: {
+        appId: providerAppCredentials?.app_id,
+        appSecret: providerAppCredentials?.app_secret,
+      },
+      externalId,
+      redirectUrlOverride,
+    });
 
-  const { successConnections, failedConnections, errors } = accountConnections;
+    const { successConnections, failedConnections, errors } = accountConnections;
 
-  if (successConnections.length === 0 && failedConnections.length === 0) {
+    if (successConnections.length === 0) {
+      errors.push("No valid accounts found");
+      return createResponse({
+        isSuccess: false,
+        teamId: project.team_id,
+        projectId,
+        provider: normalizedProvider,
+        callbackUrl: project.auth_callback_url,
+        errors,
+        failedAccountIds: failedConnections,
+        isLoggedIn,
+      });
+    }
+
+    return createResponse({
+      isSuccess: true,
+      teamId: project.team_id,
+      projectId,
+      provider: normalizedProvider,
+      accountIds: successConnections,
+      failedAccountIds: failedConnections,
+      errors,
+      callbackUrl: project.auth_callback_url,
+      isLoggedIn,
+    });
+  } catch (error) {
+    console.error(error);
     return createResponse({
       isSuccess: false,
-      error: "Something went wrong",
+      errors: [
+        (error as { message?: string })?.message ||
+          "Internal Error: Something went wrong",
+      ],
       teamId: project.team_id,
       projectId,
       provider: normalizedProvider,
       callbackUrl: project.auth_callback_url,
-      errors,
-      failedAccountIds: failedConnections,
       isLoggedIn,
     });
   }
-
-  const isSuccess = successConnections.length > 0;
-
-  return createResponse({
-    isSuccess,
-    teamId: project.team_id,
-    projectId,
-    provider: normalizedProvider,
-    accountIds: successConnections,
-    failedAccountIds: failedConnections,
-    errors,
-    error: errors[0] ?? null,
-    callbackUrl: project.auth_callback_url,
-    isLoggedIn,
-  });
 });
 
 //Either return to component or redirect to project callback url
@@ -159,7 +180,6 @@ const createResponse = ({
   projectId,
   provider,
   isSuccess,
-  error,
   callbackUrl,
   accountIds,
   failedAccountIds,
@@ -173,25 +193,25 @@ const createResponse = ({
   accountIds?: string[];
   failedAccountIds?: string[];
   errors?: string[];
-  error?: string | null;
   callbackUrl?: string | null | undefined;
   isLoggedIn?: boolean;
 }) => {
+  const error = errors && errors.length > 0 ? errors.join("|") : null;
+
   if (callbackUrl) {
     const authParams = new URLSearchParams([
       ["provider", provider || ""],
       ["projectId", projectId || ""],
       ["isSuccess", isSuccess ? "true" : "false"],
       ["accountIds", accountIds?.join(",") || ""],
-      ["failedAccountIds", failedAccountIds?.join(",") || ""],
     ]);
+
+    if (failedAccountIds && failedAccountIds.length > 0) {
+      authParams.append("failedAccountIds", failedAccountIds?.join(","));
+    }
 
     if (error) {
       authParams.append("error", error);
-    }
-
-    if (errors && errors.length > 0) {
-      authParams.append("errors", errors.join("|"));
     }
 
     return redirect(`${callbackUrl}?${authParams.toString()}`);
@@ -204,7 +224,6 @@ const createResponse = ({
     isSuccess,
     accountIds,
     failedAccountIds,
-    errors,
     error,
     isLoggedIn,
   };
