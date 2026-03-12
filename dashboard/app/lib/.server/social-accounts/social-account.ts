@@ -120,7 +120,7 @@ export async function addSocialAccountConnections({
     }
     if (existingConnections) {
       connectionsToInsert = connectionsToInsert.filter((c) =>
-        existingConnections.every((ec) => ec.id != c.social_provider_user_id),
+        existingConnections.every((ec) => ec.id !== c.social_provider_user_id),
       );
 
       failedConnections.push(...existingConnections.map((e) => e.id));
