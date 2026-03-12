@@ -118,7 +118,7 @@ export async function addSocialAccountConnections({
       console.error(existingConnectionsError);
       throw new Error("Error validating the external id");
     }
-    if (existingConnections) {
+    if (existingConnections && existingConnections.length > 0) {
       connectionsToInsert = connectionsToInsert.filter((c) =>
         existingConnections.every((ec) => ec.id !== c.social_provider_user_id),
       );
