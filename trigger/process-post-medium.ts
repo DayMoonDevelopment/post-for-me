@@ -334,6 +334,7 @@ export const processPostMedium = task({
   machine: "medium-2x",
   run: async ({
     medium: {
+      id,
       url,
       thumbnail_url,
       provider,
@@ -343,6 +344,7 @@ export const processPostMedium = task({
     },
   }: {
     medium: {
+      id: string;
       provider?: string | null;
       provider_connection_id?: string | null;
       url: string;
@@ -352,6 +354,7 @@ export const processPostMedium = task({
     };
   }): Promise<{
     provider?: string | null;
+    id: string;
     provider_connection_id?: string | null;
     url: string;
     thumbnail_url: string;
@@ -390,6 +393,7 @@ export const processPostMedium = task({
       }
 
       const result = {
+        id: id,
         url: mediaResult.publicUrl,
         thumbnail_url: thumbnailResult?.publicUrl || thumbnail_url || "",
         type: mediaResult.mediaType,
