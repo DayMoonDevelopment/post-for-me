@@ -375,10 +375,14 @@ export const processPostMedium = task({
 
       // Stream download and upload thumbnail if provided
       if (thumbnail_url) {
-        thumbnailResult = await streamDownloadAndUpload(
-          thumbnail_url,
-          "thumbnail",
-        );
+        try {
+          thumbnailResult = await streamDownloadAndUpload(
+            thumbnail_url,
+            "thumbnail",
+          );
+        } catch (error) {
+          logger.error(error);
+        }
       }
 
       if (!mediaResult) {
@@ -387,7 +391,7 @@ export const processPostMedium = task({
 
       const result = {
         url: mediaResult.publicUrl,
-        thumbnail_url: thumbnailResult?.publicUrl || "",
+        thumbnail_url: thumbnailResult?.publicUrl || thumbnail_url || "",
         type: mediaResult.mediaType,
         provider: provider,
         provider_connection_id: provider_connection_id,
