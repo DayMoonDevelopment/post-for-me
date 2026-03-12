@@ -106,7 +106,7 @@ export async function addSocialAccountConnections({
     const { data: existingConnections, error: existingConnectionsError } =
       await supabaseServiceRole
         .from("social_provider_connections")
-        .select("id")
+        .select("id,social_provider_user_id")
         .eq("project_id", projectId)
         .eq("provider", normalizedProvider as Provider)
         .in("social_provider_user_id", socialProviderUserIds)
@@ -118,17 +118,21 @@ export async function addSocialAccountConnections({
       console.error(existingConnectionsError);
       throw new Error("Error validating the external id");
     }
-    connectionsToInsert = connectionsToInsert.filter((c) =>
-      existingConnections.some((ec) => ec.id == c.social_provider_user_id),
-    );
+    if (existingConnections && existingConnections.length > 0) {
+      connectionsToInsert = connectionsToInsert.filter((c) =>
+        existingConnections.every(
+          (ec) => ec.social_provider_user_id !== c.social_provider_user_id,
+        ),
+      );
 
-    failedConnections.push(...existingConnections.map((e) => e.id));
+      failedConnections.push(...existingConnections.map((e) => e.id));
 
-    errors.push(
-      ...failedConnections.map(
-        (f) => `External Id already exists for account ${f}`,
-      ),
-    );
+      errors.push(
+        ...failedConnections.map(
+          (f) => `External Id already exists for account ${f}`,
+        ),
+      );
+    }
   }
 
   const { data: insertedConnections, error: connectionsError } =
