@@ -53,10 +53,7 @@ const getMediaType = (
 };
 
 // Helper function to get file extension from URL or content type
-const getFileExtension = (url: string, contentType?: string): string => {
-  const urlExtension = path.extname(new URL(url).pathname);
-  if (urlExtension) return urlExtension;
-
+const getFileExtension = (contentType?: string): string => {
   if (contentType) {
     const mimeToExt: Record<string, string> = {
       "image/jpeg": ".jpg",
@@ -68,10 +65,10 @@ const getFileExtension = (url: string, contentType?: string): string => {
       "video/mov": ".mov",
       "video/avi": ".avi",
     };
-    return mimeToExt[contentType] || ".bin";
+    return mimeToExt[contentType] || "";
   }
 
-  return ".bin";
+  return "";
 };
 
 // Helper function to detect content type from file signature
@@ -240,7 +237,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
     throw new Error("No response body available for streaming");
   }
 
-  const fileExtension = getFileExtension(fileUrl, contentType);
+  const fileExtension = getFileExtension(contentType);
   const fileName = `${prefix}_${uuidv4()}${fileExtension}`;
   const mediaType = getMediaType(contentType, fileExtension);
 
@@ -381,10 +378,14 @@ export const processPostMedium = task({
 
       // Stream download and upload thumbnail if provided
       if (thumbnail_url) {
-        thumbnailResult = await streamDownloadAndUpload(
-          thumbnail_url,
-          "thumbnail",
-        );
+        try {
+          thumbnailResult = await streamDownloadAndUpload(
+            thumbnail_url,
+            "thumbnail",
+          );
+        } catch (error) {
+          logger.error(error);
+        }
       }
 
       if (!mediaResult) {
@@ -394,7 +395,7 @@ export const processPostMedium = task({
       const result = {
         id: id,
         url: mediaResult.publicUrl,
-        thumbnail_url: thumbnailResult?.publicUrl || "",
+        thumbnail_url: thumbnailResult?.publicUrl || thumbnail_url || "",
         type: mediaResult.mediaType,
         provider: provider,
         provider_connection_id: provider_connection_id,
