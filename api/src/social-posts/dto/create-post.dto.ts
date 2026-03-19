@@ -38,7 +38,8 @@ export class CreateSocialPostDto {
   account_configurations?: AccountConfigurationDto[] | null;
 
   @ApiProperty({
-    description: 'Array of media URLs associated with the post',
+    description:
+      'Array of media associated with the post. If multiple media items are provided and the placement is `stories`, individual posts are created per media item.',
     nullable: true,
     required: false,
     type: SocialPostMediaDto,
