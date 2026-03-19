@@ -34,6 +34,7 @@ export const processScheduledPosts = schedules.task({
               )
             ),
             social_post_media (
+              id,
               url,
               thumbnail_url,
               thumbnail_timestamp_ms,
