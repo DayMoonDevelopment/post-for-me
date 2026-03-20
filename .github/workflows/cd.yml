@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat/ghcr-docker-build
 
 concurrency:
   group: cd-${{ github.workflow }}-${{ github.ref }}
@@ -13,6 +14,9 @@ jobs:
   deploy:
     name: Deploy Full App
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
 
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -70,6 +74,41 @@ jobs:
       - name: Install Railway CLI
         run: bun add -g @railway/cli
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: docker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/api:${{ github.sha }},ghcr.io/${{ github.repository }}/api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Unkey CLI
+        run: |
+          curl -sL https://github.com/unkeyed/unkey/releases/latest/download/unkey_Linux_x86_64.tar.gz | tar xz
+          ./unkey --version
+          ./unkey deploy --help
+
+      - name: Deploy API to Unkey
+        id: unkey
+        env:
+          UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
+          UNKEY_PROJECT: post-for-me-api # project slug, not id
+          UNKEY_APP: default # leave this as is until we allow multiple apps per project
+        run: ./unkey deploy --env=production ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+
       - name: Deploy API to Railway
         id: api
         env:
@@ -92,10 +131,10 @@ jobs:
           TYPECHECK_STATUS="${{ steps.typecheck.outcome == 'success' && '✅' || (steps.typecheck.outcome == 'skipped' && '⏸️' || '❌') }}"
           SUPABASE_STATUS="${{ steps.supabase.outcome == 'success' && '🚀' || (steps.supabase.outcome == 'skipped' && '⏸️' || '❌') }}"
           TRIGGER_STATUS="${{ steps.trigger.outcome == 'success' && '🚀' || (steps.trigger.outcome == 'skipped' && '⏸️' || '❌') }}"
-          API_STATUS="${{ steps.api.outcome == 'success' && '🚀' || (steps.api.outcome == 'skipped' && '⏸️' || '❌') }}"
+          UNKEY_STATUS="${{ steps.unkey.outcome == 'success' && '🚀' || (steps.unkey.outcome == 'skipped' && '⏸️' || '❌') }}"
           DASHBOARD_STATUS="${{ steps.dashboard.outcome == 'success' && '🚀' || (steps.dashboard.outcome == 'skipped' && '⏸️' || '❌') }}"
 
-          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$DASHBOARD_STATUS"
+          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "UNKEY_STATUS" "$DASHBOARD_STATUS"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
