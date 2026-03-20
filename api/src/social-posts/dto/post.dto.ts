@@ -57,7 +57,7 @@ export class SocialPostDto {
   account_configurations: AccountConfigurationDto[] | undefined | null;
 
   @ApiProperty({
-    description: 'Array of media URLs associated with the post',
+    description: 'Array of media associated with the post',
     nullable: true,
     isArray: true,
     type: SocialPostMediaDto,

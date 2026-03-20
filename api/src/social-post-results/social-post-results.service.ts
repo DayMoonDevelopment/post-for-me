@@ -14,7 +14,7 @@ type ProviderEnum = Database['public']['Enums']['social_provider'];
 export class PostResultsService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
-  async getPostPostResultRecord(
+  async getPostResultRecord(
     id: string,
     projectId: string,
   ): Promise<{
@@ -27,12 +27,15 @@ export class PostResultsService {
       post_id: string;
       provider_connection_id: string;
       error_message?: string;
+      media?: SocialPostResultDto['media'];
     };
   }> {
     const { data: postResult, error: postResultError } =
       await this.supabaseService.supabaseClient
         .from('social_post_results')
-        .select('*, social_provider_connections(provider, project_id)')
+        .select(
+          '*, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        )
         .eq('id', id)
         .eq('social_provider_connections.project_id', projectId)
         .maybeSingle();
@@ -51,6 +54,15 @@ export class PostResultsService {
         post_id: postResult?.post_id,
         provider_connection_id: postResult?.provider_connection_id,
         error_message: postResult?.error_message || undefined,
+        media:
+          postResult?.social_post_result_post_media?.map((resultMedia) => ({
+            url: resultMedia.social_post_media.url,
+            thumbnail_url: resultMedia.social_post_media.thumbnail_url,
+            thumbnail_timestamp_ms:
+              resultMedia.social_post_media.thumbnail_timestamp_ms,
+            tags: resultMedia.social_post_media.tags as any[] | null,
+            skip_processing: resultMedia.social_post_media.skip_processing,
+          })) || [],
       },
     };
   }
@@ -63,10 +75,13 @@ export class PostResultsService {
 
     const query = this.supabaseService.supabaseClient
       .from('social_post_results')
-      .select('*, social_provider_connections!inner(provider, project_id)', {
-        count: 'exact',
-        head: false,
-      })
+      .select(
+        '*, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        {
+          count: 'exact',
+          head: false,
+        },
+      )
       .eq('social_provider_connections.project_id', projectId)
       .range(offset, offset + limit - 1);
 
@@ -156,6 +171,15 @@ export class PostResultsService {
         error: raw.error_message,
         details: raw.details,
         platform_data,
+        media:
+          raw.social_post_result_post_media?.map((resultMedia) => ({
+            url: resultMedia.social_post_media.url,
+            thumbnail_url: resultMedia.social_post_media.thumbnail_url,
+            thumbnail_timestamp_ms:
+              resultMedia.social_post_media.thumbnail_timestamp_ms,
+            tags: resultMedia.social_post_media.tags as any[] | null,
+            skip_processing: resultMedia.social_post_media.skip_processing,
+          })) || [],
       };
     });
 
@@ -169,7 +193,7 @@ export class PostResultsService {
     id: string,
     projectId: string,
   ): Promise<SocialPostResultDto | null> {
-    const postResults = await this.getPostPostResultRecord(id, projectId);
+    const postResults = await this.getPostResultRecord(id, projectId);
 
     if (!postResults.data) {
       return null;
@@ -193,6 +217,7 @@ export class PostResultsService {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       details: postResults.data.details,
       platform_data,
+      media: postResults.data.media || [],
     };
 
     return result;

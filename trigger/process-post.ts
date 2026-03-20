@@ -216,6 +216,7 @@ export const processPost = task({
 
       await tags.add(`${project.team_id}`);
       const postMedia: {
+        id: string;
         provider?: string | null;
         provider_connection_id?: string | null;
         url: string;
@@ -232,6 +233,7 @@ export const processPost = task({
           post.social_post_media.map((medium) => ({
             payload: {
               medium: {
+                id: medium.id,
                 provider: medium.provider,
                 provider_connection_id: medium.provider_connection_id,
                 url: medium.url,
@@ -398,17 +400,36 @@ export const processPost = task({
             ...accountConfig?.provider_data,
           } as PlatformConfiguration;
 
-          bulkPostData.push({
-            stripeCustomerId: postData.stripe_customer_id,
-            platform: account.provider,
-            postId: postData.id,
-            account,
-            media,
-            caption,
-            platformConfig: platformData,
-            appCredentials,
-            projectId: post.project_id,
-          });
+          const isStoryPlacement =
+            (platformData as { placement?: string }).placement === "stories";
+
+          if (isStoryPlacement) {
+            for (const medium of media) {
+              bulkPostData.push({
+                stripeCustomerId: postData.stripe_customer_id,
+                platform: account.provider,
+                postId: postData.id,
+                account,
+                media: [medium],
+                caption,
+                platformConfig: platformData,
+                appCredentials,
+                projectId: post.project_id,
+              });
+            }
+          } else {
+            bulkPostData.push({
+              stripeCustomerId: postData.stripe_customer_id,
+              platform: account.provider,
+              postId: postData.id,
+              account,
+              media,
+              caption,
+              platformConfig: platformData,
+              appCredentials,
+              projectId: post.project_id,
+            });
+          }
 
           logger.info("Created Indidividual Post Configuration");
         } catch (error: any) {

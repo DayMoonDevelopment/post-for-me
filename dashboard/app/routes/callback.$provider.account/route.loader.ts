@@ -25,7 +25,7 @@ export const loader = withSupabase(async function ({
   if (!key) {
     return createResponse({
       isSuccess: false,
-      error: "Auth state not set",
+      errors: ["Auth state not set"],
       isLoggedIn,
     });
   }
@@ -52,7 +52,7 @@ export const loader = withSupabase(async function ({
   if (!projectId || !provider) {
     return createResponse({
       isSuccess: false,
-      error: "Project Id or Provider not found",
+      errors: ["Project Id or Provider not found"],
       isLoggedIn,
     });
   }
@@ -92,7 +92,7 @@ export const loader = withSupabase(async function ({
     console.error("Project not found");
     return createResponse({
       isSuccess: false,
-      error: "Project not found",
+      errors: ["Project not found"],
       projectId,
       provider: normalizedProvider,
       isLoggedIn,
@@ -110,14 +110,14 @@ export const loader = withSupabase(async function ({
       provider: normalizedProvider,
       teamId: project.team_id,
       isSuccess: false,
-      error: "No App Credentials set",
+      errors: ["No App Credentials set"],
       callbackUrl: project.auth_callback_url,
       isLoggedIn,
     });
   }
 
   try {
-    const accounts = await addSocialAccountConnections({
+    const accountConnections = await addSocialAccountConnections({
       projectId,
       provider,
       request,
@@ -131,14 +131,19 @@ export const loader = withSupabase(async function ({
       redirectUrlOverride,
     });
 
-    if (!accounts || accounts.length === 0) {
+    const { successConnections, failedConnections, errors } =
+      accountConnections;
+
+    if (successConnections.length === 0) {
+      errors.push("No valid accounts found");
       return createResponse({
         isSuccess: false,
-        error: "No valid accounts found",
         teamId: project.team_id,
         projectId,
         provider: normalizedProvider,
         callbackUrl: project.auth_callback_url,
+        errors,
+        failedAccountIds: failedConnections,
         isLoggedIn,
       });
     }
@@ -148,7 +153,9 @@ export const loader = withSupabase(async function ({
       teamId: project.team_id,
       projectId,
       provider: normalizedProvider,
-      accountIds: accounts.map((account) => account.id),
+      accountIds: successConnections,
+      failedAccountIds: failedConnections,
+      errors,
       callbackUrl: project.auth_callback_url,
       isLoggedIn,
     });
@@ -156,9 +163,10 @@ export const loader = withSupabase(async function ({
     console.error(error);
     return createResponse({
       isSuccess: false,
-      error:
+      errors: [
         (error as { message?: string })?.message ||
-        "Internal Error: Something went wrong",
+          "Internal Error: Something went wrong",
+      ],
       teamId: project.team_id,
       projectId,
       provider: normalizedProvider,
@@ -174,9 +182,10 @@ const createResponse = ({
   projectId,
   provider,
   isSuccess,
-  error,
   callbackUrl,
   accountIds,
+  failedAccountIds,
+  errors,
   isLoggedIn,
 }: {
   teamId?: string;
@@ -184,10 +193,13 @@ const createResponse = ({
   provider?: string;
   isSuccess: boolean;
   accountIds?: string[];
-  error?: string | null;
+  failedAccountIds?: string[];
+  errors?: string[];
   callbackUrl?: string | null | undefined;
   isLoggedIn?: boolean;
 }) => {
+  const error = errors && errors.length > 0 ? errors.join("|") : null;
+
   if (callbackUrl) {
     const authParams = new URLSearchParams([
       ["provider", provider || ""],
@@ -196,6 +208,9 @@ const createResponse = ({
       ["accountIds", accountIds?.join(",") || ""],
     ]);
 
+    if (failedAccountIds && failedAccountIds.length > 0) {
+      authParams.append("failedAccountIds", failedAccountIds?.join(","));
+    }
     if (error) {
       authParams.append("error", error);
     }
@@ -208,6 +223,8 @@ const createResponse = ({
     projectId,
     provider,
     isSuccess,
+    accountIds,
+    failedAccountIds,
     error,
     isLoggedIn,
   };

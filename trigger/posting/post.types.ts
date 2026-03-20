@@ -53,6 +53,7 @@ export interface Post {
     };
   }[];
   social_post_media: {
+    id: string;
     url: string;
     thumbnail_url: string | null;
     thumbnail_timestamp_ms: number | null;
@@ -92,6 +93,7 @@ export interface RefreshTokenResult {
 }
 
 export interface PostMedia {
+  id: string;
   url: string;
   thumbnail_url?: string | null;
   thumbnail_timestamp_ms?: number | null;
