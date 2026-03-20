@@ -20,7 +20,7 @@ Typecheck    | ${TYPECHECK}
 Supabase     | ${SUPABASE}
 Trigger.dev  | ${TRIGGER}
 API          | ${API}
-UNKEY          | ${UNKEY}
+UNKEY        | ${UNKEY}
 Dashboard    | ${DASHBOARD}
 \`\`\`
 EOF

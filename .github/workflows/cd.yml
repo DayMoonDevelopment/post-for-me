@@ -91,7 +91,7 @@ jobs:
           context: .
           file: api/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}/api:${{ github.sha }},ghcr.io/${{ github.repository }}/api:latest
+          tags: ghcr.io/daymoondevelopment/api:${{ github.sha }},ghcr.io/daymoondevelopment/api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -107,7 +107,7 @@ jobs:
           UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
           UNKEY_PROJECT: post-for-me-api # project slug, not id
           UNKEY_APP: default # leave this as is until we allow multiple apps per project
-        run: ./unkey deploy --env=production ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+        run: ./unkey deploy --env=production ghcr.io/daymoondevelopment/api:${{ github.sha }}
 
       - name: Deploy API to Railway
         id: api
@@ -131,6 +131,7 @@ jobs:
           TYPECHECK_STATUS="${{ steps.typecheck.outcome == 'success' && '✅' || (steps.typecheck.outcome == 'skipped' && '⏸️' || '❌') }}"
           SUPABASE_STATUS="${{ steps.supabase.outcome == 'success' && '🚀' || (steps.supabase.outcome == 'skipped' && '⏸️' || '❌') }}"
           TRIGGER_STATUS="${{ steps.trigger.outcome == 'success' && '🚀' || (steps.trigger.outcome == 'skipped' && '⏸️' || '❌') }}"
+          API_STATUS="${{ steps.api.outcome == 'success' && '🚀' || (steps.api.outcome == 'skipped' && '⏸️' || '❌') }}"
           UNKEY_STATUS="${{ steps.unkey.outcome == 'success' && '🚀' || (steps.unkey.outcome == 'skipped' && '⏸️' || '❌') }}"
           DASHBOARD_STATUS="${{ steps.dashboard.outcome == 'success' && '🚀' || (steps.dashboard.outcome == 'skipped' && '⏸️' || '❌') }}"
 
