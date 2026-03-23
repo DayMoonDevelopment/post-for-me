@@ -683,9 +683,7 @@ export type Database = {
           meta_data: Json | null
           notification_type: Database["public"]["Enums"]["notification_type"]
           project_id: string | null
-          status: Database["public"]["Enums"]["notification_status"]
           team_id: string
-          updated_at: string
         }
         Insert: {
           created_at?: string
@@ -695,9 +693,7 @@ export type Database = {
           meta_data?: Json | null
           notification_type: Database["public"]["Enums"]["notification_type"]
           project_id?: string | null
-          status?: Database["public"]["Enums"]["notification_status"]
           team_id: string
-          updated_at?: string
         }
         Update: {
           created_at?: string
@@ -707,9 +703,7 @@ export type Database = {
           meta_data?: Json | null
           notification_type?: Database["public"]["Enums"]["notification_type"]
           project_id?: string | null
-          status?: Database["public"]["Enums"]["notification_status"]
           team_id?: string
-          updated_at?: string
         }
         Relationships: [
           {
@@ -1050,27 +1044,6 @@ export type Database = {
       }
     }
     Functions: {
-      claim_pending_team_notifications: {
-        Args: { p_limit: number }
-        Returns: {
-          created_at: string
-          delivery_type: Database["public"]["Enums"]["delivery_type"]
-          id: string
-          message: string
-          meta_data: Json | null
-          notification_type: Database["public"]["Enums"]["notification_type"]
-          project_id: string | null
-          status: Database["public"]["Enums"]["notification_status"]
-          team_id: string
-          updated_at: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "team_notifications"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
       increment_team_social_post_meter: {
         Args: {
           p_day: number
@@ -1108,7 +1081,6 @@ export type Database = {
     }
     Enums: {
       delivery_type: "email"
-      notification_status: "pending" | "processing" | "processed"
       notification_type: "usage_alert" | "general"
       social_post_status:
         | "draft"
@@ -1271,7 +1243,6 @@ export const Constants = {
   public: {
     Enums: {
       delivery_type: ["email"],
-      notification_status: ["pending", "processing", "processed"],
       notification_type: ["usage_alert", "general"],
       social_post_status: [
         "draft",

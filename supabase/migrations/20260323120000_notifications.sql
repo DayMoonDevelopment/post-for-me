@@ -10,13 +10,6 @@ CREATE TYPE delivery_type AS enum(
     'email'
 );
 
-
-CREATE TYPE notification_status AS enum(
-    'pending',
-    'processing',
-    'processed'
-);
-
 --
 -- Team notifications
 CREATE TABLE public.team_notifications(
@@ -27,19 +20,13 @@ CREATE TABLE public.team_notifications(
     delivery_type delivery_type NOT NULL,
     message text NOT NULL,
     meta_data jsonb NULL,
-    status notification_status NOT NULL DEFAULT 'pending',
-    created_at timestamp with time zone NOT NULL DEFAULT now(),
-    updated_at timestamp with time zone NOT NULL DEFAULT now()
+    created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_team_notifications_team_id ON public.team_notifications(team_id);
 CREATE INDEX idx_team_notifications_project_id ON public.team_notifications(project_id);
-CREATE INDEX idx_team_notifications_pending ON public.team_notifications(status, created_at)
-    WHERE status = 'pending';
-
-CREATE TRIGGER trg_team_notifications_updated_at
-    BEFORE UPDATE ON public.team_notifications
-    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE INDEX idx_team_notifications_type ON public.team_notifications(team_id, notification_type);
+CREATE INDEX idx_team_notifications_created_at ON public.team_notifications(created_at);
 
 ALTER TABLE public.team_notifications ENABLE ROW LEVEL SECURITY;
 
@@ -60,32 +47,3 @@ CREATE POLICY "Users can delete team notifications for their teams" ON public.te
     FOR DELETE TO authenticated
         USING (is_team_member(team_id));
 
---
--- Fetches pending notifications and atomically marks them as processing.
--- Uses FOR UPDATE SKIP LOCKED so concurrent callers do not claim the same rows.
-CREATE OR REPLACE FUNCTION public.claim_pending_team_notifications(p_limit integer)
-    RETURNS SETOF public.team_notifications
-    LANGUAGE sql
-    SECURITY DEFINER
-    VOLATILE
-    SET search_path = public
-    AS $$
-    WITH to_claim AS (
-        SELECT tn.id
-        FROM public.team_notifications tn
-        WHERE tn.status = 'pending'
-        ORDER BY tn.created_at, tn.id
-        FOR UPDATE SKIP LOCKED
-        LIMIT GREATEST(COALESCE(p_limit, 0), 0)
-    ),
-    claimed AS (
-        UPDATE public.team_notifications tn
-        SET status = 'processing'
-        FROM to_claim tc
-        WHERE tn.id = tc.id
-        RETURNING tn.*
-    )
-    SELECT *
-    FROM claimed
-    ORDER BY created_at, id;
-$$;

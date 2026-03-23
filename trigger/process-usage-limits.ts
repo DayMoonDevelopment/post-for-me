@@ -2,6 +2,7 @@ import { logger, task } from "@trigger.dev/sdk";
 import type Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { Database } from "@post-for-me/db";
+import { isWithinInterval } from "date-fns";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
 const supabaseClient = createClient<Database>(
@@ -93,7 +94,7 @@ const NEW_PRICING_TIER_PRODUCT_IDS = [
   STRIPE_PRICING_TIER_200K_PRODUCT_ID,
 ].filter(Boolean); // Filter out empty strings
 
-function getSubscriptionPlanInfo(subscription: Stripe.Subscription) {
+const getSubscriptionPlanInfo = (subscription: Stripe.Subscription) => {
   // Check if subscription has any new pricing tier products
   for (const item of subscription.items.data) {
     const productId = item.price.product as string;
@@ -138,7 +139,21 @@ function getSubscriptionPlanInfo(subscription: Stripe.Subscription) {
     price: null,
     includesSystemCredentials: false,
   };
-}
+};
+
+const getDefaultPriceId = (product: Stripe.Product): string => {
+  const defaultPrice = product.default_price;
+
+  if (!defaultPrice) {
+    throw new Error("Stripe product has no default price");
+  }
+
+  if (typeof defaultPrice === "string") {
+    return defaultPrice;
+  }
+
+  return defaultPrice.id;
+};
 
 export const processUsageLimits = task({
   id: "process-usage-limits",
@@ -159,10 +174,11 @@ export const processUsageLimits = task({
           expand: ["data.items.data.price"],
         });
 
-        const subscription = subscriptions.data[0];
+        const subscription = subscriptions.data[0] as Stripe.Subscription;
 
         if (!subscription) {
           logger.error("No active subscirpiton for customer", { subscription });
+          return;
         }
         // Get plan info to determine post limit
         const planInfo = getSubscriptionPlanInfo(subscription);
@@ -177,8 +193,20 @@ export const processUsageLimits = task({
           return;
         }
 
-        const item = subscription.items.data[0];
-        const startTime = item.current_period_start;
+        const currentPlanItem = subscription.items.data.find(
+          (subscriptionItem) =>
+            subscriptionItem.price.product === planInfo.productId,
+        );
+
+        if (!currentPlanItem) {
+          logger.error("Could not find current plan item", {
+            subscriptionId: subscription.id,
+            productId: planInfo.productId,
+          });
+          return;
+        }
+
+        const startTime = currentPlanItem.current_period_start;
         const endTime = Math.floor(Date.now() / 1000);
 
         // Query meter event summaries for the current subscription period
@@ -196,17 +224,142 @@ export const processUsageLimits = task({
           0,
         );
 
-        if (usage > planInfo.postLimit) {
-          //TODO:: Check last notification and insert team notificaiton based on status of last notification.
+        if (usage <= planInfo.postLimit) {
+          logger.info("Usage is within subscription limits");
+          return;
+        }
 
-          const { data: lastNotification } = await supabaseClient
+        const { data: lastNotification, error: lastNotificationError } =
+          await supabaseClient
             .from("team_notifications")
             .select("created_at")
             .eq("notification_type", "usage_alert")
             .eq("team_id", team_id)
             .order("created_at", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
+
+        if (lastNotificationError) {
+          logger.error("Failed to fetch last usage notification", {
+            error: lastNotificationError,
+            team_id,
+          });
+          return;
+        }
+
+        const currentPeriodStart = currentPlanItem.current_period_start;
+        const currentPeriodEnd = currentPlanItem.current_period_end;
+        const periodDuration = currentPeriodEnd - currentPeriodStart;
+        const previousPeriodStart = currentPeriodStart - periodDuration;
+
+        const lastNotificationDate = lastNotification
+          ? new Date(lastNotification.created_at)
+          : null;
+
+        if (!lastNotificationDate) {
+          return;
+        }
+
+        switch (true) {
+          //Notificaiont is in current subscripion period
+          case isWithinInterval(lastNotificationDate, {
+            start: new Date(currentPeriodStart),
+            end: new Date(currentPeriodEnd),
+          }): {
+            logger.info("Usage notification already sent this period", {
+              team_id,
+              subscription_id: subscription.id,
+              period: {
+                lastNotificationDate,
+                start: new Date(currentPeriodStart),
+                end: new Date(currentPeriodEnd),
+              },
+            });
+
+            return;
+          }
+          //Notification is in previous subscription period
+          case isWithinInterval(lastNotificationDate, {
+            start: new Date(previousPeriodStart),
+            end: new Date(currentPeriodStart),
+          }): {
+            const currentTierIndex = PRICING_TIERS.findIndex(
+              (tier) => tier.productId === planInfo.productId,
+            );
+            const nextTier = PRICING_TIERS[currentTierIndex + 1];
+
+            if (!nextTier) {
+              logger.info("Team is already on highest pricing tier", {
+                team_id,
+                subscription_id: subscription.id,
+              });
+              return;
+            }
+
+            const nextTierProduct = await stripe.products.retrieve(
+              nextTier.productId,
+            );
+            const nextTierPriceId = getDefaultPriceId(nextTierProduct);
+
+            const activeSchedules = await stripe.subscriptionSchedules.list({
+              customer: stripe_customer_id,
+            });
+
+            for (const schedule of activeSchedules.data.filter(
+              (entry: Stripe.SubscriptionSchedule) => entry.status === "active",
+            )) {
+              await stripe.subscriptionSchedules.release(schedule.id);
+            }
+
+            const schedule = await stripe.subscriptionSchedules.create({
+              from_subscription: subscription.id,
+            });
+
+            const firstPhase = schedule.phases[0];
+
+            if (!firstPhase) {
+              logger.error("Missing subscription schedule phase", {
+                schedule_id: schedule.id,
+                subscription_id: subscription.id,
+              });
+              return;
+            }
+
+            const currentPhaseItems = subscription.items.data.map(
+              (subscriptionItem) => ({
+                price: subscriptionItem.price.id,
+                quantity: subscriptionItem.quantity ?? 1,
+              }),
+            );
+
+            const upgradedPhaseItems = currentPhaseItems.map((phaseItem) =>
+              phaseItem.price === currentPlanItem.price.id
+                ? { ...phaseItem, price: nextTierPriceId }
+                : phaseItem,
+            );
+
+            await stripe.subscriptionSchedules.update(schedule.id, {
+              end_behavior: "release",
+              phases: [
+                {
+                  start_date: firstPhase.start_date,
+                  end_date: currentPeriodEnd,
+                  items: currentPhaseItems,
+                  proration_behavior: "none",
+                },
+                {
+                  start_date: currentPeriodEnd,
+                  items: upgradedPhaseItems,
+                  proration_behavior: "none",
+                },
+              ],
+            });
+
+            return;
+          }
+          default: {
+            return;
+          }
         }
       } catch (error) {
         logger.error("Error fetching usage from Stripe:", error);
