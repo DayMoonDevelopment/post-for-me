@@ -20,13 +20,18 @@ CREATE TABLE public.team_notifications(
     message text NOT NULL,
     meta_data jsonb NULL,
     status notification_status NOT NULL DEFAULT 'pending',
-    created_at timestamp with time zone NOT NULL DEFAULT now()
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_team_notifications_team_id ON public.team_notifications(team_id);
 CREATE INDEX idx_team_notifications_project_id ON public.team_notifications(project_id);
 CREATE INDEX idx_team_notifications_pending ON public.team_notifications(status, created_at)
     WHERE status = 'pending';
+
+CREATE TRIGGER trg_team_notifications_updated_at
+    BEFORE UPDATE ON public.team_notifications
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 ALTER TABLE public.team_notifications ENABLE ROW LEVEL SECURITY;
 

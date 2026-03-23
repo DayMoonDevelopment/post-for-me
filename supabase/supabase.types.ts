@@ -674,6 +674,57 @@ export type Database = {
           },
         ]
       }
+      team_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          meta_data: Json | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          project_id: string | null
+          status: Database["public"]["Enums"]["notification_status"]
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          meta_data?: Json | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          meta_data?: Json | null
+          notification_type?: Database["public"]["Enums"]["notification_type"]
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_notifications_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_notifications_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_social_post_meters: {
         Row: {
           count: number
@@ -996,6 +1047,26 @@ export type Database = {
       }
     }
     Functions: {
+      claim_pending_team_notifications: {
+        Args: { p_limit: number }
+        Returns: {
+          created_at: string
+          id: string
+          message: string
+          meta_data: Json | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          project_id: string | null
+          status: Database["public"]["Enums"]["notification_status"]
+          team_id: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "team_notifications"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       increment_team_social_post_meter: {
         Args: {
           p_day: number
@@ -1032,6 +1103,8 @@ export type Database = {
       }
     }
     Enums: {
+      notification_status: "pending" | "processing" | "processed"
+      notification_type: "email"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1192,6 +1265,8 @@ export const Constants = {
   },
   public: {
     Enums: {
+      notification_status: ["pending", "processing", "processed"],
+      notification_type: ["email"],
       social_post_status: [
         "draft",
         "scheduled",
