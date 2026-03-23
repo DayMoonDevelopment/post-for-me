@@ -1,8 +1,15 @@
 --
 -- Notification enums
 CREATE TYPE notification_type AS enum(
+    'usage_alert',
+    'general'
+);
+
+
+CREATE TYPE delivery_type AS enum(
     'email'
 );
+
 
 CREATE TYPE notification_status AS enum(
     'pending',
@@ -17,6 +24,7 @@ CREATE TABLE public.team_notifications(
     team_id text NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
     project_id text NULL REFERENCES public.projects(id) ON DELETE SET NULL,
     notification_type notification_type NOT NULL,
+    delivery_type delivery_type NOT NULL,
     message text NOT NULL,
     meta_data jsonb NULL,
     status notification_status NOT NULL DEFAULT 'pending',

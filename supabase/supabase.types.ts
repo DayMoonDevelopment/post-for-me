@@ -677,6 +677,7 @@ export type Database = {
       team_notifications: {
         Row: {
           created_at: string
+          delivery_type: Database["public"]["Enums"]["delivery_type"]
           id: string
           message: string
           meta_data: Json | null
@@ -688,6 +689,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          delivery_type: Database["public"]["Enums"]["delivery_type"]
           id?: string
           message: string
           meta_data?: Json | null
@@ -699,6 +701,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          delivery_type?: Database["public"]["Enums"]["delivery_type"]
           id?: string
           message?: string
           meta_data?: Json | null
@@ -1051,6 +1054,7 @@ export type Database = {
         Args: { p_limit: number }
         Returns: {
           created_at: string
+          delivery_type: Database["public"]["Enums"]["delivery_type"]
           id: string
           message: string
           meta_data: Json | null
@@ -1103,8 +1107,9 @@ export type Database = {
       }
     }
     Enums: {
+      delivery_type: "email"
       notification_status: "pending" | "processing" | "processed"
-      notification_type: "email"
+      notification_type: "usage_alert" | "general"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1265,8 +1270,9 @@ export const Constants = {
   },
   public: {
     Enums: {
+      delivery_type: ["email"],
       notification_status: ["pending", "processing", "processed"],
-      notification_type: ["email"],
+      notification_type: ["usage_alert", "general"],
       social_post_status: [
         "draft",
         "scheduled",

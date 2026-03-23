@@ -198,6 +198,15 @@ export const processUsageLimits = task({
 
         if (usage > planInfo.postLimit) {
           //TODO:: Check last notification and insert team notificaiton based on status of last notification.
+
+          const { data: lastNotification } = await supabaseClient
+            .from("team_notifications")
+            .select("created_at")
+            .eq("notification_type", "usage_alert")
+            .eq("team_id", team_id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
         }
       } catch (error) {
         logger.error("Error fetching usage from Stripe:", error);
