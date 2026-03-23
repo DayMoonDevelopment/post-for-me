@@ -332,11 +332,12 @@ export const processUsageLimits = task({
               }),
             );
 
-            const upgradedPhaseItems = currentPhaseItems.map((phaseItem) =>
-              phaseItem.price === currentPlanItem.price.id
-                ? { ...phaseItem, price: nextTierPriceId }
-                : phaseItem,
-            );
+            const nextPhaseItems = [
+              {
+                price: nextTierPriceId,
+                quantity: currentPlanItem.quantity ?? 1,
+              },
+            ];
 
             await stripe.subscriptionSchedules.update(schedule.id, {
               end_behavior: "release",
@@ -349,7 +350,7 @@ export const processUsageLimits = task({
                 },
                 {
                   start_date: currentPeriodEnd,
-                  items: upgradedPhaseItems,
+                  items: nextPhaseItems,
                   proration_behavior: "none",
                 },
               ],
