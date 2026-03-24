@@ -10,13 +10,14 @@ import { BlueskyPostClient } from "./posting/platforms/bluesky-post-client";
 import { ThreadsPostClient } from "./posting/platforms/threads-post-client";
 import { PinterestPostClient } from "./posting/platforms/pinterest-post-client";
 import { YouTubePostClient } from "./posting/platforms/youtube-post-client";
+import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
+
 import {
   IndividualPostData,
   PlatformAppCredentials,
   PostResult,
   SocialAccount,
 } from "./posting/post.types";
-import { TikTokBusinessPostClient } from "posting/platforms/tiktok_business-post-client";
 import { differenceInDays } from "date-fns";
 import { Database } from "@post-for-me/db";
 
