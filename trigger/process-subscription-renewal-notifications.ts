@@ -32,7 +32,7 @@ const hasRenewalReminderInCurrentCycle = async (
     .from("team_notifications")
     .select("created_at, meta_data")
     .eq("team_id", teamId)
-    .eq("notification_type", "general")
+    .eq("notification_type", "payment_reminder")
     .gte("created_at", reminderStart.toISOString())
     .lt("created_at", renewalDate.toISOString())
     .order("created_at", { ascending: false })
@@ -66,7 +66,7 @@ const triggerRenewalReminder = async (
     id: `tn_${randomUUID()}`,
     team_id: teamId,
     project_id: null,
-    notification_type: "general",
+    notification_type: "payment_reminder",
     delivery_type: "email",
     message: SUBSCRIPTION_RENEWAL_REMINDER_MESSAGE,
     meta_data: metadata,
@@ -109,7 +109,7 @@ export const processSubscriptionRenewalNotifications = schedules.task({
       await supabaseClient
         .from("team_notifications")
         .select("team_id")
-        .filter("notification_type", "eq", "payment_reminder")
+        .eq("notification_type", "payment_reminder")
         .lte("created_at", oneMonthAgo);
 
     if (paymentReminderError) {
