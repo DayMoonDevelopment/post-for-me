@@ -2,6 +2,7 @@
 -- Notification enums
 CREATE TYPE notification_type AS enum(
     'usage_alert',
+    'payment_reminder',
     'general'
 );
 
