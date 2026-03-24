@@ -1,8 +1,9 @@
-import { logger, task } from "@trigger.dev/sdk";
+import { logger, task, tasks } from "@trigger.dev/sdk";
 import type Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
-import { Database } from "@post-for-me/db";
+import { Database, Json } from "@post-for-me/db";
 import { isWithinInterval } from "date-fns";
+import { randomUUID } from "crypto";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
 const supabaseClient = createClient<Database>(
@@ -30,6 +31,33 @@ const STRIPE_PRICING_TIER_200K_PRODUCT_ID =
   process.env?.STRIPE_PRICING_TIER_200K_PRODUCT_ID || "";
 
 const STRIPE_API_PRODUCT_ID = process.env?.STRIPE_API_PRODUCT_ID || "";
+const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID || "";
+const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
+
+const USAGE_LIMIT_ALERT_MESSAGE =
+  "You've exceeded your monthly usage limit. Upgrade your plan to keep publishing without interruption.";
+
+const UPGRADE_SCHEDULED_MESSAGE =
+  "Your plan has been upgraded. The new usage limit will apply at the start of your next billing period.";
+
+const triggerTeamNotification = async (
+  teamId: string,
+  message: string,
+  metadata: Json,
+): Promise<void> => {
+  await tasks.trigger("process-team-notification", {
+    id: `tn_${randomUUID()}`,
+    team_id: teamId,
+    project_id: null,
+    notification_type: "usage_alert",
+    delivery_type: "email",
+    message,
+    meta_data: metadata,
+    created_at: new Date().toISOString(),
+  });
+};
 
 const PRICING_TIERS = [
   {
@@ -256,7 +284,22 @@ export const processUsageLimits = task({
           ? new Date(lastNotification.created_at)
           : null;
 
+        const currentPlanMetadata = {
+          plan_info: {
+            current_plan: {
+              product_id: planInfo.productId,
+              name: planInfo.planName,
+              post_limit: planInfo.postLimit,
+              price: planInfo.price,
+            },
+          },
+        };
+
         if (!lastNotificationDate) {
+          await triggerTeamNotification(team_id, USAGE_LIMIT_ALERT_MESSAGE, {
+            transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
+            ...currentPlanMetadata,
+          });
           return;
         }
 
@@ -356,9 +399,26 @@ export const processUsageLimits = task({
               ],
             });
 
+            await triggerTeamNotification(team_id, UPGRADE_SCHEDULED_MESSAGE, {
+              transactional_email_id:
+                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+              plan_info: {
+                ...currentPlanMetadata.plan_info,
+                next_plan: {
+                  product_id: nextTier.productId,
+                  name: nextTier.name,
+                  post_limit: nextTier.posts,
+                  price: nextTier.price,
+                },
+              },
+            });
             return;
           }
           default: {
+            await triggerTeamNotification(team_id, USAGE_LIMIT_ALERT_MESSAGE, {
+              transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
+              ...currentPlanMetadata,
+            });
             return;
           }
         }
