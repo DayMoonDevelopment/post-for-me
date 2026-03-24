@@ -14,30 +14,43 @@ const supabaseClient = createClient<Database>(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+const getTeamContactEmail = async (
+  teamId: string,
+): Promise<string | undefined> => {
+  const { data: team, error: teamError } = await supabaseClient
+    .from("teams")
+    .select("billing_email, user:users!created_by (email)")
+    .eq("id", teamId)
+    .single();
+
+  if (!team || teamError) {
+    logger.error("Unable to fetch team", { error: teamError });
+    throw new Error("Unable to select team");
+  }
+
+  return team.billing_email || team.user?.email;
+};
+
 async function sendEmailNotification(
   notification: TeamNotification,
 ): Promise<void> {
-  const metaData = getNotificationMetadata(notification.meta_data);
-  const transactionalEmailId = metaData.transactional_email_id;
-
-  if (
-    typeof transactionalEmailId !== "string" ||
-    transactionalEmailId.trim() === ""
-  ) {
-    logger.error("Notification metadata missing transactional_email_id", {
-      notificationId: notification.id,
-      teamId: notification.team_id,
-    });
-    return;
-  }
-
   if (!LOOPS_API_KEY) {
     logger.error("LOOPS_API_KEY is not configured", {
       notificationId: notification.id,
       teamId: notification.team_id,
     });
-    return;
+    throw new Error("Unable to intialize loops client");
   }
+
+  const metadata = notification.meta_data as {
+    transactional_email_id?: string;
+  };
+
+  if (!metadata.transactional_email_id) {
+    throw new Error("Loops email Id not set");
+  }
+
+  const transactionalEmailId = metadata.transactional_email_id;
 
   const email = await getTeamContactEmail(notification.team_id);
 
@@ -48,9 +61,6 @@ async function sendEmailNotification(
     });
     return;
   }
-
-  const { transactional_email_id: _, ...metadataWithoutTransactionalId } =
-    metaData;
 
   const response = await fetch(LOOPS_TRANSACTIONAL_URL, {
     method: "POST",
@@ -63,7 +73,7 @@ async function sendEmailNotification(
       transactionalId: transactionalEmailId,
       dataVariables: {
         message: notification.message,
-        metadata: metadataWithoutTransactionalId,
+        ...((notification.meta_data as {}) || {}),
       },
     }),
   });
