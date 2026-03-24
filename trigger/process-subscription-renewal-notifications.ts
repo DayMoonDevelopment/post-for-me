@@ -91,20 +91,6 @@ export const processSubscriptionRenewalNotifications = schedules.task({
 
     const oneMonthAgo = subMonths(new Date(), 1).toISOString();
 
-    const { data: recentlyCreatedTeams, error: recentlyCreatedTeamsError } =
-      await supabaseClient
-        .from("teams")
-        .select("id")
-        .not("stripe_customer_id", "is", null)
-        .gte("created_at", oneMonthAgo);
-
-    if (recentlyCreatedTeamsError) {
-      logger.error("Failed to fetch recently created teams", {
-        error: recentlyCreatedTeamsError,
-      });
-      throw new Error(recentlyCreatedTeamsError.message);
-    }
-
     const { data: paymentReminderNotifications, error: paymentReminderError } =
       await supabaseClient
         .from("team_notifications")
@@ -119,23 +105,26 @@ export const processSubscriptionRenewalNotifications = schedules.task({
       throw new Error(paymentReminderError.message);
     }
 
-    const teamIdsToProcess = new Set<string>([
-      ...(recentlyCreatedTeams || []).map((team) => team.id),
-      ...(paymentReminderNotifications || []).map(
-        (notification) => notification.team_id,
+    const teamIdsFromNotifications = Array.from(
+      new Set(
+        (paymentReminderNotifications || []).map(
+          (notification) => notification.team_id,
+        ),
       ),
-    ]);
+    );
 
-    if (teamIdsToProcess.size === 0) {
-      logger.info("No teams found for renewal reminders");
-      return;
-    }
-
-    const { data: teams, error: teamsError } = await supabaseClient
+    let teamsQuery = supabaseClient
       .from("teams")
       .select("id, updated_at")
-      .not("stripe_customer_id", "is", null)
-      .in("id", Array.from(teamIdsToProcess));
+      .not("stripe_customer_id", "is", null);
+
+    teamsQuery = teamIdsFromNotifications.length
+      ? teamsQuery.or(
+          `id.in.(${teamIdsFromNotifications.join(",")}),created_at.gte.${oneMonthAgo}`,
+        )
+      : teamsQuery.gte("created_at", oneMonthAgo);
+
+    const { data: teams, error: teamsError } = await teamsQuery;
 
     if (teamsError) {
       logger.error("Failed to fetch teams for renewal reminders", {
