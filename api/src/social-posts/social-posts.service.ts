@@ -573,7 +573,7 @@ export class SocialPostsService {
          provider_data
         )
         `,
-        { count: 'exact', head: false },
+        { count: 'estimated', head: false },
       )
       .eq('project_id', projectId)
       .range(offset, offset + limit - 1);

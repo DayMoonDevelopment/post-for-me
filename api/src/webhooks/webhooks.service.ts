@@ -26,7 +26,7 @@ export class WebhooksService {
     const webhookQuery = this.supabaseService.supabaseClient
       .from('webhooks')
       .select('*, webhook_subscribed_event_types!inner(type)', {
-        count: 'exact',
+        count: 'estimated',
         head: false,
       })
       .eq('project_id', projectId)
