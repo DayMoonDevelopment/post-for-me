@@ -34,7 +34,7 @@ export class SocialAccountsService {
 
     const query = this.supabaseService.supabaseClient
       .from('social_provider_connections')
-      .select('*', { count: 'exact', head: false })
+      .select('*', { count: 'estimated', head: false })
       .eq('project_id', projectId)
       .range(offset, offset + limit - 1);
 

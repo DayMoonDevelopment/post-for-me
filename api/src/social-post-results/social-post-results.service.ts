@@ -78,7 +78,7 @@ export class PostResultsService {
       .select(
         '*, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
         {
-          count: 'exact',
+          count: 'estimated',
           head: false,
         },
       )
