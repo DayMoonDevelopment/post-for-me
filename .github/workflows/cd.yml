@@ -135,7 +135,7 @@ jobs:
           UNKEY_STATUS="${{ steps.unkey.outcome == 'success' && '🚀' || (steps.unkey.outcome == 'skipped' && '⏸️' || '❌') }}"
           DASHBOARD_STATUS="${{ steps.dashboard.outcome == 'success' && '🚀' || (steps.dashboard.outcome == 'skipped' && '⏸️' || '❌') }}"
 
-          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "UNKEY_STATUS" "$DASHBOARD_STATUS"
+          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$UNKEY_STATUS" "$DASHBOARD_STATUS"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
