@@ -674,6 +674,54 @@ export type Database = {
           },
         ]
       }
+      team_notifications: {
+        Row: {
+          created_at: string
+          delivery_type: Database["public"]["Enums"]["delivery_type"]
+          id: string
+          message: string
+          meta_data: Json | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          project_id: string | null
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_type: Database["public"]["Enums"]["delivery_type"]
+          id?: string
+          message: string
+          meta_data?: Json | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          project_id?: string | null
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_type?: Database["public"]["Enums"]["delivery_type"]
+          id?: string
+          message?: string
+          meta_data?: Json | null
+          notification_type?: Database["public"]["Enums"]["notification_type"]
+          project_id?: string | null
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_notifications_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_notifications_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_social_post_meters: {
         Row: {
           count: number
@@ -1032,6 +1080,8 @@ export type Database = {
       }
     }
     Enums: {
+      delivery_type: "email"
+      notification_type: "usage_alert" | "payment_reminder" | "general"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1192,6 +1242,8 @@ export const Constants = {
   },
   public: {
     Enums: {
+      delivery_type: ["email"],
+      notification_type: ["usage_alert", "payment_reminder", "general"],
       social_post_status: [
         "draft",
         "scheduled",

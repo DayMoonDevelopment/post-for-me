@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { logger, task, tags, tasks } from "@trigger.dev/sdk";
+import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -10,13 +10,14 @@ import { BlueskyPostClient } from "./posting/platforms/bluesky-post-client";
 import { ThreadsPostClient } from "./posting/platforms/threads-post-client";
 import { PinterestPostClient } from "./posting/platforms/pinterest-post-client";
 import { YouTubePostClient } from "./posting/platforms/youtube-post-client";
+import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
+
 import {
   IndividualPostData,
   PlatformAppCredentials,
   PostResult,
   SocialAccount,
 } from "./posting/post.types";
-import { TikTokBusinessPostClient } from "posting/platforms/tiktok_business-post-client";
 import { differenceInDays } from "date-fns";
 import { Database } from "@post-for-me/db";
 
@@ -149,6 +150,7 @@ export const postToPlatform = task({
       platformConfig,
       postId,
       stripeCustomerId,
+      teamId,
       appCredentials,
       projectId,
     } = payload;
@@ -223,6 +225,31 @@ export const postToPlatform = task({
           logger.error("Failed to increase stripe meter", {
             meter: STRIPE_METER_EVENT,
             stripe_customer_id: stripeCustomerId,
+            error,
+          });
+        }
+
+        try {
+          const idempotencyKey = await idempotencyKeys.create(
+            ["process-usage-limits", teamId, stripeCustomerId],
+            { scope: "global" },
+          );
+
+          await tasks.trigger(
+            "process-usage-limits",
+            {
+              stripe_customer_id: stripeCustomerId,
+              team_id: teamId,
+            },
+            {
+              idempotencyKey,
+              idempotencyKeyTTL: "1h",
+            },
+          );
+        } catch (error) {
+          logger.error("Failed to trigger process usage limits", {
+            stripe_customer_id: stripeCustomerId,
+            team_id: teamId,
             error,
           });
         }
