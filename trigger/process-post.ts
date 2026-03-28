@@ -407,6 +407,7 @@ export const processPost = task({
             for (const medium of media) {
               bulkPostData.push({
                 stripeCustomerId: postData.stripe_customer_id,
+                teamId: project.team_id,
                 platform: account.provider,
                 postId: postData.id,
                 account,
@@ -420,6 +421,7 @@ export const processPost = task({
           } else {
             bulkPostData.push({
               stripeCustomerId: postData.stripe_customer_id,
+              teamId: project.team_id,
               platform: account.provider,
               postId: postData.id,
               account,

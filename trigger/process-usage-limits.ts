@@ -42,6 +42,11 @@ const USAGE_LIMIT_ALERT_MESSAGE =
 const UPGRADE_SCHEDULED_MESSAGE =
   "Your plan has been upgraded. The new usage limit will apply at the start of your next billing period.";
 
+export type ProcessUsageLimitsPayload = {
+  stripe_customer_id: string;
+  team_id: string;
+};
+
 const triggerTeamNotification = async (
   teamId: string,
   message: string,
@@ -187,7 +192,7 @@ export const processUsageLimits = task({
   id: "process-usage-limits",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
-  run: async (payload: { stripe_customer_id: string; team_id: string }) => {
+  run: async (payload: ProcessUsageLimitsPayload) => {
     const { stripe_customer_id, team_id } = payload;
 
     logger.info("Checking usage for customer", { stripe_customer_id, team_id });
