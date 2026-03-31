@@ -25,10 +25,13 @@ export class WebhooksService {
 
     const webhookQuery = this.supabaseService.supabaseClient
       .from('webhooks')
-      .select('*, webhook_subscribed_event_types!inner(type)', {
-        count: 'estimated',
-        head: false,
-      })
+      .select(
+        'id, url, secret_key, webhook_subscribed_event_types!inner(type)',
+        {
+          count: 'estimated',
+          head: false,
+        },
+      )
       .eq('project_id', projectId)
       .range(offset, offset + limit - 1);
 
@@ -120,7 +123,7 @@ export class WebhooksService {
   }): Promise<WebhookDto | null> {
     const { data, error } = await this.supabaseService.supabaseClient
       .from('webhooks')
-      .select('*, webhook_subscribed_event_types!inner(type)')
+      .select('id, url, secret_key, webhook_subscribed_event_types!inner(type)')
       .eq('id', id)
       .eq('project_id', projectId)
       .single();
