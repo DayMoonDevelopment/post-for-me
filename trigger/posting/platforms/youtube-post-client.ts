@@ -415,11 +415,13 @@ export class YouTubePostClient extends PostClient {
 
     while (attempt < maxAttempts) {
       attempt += 1;
+      const waitMs = Math.min(10_000, 500 * 2 ** (attempt - 1));
+
       try {
         const res = await fetch(url, init);
+
         if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
           // Retry throttling/transient server errors.
-          const waitMs = Math.min(10_000, 500 * 2 ** (attempt - 1));
           this.#responses.push({
             resumableRetry: {
               attempt,
@@ -434,7 +436,6 @@ export class YouTubePostClient extends PostClient {
         return res;
       } catch (err) {
         lastErr = err;
-        const waitMs = Math.min(10_000, 500 * 2 ** (attempt - 1));
         this.#responses.push({
           resumableRetry: {
             attempt,
