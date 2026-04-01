@@ -19,7 +19,7 @@ import {
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
 import ffmpeg from "fluent-ffmpeg";
 import { createReadStream } from "fs";
-import { logger, tasks } from "@trigger.dev/sdk/v3";
+import { logger, tasks, wait } from "@trigger.dev/sdk/v3";
 
 export class BlueskyPostClient extends PostClient {
   #agent: AtpAgent;
@@ -339,7 +339,7 @@ export class BlueskyPostClient extends PostClient {
 
       if (!jobFinished) {
         // wait a second
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await wait.for({ seconds: 1 });
       }
     }
 

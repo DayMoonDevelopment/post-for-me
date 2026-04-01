@@ -15,7 +15,7 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-import { logger } from "@trigger.dev/sdk";
+import { logger, wait } from "@trigger.dev/sdk";
 import FormData from "form-data";
 
 export class FacebookPostClient extends PostClient {
@@ -537,7 +537,7 @@ export class FacebookPostClient extends PostClient {
       status = statusResponse.data?.status?.video_status;
       attempts++;
 
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await wait.for({ seconds: delay / 1000 });
     }
 
     if (status === "error") {
@@ -623,7 +623,7 @@ export class FacebookPostClient extends PostClient {
         videoDelay,
         vidoeAttempts,
       });
-      await new Promise((resolve) => setTimeout(resolve, videoDelay));
+      await wait.for({ seconds: videoDelay / 1000 });
     }
 
     if (videoStatus === "error") {
@@ -688,7 +688,7 @@ export class FacebookPostClient extends PostClient {
         attempts++;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await wait.for({ seconds: delay / 1000 });
     }
 
     if (status === "error") {
@@ -880,7 +880,7 @@ export class FacebookPostClient extends PostClient {
         videoDelay,
         vidoeAttempts,
       });
-      await new Promise((resolve) => setTimeout(resolve, videoDelay));
+      await wait.for({ seconds: videoDelay / 1000 });
     }
 
     if (videoStatus === "error") {
@@ -968,7 +968,7 @@ export class FacebookPostClient extends PostClient {
         attempts++;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await wait.for({ seconds: delay / 1000 });
     }
 
     if (status === "error") {

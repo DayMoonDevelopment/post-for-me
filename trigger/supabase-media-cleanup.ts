@@ -1,6 +1,6 @@
 import { Database } from "@post-for-me/db";
 import { createClient } from "@supabase/supabase-js";
-import { logger, schedules } from "@trigger.dev/sdk";
+import { logger, schedules, wait } from "@trigger.dev/sdk";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -139,7 +139,7 @@ export const supabaseMediaCleanup = schedules.task({
 
       // Add a small delay between batches to be nice to the API
       if (i + batchSize < filesToDelete.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await wait.for({ seconds: 0.1 });
       }
     }
 
