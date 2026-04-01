@@ -5,6 +5,7 @@
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { wait } from "@trigger.dev/sdk";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -510,7 +511,7 @@ export class YouTubePostClient extends PostClient {
   }
 
   async #sleep(ms: number): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms));
+    await wait.for({ seconds: ms / 1000 });
   }
 
   #sanitizeYouTubeCaption(caption: string): string {

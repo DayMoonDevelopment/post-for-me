@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/require-await */
 import { SupabaseClient } from "@supabase/supabase-js";
+import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -220,7 +221,7 @@ export class InstagramPostClient extends PostClient {
               `Bad Request With Error: ${error.response?.data?.error?.message}`,
             );
             console.log("Waiting 5 secs");
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+            await wait.for({ seconds: 5 });
             continue;
           }
 
@@ -468,7 +469,7 @@ export class InstagramPostClient extends PostClient {
               delay / 1000
             } seconds before retrying...`,
           );
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await wait.for({ seconds: delay / 1000 });
         }
       }
 
@@ -618,7 +619,7 @@ export class InstagramPostClient extends PostClient {
                   delay / 1000
                 } seconds before retrying...`,
               );
-              await new Promise((resolve) => setTimeout(resolve, delay));
+              await wait.for({ seconds: delay / 1000 });
             }
           }
 
@@ -627,7 +628,7 @@ export class InstagramPostClient extends PostClient {
           }
         } else {
           // Wait for item processing
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await wait.for({ seconds: 2 });
         }
 
         containerIds.push(containerId);

@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/require-await */
 import { SupabaseClient } from "@supabase/supabase-js";
+import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -268,7 +269,7 @@ export class TikTokPostClient extends PostClient {
       status = statusResponse.data.data.status;
       attempts++;
 
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await wait.for({ seconds: delay / 1000 });
     }
 
     if (

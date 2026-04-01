@@ -6,6 +6,7 @@
 import { PostClient } from "../post-client";
 import axios from "axios";
 import FormData from "form-data";
+import { wait } from "@trigger.dev/sdk";
 import {
   PinterestConfiguration,
   PlatformAppCredentials,
@@ -331,7 +332,7 @@ export class PinterestPostClient extends PostClient {
         throw new Error("Media processing failed");
       }
 
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await wait.for({ seconds: delay / 1000 });
       delay *= 1.2;
       attempts++;
     }
