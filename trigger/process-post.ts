@@ -179,12 +179,8 @@ export const processPost = task({
         } catch (error) {
           apiKeyEnabled = false;
           const hasRetriesLeft = retryCount < UNKEY_MAX_RETRIES;
-
-          if (!hasRetriesLeft) {
-            throw error;
-          }
-
           const delaySeconds = 2 ** retryCount;
+
           logger.warn("Unkey API key validation failed, retrying", {
             retryAttempt: retryCount + 1,
             maxRetries: UNKEY_MAX_RETRIES,
@@ -192,7 +188,9 @@ export const processPost = task({
             error,
           });
 
-          await wait.for({ seconds: delaySeconds });
+          if (hasRetriesLeft) {
+            await wait.for({ seconds: delaySeconds });
+          }
         }
       }
 
