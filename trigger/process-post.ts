@@ -1,4 +1,4 @@
-import { logger, task, tasks, tags } from "@trigger.dev/sdk";
+import { logger, task, tasks, tags, wait } from "@trigger.dev/sdk";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -139,6 +139,8 @@ const transformPostData = (data: {
 
 const unkey = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
 
+const UNKEY_MAX_RETRIES = 3;
+
 export const processPost = task({
   id: "process-post",
   maxDuration: 3600,
@@ -165,10 +167,37 @@ export const processPost = task({
       }
 
       logger.info("Checking API Key is valid");
-      const { data } = await unkey.keys.getKey({ keyId: post.api_key });
+      let apiKeyEnabled = false;
 
-      if (!data.enabled) {
-        logger.error("API Key is invalid", { key_result: data });
+      for (let retryCount = 0; retryCount <= UNKEY_MAX_RETRIES; retryCount++) {
+        try {
+          const { data } = await unkey.keys.getKey({ keyId: post.api_key });
+
+          apiKeyEnabled = data.enabled;
+          logger.info("Found API Key", { data });
+          break;
+        } catch (error) {
+          apiKeyEnabled = false;
+          const hasRetriesLeft = retryCount < UNKEY_MAX_RETRIES;
+
+          if (!hasRetriesLeft) {
+            throw error;
+          }
+
+          const delaySeconds = 2 ** retryCount;
+          logger.warn("Unkey API key validation failed, retrying", {
+            retryAttempt: retryCount + 1,
+            maxRetries: UNKEY_MAX_RETRIES,
+            delaySeconds,
+            error,
+          });
+
+          await wait.for({ seconds: delaySeconds });
+        }
+      }
+
+      if (!apiKeyEnabled) {
+        logger.error("API Key is invalid");
         errorResults.push(
           ...accounts.map((connection) => ({
             success: false,
