@@ -496,11 +496,23 @@ export class TikTokBusinessService implements SocialPlatformService {
       'shares',
       'reach',
       'video_duration',
+      'video_view_retention',
       'full_video_watched_rate',
       'total_time_watched',
       'average_time_watched',
       'impression_sources',
       'audience_countries',
+      'new_followers',
+      'profile_views',
+      'website_clicks',
+      'phone_number_clicks',
+      'app_download_clicks',
+      'email_clicks',
+      'address_clicks',
+      'audience_genders',
+      'audience_types',
+      'engagement_likes',
+      'favorites',
     ];
 
     return includeMetrics
