@@ -48,7 +48,7 @@ export async function getYoutubeSocialProviderConnection({
         channel.snippet?.thumbnails?.default?.url;
 
       return {
-        social_provider_user_id: channel.id,
+        social_provider_user_id: channel.id!,
         social_provider_user_name: channel.snippet?.title ?? "",
         social_provider_photo_url: profilePhotoUrl ?? undefined,
         access_token: tokens.access_token!,
