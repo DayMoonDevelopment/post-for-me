@@ -5,6 +5,7 @@
 /.react-router/
 /build/
 .vercel
+/scripts/
 
 .env.*
 !.env.example
