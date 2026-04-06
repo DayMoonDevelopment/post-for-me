@@ -23,7 +23,7 @@ export class InstagramPostClient extends PostClient {
   #minAspectRatio = 4 / 5;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
-  #mediaRetryAttempts = 10;
+  #mediaRetryAttempts = 30;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
   #localSupabaseClient;
@@ -602,6 +602,14 @@ export class InstagramPostClient extends PostClient {
 
         return containerId;
       } catch (error) {
+        if (error?.response?.data) {
+          this.#responses.push({
+            [responseLogKey]: error.response.data,
+            attempt,
+            failed: true,
+          });
+        }
+
         const errorMessage = this.#getErrorMessage(error);
         console.error(
           `Failed to process ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}: ${errorMessage}`,
@@ -613,7 +621,9 @@ export class InstagramPostClient extends PostClient {
           );
         }
 
-        await wait.for({ seconds: attempt * 2 });
+        const delay =
+          this.#mediaStatusInitialDelayMs * Math.pow(1.5, attempt - 1);
+        await wait.for({ seconds: delay / 1000 });
       }
     }
 
