@@ -23,7 +23,7 @@ export class InstagramPostClient extends PostClient {
   #minAspectRatio = 4 / 5;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
-  #mediaRetryAttempts = 3;
+  #mediaRetryAttempts = 10;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
   #localSupabaseClient;
@@ -323,7 +323,7 @@ export class InstagramPostClient extends PostClient {
       signedUrl = await this.getSignedUrlForFile(medium);
       if (medium.thumbnail_url) {
         const transformedThumbnail = await this.#transformImage({
-          medium: { url: medium.thumbnail_url, type: "image" },
+          medium: { id: medium.id, url: medium.thumbnail_url, type: "image" },
           options: {
             placement: platformConfig?.placement,
           },
@@ -684,7 +684,9 @@ export class InstagramPostClient extends PostClient {
   }
 
   #getErrorMessage(error: any): string {
-    return error?.response?.data?.error?.message || error?.message || "Unknown error";
+    return (
+      error?.response?.data?.error?.message || error?.message || "Unknown error"
+    );
   }
 
   async #getPostUrl({
