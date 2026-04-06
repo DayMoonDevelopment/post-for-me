@@ -23,7 +23,7 @@ export class InstagramPostClient extends PostClient {
   #minAspectRatio = 4 / 5;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
-  #mediaRetryAttempts = 10;
+  #mediaRetryAttempts = 30;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
   #localSupabaseClient;
