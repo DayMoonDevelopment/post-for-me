@@ -329,6 +329,7 @@ export const processPost = task({
       logger.info("Constructed Post Data", { postData });
 
       const bulkPostData: IndividualPostData[] = [];
+      const storyBulkPostData: IndividualPostData[] = [];
       for (const account of postData.accounts) {
         try {
           logger.info("Getting App Credentials");
@@ -432,7 +433,7 @@ export const processPost = task({
 
           if (isStoryPlacement) {
             for (const medium of media) {
-              bulkPostData.push({
+              storyBulkPostData.push({
                 stripeCustomerId: postData.stripe_customer_id,
                 platform: account.provider,
                 postId: postData.id,
@@ -476,13 +477,43 @@ export const processPost = task({
         }
       }
 
-      logger.info("Posting To Accounts", { bulkPostData });
-      const batchPostResult = await tasks.batchTriggerAndWait(
-        "post-to-platform",
-        bulkPostData.map((data) => ({ payload: data })),
-      );
+      if (bulkPostData.length > 0) {
+        logger.info("Posting To Accounts", { bulkPostData });
+        const batchPostResult = await tasks.batchTriggerAndWait(
+          "post-to-platform",
+          bulkPostData.map((data) => ({ payload: data })),
+        );
 
-      logger.info("Posting To Accounts Complete", { batchPostResult });
+        logger.info("Posting To Accounts Complete", { batchPostResult });
+      }
+
+      if (storyBulkPostData.length > 0) {
+        logger.info("Posting Story Media Sequentially", {
+          totalStoryPosts: storyBulkPostData.length,
+        });
+
+        for (const [index, storyPostData] of storyBulkPostData.entries()) {
+          logger.info("Posting Story Media", {
+            current: index + 1,
+            total: storyBulkPostData.length,
+            provider: storyPostData.platform,
+            provider_connection_id: storyPostData.account.id,
+          });
+
+          const storyPostResult = await tasks.triggerAndWait(
+            "post-to-platform",
+            storyPostData,
+          );
+
+          logger.info("Posting Story Media Complete", {
+            current: index + 1,
+            total: storyBulkPostData.length,
+            provider: storyPostData.platform,
+            provider_connection_id: storyPostData.account.id,
+            success: storyPostResult.ok,
+          });
+        }
+      }
     } catch (error) {
       logger.error("Unexpected Error", { error });
     } finally {
