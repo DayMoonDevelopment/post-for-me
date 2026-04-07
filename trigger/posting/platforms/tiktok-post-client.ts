@@ -238,7 +238,7 @@ export class TikTokPostClient extends PostClient {
     let statusResponse;
     let attempts = 0;
     const initialDelayMs = 5000;
-    const maxAttempts = 48; // 48 attempts = 240 seconds = 4 minutes
+    const maxAttempts = 15;
 
     while (
       this.#processingStatuses.includes(status) &&
