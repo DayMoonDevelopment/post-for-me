@@ -191,7 +191,7 @@ export class InstagramPostClient extends PostClient {
       }
 
       let platformId: string | null = null;
-      const maxPublishAttempts = 10;
+      const maxPublishAttempts = 15;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
         try {
@@ -706,43 +706,86 @@ export class InstagramPostClient extends PostClient {
     account: SocialAccount;
     postId: string;
   }): Promise<string> {
-    this.#requests.push({
-      getPostUrlRequest: {
-        url: `${this.getApiBaseUrl(account)}/${postId}`,
-      },
-    });
-    // Fetch the media object to get the permalink
-    const mediaResponse = await axios.get(
-      `${this.getApiBaseUrl(account)}/${postId}`,
-      {
-        params: {
-          fields: "permalink,media_type",
-          access_token: account.access_token,
-        },
-      },
+    const maxGetPostUrlAttempts = 5;
+    const accountUrl = `https://www.instagram.com/${account.social_provider_user_name}/`;
+
+    for (let attempt = 1; attempt <= maxGetPostUrlAttempts; attempt++) {
+      try {
+        this.#requests.push({
+          getPostUrlRequest: {
+            url: `${this.getApiBaseUrl(account)}/${postId}`,
+            attempt,
+          },
+        });
+
+        // Fetch the media object to get the permalink
+        const mediaResponse = await axios.get(
+          `${this.getApiBaseUrl(account)}/${postId}`,
+          {
+            params: {
+              fields: "permalink,media_type",
+              access_token: account.access_token,
+            },
+          },
+        );
+
+        this.#responses.push({
+          getPostUrlResponse: mediaResponse.data,
+          attempt,
+        });
+
+        if (mediaResponse.data.error) {
+          throw new Error(
+            `Failed to fetch media details: ${mediaResponse.data.error.message as string}`,
+          );
+        }
+
+        const permalink = mediaResponse.data.permalink as string | undefined;
+        const actualMediaType = mediaResponse.data.media_type as
+          | string
+          | undefined;
+
+        if (!permalink) {
+          throw new Error("Permalink missing from media response");
+        }
+
+        if (actualMediaType === "VIDEO" || actualMediaType === "REELS") {
+          // Extract the shortcode from the permalink
+          const shortcode = permalink.split("/").filter(Boolean).pop();
+          if (!shortcode) {
+            throw new Error("Unable to derive Instagram reel shortcode");
+          }
+
+          return `https://www.instagram.com/reel/${shortcode}/`;
+        }
+
+        return permalink;
+      } catch (error) {
+        const errorMessage = this.#getErrorMessage(error);
+
+        if (error?.response?.data) {
+          this.#responses.push({
+            getPostUrlResponse: error.response.data,
+            attempt,
+            failed: true,
+          });
+        }
+
+        console.error(
+          `Failed to fetch Instagram post URL, attempt ${attempt}/${maxGetPostUrlAttempts}: ${errorMessage}`,
+        );
+
+        if (attempt < maxGetPostUrlAttempts) {
+          await wait.for({ seconds: 5 });
+          continue;
+        }
+      }
+    }
+
+    console.log(
+      `Falling back to Instagram account URL for post ${postId}: ${accountUrl}`,
     );
-
-    this.#responses.push({ getPostUrlResponse: mediaResponse.data });
-
-    if (mediaResponse.data.error) {
-      throw new Error(
-        `Failed to fetch media details: ${mediaResponse.data.error.message}`,
-      );
-    }
-
-    const permalink = mediaResponse.data.permalink;
-    const actualMediaType = mediaResponse.data.media_type;
-
-    let postUrl;
-    if (actualMediaType === "VIDEO" || actualMediaType === "REELS") {
-      // Extract the shortcode from the permalink
-      const shortcode = permalink.split("/").slice(-2)[0];
-      postUrl = `https://www.instagram.com/reel/${shortcode}/`;
-    } else {
-      postUrl = permalink;
-    }
-
-    return postUrl;
+    return accountUrl;
   }
 
   async #transformImage({
