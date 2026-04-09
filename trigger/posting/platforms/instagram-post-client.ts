@@ -200,7 +200,9 @@ export class InstagramPostClient extends PostClient {
       const maxPublishAttempts = 15;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
-        this.#assertTaskTimeRemaining("publishing Instagram media");
+        if (!this.#hasTaskTimeRemaining()) {
+          break;
+        }
 
         try {
           console.log(`Publish attempt #${publishAttempts + 1}`);
@@ -236,10 +238,15 @@ export class InstagramPostClient extends PostClient {
               `Bad Request With Error: ${error.response?.data?.error?.message}`,
             );
             console.log("Waiting 5 secs");
-            await this.#waitWithTaskBudget({
+            const waited = await this.#waitWithTaskBudget({
               delayMs: 5000,
               operation: "retrying Instagram media publish",
             });
+
+            if (!waited) {
+              break;
+            }
+
             continue;
           }
 
@@ -585,7 +592,9 @@ export class InstagramPostClient extends PostClient {
     mediaLabel: string;
   }): Promise<string> {
     for (let attempt = 1; attempt <= this.#mediaRetryAttempts; attempt++) {
-      this.#assertTaskTimeRemaining(`creating ${mediaLabel}`);
+      if (!this.#hasTaskTimeRemaining()) {
+        break;
+      }
 
       try {
         console.log(
@@ -646,10 +655,14 @@ export class InstagramPostClient extends PostClient {
           );
         }
 
-        await this.#waitWithTaskBudget({
+        const waited = await this.#waitWithTaskBudget({
           delayMs: this.#getRetryDelayMs(attempt),
           operation: `retrying ${mediaLabel} creation`,
         });
+
+        if (!waited) {
+          break;
+        }
       }
     }
 
@@ -668,7 +681,9 @@ export class InstagramPostClient extends PostClient {
     let statusData;
 
     for (let attempt = 1; attempt <= this.#mediaStatusMaxAttempts; attempt++) {
-      this.#assertTaskTimeRemaining(`checking ${mediaLabel} status`);
+      if (!this.#hasTaskTimeRemaining()) {
+        return;
+      }
 
       console.log(
         `Checking ${mediaLabel} status, attempt ${attempt}/${this.#mediaStatusMaxAttempts}`,
@@ -710,10 +725,14 @@ export class InstagramPostClient extends PostClient {
           delay / 1000
         } seconds before retrying...`,
       );
-      await this.#waitWithTaskBudget({
+      const waited = await this.#waitWithTaskBudget({
         delayMs: delay,
         operation: `waiting for ${mediaLabel} status`,
       });
+
+      if (!waited) {
+        return;
+      }
     }
 
     throw new Error(
@@ -758,12 +777,8 @@ export class InstagramPostClient extends PostClient {
     );
   }
 
-  #assertTaskTimeRemaining(operation: string): void {
-    if (this.#getRemainingTaskDurationMs() <= 0) {
-      throw new Error(
-        `Exceeded one hour retry budget while ${operation}. Please try again.`,
-      );
-    }
+  #hasTaskTimeRemaining(): boolean {
+    return this.#getRemainingTaskDurationMs() > 0;
   }
 
   async #waitWithTaskBudget({
@@ -772,18 +787,21 @@ export class InstagramPostClient extends PostClient {
   }: {
     delayMs: number;
     operation: string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const remainingDurationMs = this.#getRemainingTaskDurationMs();
 
     if (remainingDurationMs <= 0) {
-      throw new Error(
-        `Exceeded one hour retry budget while ${operation}. Please try again.`,
+      console.log(
+        `Skipping further retries while ${operation} because retry time budget was exhausted.`,
       );
+      return false;
     }
 
     await wait.for({
       seconds: Math.min(delayMs, remainingDurationMs) / 1000,
     });
+
+    return true;
   }
 
   async #getPostUrl({
@@ -797,7 +815,9 @@ export class InstagramPostClient extends PostClient {
     const accountUrl = `https://www.instagram.com/${account.social_provider_user_name}/`;
 
     for (let attempt = 1; attempt <= maxGetPostUrlAttempts; attempt++) {
-      this.#assertTaskTimeRemaining("fetching Instagram post URL");
+      if (!this.#hasTaskTimeRemaining()) {
+        break;
+      }
 
       try {
         this.#requests.push({
@@ -869,10 +889,15 @@ export class InstagramPostClient extends PostClient {
         );
 
         if (attempt < maxGetPostUrlAttempts) {
-          await this.#waitWithTaskBudget({
+          const waited = await this.#waitWithTaskBudget({
             delayMs: 5000,
             operation: "retrying Instagram post URL fetch",
           });
+
+          if (!waited) {
+            break;
+          }
+
           continue;
         }
       }
