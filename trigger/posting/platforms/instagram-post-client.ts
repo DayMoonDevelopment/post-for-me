@@ -227,6 +227,10 @@ export class InstagramPostClient extends PostClient {
 
           platformId = publishResponse.data.id;
         } catch (error) {
+          if (this.#isNonRetryableError(error)) {
+            throw error;
+          }
+
           if (error.response?.status === 400) {
             console.log(
               `Bad Request With Error: ${error.response?.data?.error?.message}`,
@@ -630,6 +634,12 @@ export class InstagramPostClient extends PostClient {
           `Failed to process ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}: ${errorMessage}`,
         );
 
+        if (this.#isNonRetryableError(error)) {
+          throw new Error(
+            `Failed to process ${mediaLabel} without retry: ${errorMessage}`,
+          );
+        }
+
         if (attempt === this.#mediaRetryAttempts) {
           throw new Error(
             `Failed to process ${mediaLabel} after ${this.#mediaRetryAttempts} attempts: ${errorMessage}`,
@@ -716,6 +726,16 @@ export class InstagramPostClient extends PostClient {
   #getErrorMessage(error: any): string {
     return (
       error?.response?.data?.error?.message || error?.message || "Unknown error"
+    );
+  }
+
+  #isNonRetryableError(error: any): boolean {
+    const errorMessage = this.#getErrorMessage(error).toLowerCase();
+
+    return (
+      errorMessage.includes(
+        "error validating access token: sessions for the user are not allowed because the user is not a confirmed user",
+      ) || errorMessage.includes("user access is restricted")
     );
   }
 
@@ -831,6 +851,10 @@ export class InstagramPostClient extends PostClient {
         return permalink;
       } catch (error) {
         const errorMessage = this.#getErrorMessage(error);
+
+        if (this.#isNonRetryableError(error)) {
+          throw error;
+        }
 
         if (error?.response?.data) {
           this.#responses.push({
