@@ -167,6 +167,7 @@ export interface FacebookConfiguration {
   media?: PostMedia[];
   location?: string;
   collaborators?: string[];
+  set_caption_for_each_image?: boolean;
 }
 
 export interface LinkedinConfiguration {

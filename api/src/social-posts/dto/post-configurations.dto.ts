@@ -336,6 +336,15 @@ export class FacebookConfigurationDto extends BaseConfigurationDto {
     isArray: true,
   })
   collaborators?: string[];
+
+  @ApiProperty({
+    description:
+      'If true, include the caption on each image in a carousel upload; if false, only include it on the final carousel post',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  set_caption_for_each_image?: boolean;
 }
 
 export class LinkedinConfigurationDto extends BaseConfigurationDto {}
@@ -632,6 +641,15 @@ export class AccountConfigurationDetailsDto {
     required: false,
   })
   trial_reel_type?: string;
+
+  @ApiProperty({
+    description:
+      'If true, include the caption on each image in a Facebook carousel upload; if false, only include it on the final carousel post',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  set_caption_for_each_image?: boolean;
 }
 
 export class AccountConfigurationDto {
