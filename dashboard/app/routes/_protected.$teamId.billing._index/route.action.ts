@@ -254,6 +254,7 @@ async function handleCreateCheckout({
       customer_email: team.stripe_customer_id
         ? undefined
         : team.billing_email || undefined,
+      allow_promotion_codes: true,
       mode: "subscription",
       line_items: [
         {

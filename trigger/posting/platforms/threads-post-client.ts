@@ -6,6 +6,7 @@
 import { PostClient } from "../post-client";
 import axios, { AxiosResponse } from "axios";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { wait } from "@trigger.dev/sdk";
 import {
   SocialAccount,
   PostMedia,
@@ -152,7 +153,7 @@ export class ThreadsPostClient extends PostClient {
               `Bad Request With Error: ${error.response?.data?.error?.message || "Unknown error"}`,
             );
             console.log("Waiting 5 secs");
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+            await wait.for({ seconds: 5 });
             continue;
           }
 
@@ -247,7 +248,7 @@ export class ThreadsPostClient extends PostClient {
     const conatinerId = createContainerResponse?.data?.id || null;
 
     // Simple delay to ensure container is processed
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await wait.for({ seconds: 5 });
 
     return conatinerId;
   }
@@ -350,7 +351,7 @@ export class ThreadsPostClient extends PostClient {
             break;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 10000)); // 10-second interval
+        await wait.for({ seconds: 10 });
         attempts++;
       } catch (error: any) {
         if (error.response?.status === 400) {
@@ -414,7 +415,7 @@ export class ThreadsPostClient extends PostClient {
       containerIds.push(containerId);
 
       // Wait for item processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await wait.for({ seconds: 2 });
     }
 
     this.#requests.push({
@@ -450,7 +451,7 @@ export class ThreadsPostClient extends PostClient {
     const carouselContainerId = carouselResponse.data.id;
 
     // Wait for carousel processing
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await wait.for({ seconds: 5 });
 
     return carouselContainerId;
   }

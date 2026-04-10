@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/require-await */
 import { SupabaseClient } from "@supabase/supabase-js";
+import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -22,6 +23,13 @@ export class InstagramPostClient extends PostClient {
   #minAspectRatio = 4 / 5;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
+  #mediaRetryAttempts = 30;
+  #mediaStatusMaxAttempts = 30;
+  #mediaStatusInitialDelayMs = 5000;
+  #mediaRetryBackoffMultiplier = 1.5;
+  #maxRetryDelayMs = 60000;
+  #maxTaskDurationMs = 60 * 60 * 1000;
+  #postStartedAtMs: number | null = null;
   #localSupabaseClient;
   #addedMedia: any[] = [];
   #requests: any[] = [];
@@ -157,6 +165,8 @@ export class InstagramPostClient extends PostClient {
     media: PostMedia[];
     platformConfig: InstagramConfiguration;
   }): Promise<PostResult> {
+    this.#postStartedAtMs = Date.now();
+
     try {
       const sanitizedCaption = this.#sanitizeCaption(caption);
 
@@ -187,9 +197,13 @@ export class InstagramPostClient extends PostClient {
       }
 
       let platformId: string | null = null;
-      const maxPublishAttempts = 10;
+      const maxPublishAttempts = 15;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
+        if (!this.#hasTaskTimeRemaining()) {
+          break;
+        }
+
         try {
           console.log(`Publish attempt #${publishAttempts + 1}`);
           this.#requests.push({
@@ -215,12 +229,24 @@ export class InstagramPostClient extends PostClient {
 
           platformId = publishResponse.data.id;
         } catch (error) {
+          if (this.#isNonRetryableError(error)) {
+            throw error;
+          }
+
           if (error.response?.status === 400) {
             console.log(
               `Bad Request With Error: ${error.response?.data?.error?.message}`,
             );
             console.log("Waiting 5 secs");
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+            const waited = await this.#waitWithTaskBudget({
+              delayMs: 5000,
+              operation: "retrying Instagram media publish",
+            });
+
+            if (!waited) {
+              break;
+            }
+
             continue;
           }
 
@@ -288,6 +314,8 @@ export class InstagramPostClient extends PostClient {
           responses: this.#responses,
         },
       };
+    } finally {
+      this.#postStartedAtMs = null;
     }
   }
 
@@ -319,7 +347,7 @@ export class InstagramPostClient extends PostClient {
       signedUrl = await this.getSignedUrlForFile(medium);
       if (medium.thumbnail_url) {
         const transformedThumbnail = await this.#transformImage({
-          medium: { url: medium.thumbnail_url, type: "image" },
+          medium: { id: medium.id, url: medium.thumbnail_url, type: "image" },
           options: {
             placement: platformConfig?.placement,
           },
@@ -412,72 +440,13 @@ export class InstagramPostClient extends PostClient {
       createMediaParams.location_id = platformConfig.location;
     }
 
-    this.#requests.push({ createMediaRequest: createMediaParams });
-    const createMediaResponse = await axios.post(
-      `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
-      createMediaParams,
-    );
-
-    this.#responses.push({ createMediaResponse: createMediaResponse.data });
-    if (createMediaResponse.data.error) {
-      throw new Error(
-        `Failed to create media container: ${createMediaResponse.data.error.message}`,
-      );
-    }
-
-    const containerId = createMediaResponse.data.id;
-
-    if (isVideo) {
-      let statusData;
-      const maxAttempts = 30;
-      const initialDelay = 5000; // 5 seconds
-      let attempt = 0;
-
-      while (attempt < maxAttempts) {
-        attempt++;
-        console.log(`Checking media status, attempt ${attempt}/${maxAttempts}`);
-
-        this.#requests.push({
-          statusRequest: {
-            url: `${this.getApiBaseUrl(account)}/${containerId}`,
-          },
-        });
-        const statusResponse = await axios.get(
-          `${this.getApiBaseUrl(account)}/${containerId}`,
-          {
-            params: {
-              fields: "status_code",
-              access_token: account.access_token,
-            },
-          },
-        );
-
-        this.#responses.push({ statusResponse: statusResponse.data });
-
-        statusData = statusResponse.data;
-        console.log("Media status:", statusData);
-
-        if (statusData.status_code === "FINISHED") {
-          break;
-        } else if (statusData.status_code === "ERROR") {
-          throw new Error(`Upload failed: ${JSON.stringify(statusData)}`);
-        } else {
-          const delay = initialDelay * Math.pow(1.5, attempt - 1); // Exponential backoff
-          console.log(
-            `Media not ready. Waiting for ${
-              delay / 1000
-            } seconds before retrying...`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-      }
-
-      if (statusData.status_code !== "FINISHED") {
-        throw new Error("Max attempts reached. Failed to process media.");
-      }
-    }
-
-    return containerId;
+    return this.#createMediaContainerWithRetry({
+      account,
+      payload: createMediaParams,
+      requestLogKey: "createMediaRequest",
+      responseLogKey: "createMediaResponse",
+      mediaLabel: isVideo ? "video media" : "image media",
+    });
   }
 
   async #processCarousel({
@@ -496,147 +465,76 @@ export class InstagramPostClient extends PostClient {
 
     let firstImageWidth = null;
     let firstImageHeight = null;
-    let index = 0;
-    for (const medium of allowedMedia) {
-      try {
-        const isVideo = medium.type === "video";
-        let signedUrl: string = "";
-        if (!isVideo) {
-          const transformedImage = await this.#transformImage({
-            medium,
-            options: {
-              firstImage: { width: firstImageWidth, height: firstImageHeight },
-            },
-          });
+    for (let index = 0; index < allowedMedia.length; index++) {
+      const medium = allowedMedia[index];
+      const isVideo = medium.type === "video";
+      let signedUrl: string = "";
 
-          signedUrl = transformedImage.signedUrl!;
-
-          if (index === 0) {
-            firstImageWidth = transformedImage.width;
-            firstImageHeight = transformedImage.height;
-          }
-        } else {
-          signedUrl = await this.getSignedUrlForFile(medium);
-        }
-
-        const itemPayload: {
-          media_type: string;
-          video_url?: string;
-          image_url?: string;
-          is_carousel_item: boolean;
-          access_token: string;
-          product_tags?: any[];
-          location_id?: string;
-          user_tags?: any[];
-        } = {
-          media_type: isVideo ? "VIDEO" : "IMAGE",
-          [isVideo ? "video_url" : "image_url"]: signedUrl,
-          is_carousel_item: true,
-          access_token: account.access_token,
-        };
-
-        if (!isVideo && medium.tags && medium.tags.length > 0) {
-          itemPayload.user_tags = medium.tags
-            .filter((t) => t.platform == "instagram" && t.type == "user")
-            .map((t) => ({
-              username: t.id,
-              x: t.x,
-              y: t.y,
-            }));
-        }
-
-        if (medium.tags && medium.tags.length > 0) {
-          itemPayload.product_tags = medium.tags
-            .filter((t) => t.platform == "instagram" && t.type == "product")
-            .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
-        }
-
-        if (index == 0) {
-          if (platformConfig?.location) {
-            itemPayload.location_id = platformConfig.location;
-          }
-        }
-
-        this.#requests.push({
-          createCarouselItemRequest: itemPayload,
+      if (!isVideo) {
+        const transformedImage = await this.#transformImage({
+          medium,
+          options: {
+            firstImage: { width: firstImageWidth, height: firstImageHeight },
+          },
         });
-        const itemResponse = await axios.post(
-          `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
-          itemPayload,
-        );
 
-        this.#responses.push({ createCarouselItemResponse: itemResponse.data });
+        signedUrl = transformedImage.signedUrl!;
 
-        if (itemResponse.data.error) {
-          throw new Error(
-            `Failed to create item container: ${itemResponse.data.error.message}`,
-          );
+        if (index === 0) {
+          firstImageWidth = transformedImage.width;
+          firstImageHeight = transformedImage.height;
         }
-
-        const containerId = itemResponse.data.id;
-
-        if (isVideo) {
-          let statusData;
-          const maxAttempts = 30;
-          const initialDelay = 5000; // 5 seconds
-          let attempt = 0;
-
-          while (attempt < maxAttempts) {
-            attempt++;
-            console.log(
-              `Checking media status, attempt ${attempt}/${maxAttempts}`,
-            );
-
-            this.#requests.push({
-              statusRequest: {
-                url: `${this.getApiBaseUrl(account)}/${containerId}`,
-              },
-            });
-            const statusResponse = await axios.get(
-              `${this.getApiBaseUrl(account)}/${containerId}`,
-              {
-                params: {
-                  fields: "status_code",
-                  access_token: account.access_token,
-                },
-              },
-            );
-
-            this.#responses.push({ statusResponse: statusResponse.data });
-
-            statusData = statusResponse.data;
-            console.log("Media status:", statusData);
-
-            if (statusData.status_code === "FINISHED") {
-              break;
-            } else if (statusData.status_code === "ERROR") {
-              throw new Error(`Upload failed: ${JSON.stringify(statusData)}`);
-            } else {
-              const delay = initialDelay * Math.pow(1.5, attempt - 1); // Exponential backoff
-              console.log(
-                `Media not ready. Waiting for ${
-                  delay / 1000
-                } seconds before retrying...`,
-              );
-              await new Promise((resolve) => setTimeout(resolve, delay));
-            }
-          }
-
-          if (statusData.status_code !== "FINISHED") {
-            throw new Error("Max attempts reached. Failed to process media.");
-          }
-        } else {
-          // Wait for item processing
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-
-        containerIds.push(containerId);
-      } catch (error) {
-        console.error(error);
-        continue;
-      } finally {
-        index++;
+      } else {
+        signedUrl = await this.getSignedUrlForFile(medium);
       }
+
+      const itemPayload: {
+        media_type: string;
+        video_url?: string;
+        image_url?: string;
+        is_carousel_item: boolean;
+        access_token: string;
+        product_tags?: any[];
+        location_id?: string;
+        user_tags?: any[];
+      } = {
+        media_type: isVideo ? "VIDEO" : "IMAGE",
+        [isVideo ? "video_url" : "image_url"]: signedUrl,
+        is_carousel_item: true,
+        access_token: account.access_token,
+      };
+
+      if (!isVideo && medium.tags && medium.tags.length > 0) {
+        itemPayload.user_tags = medium.tags
+          .filter((t) => t.platform == "instagram" && t.type == "user")
+          .map((t) => ({
+            username: t.id,
+            x: t.x,
+            y: t.y,
+          }));
+      }
+
+      if (medium.tags && medium.tags.length > 0) {
+        itemPayload.product_tags = medium.tags
+          .filter((t) => t.platform == "instagram" && t.type == "product")
+          .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
+      }
+
+      if (index == 0) {
+        if (platformConfig?.location) {
+          itemPayload.location_id = platformConfig.location;
+        }
+      }
+
+      const containerId = await this.#createMediaContainerWithRetry({
+        account,
+        payload: itemPayload,
+        requestLogKey: "createCarouselItemRequest",
+        responseLogKey: "createCarouselItemResponse",
+        mediaLabel: `carousel item ${index + 1}`,
+      });
+
+      containerIds.push(containerId);
     }
 
     const carouselPayload: {
@@ -680,6 +578,232 @@ export class InstagramPostClient extends PostClient {
     return carouselContainerId;
   }
 
+  async #createMediaContainerWithRetry({
+    account,
+    payload,
+    requestLogKey,
+    responseLogKey,
+    mediaLabel,
+  }: {
+    account: SocialAccount;
+    payload: Record<string, unknown>;
+    requestLogKey: string;
+    responseLogKey: string;
+    mediaLabel: string;
+  }): Promise<string> {
+    for (let attempt = 1; attempt <= this.#mediaRetryAttempts; attempt++) {
+      if (!this.#hasTaskTimeRemaining()) {
+        break;
+      }
+
+      try {
+        console.log(
+          `Creating ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}`,
+        );
+
+        this.#requests.push({
+          [requestLogKey]: payload,
+          attempt,
+        });
+
+        const createMediaResponse = await axios.post(
+          `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
+          payload,
+        );
+
+        this.#responses.push({
+          [responseLogKey]: createMediaResponse.data,
+          attempt,
+        });
+
+        if (createMediaResponse.data.error) {
+          throw new Error(createMediaResponse.data.error.message as string);
+        }
+
+        const containerId = createMediaResponse.data.id as string | undefined;
+
+        if (!containerId) {
+          throw new Error("Media container id missing from response");
+        }
+
+        await this.#waitForMediaStatus({ account, containerId, mediaLabel });
+
+        return containerId;
+      } catch (error) {
+        if (error?.response?.data) {
+          this.#responses.push({
+            [responseLogKey]: error.response.data,
+            attempt,
+            failed: true,
+          });
+        }
+
+        const errorMessage = this.#getErrorMessage(error);
+        console.error(
+          `Failed to process ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}: ${errorMessage}`,
+        );
+
+        if (this.#isNonRetryableError(error)) {
+          throw new Error(
+            `Failed to process ${mediaLabel} without retry: ${errorMessage}`,
+          );
+        }
+
+        if (attempt === this.#mediaRetryAttempts) {
+          throw new Error(
+            `Failed to process ${mediaLabel} after ${this.#mediaRetryAttempts} attempts: ${errorMessage}`,
+          );
+        }
+
+        const waited = await this.#waitWithTaskBudget({
+          delayMs: this.#getRetryDelayMs(attempt),
+          operation: `retrying ${mediaLabel} creation`,
+        });
+
+        if (!waited) {
+          break;
+        }
+      }
+    }
+
+    throw new Error(`Failed to process ${mediaLabel}`);
+  }
+
+  async #waitForMediaStatus({
+    account,
+    containerId,
+    mediaLabel,
+  }: {
+    account: SocialAccount;
+    containerId: string;
+    mediaLabel: string;
+  }): Promise<void> {
+    let statusData;
+
+    for (let attempt = 1; attempt <= this.#mediaStatusMaxAttempts; attempt++) {
+      if (!this.#hasTaskTimeRemaining()) {
+        return;
+      }
+
+      console.log(
+        `Checking ${mediaLabel} status, attempt ${attempt}/${this.#mediaStatusMaxAttempts}`,
+      );
+
+      this.#requests.push({
+        statusRequest: {
+          url: `${this.getApiBaseUrl(account)}/${containerId}`,
+          mediaLabel,
+          attempt,
+        },
+      });
+      const statusResponse = await axios.get(
+        `${this.getApiBaseUrl(account)}/${containerId}`,
+        {
+          params: {
+            fields: "status_code",
+            access_token: account.access_token,
+          },
+        },
+      );
+
+      this.#responses.push({ statusResponse: statusResponse.data });
+
+      statusData = statusResponse.data;
+      console.log(`${mediaLabel} status:`, statusData);
+
+      if (statusData.status_code === "FINISHED") {
+        return;
+      }
+
+      if (statusData.status_code === "ERROR") {
+        throw new Error(`Upload failed: ${JSON.stringify(statusData)}`);
+      }
+
+      const delay = this.#getRetryDelayMs(attempt);
+      console.log(
+        `${mediaLabel} not ready. Waiting for ${
+          delay / 1000
+        } seconds before retrying...`,
+      );
+      const waited = await this.#waitWithTaskBudget({
+        delayMs: delay,
+        operation: `waiting for ${mediaLabel} status`,
+      });
+
+      if (!waited) {
+        return;
+      }
+    }
+
+    throw new Error(
+      `Max attempts reached. Failed to process media. Last status: ${JSON.stringify(
+        statusData,
+      )}`,
+    );
+  }
+
+  #getErrorMessage(error: any): string {
+    return (
+      error?.response?.data?.error?.message || error?.message || "Unknown error"
+    );
+  }
+
+  #isNonRetryableError(error: any): boolean {
+    const errorMessage = this.#getErrorMessage(error).toLowerCase();
+
+    return (
+      errorMessage.includes(
+        "error validating access token: sessions for the user are not allowed because the user is not a confirmed user",
+      ) || errorMessage.includes("user access is restricted")
+    );
+  }
+
+  #getRetryDelayMs(attempt: number): number {
+    return Math.min(
+      this.#mediaStatusInitialDelayMs *
+        Math.pow(this.#mediaRetryBackoffMultiplier, attempt - 1),
+      this.#maxRetryDelayMs,
+    );
+  }
+
+  #getRemainingTaskDurationMs(): number {
+    if (this.#postStartedAtMs === null) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.max(
+      0,
+      this.#maxTaskDurationMs - (Date.now() - this.#postStartedAtMs),
+    );
+  }
+
+  #hasTaskTimeRemaining(): boolean {
+    return this.#getRemainingTaskDurationMs() > 0;
+  }
+
+  async #waitWithTaskBudget({
+    delayMs,
+    operation,
+  }: {
+    delayMs: number;
+    operation: string;
+  }): Promise<boolean> {
+    const remainingDurationMs = this.#getRemainingTaskDurationMs();
+
+    if (remainingDurationMs <= 0) {
+      console.log(
+        `Skipping further retries while ${operation} because retry time budget was exhausted.`,
+      );
+      return false;
+    }
+
+    await wait.for({
+      seconds: Math.min(delayMs, remainingDurationMs) / 1000,
+    });
+
+    return true;
+  }
+
   async #getPostUrl({
     account,
     postId,
@@ -687,43 +811,102 @@ export class InstagramPostClient extends PostClient {
     account: SocialAccount;
     postId: string;
   }): Promise<string> {
-    this.#requests.push({
-      getPostUrlRequest: {
-        url: `${this.getApiBaseUrl(account)}/${postId}`,
-      },
-    });
-    // Fetch the media object to get the permalink
-    const mediaResponse = await axios.get(
-      `${this.getApiBaseUrl(account)}/${postId}`,
-      {
-        params: {
-          fields: "permalink,media_type",
-          access_token: account.access_token,
-        },
-      },
+    const maxGetPostUrlAttempts = 5;
+    const accountUrl = `https://www.instagram.com/${account.social_provider_user_name}/`;
+
+    for (let attempt = 1; attempt <= maxGetPostUrlAttempts; attempt++) {
+      if (!this.#hasTaskTimeRemaining()) {
+        break;
+      }
+
+      try {
+        this.#requests.push({
+          getPostUrlRequest: {
+            url: `${this.getApiBaseUrl(account)}/${postId}`,
+            attempt,
+          },
+        });
+
+        // Fetch the media object to get the permalink
+        const mediaResponse = await axios.get(
+          `${this.getApiBaseUrl(account)}/${postId}`,
+          {
+            params: {
+              fields: "permalink,media_type",
+              access_token: account.access_token,
+            },
+          },
+        );
+
+        this.#responses.push({
+          getPostUrlResponse: mediaResponse.data,
+          attempt,
+        });
+
+        if (mediaResponse.data.error) {
+          throw new Error(
+            `Failed to fetch media details: ${mediaResponse.data.error.message as string}`,
+          );
+        }
+
+        const permalink = mediaResponse.data.permalink as string | undefined;
+        const actualMediaType = mediaResponse.data.media_type as
+          | string
+          | undefined;
+
+        if (!permalink) {
+          throw new Error("Permalink missing from media response");
+        }
+
+        if (actualMediaType === "VIDEO" || actualMediaType === "REELS") {
+          // Extract the shortcode from the permalink
+          const shortcode = permalink.split("/").filter(Boolean).pop();
+          if (!shortcode) {
+            throw new Error("Unable to derive Instagram reel shortcode");
+          }
+
+          return `https://www.instagram.com/reel/${shortcode}/`;
+        }
+
+        return permalink;
+      } catch (error) {
+        const errorMessage = this.#getErrorMessage(error);
+
+        if (this.#isNonRetryableError(error)) {
+          throw error;
+        }
+
+        if (error?.response?.data) {
+          this.#responses.push({
+            getPostUrlResponse: error.response.data,
+            attempt,
+            failed: true,
+          });
+        }
+
+        console.error(
+          `Failed to fetch Instagram post URL, attempt ${attempt}/${maxGetPostUrlAttempts}: ${errorMessage}`,
+        );
+
+        if (attempt < maxGetPostUrlAttempts) {
+          const waited = await this.#waitWithTaskBudget({
+            delayMs: 5000,
+            operation: "retrying Instagram post URL fetch",
+          });
+
+          if (!waited) {
+            break;
+          }
+
+          continue;
+        }
+      }
+    }
+
+    console.log(
+      `Falling back to Instagram account URL for post ${postId}: ${accountUrl}`,
     );
-
-    this.#responses.push({ getPostUrlResponse: mediaResponse.data });
-
-    if (mediaResponse.data.error) {
-      throw new Error(
-        `Failed to fetch media details: ${mediaResponse.data.error.message}`,
-      );
-    }
-
-    const permalink = mediaResponse.data.permalink;
-    const actualMediaType = mediaResponse.data.media_type;
-
-    let postUrl;
-    if (actualMediaType === "VIDEO" || actualMediaType === "REELS") {
-      // Extract the shortcode from the permalink
-      const shortcode = permalink.split("/").slice(-2)[0];
-      postUrl = `https://www.instagram.com/reel/${shortcode}/`;
-    } else {
-      postUrl = permalink;
-    }
-
-    return postUrl;
+    return accountUrl;
   }
 
   async #transformImage({

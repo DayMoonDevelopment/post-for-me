@@ -11,6 +11,7 @@ import {
 } from "twitter-api-v2";
 import sharp from "sharp";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { wait } from "@trigger.dev/sdk";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -197,7 +198,7 @@ export class TwitterPostClient extends PostClient {
       this.#responses.push({ uploadResponse: { mediaId } });
       mediaIds.push(mediaId);
       // Add a small delay after successful upload
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await wait.for({ seconds: 1 });
     } else {
       const allowedMedia = media.slice(0, this.#IMAGE_LIMIT);
       for (const medium of allowedMedia) {
@@ -216,7 +217,7 @@ export class TwitterPostClient extends PostClient {
         mediaIds.push(mediaId);
       }
       // Add a small delay after uploads
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await wait.for({ seconds: 1 });
     }
 
     return mediaIds;
@@ -254,7 +255,7 @@ export class TwitterPostClient extends PostClient {
         console.log(
           `Media processing status: ${mediaInfo.processing_info?.state}`
         );
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 second delay
+        await wait.for({ seconds: 2 });
         attempts++;
       } catch (error) {
         console.error("Error checking media status:", error);

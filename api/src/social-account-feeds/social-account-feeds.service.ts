@@ -144,7 +144,9 @@ export class SocialAccountFeedsService {
     const { data: account, error: accountError } =
       await this.supabaseService.supabaseClient
         .from('social_provider_connections')
-        .select()
+        .select(
+          'id, provider, external_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, social_provider_user_id, social_provider_user_name, social_provider_metadata',
+        )
         .eq('id', accountId)
         .eq('project_id', projectId)
         .single();
@@ -251,8 +253,10 @@ export class SocialAccountFeedsService {
       .from('social_post_results')
       .select(
         `
-          *,
-          social_posts!inner(*)
+          id,
+          post_id,
+          provider_post_id,
+          social_posts!inner(external_id)
         `,
       )
       .eq('provider_connection_id', accountId)
@@ -373,7 +377,8 @@ export class SocialAccountFeedsService {
       .from('social_post_results')
       .select(
         `
-            *,
+            provider_post_id,
+            created_at,
             social_posts!inner(external_id, caption, post_at)
                     
           `,

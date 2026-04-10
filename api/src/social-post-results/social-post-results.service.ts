@@ -34,7 +34,7 @@ export class PostResultsService {
       await this.supabaseService.supabaseClient
         .from('social_post_results')
         .select(
-          '*, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+          'id, success, provider_post_id, provider_post_url, details, post_id, provider_connection_id, error_message, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
         )
         .eq('id', id)
         .eq('social_provider_connections.project_id', projectId)
@@ -76,9 +76,9 @@ export class PostResultsService {
     const query = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
-        '*, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        'id, provider_connection_id, post_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
         {
-          count: 'exact',
+          count: 'estimated',
           head: false,
         },
       )

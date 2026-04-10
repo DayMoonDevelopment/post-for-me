@@ -1,4 +1,4 @@
-import { logger, task, tasks, tags } from "@trigger.dev/sdk";
+import { logger, task, tasks, tags, wait } from "@trigger.dev/sdk";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -139,6 +139,8 @@ const transformPostData = (data: {
 
 const unkey = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
 
+const UNKEY_MAX_RETRIES = 3;
+
 export const processPost = task({
   id: "process-post",
   maxDuration: 3600,
@@ -165,10 +167,35 @@ export const processPost = task({
       }
 
       logger.info("Checking API Key is valid");
-      const { data } = await unkey.keys.getKey({ keyId: post.api_key });
+      let apiKeyEnabled = false;
 
-      if (!data.enabled) {
-        logger.error("API Key is invalid", { key_result: data });
+      for (let retryCount = 0; retryCount <= UNKEY_MAX_RETRIES; retryCount++) {
+        try {
+          const { data } = await unkey.keys.getKey({ keyId: post.api_key });
+
+          apiKeyEnabled = data.enabled;
+          logger.info("Found API Key", { data });
+          break;
+        } catch (error) {
+          apiKeyEnabled = false;
+          const hasRetriesLeft = retryCount < UNKEY_MAX_RETRIES;
+          const delaySeconds = 2 ** retryCount;
+
+          logger.warn("Unkey API key validation failed, retrying", {
+            retryAttempt: retryCount + 1,
+            maxRetries: UNKEY_MAX_RETRIES,
+            delaySeconds,
+            error,
+          });
+
+          if (hasRetriesLeft) {
+            await wait.for({ seconds: delaySeconds });
+          }
+        }
+      }
+
+      if (!apiKeyEnabled) {
+        logger.error("API Key is invalid");
         errorResults.push(
           ...accounts.map((connection) => ({
             success: false,
@@ -302,6 +329,7 @@ export const processPost = task({
       logger.info("Constructed Post Data", { postData });
 
       const bulkPostData: IndividualPostData[] = [];
+      const storyBulkPostData: IndividualPostData[] = [];
       for (const account of postData.accounts) {
         try {
           logger.info("Getting App Credentials");
@@ -405,7 +433,7 @@ export const processPost = task({
 
           if (isStoryPlacement) {
             for (const medium of media) {
-              bulkPostData.push({
+              storyBulkPostData.push({
                 stripeCustomerId: postData.stripe_customer_id,
                 teamId: project.team_id,
                 platform: account.provider,
@@ -451,13 +479,43 @@ export const processPost = task({
         }
       }
 
-      logger.info("Posting To Accounts", { bulkPostData });
-      const batchPostResult = await tasks.batchTriggerAndWait(
-        "post-to-platform",
-        bulkPostData.map((data) => ({ payload: data })),
-      );
+      if (bulkPostData.length > 0) {
+        logger.info("Posting To Accounts", { bulkPostData });
+        const batchPostResult = await tasks.batchTriggerAndWait(
+          "post-to-platform",
+          bulkPostData.map((data) => ({ payload: data })),
+        );
 
-      logger.info("Posting To Accounts Complete", { batchPostResult });
+        logger.info("Posting To Accounts Complete", { batchPostResult });
+      }
+
+      if (storyBulkPostData.length > 0) {
+        logger.info("Posting Story Media Sequentially", {
+          totalStoryPosts: storyBulkPostData.length,
+        });
+
+        for (const [index, storyPostData] of storyBulkPostData.entries()) {
+          logger.info("Posting Story Media", {
+            current: index + 1,
+            total: storyBulkPostData.length,
+            provider: storyPostData.platform,
+            provider_connection_id: storyPostData.account.id,
+          });
+
+          const storyPostResult = await tasks.triggerAndWait(
+            "post-to-platform",
+            storyPostData,
+          );
+
+          logger.info("Posting Story Media Complete", {
+            current: index + 1,
+            total: storyBulkPostData.length,
+            provider: storyPostData.platform,
+            provider_connection_id: storyPostData.account.id,
+            success: storyPostResult.ok,
+          });
+        }
+      }
     } catch (error) {
       logger.error("Unexpected Error", { error });
     } finally {

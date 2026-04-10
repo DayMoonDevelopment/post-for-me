@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/require-await */
 import { SupabaseClient } from "@supabase/supabase-js";
+import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -33,7 +34,7 @@ export class TikTokPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
 
@@ -44,7 +45,7 @@ export class TikTokPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     const formData = new URLSearchParams();
     formData.append("client_key", this.#clientKey);
@@ -66,7 +67,7 @@ export class TikTokPostClient extends PostClient {
       throw new Error(
         `TikTok API error: ${
           refreshResponse.data.error_description || refreshResponse.data.error
-        }`
+        }`,
       );
     }
 
@@ -155,12 +156,13 @@ export class TikTokPostClient extends PostClient {
 
       if (this.#processingStatuses.includes(status)) {
         return {
-          success: true,
+          success: false,
           post_id: postId,
           provider_connection_id: account.id,
           details: {
             status: "Processing",
-            message: "Still Proccessing, not published yet",
+            message:
+              "Still Proccessing, check TikTok account to confirm status",
             addedMedia: this.#addedMedia,
             requests: this.#requests,
             responses: this.#responses,
@@ -217,7 +219,7 @@ export class TikTokPostClient extends PostClient {
           Authorization: `Bearer ${account.access_token}`,
           "Content-Type": "application/json; charset=UTF-8",
         },
-      }
+      },
     );
 
     this.#responses.push({ creatorResponse: response.data });
@@ -235,8 +237,8 @@ export class TikTokPostClient extends PostClient {
     let status = "PROCESSING";
     let statusResponse;
     let attempts = 0;
-    const delay = 5000; // 5 seconds
-    const maxAttempts = 48; // 48 attempts = 240 seconds = 4 minutes
+    const initialDelayMs = 5000;
+    const maxAttempts = 15;
 
     while (
       this.#processingStatuses.includes(status) &&
@@ -260,7 +262,7 @@ export class TikTokPostClient extends PostClient {
             Authorization: `Bearer ${account.access_token}`,
             "Content-Type": "application/json; charset=UTF-8",
           },
-        }
+        },
       );
 
       this.#responses.push({ statusResponse: statusResponse.data });
@@ -268,7 +270,10 @@ export class TikTokPostClient extends PostClient {
       status = statusResponse.data.data.status;
       attempts++;
 
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (this.#processingStatuses.includes(status) && attempts < maxAttempts) {
+        const delay = initialDelayMs * Math.pow(1.5, attempts - 1);
+        await wait.for({ seconds: delay / 1000 });
+      }
     }
 
     if (
@@ -540,7 +545,7 @@ export class TikTokPostClient extends PostClient {
     if (processedImageUploadError) {
       console.error("Error Processing Image", processedImageUploadError);
       throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`
+        `Error Processing Image: ${processedImageUploadError.message}`,
       );
     }
 

@@ -176,6 +176,7 @@ async function createCheckoutSessionUrl({
       const checkoutSession = await stripe.checkout.sessions.create({
         client_reference_id: teamData.id,
         customer: teamData.stripe_customer_id || undefined,
+        allow_promotion_codes: true,
         mode: "subscription",
         line_items: [
           {
@@ -199,6 +200,7 @@ async function createCheckoutSessionUrl({
     const product = await stripe.products.retrieve(defaultTier.productId);
     const checkoutSession = await stripe.checkout.sessions.create({
       customer_email: teamData.billing_email || undefined,
+      allow_promotion_codes: true,
       mode: "subscription",
       line_items: [
         {

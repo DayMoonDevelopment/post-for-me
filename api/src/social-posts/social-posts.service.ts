@@ -500,10 +500,25 @@ export class SocialPostsService {
       .from('social_posts')
       .select(
         `
-        *,
+        id,
+        project_id,
+        external_id,
+        caption,
+        status,
+        post_at,
+        created_at,
+        updated_at,
         social_post_provider_connections (
           social_provider_connections (
-            *
+            id,
+            provider,
+            social_provider_user_name,
+            social_provider_user_id,
+            access_token,
+            refresh_token,
+            access_token_expires_at,
+            refresh_token_expires_at,
+            external_id
           )
         ),
         social_post_media (
@@ -551,10 +566,25 @@ export class SocialPostsService {
       .from('social_posts')
       .select(
         `
-        *,
+        id,
+        project_id,
+        external_id,
+        caption,
+        status,
+        post_at,
+        created_at,
+        updated_at,
         social_post_provider_connections!inner (
           social_provider_connections!inner (
-            *
+            id,
+            provider,
+            social_provider_user_name,
+            social_provider_user_id,
+            access_token,
+            refresh_token,
+            access_token_expires_at,
+            refresh_token_expires_at,
+            external_id
           )
         ),
         social_post_media (
@@ -573,7 +603,7 @@ export class SocialPostsService {
          provider_data
         )
         `,
-        { count: 'exact', head: false },
+        { count: 'estimated', head: false },
       )
       .eq('project_id', projectId)
       .range(offset, offset + limit - 1);

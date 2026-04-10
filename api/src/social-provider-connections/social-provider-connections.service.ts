@@ -34,7 +34,10 @@ export class SocialAccountsService {
 
     const query = this.supabaseService.supabaseClient
       .from('social_provider_connections')
-      .select('*', { count: 'exact', head: false })
+      .select(
+        'id, provider, social_provider_user_name, social_provider_profile_photo_url, social_provider_user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, external_id, social_provider_metadata, created_at',
+        { count: 'estimated', head: false },
+      )
       .eq('project_id', projectId)
       .range(offset, offset + limit - 1);
 
@@ -183,7 +186,9 @@ export class SocialAccountsService {
   }): Promise<SocialAccountDto | null> {
     const socialAccount = await this.supabaseService.supabaseClient
       .from('social_provider_connections')
-      .select('*')
+      .select(
+        'id, provider, social_provider_user_name, social_provider_profile_photo_url, social_provider_user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, external_id, social_provider_metadata',
+      )
       .eq('id', id)
       .eq('project_id', projectId)
       .maybeSingle();
