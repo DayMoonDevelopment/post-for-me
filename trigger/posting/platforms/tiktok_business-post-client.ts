@@ -317,6 +317,7 @@ export class TikTokBusinessPostClient extends PostClient {
         business_id: account.social_provider_user_id,
         video_url: signedUrl,
         custom_thumbnail_url: medium.thumbnail_url,
+        upload_to_draft: platformData?.is_draft ? true : undefined,
         post_info: {
           caption,
           disable_duet:
@@ -377,6 +378,7 @@ export class TikTokBusinessPostClient extends PostClient {
         business_id: account.social_provider_user_id,
         photo_images: photoUrls,
         photo_cover_index: 0,
+        is_draft: platformData?.is_draft ? true : undefined,
         post_info: {
           title: (title || caption).slice(0, this.#titleLength),
           caption,
