@@ -35,7 +35,7 @@ export class TikTokBusinessPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
 
@@ -46,7 +46,7 @@ export class TikTokBusinessPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     const refreshRequestBody = {
       client_id: this.#clientKey,
@@ -63,7 +63,7 @@ export class TikTokBusinessPostClient extends PostClient {
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     const refreshData = refreshResponse.data;
@@ -196,7 +196,7 @@ export class TikTokBusinessPostClient extends PostClient {
         headers: {
           "Access-Token": `${account.access_token}`,
         },
-      }
+      },
     );
 
     this.#responses.push({ creatorResponse: response.data });
@@ -237,7 +237,7 @@ export class TikTokBusinessPostClient extends PostClient {
           headers: {
             "Access-Token": `${account.access_token}`,
           },
-        }
+        },
       );
 
       this.#responses.push({ statusResponse: statusResponse.data });
@@ -317,9 +317,9 @@ export class TikTokBusinessPostClient extends PostClient {
         business_id: account.social_provider_user_id,
         video_url: signedUrl,
         custom_thumbnail_url: medium.thumbnail_url,
-        upload_to_draft: platformData?.is_draft ? true : undefined,
         post_info: {
           caption,
+          upload_to_draft: platformData?.is_draft ? true : undefined,
           disable_duet:
             platformData.allow_duet === undefined
               ? false
@@ -378,10 +378,10 @@ export class TikTokBusinessPostClient extends PostClient {
         business_id: account.social_provider_user_id,
         photo_images: photoUrls,
         photo_cover_index: 0,
-        is_draft: platformData?.is_draft ? true : undefined,
         post_info: {
           title: (title || caption).slice(0, this.#titleLength),
           caption,
+          is_draft: platformData?.is_draft ? true : undefined,
           privacy_level:
             platformData.privacy_status == "private"
               ? "SELF_ONLY"
@@ -485,7 +485,7 @@ export class TikTokBusinessPostClient extends PostClient {
     if (processedImageUploadError) {
       console.error("Error Processing Image", processedImageUploadError);
       throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`
+        `Error Processing Image: ${processedImageUploadError.message}`,
       );
     }
 
