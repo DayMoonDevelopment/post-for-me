@@ -1,4 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPostsResponse,
@@ -7,7 +8,6 @@ import type {
 } from '../lib/dto/global.dto';
 import { LinkedInPostMetricsDto } from './dto/linkedin-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
-import { ConfigService } from '@nestjs/config';
 
 type LinkedInBatchGetResponse<T> = {
   results?: Record<string, T>;
@@ -409,6 +409,7 @@ export class LinkedInService implements SocialPlatformService {
             Authorization: `Bearer ${account.access_token}`,
             'X-RestLi-Method': 'BATCH_GET',
             'Linkedin-Version': this.apiVersion,
+            'X-Restli-Protocol-Version': '2.0.0',
           },
         });
 
@@ -417,7 +418,12 @@ export class LinkedInService implements SocialPlatformService {
         }
 
         const data: any = await response.json();
-        posts = data.elements || [];
+        const resultsSource = data?.results;
+        const results =
+          resultsSource && typeof resultsSource === 'object'
+            ? Object.values(resultsSource as Record<string, unknown>)
+            : [];
+        posts = results.length > 0 ? (results as any[]) : [];
         isBatch = true;
       } else {
         let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}&q=author`;
