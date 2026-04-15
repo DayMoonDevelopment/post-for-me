@@ -114,6 +114,7 @@ export interface AccountConfigurationParent {
 
 export interface PinterestConfiguration {
   caption?: string;
+  title?: string;
   board_ids?: string[];
   link?: string;
   media?: PostMedia[];

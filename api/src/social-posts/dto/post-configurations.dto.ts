@@ -54,6 +54,13 @@ export class BaseConfigurationDto {
 
 export class PinterestConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
+    description: 'Overrides the `title` from the post for Pinterest',
+    nullable: true,
+    required: false,
+  })
+  title?: string;
+
+  @ApiProperty({
     description: 'Pinterest board IDs',
     type: Array,
     items: { type: 'string' },
@@ -487,7 +494,7 @@ export class AccountConfigurationDetailsDto {
   placement?: 'reels' | 'timeline' | 'stories';
 
   @ApiProperty({
-    description: 'Overrides the `title` from the post',
+    description: 'Overrides the `title` from the post (Pinterest, TikTok, YouTube)',
     nullable: true,
     required: false,
   })
