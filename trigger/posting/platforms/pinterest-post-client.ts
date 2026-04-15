@@ -112,9 +112,10 @@ export class PinterestPostClient extends PostClient {
       }
 
       // Create the pin
+      const pinTitle = platformConfig?.title?.trim() || caption;
       const pinData = {
         board_id: boardId,
-        title: caption.slice(0, 100),
+        title: pinTitle.slice(0, 100),
         link: platformConfig?.link,
         description: caption.slice(0, 800),
         media_source: mediaSource,
