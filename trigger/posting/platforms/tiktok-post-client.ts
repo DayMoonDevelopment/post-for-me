@@ -27,6 +27,7 @@ export class TikTokPostClient extends PostClient {
   #clientSecret: string;
   #localSupabaseClient;
   #maxFileSize = 20 * 1024 * 1024;
+  #allowedAspectRatios = [9 / 16, 1, 16 / 9];
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
@@ -496,24 +497,51 @@ export class TikTokPostClient extends PostClient {
 
     const imageBuffer = Buffer.from(response.data);
 
-    // Step 2: Get image metadata and downscale so the short side is <= 1080
-    const { width, height } = await sharp(imageBuffer).metadata();
-    let safeWidth = width;
-    let safeHeight = height;
+    // Step 2: Get image metadata and crop to nearest TikTok-allowed ratio
+    const metadata = await sharp(imageBuffer).metadata();
+    const width = metadata.width || 0;
+    const height = metadata.height || 0;
 
-    if (safeWidth && safeHeight) {
-      const shortSide = Math.min(safeWidth, safeHeight);
-      if (shortSide > 1080) {
-        const scale = 1080 / shortSide;
-        safeWidth = Math.round(safeWidth * scale);
-        safeHeight = Math.round(safeHeight * scale);
-      }
+    if (!width || !height) {
+      throw new Error("Unable to read image dimensions for TikTok upload");
     }
 
-    // Step 4: Process image with Sharp (resize & compress)
+    const aspectRatio = width / height;
+    const targetRatio = this.#allowedAspectRatios.reduce((closest, current) =>
+      Math.abs(current - aspectRatio) < Math.abs(closest - aspectRatio)
+        ? current
+        : closest,
+    );
+
+    let targetWidth = width;
+    let targetHeight = height;
+
+    if (aspectRatio > targetRatio) {
+      targetWidth = Math.round(height * targetRatio);
+    } else if (aspectRatio < targetRatio) {
+      targetHeight = Math.round(width / targetRatio);
+    }
+
+    let safeWidth = targetWidth;
+    let safeHeight = targetHeight;
+
+    // Downscale so the short side is <= 1080
+    const shortSide = Math.min(safeWidth, safeHeight);
+    if (shortSide > 1080) {
+      const scale = 1080 / shortSide;
+      safeWidth = Math.round(safeWidth * scale);
+      safeHeight = Math.round(safeHeight * scale);
+    }
+
+    // Step 4: Process image with Sharp (crop, resize & compress)
     let processedImage = await sharp(imageBuffer)
       .rotate()
-      .resize({ width: safeWidth, height: safeHeight, fit: "inside" })
+      .resize({
+        width: safeWidth,
+        height: safeHeight,
+        fit: "cover",
+        position: "center",
+      })
       .jpeg({ quality: 100 })
       .toBuffer();
 
