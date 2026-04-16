@@ -53,7 +53,7 @@ export const processScheduledPosts = schedules.task({
         )
         .eq("status", "scheduled")
         .lte("post_at", new Date().toISOString())
-        .limit(10);
+        .limit(100);
 
       if (postsError) {
         logger.error("Error fetching scheduled posts", {
