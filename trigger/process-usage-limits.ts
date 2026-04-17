@@ -188,6 +188,31 @@ const getDefaultPriceId = (product: Stripe.Product): string => {
   return defaultPrice.id;
 };
 
+const toDateFromUnixSeconds = (timestamp: number): Date =>
+  new Date(timestamp * 1000);
+
+const getProductIdFromPrice = async (
+  price: string | Stripe.Price,
+): Promise<string | null> => {
+  if (typeof price !== "string") {
+    const product = price.product;
+    if (typeof product === "string") {
+      return product;
+    }
+
+    return product?.id ?? null;
+  }
+
+  const stripePrice = await stripe.prices.retrieve(price);
+  const product = stripePrice.product;
+
+  if (typeof product === "string") {
+    return product;
+  }
+
+  return product?.id ?? null;
+};
+
 export const processUsageLimits = task({
   id: "process-usage-limits",
   maxDuration: 3600,
@@ -311,16 +336,162 @@ export const processUsageLimits = task({
         switch (true) {
           //Notificaiont is in current subscripion period
           case isWithinInterval(lastNotificationDate, {
-            start: new Date(currentPeriodStart),
-            end: new Date(currentPeriodEnd),
+            start: toDateFromUnixSeconds(currentPeriodStart),
+            end: toDateFromUnixSeconds(currentPeriodEnd),
           }): {
-            logger.info("Usage notification already sent this period", {
-              team_id,
-              subscription_id: subscription.id,
-              period: {
-                lastNotificationDate,
-                start: new Date(currentPeriodStart),
-                end: new Date(currentPeriodEnd),
+            const activeSchedules = await stripe.subscriptionSchedules.list({
+              customer: stripe_customer_id,
+            });
+
+            const activeScheduleForSubscription: Stripe.SubscriptionSchedule =
+              activeSchedules.data.find(
+                (entry: Stripe.SubscriptionSchedule) => {
+                  if (entry.status !== "active") {
+                    return false;
+                  }
+
+                  if (typeof entry.subscription === "string") {
+                    return entry.subscription === subscription.id;
+                  }
+
+                  return entry.subscription?.id === subscription.id;
+                },
+              );
+
+            if (!activeScheduleForSubscription) {
+              logger.info("Usage notification already sent this period", {
+                team_id,
+                subscription_id: subscription.id,
+                period: {
+                  lastNotificationDate,
+                  start: toDateFromUnixSeconds(currentPeriodStart),
+                  end: toDateFromUnixSeconds(currentPeriodEnd),
+                },
+              });
+              return;
+            }
+
+            const upgradePhaseIndex =
+              activeScheduleForSubscription.phases.findIndex(
+                (phase) => phase.start_date >= currentPeriodEnd,
+              );
+
+            if (upgradePhaseIndex === -1) {
+              logger.info("No upgrade phase found in active schedule", {
+                team_id,
+                subscription_id: subscription.id,
+                schedule_id: activeScheduleForSubscription.id,
+              });
+              return;
+            }
+
+            const upgradePhase =
+              activeScheduleForSubscription.phases[upgradePhaseIndex];
+
+            let scheduledTier: (typeof PRICING_TIERS)[number] | null = null;
+
+            for (const item of upgradePhase.items) {
+              const productId = await getProductIdFromPrice(
+                item.price as string | Stripe.Price,
+              );
+              if (!productId) {
+                continue;
+              }
+
+              const tier = PRICING_TIERS.find(
+                (candidateTier) => candidateTier.productId === productId,
+              );
+
+              if (tier) {
+                scheduledTier = tier;
+                break;
+              }
+            }
+
+            if (!scheduledTier) {
+              logger.info("Scheduled upgrade does not map to pricing tier", {
+                team_id,
+                subscription_id: subscription.id,
+                schedule_id: activeScheduleForSubscription.id,
+              });
+              return;
+            }
+
+            if (usage <= scheduledTier.posts) {
+              logger.info("Usage is within scheduled upgrade tier limit", {
+                team_id,
+                subscription_id: subscription.id,
+                usage,
+                scheduled_tier: scheduledTier,
+              });
+              return;
+            }
+
+            const scheduledTierIndex = PRICING_TIERS.findIndex(
+              (tier) => tier.productId === scheduledTier?.productId,
+            );
+            const nextScheduledTier = PRICING_TIERS[scheduledTierIndex + 1];
+
+            if (!nextScheduledTier) {
+              logger.info("Scheduled upgrade is already on highest tier", {
+                team_id,
+                subscription_id: subscription.id,
+                usage,
+                scheduled_tier: scheduledTier,
+              });
+              return;
+            }
+
+            const nextTierProduct = await stripe.products.retrieve(
+              nextScheduledTier.productId,
+            );
+            const nextTierPriceId = getDefaultPriceId(nextTierProduct);
+
+            const existingUpgradeItemQuantity =
+              upgradePhase.items[0]?.quantity ?? currentPlanItem.quantity ?? 1;
+
+            const updatedPhases = activeScheduleForSubscription.phases.map(
+              (phase, index) => ({
+                start_date: phase.start_date,
+                ...(phase.end_date ? { end_date: phase.end_date } : {}),
+                items:
+                  index === upgradePhaseIndex
+                    ? [
+                        {
+                          price: nextTierPriceId,
+                          quantity: existingUpgradeItemQuantity,
+                        },
+                      ]
+                    : phase.items.map((item) => ({
+                        price:
+                          typeof item.price === "string"
+                            ? item.price
+                            : item.price.id,
+                        quantity: item.quantity ?? 1,
+                      })),
+                proration_behavior: "none" as const,
+              }),
+            );
+
+            await stripe.subscriptionSchedules.update(
+              activeScheduleForSubscription.id,
+              {
+                end_behavior: "release",
+                phases: updatedPhases,
+              },
+            );
+
+            await triggerTeamNotification(team_id, UPGRADE_SCHEDULED_MESSAGE, {
+              transactional_email_id:
+                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+              plan_info: {
+                ...currentPlanMetadata.plan_info,
+                next_plan: {
+                  product_id: nextScheduledTier.productId,
+                  name: nextScheduledTier.name,
+                  post_limit: nextScheduledTier.posts,
+                  price: nextScheduledTier.price,
+                },
               },
             });
 
@@ -328,8 +499,8 @@ export const processUsageLimits = task({
           }
           //Notification is in previous subscription period
           case isWithinInterval(lastNotificationDate, {
-            start: new Date(previousPeriodStart),
-            end: new Date(currentPeriodStart),
+            start: toDateFromUnixSeconds(previousPeriodStart),
+            end: toDateFromUnixSeconds(currentPeriodStart),
           }): {
             const currentTierIndex = PRICING_TIERS.findIndex(
               (tier) => tier.productId === planInfo.productId,
