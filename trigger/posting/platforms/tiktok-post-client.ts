@@ -27,7 +27,7 @@ export class TikTokPostClient extends PostClient {
   #clientSecret: string;
   #localSupabaseClient;
   #maxFileSize = 20 * 1024 * 1024;
-  #allowedAspectRatios = [9 / 16, 1, 16 / 9];
+  #allowedAspectRatios = [9 / 16, 3 / 4, 1, 16 / 9];
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
