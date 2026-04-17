@@ -114,6 +114,7 @@ export interface AccountConfigurationParent {
 
 export interface PinterestConfiguration {
   caption?: string;
+  title?: string;
   board_ids?: string[];
   link?: string;
   media?: PostMedia[];
@@ -167,6 +168,7 @@ export interface FacebookConfiguration {
   media?: PostMedia[];
   location?: string;
   collaborators?: string[];
+  set_caption_for_each_image?: boolean;
 }
 
 export interface LinkedinConfiguration {

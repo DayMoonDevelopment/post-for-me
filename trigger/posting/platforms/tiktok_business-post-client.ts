@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/require-await */
 import { SupabaseClient } from "@supabase/supabase-js";
-import { wait } from "@trigger.dev/sdk";
+import { logger, wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -35,7 +35,7 @@ export class TikTokBusinessPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
 
@@ -46,7 +46,7 @@ export class TikTokBusinessPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     const refreshRequestBody = {
       client_id: this.#clientKey,
@@ -63,7 +63,7 @@ export class TikTokBusinessPostClient extends PostClient {
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     const refreshData = refreshResponse.data;
@@ -196,7 +196,7 @@ export class TikTokBusinessPostClient extends PostClient {
         headers: {
           "Access-Token": `${account.access_token}`,
         },
-      }
+      },
     );
 
     this.#responses.push({ creatorResponse: response.data });
@@ -214,8 +214,8 @@ export class TikTokBusinessPostClient extends PostClient {
     let status = "PROCESSING";
     let statusResponse;
     let attempts = 0;
-    const delay = 5000; // 5 seconds
-    const maxAttempts = 600;
+    const initialDelayMs = 5000;
+    const maxAttempts = 15;
 
     const statusUrl =
       "https://business-api.tiktok.com/open_api/v1.3/business/publish/status/";
@@ -237,15 +237,21 @@ export class TikTokBusinessPostClient extends PostClient {
           headers: {
             "Access-Token": `${account.access_token}`,
           },
-        }
+        },
       );
 
       this.#responses.push({ statusResponse: statusResponse.data });
+      logger.info("TikTok Business publish status response", {
+        statusResponse: statusResponse.data,
+      });
 
       status = statusResponse.data.data.status;
       attempts++;
 
-      await wait.for({ seconds: delay / 1000 });
+      if (this.#processingStatuses.includes(status) && attempts < maxAttempts) {
+        const delay = initialDelayMs * Math.pow(1.5, attempts - 1);
+        await wait.for({ seconds: delay / 1000 });
+      }
     }
 
     if (
@@ -319,6 +325,7 @@ export class TikTokBusinessPostClient extends PostClient {
         custom_thumbnail_url: medium.thumbnail_url,
         post_info: {
           caption,
+          upload_to_draft: platformData?.is_draft ? true : undefined,
           disable_duet:
             platformData.allow_duet === undefined
               ? false
@@ -380,6 +387,7 @@ export class TikTokBusinessPostClient extends PostClient {
         post_info: {
           title: (title || caption).slice(0, this.#titleLength),
           caption,
+          is_draft: platformData?.is_draft ? true : undefined,
           privacy_level:
             platformData.privacy_status == "private"
               ? "SELF_ONLY"
@@ -483,7 +491,7 @@ export class TikTokBusinessPostClient extends PostClient {
     if (processedImageUploadError) {
       console.error("Error Processing Image", processedImageUploadError);
       throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`
+        `Error Processing Image: ${processedImageUploadError.message}`,
       );
     }
 

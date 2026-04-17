@@ -32,14 +32,14 @@ export class FacebookPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
     this.#appCredentials = appCredentials;
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     try {
       const refreshParams = {
@@ -56,7 +56,7 @@ export class FacebookPostClient extends PostClient {
         "https://graph.facebook.com/v20.0/oauth/access_token",
         {
           params: refreshParams,
-        }
+        },
       );
       this.#responses.push({ refreshResponse: response.data });
 
@@ -68,13 +68,13 @@ export class FacebookPostClient extends PostClient {
       return {
         access_token: response.data.access_token,
         expires_at: new Date(
-          Date.now() + 60 * 24 * 60 * 60 * 1000
+          Date.now() + 60 * 24 * 60 * 60 * 1000,
         ).toISOString(),
       };
     } catch (error) {
       console.error(
         "Error refreshing Facebook token:",
-        error.response?.data || error
+        error.response?.data || error,
       );
       throw error;
     }
@@ -208,7 +208,7 @@ export class FacebookPostClient extends PostClient {
               fields: "permalink_url",
               access_token: account.access_token,
             },
-          }
+          },
         );
 
         this.#responses.push({ postResponse: postResponse.data });
@@ -229,7 +229,7 @@ export class FacebookPostClient extends PostClient {
     } catch (error) {
       console.error(
         "Error posting to Facebook:",
-        error.response?.data || error
+        error.response?.data || error,
       );
       return {
         success: false,
@@ -285,7 +285,7 @@ export class FacebookPostClient extends PostClient {
 
     const response = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
-      postData
+      postData,
     );
 
     this.#responses.push({ createTextResponse: response.data });
@@ -344,14 +344,14 @@ export class FacebookPostClient extends PostClient {
     });
     const photoResponse = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
-      payload
+      payload,
     );
 
     this.#responses.push({ photoResponse: photoResponse.data });
 
     if (photoResponse.data.error) {
       throw new Error(
-        `Failed to upload media: ${photoResponse.data.error.message}`
+        `Failed to upload media: ${photoResponse.data.error.message}`,
       );
     }
 
@@ -370,6 +370,8 @@ export class FacebookPostClient extends PostClient {
     platformConfig: FacebookConfiguration;
   }): Promise<string> {
     const mediaIds = [];
+    const setCaptionForEachImage =
+      platformConfig?.set_caption_for_each_image ?? true;
 
     // Upload each image
     let index = 0;
@@ -380,16 +382,19 @@ export class FacebookPostClient extends PostClient {
       const fileUrl = await this.getSignedUrlForFile(medium);
       const payload: {
         url: string;
-        message: string;
+        message?: string;
         published: boolean;
         access_token: string;
         tags?: any[];
       } = {
         url: fileUrl,
-        message: caption,
         published: false,
         access_token: account.access_token,
       };
+
+      if (setCaptionForEachImage) {
+        payload.message = caption;
+      }
 
       if (medium.tags && medium.tags.length > 0) {
         payload.tags = medium.tags
@@ -409,13 +414,13 @@ export class FacebookPostClient extends PostClient {
       });
       const photoResponse = await axios.post(
         `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
-        payload
+        payload,
       );
 
       this.#responses.push({ photoResponse: photoResponse.data });
       if (photoResponse.data.error) {
         throw new Error(
-          `Failed to upload image: ${photoResponse.data.error.message}`
+          `Failed to upload image: ${photoResponse.data.error.message}`,
         );
       }
       mediaIds.push({ media_fbid: photoResponse.data.id });
@@ -452,18 +457,14 @@ export class FacebookPostClient extends PostClient {
     // Create the carousel post
     const response = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
-      {
-        message: caption,
-        access_token: account.access_token,
-        attached_media: mediaIds,
-      }
+      carouselBody,
     );
 
     this.#responses.push({ createCarouselPostResponse: response.data });
 
     if (response.data.error) {
       throw new Error(
-        `Failed to create carousel: ${response.data.error.message}`
+        `Failed to create carousel: ${response.data.error.message}`,
       );
     }
 
@@ -496,7 +497,7 @@ export class FacebookPostClient extends PostClient {
         file_url: fileUrl,
         description: caption,
         access_token: account.access_token,
-      }
+      },
     );
 
     const videoResponseData = videoResponse.data;
@@ -506,7 +507,7 @@ export class FacebookPostClient extends PostClient {
     if (videoResponseData?.error) {
       console.error(videoResponseData);
       throw new Error(
-        `Failed to publish video: ${videoResponseData.error.message}`
+        `Failed to publish video: ${videoResponseData.error.message}`,
       );
     }
 
@@ -529,7 +530,7 @@ export class FacebookPostClient extends PostClient {
             Authorization: `OAuth ${account.access_token}`,
             "Content-Type": "application/json; charset=UTF-8",
           },
-        }
+        },
       );
 
       this.#responses.push({ statusResponse: statusResponse.data });
@@ -559,7 +560,7 @@ export class FacebookPostClient extends PostClient {
       {
         upload_phase: "start",
         access_token: account.access_token,
-      }
+      },
     );
 
     const uploadSessionResponseData = uploadSessionResponse.data;
@@ -567,7 +568,7 @@ export class FacebookPostClient extends PostClient {
     if (uploadSessionResponseData?.error) {
       console.error(uploadSessionResponseData);
       throw new Error(
-        `Failed to create upload session: ${uploadSessionResponseData.error.message}`
+        `Failed to create upload session: ${uploadSessionResponseData.error.message}`,
       );
     }
 
@@ -582,7 +583,7 @@ export class FacebookPostClient extends PostClient {
           Authorization: `OAuth ${account.access_token}`,
           file_url: fileUrl,
         },
-      }
+      },
     );
 
     const uploadVideoResponseData = uploadVideoResponse.data;
@@ -590,7 +591,7 @@ export class FacebookPostClient extends PostClient {
     if (uploadVideoResponseData?.error) {
       console.error(uploadVideoResponseData);
       throw new Error(
-        `Failed to upload video: ${uploadVideoResponseData.error.message}`
+        `Failed to upload video: ${uploadVideoResponseData.error.message}`,
       );
     }
 
@@ -611,7 +612,7 @@ export class FacebookPostClient extends PostClient {
             Authorization: `OAuth ${account.access_token}`,
             "Content-Type": "application/json; charset=UTF-8",
           },
-        }
+        },
       );
 
       videoStatus = videoStatusResponse.data?.status?.video_status;
@@ -638,7 +639,7 @@ export class FacebookPostClient extends PostClient {
         video_id: createdMediaId,
         upload_phase: "finish",
         access_token: account.access_token,
-      }
+      },
     );
 
     const storyResponseData = storyResponse.data;
@@ -647,7 +648,7 @@ export class FacebookPostClient extends PostClient {
 
     if (storyResponseData?.error) {
       throw new Error(
-        `Failed to create story: ${storyResponseData.error.message}`
+        `Failed to create story: ${storyResponseData.error.message}`,
       );
     }
 
@@ -669,7 +670,7 @@ export class FacebookPostClient extends PostClient {
               Authorization: `OAuth ${account.access_token}`,
               "Content-Type": "application/json; charset=UTF-8",
             },
-          }
+          },
         );
 
         status = statusResponse.data?.status?.processing_phase?.status;
@@ -749,13 +750,13 @@ export class FacebookPostClient extends PostClient {
     });
     const photoResponse = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
-      payload
+      payload,
     );
 
     this.#responses.push({ photoResponse: photoResponse.data });
     if (photoResponse.data.error) {
       throw new Error(
-        `Failed to upload image: ${photoResponse.data.error.message}`
+        `Failed to upload image: ${photoResponse.data.error.message}`,
       );
     }
 
@@ -766,7 +767,7 @@ export class FacebookPostClient extends PostClient {
       {
         photo_id: createdMediaId,
         access_token: account.access_token,
-      }
+      },
     );
 
     const storyResponseData = storyResponse.data;
@@ -775,7 +776,7 @@ export class FacebookPostClient extends PostClient {
 
     if (storyResponseData?.error) {
       throw new Error(
-        `Failed to create story: ${storyResponseData.error.message}`
+        `Failed to create story: ${storyResponseData.error.message}`,
       );
     }
 
@@ -790,7 +791,7 @@ export class FacebookPostClient extends PostClient {
     accessToken: string;
   }): Promise<string | undefined> {
     const postResponse = await axios.get(
-      `https://graph.facebook.com/v20.0/${platformId}?fields=url&access_token=${accessToken}`
+      `https://graph.facebook.com/v20.0/${platformId}?fields=url&access_token=${accessToken}`,
     );
 
     const postResponseData = postResponse.data as {
@@ -816,7 +817,7 @@ export class FacebookPostClient extends PostClient {
       {
         upload_phase: "start",
         access_token: account.access_token,
-      }
+      },
     );
 
     const uploadSessionResponseData = uploadSessionResponse.data;
@@ -824,7 +825,7 @@ export class FacebookPostClient extends PostClient {
     if (uploadSessionResponseData?.error) {
       console.error(uploadSessionResponseData);
       throw new Error(
-        `Failed to create upload session: ${uploadSessionResponseData.error.message}`
+        `Failed to create upload session: ${uploadSessionResponseData.error.message}`,
       );
     }
 
@@ -839,7 +840,7 @@ export class FacebookPostClient extends PostClient {
           Authorization: `OAuth ${account.access_token}`,
           file_url: fileUrl,
         },
-      }
+      },
     );
 
     const uploadVideoResponseData = uploadVideoResponse.data;
@@ -847,7 +848,7 @@ export class FacebookPostClient extends PostClient {
     if (uploadVideoResponseData?.error) {
       console.error(uploadVideoResponseData);
       throw new Error(
-        `Failed to upload video: ${uploadVideoResponseData.error.message}`
+        `Failed to upload video: ${uploadVideoResponseData.error.message}`,
       );
     }
 
@@ -868,7 +869,7 @@ export class FacebookPostClient extends PostClient {
             Authorization: `OAuth ${account.access_token}`,
             "Content-Type": "application/json; charset=UTF-8",
           },
-        }
+        },
       );
 
       videoStatus = videoStatusResponse.data?.status?.video_status;
@@ -918,7 +919,7 @@ export class FacebookPostClient extends PostClient {
 
     const reelResponse = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_reels`,
-      reelBody
+      reelBody,
     );
 
     const reelResponseData = reelResponse.data;
@@ -927,7 +928,7 @@ export class FacebookPostClient extends PostClient {
 
     if (reelResponseData?.error) {
       throw new Error(
-        `Failed to create reel: ${reelResponseData.error.message}`
+        `Failed to create reel: ${reelResponseData.error.message}`,
       );
     }
 
@@ -949,7 +950,7 @@ export class FacebookPostClient extends PostClient {
               Authorization: `OAuth ${account.access_token}`,
               "Content-Type": "application/json; charset=UTF-8",
             },
-          }
+          },
         );
 
         status = statusResponse.data?.status?.processing_phase?.status;
@@ -987,7 +988,7 @@ export class FacebookPostClient extends PostClient {
             {
               target_id: collaborator,
               access_token: account.access_token,
-            }
+            },
           );
 
           logger.info("Added collaborator", {
@@ -1018,6 +1019,7 @@ export class FacebookPostClient extends PostClient {
     const file = await this.getFile({
       type: medium.type,
       url: medium.thumbnail_url,
+      id: medium.id,
     });
     const form = new FormData();
     form.append("access_token", accessToken);
