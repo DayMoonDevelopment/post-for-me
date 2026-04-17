@@ -2,6 +2,7 @@ export interface PaginationMeta {
   total: number;
   offset: number;
   limit: number;
+  next_cursor: string | null;
   next: string | null;
 }
 

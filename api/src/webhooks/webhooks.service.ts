@@ -7,6 +7,10 @@ import { WebhookQueryDto } from './dto/webhook-query.dto';
 import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { Database } from '@post-for-me/db';
 import { randomUUID } from 'crypto';
+import {
+  decodePaginationCursor,
+  encodePaginationCursor,
+} from '../pagination/cursor';
 
 type WebhookEventType = Database['public']['Enums']['webhook_event_type'];
 
@@ -20,20 +24,28 @@ export class WebhooksService {
   }: {
     queryParams: WebhookQueryDto;
     projectId: string;
-  }): Promise<{ data: WebhookDto[]; count: number }> {
-    const { offset, limit, url, event_type, id } = queryParams;
+  }): Promise<{
+    data: WebhookDto[];
+    count: number;
+    next_cursor: string | null;
+  }> {
+    const { offset, limit, url, event_type, id, cursor } = queryParams;
 
-    const webhookQuery = this.supabaseService.supabaseClient
+    const decodedCursor = decodePaginationCursor(cursor);
+    const isCursorPagination = typeof cursor === 'string';
+    const pageSize = isCursorPagination ? limit + 1 : limit;
+
+    const idSelect = event_type
+      ? 'id, created_at, webhook_subscribed_event_types!inner(type)'
+      : 'id, created_at';
+
+    const webhookIdQuery = this.supabaseService.supabaseClient
       .from('webhooks')
-      .select(
-        'id, url, secret_key, webhook_subscribed_event_types!inner(type)',
-        {
-          count: 'estimated',
-          head: false,
-        },
-      )
-      .eq('project_id', projectId)
-      .range(offset, offset + limit - 1);
+      .select(idSelect, {
+        count: 'estimated',
+        head: false,
+      })
+      .eq('project_id', projectId);
 
     if (url) {
       const values: string[] = [];
@@ -51,7 +63,7 @@ export class WebhooksService {
           break;
       }
 
-      webhookQuery.in('url', values);
+      webhookIdQuery.in('url', values);
     }
 
     if (event_type) {
@@ -70,7 +82,7 @@ export class WebhooksService {
           break;
       }
 
-      webhookQuery.in(
+      webhookIdQuery.in(
         'webhook_subscribed_event_types.type',
         values as WebhookEventType[],
       );
@@ -92,16 +104,79 @@ export class WebhooksService {
           break;
       }
 
-      webhookQuery.in('id', values);
+      webhookIdQuery.in('id', values);
     }
 
-    const { data: webhooks, error, count } = await webhookQuery;
+    if (decodedCursor && isCursorPagination) {
+      webhookIdQuery.or(
+        `created_at.lt.${decodedCursor.created_at},and(created_at.eq.${decodedCursor.created_at},id.lt.${decodedCursor.id})`,
+      );
+    }
+
+    webhookIdQuery.order('created_at', { ascending: false });
+    webhookIdQuery.order('id', { ascending: false });
+
+    if (isCursorPagination) {
+      webhookIdQuery.limit(pageSize);
+    } else {
+      webhookIdQuery.range(offset, offset + limit - 1);
+    }
+
+    const { data: rawWebhookIds, error, count } = await webhookIdQuery;
 
     if (error) {
       throw error;
     }
 
-    const transformedData: WebhookDto[] = webhooks.map((raw) => ({
+    const idRows = (rawWebhookIds || []) as unknown as Array<{
+      id: string;
+      created_at: string;
+    }>;
+    const hasMore = isCursorPagination ? idRows.length > limit : false;
+    const paginatedRows = isCursorPagination ? idRows.slice(0, limit) : idRows;
+    const webhookIds = paginatedRows.map((row) => row.id);
+    const lastRecord = paginatedRows.length
+      ? paginatedRows[paginatedRows.length - 1]
+      : null;
+
+    const nextCursor =
+      hasMore && lastRecord
+        ? encodePaginationCursor({
+            created_at: lastRecord.created_at,
+            id: lastRecord.id,
+          })
+        : null;
+
+    if (webhookIds.length === 0) {
+      return {
+        data: [],
+        count: count || 0,
+        next_cursor: nextCursor,
+      };
+    }
+
+    const { data: webhooks, error: webhookDetailsError } =
+      await this.supabaseService.supabaseClient
+        .from('webhooks')
+        .select('id, url, secret_key, webhook_subscribed_event_types(type)')
+        .eq('project_id', projectId)
+        .in('id', webhookIds);
+
+    if (webhookDetailsError) {
+      throw webhookDetailsError;
+    }
+
+    const positionById = new Map(
+      webhookIds.map((webhookId, idx) => [webhookId, idx]),
+    );
+    const sortedWebhooks = [...(webhooks || [])].sort((a, b) => {
+      const aPos = positionById.get(a.id) ?? 0;
+      const bPos = positionById.get(b.id) ?? 0;
+
+      return aPos - bPos;
+    });
+
+    const transformedData: WebhookDto[] = sortedWebhooks.map((raw) => ({
       id: raw.id,
       url: raw.url,
       secret: raw.secret_key,
@@ -111,6 +186,7 @@ export class WebhooksService {
     return {
       data: transformedData || [],
       count: count || 0,
+      next_cursor: nextCursor,
     };
   }
 

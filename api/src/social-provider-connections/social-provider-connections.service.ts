@@ -15,6 +15,10 @@ import {
   SocialAccountMetadata,
 } from './dto/create-social-account.dto';
 import { Database } from '@post-for-me/db';
+import {
+  decodePaginationCursor,
+  encodePaginationCursor,
+} from '../pagination/cursor';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -29,8 +33,20 @@ export class SocialAccountsService {
     queryParams: SocialAccountQueryDto,
     projectId: string,
   ): PaginatedRequestQuery<SocialAccountDto> {
-    const { offset, limit, platform, username, external_id, id, status } =
-      queryParams;
+    const {
+      offset,
+      limit,
+      platform,
+      username,
+      external_id,
+      id,
+      status,
+      cursor,
+    } = queryParams;
+
+    const decodedCursor = decodePaginationCursor(cursor);
+    const isCursorPagination = typeof cursor === 'string';
+    const pageSize = isCursorPagination ? limit + 1 : limit;
 
     const query = this.supabaseService.supabaseClient
       .from('social_provider_connections')
@@ -38,8 +54,7 @@ export class SocialAccountsService {
         'id, provider, social_provider_user_name, social_provider_profile_photo_url, social_provider_user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, external_id, social_provider_metadata, created_at',
         { count: 'estimated', head: false },
       )
-      .eq('project_id', projectId)
-      .range(offset, offset + limit - 1);
+      .eq('project_id', projectId);
 
     if (platform) {
       const values: string[] = [];
@@ -147,13 +162,39 @@ export class SocialAccountsService {
       }
     }
 
-    query.order('created_at', { ascending: false });
+    if (decodedCursor && isCursorPagination) {
+      query.or(
+        `created_at.lt.${decodedCursor.created_at},and(created_at.eq.${decodedCursor.created_at},id.lt.${decodedCursor.id})`,
+      );
+    }
 
-    const { data, error, count } = await query;
+    query.order('created_at', { ascending: false });
+    query.order('id', { ascending: false });
+
+    if (isCursorPagination) {
+      query.limit(pageSize);
+    } else {
+      query.range(offset, offset + limit - 1);
+    }
+
+    const { data: rawData, error, count } = await query;
 
     if (error) {
       throw error;
     }
+
+    const rows = rawData || [];
+    const hasMore = isCursorPagination ? rows.length > limit : false;
+    const data = isCursorPagination ? rows.slice(0, limit) : rows;
+    const lastRecord = data.length > 0 ? data[data.length - 1] : null;
+
+    const nextCursor =
+      hasMore && lastRecord
+        ? encodePaginationCursor({
+            created_at: lastRecord.created_at,
+            id: lastRecord.id,
+          })
+        : null;
 
     const transformedData: SocialAccountDto[] = data.map((raw) => ({
       id: raw.id,
@@ -174,6 +215,7 @@ export class SocialAccountsService {
     return {
       data: transformedData,
       count: count || 0,
+      next_cursor: nextCursor,
     };
   }
 

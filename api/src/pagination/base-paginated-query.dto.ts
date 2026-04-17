@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, Min, Max } from 'class-validator';
+import { IsInt, IsOptional, Min, Max, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 const DEFAULT_OFFSET = 0;
@@ -8,7 +8,19 @@ const MAX_LIMIT = 100;
 
 export class BasePaginatedQueryDto {
   @ApiProperty({
-    description: 'Number of items to skip',
+    description:
+      'Cursor for keyset pagination. Preferred over offset. If cursor is provided, offset is ignored.',
+    required: false,
+    example:
+      'eyJjcmVhdGVkX2F0IjoiMjAyNi0wNC0xN1QxMDowMDowMC4wMDBaIiwiaWQiOiJzcF8xMjMifQ',
+  })
+  @IsString()
+  @IsOptional()
+  cursor?: string;
+
+  @ApiProperty({
+    description:
+      'Number of items to skip when offset pagination is used. Ignored when cursor is provided.',
     default: DEFAULT_OFFSET,
     required: false,
   })
@@ -19,7 +31,8 @@ export class BasePaginatedQueryDto {
   offset: number = DEFAULT_OFFSET;
 
   @ApiProperty({
-    description: 'Number of items to return',
+    description:
+      'Number of items to return for either cursor or offset pagination.',
     default: DEFAULT_LIMIT,
     required: false,
   })
