@@ -213,6 +213,102 @@ const getProductIdFromPrice = async (
   return product?.id ?? null;
 };
 
+const scheduleUpgrade = async ({
+  stripeCustomerId,
+  teamId,
+  subscription,
+  currentPlanItem,
+  currentPeriodEnd,
+  currentPlanMetadata,
+  nextTier,
+}: {
+  stripeCustomerId: string;
+  teamId: string;
+  subscription: Stripe.Subscription;
+  currentPlanItem: Stripe.SubscriptionItem;
+  currentPeriodEnd: number;
+  currentPlanMetadata: {
+    plan_info: {
+      current_plan: {
+        product_id: string | null;
+        name: string | null;
+        post_limit: number | null;
+        price: number | null;
+      };
+    };
+  };
+  nextTier: (typeof PRICING_TIERS)[number];
+}): Promise<void> => {
+  const nextTierProduct = await stripe.products.retrieve(nextTier.productId);
+  const nextTierPriceId = getDefaultPriceId(nextTierProduct);
+
+  const activeSchedules = await stripe.subscriptionSchedules.list({
+    customer: stripeCustomerId,
+  });
+
+  for (const schedule of activeSchedules.data.filter(
+    (entry: Stripe.SubscriptionSchedule) => entry.status === "active",
+  )) {
+    await stripe.subscriptionSchedules.release(schedule.id);
+  }
+
+  const schedule = await stripe.subscriptionSchedules.create({
+    from_subscription: subscription.id,
+  });
+
+  const firstPhase = schedule.phases[0];
+
+  if (!firstPhase) {
+    logger.error("Missing subscription schedule phase", {
+      schedule_id: schedule.id,
+      subscription_id: subscription.id,
+    });
+    return;
+  }
+
+  const currentPhaseItems = subscription.items.data.map((subscriptionItem) => ({
+    price: subscriptionItem.price.id,
+    quantity: subscriptionItem.quantity ?? 1,
+  }));
+
+  const nextPhaseItems = [
+    {
+      price: nextTierPriceId,
+      quantity: currentPlanItem.quantity ?? 1,
+    },
+  ];
+
+  await stripe.subscriptionSchedules.update(schedule.id, {
+    end_behavior: "release",
+    phases: [
+      {
+        start_date: firstPhase.start_date,
+        end_date: currentPeriodEnd,
+        items: currentPhaseItems,
+        proration_behavior: "none",
+      },
+      {
+        start_date: currentPeriodEnd,
+        items: nextPhaseItems,
+        proration_behavior: "none",
+      },
+    ],
+  });
+
+  await triggerTeamNotification(teamId, UPGRADE_SCHEDULED_MESSAGE, {
+    transactional_email_id: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+    plan_info: {
+      ...currentPlanMetadata.plan_info,
+      next_plan: {
+        product_id: nextTier.productId,
+        name: nextTier.name,
+        post_limit: nextTier.posts,
+        price: nextTier.price,
+      },
+    },
+  });
+};
+
 export const processUsageLimits = task({
   id: "process-usage-limits",
   maxDuration: 3600,
@@ -442,57 +538,14 @@ export const processUsageLimits = task({
               return;
             }
 
-            const nextTierProduct = await stripe.products.retrieve(
-              nextScheduledTier.productId,
-            );
-            const nextTierPriceId = getDefaultPriceId(nextTierProduct);
-
-            const existingUpgradeItemQuantity =
-              upgradePhase.items[0]?.quantity ?? currentPlanItem.quantity ?? 1;
-
-            const updatedPhases = activeScheduleForSubscription.phases.map(
-              (phase, index) => ({
-                start_date: phase.start_date,
-                ...(phase.end_date ? { end_date: phase.end_date } : {}),
-                items:
-                  index === upgradePhaseIndex
-                    ? [
-                        {
-                          price: nextTierPriceId,
-                          quantity: existingUpgradeItemQuantity,
-                        },
-                      ]
-                    : phase.items.map((item) => ({
-                        price:
-                          typeof item.price === "string"
-                            ? item.price
-                            : item.price.id,
-                        quantity: item.quantity ?? 1,
-                      })),
-                proration_behavior: "none" as const,
-              }),
-            );
-
-            await stripe.subscriptionSchedules.update(
-              activeScheduleForSubscription.id,
-              {
-                end_behavior: "release",
-                phases: updatedPhases,
-              },
-            );
-
-            await triggerTeamNotification(team_id, UPGRADE_SCHEDULED_MESSAGE, {
-              transactional_email_id:
-                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-              plan_info: {
-                ...currentPlanMetadata.plan_info,
-                next_plan: {
-                  product_id: nextScheduledTier.productId,
-                  name: nextScheduledTier.name,
-                  post_limit: nextScheduledTier.posts,
-                  price: nextScheduledTier.price,
-                },
-              },
+            await scheduleUpgrade({
+              stripeCustomerId: stripe_customer_id,
+              teamId: team_id,
+              subscription,
+              currentPlanItem,
+              currentPeriodEnd,
+              currentPlanMetadata,
+              nextTier: nextScheduledTier,
             });
 
             return;
@@ -515,78 +568,14 @@ export const processUsageLimits = task({
               return;
             }
 
-            const nextTierProduct = await stripe.products.retrieve(
-              nextTier.productId,
-            );
-            const nextTierPriceId = getDefaultPriceId(nextTierProduct);
-
-            const activeSchedules = await stripe.subscriptionSchedules.list({
-              customer: stripe_customer_id,
-            });
-
-            for (const schedule of activeSchedules.data.filter(
-              (entry: Stripe.SubscriptionSchedule) => entry.status === "active",
-            )) {
-              await stripe.subscriptionSchedules.release(schedule.id);
-            }
-
-            const schedule = await stripe.subscriptionSchedules.create({
-              from_subscription: subscription.id,
-            });
-
-            const firstPhase = schedule.phases[0];
-
-            if (!firstPhase) {
-              logger.error("Missing subscription schedule phase", {
-                schedule_id: schedule.id,
-                subscription_id: subscription.id,
-              });
-              return;
-            }
-
-            const currentPhaseItems = subscription.items.data.map(
-              (subscriptionItem) => ({
-                price: subscriptionItem.price.id,
-                quantity: subscriptionItem.quantity ?? 1,
-              }),
-            );
-
-            const nextPhaseItems = [
-              {
-                price: nextTierPriceId,
-                quantity: currentPlanItem.quantity ?? 1,
-              },
-            ];
-
-            await stripe.subscriptionSchedules.update(schedule.id, {
-              end_behavior: "release",
-              phases: [
-                {
-                  start_date: firstPhase.start_date,
-                  end_date: currentPeriodEnd,
-                  items: currentPhaseItems,
-                  proration_behavior: "none",
-                },
-                {
-                  start_date: currentPeriodEnd,
-                  items: nextPhaseItems,
-                  proration_behavior: "none",
-                },
-              ],
-            });
-
-            await triggerTeamNotification(team_id, UPGRADE_SCHEDULED_MESSAGE, {
-              transactional_email_id:
-                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-              plan_info: {
-                ...currentPlanMetadata.plan_info,
-                next_plan: {
-                  product_id: nextTier.productId,
-                  name: nextTier.name,
-                  post_limit: nextTier.posts,
-                  price: nextTier.price,
-                },
-              },
+            await scheduleUpgrade({
+              stripeCustomerId: stripe_customer_id,
+              teamId: team_id,
+              subscription,
+              currentPlanItem,
+              currentPeriodEnd,
+              currentPlanMetadata,
+              nextTier,
             });
             return;
           }
