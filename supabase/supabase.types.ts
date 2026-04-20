@@ -679,7 +679,7 @@ export type Database = {
           created_at: string
           delivery_type: Database["public"]["Enums"]["delivery_type"]
           id: string
-          message: string
+          message: string | null
           meta_data: Json | null
           notification_type: Database["public"]["Enums"]["notification_type"]
           project_id: string | null
@@ -689,7 +689,7 @@ export type Database = {
           created_at?: string
           delivery_type: Database["public"]["Enums"]["delivery_type"]
           id?: string
-          message: string
+          message?: string | null
           meta_data?: Json | null
           notification_type: Database["public"]["Enums"]["notification_type"]
           project_id?: string | null
@@ -699,7 +699,7 @@ export type Database = {
           created_at?: string
           delivery_type?: Database["public"]["Enums"]["delivery_type"]
           id?: string
-          message?: string
+          message?: string | null
           meta_data?: Json | null
           notification_type?: Database["public"]["Enums"]["notification_type"]
           project_id?: string | null
