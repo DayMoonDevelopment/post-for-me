@@ -520,12 +520,6 @@ export class InstagramPostClient extends PostClient {
           .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
       }
 
-      if (index == 0) {
-        if (platformConfig?.location) {
-          itemPayload.location_id = platformConfig.location;
-        }
-      }
-
       const containerId = await this.#createMediaContainerWithRetry({
         account,
         payload: itemPayload,
@@ -543,6 +537,7 @@ export class InstagramPostClient extends PostClient {
       caption: string;
       access_token: string;
       collaborators?: string[];
+      location_id?: string;
     } = {
       media_type: "CAROUSEL",
       children: containerIds,
@@ -555,6 +550,10 @@ export class InstagramPostClient extends PostClient {
       platformConfig?.collaborators.length > 0
     ) {
       carouselPayload.collaborators = platformConfig?.collaborators;
+    }
+
+    if (platformConfig?.location) {
+      carouselPayload.location_id = platformConfig.location;
     }
 
     this.#requests.push({
