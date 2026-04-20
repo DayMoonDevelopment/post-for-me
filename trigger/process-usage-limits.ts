@@ -36,12 +36,6 @@ const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
 const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
 
-const USAGE_LIMIT_ALERT_MESSAGE =
-  "You've exceeded your monthly usage limit. Upgrade your plan to keep publishing without interruption.";
-
-const UPGRADE_SCHEDULED_MESSAGE =
-  "Your plan has been upgraded. The new usage limit will apply at the start of your next billing period.";
-
 export type ProcessUsageLimitsPayload = {
   stripe_customer_id: string;
   team_id: string;
@@ -49,7 +43,6 @@ export type ProcessUsageLimitsPayload = {
 
 const triggerTeamNotification = async (
   teamId: string,
-  message: string,
   metadata: Json,
 ): Promise<void> => {
   await tasks.trigger("process-team-notification", {
@@ -58,7 +51,7 @@ const triggerTeamNotification = async (
     project_id: null,
     notification_type: "usage_alert",
     delivery_type: "email",
-    message,
+    message: null,
     meta_data: metadata,
     created_at: new Date().toISOString(),
   });
@@ -295,7 +288,7 @@ const scheduleUpgrade = async ({
     ],
   });
 
-  await triggerTeamNotification(teamId, UPGRADE_SCHEDULED_MESSAGE, {
+  await triggerTeamNotification(teamId, {
     transactional_email_id: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
     plan_info: {
       ...currentPlanMetadata.plan_info,
@@ -426,7 +419,7 @@ export const processUsageLimits = task({
       };
 
       if (!lastNotificationDate) {
-        await triggerTeamNotification(team_id, USAGE_LIMIT_ALERT_MESSAGE, {
+        await triggerTeamNotification(team_id, {
           transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
           ...currentPlanMetadata,
         });
@@ -582,7 +575,7 @@ export const processUsageLimits = task({
           return;
         }
         default: {
-          await triggerTeamNotification(team_id, USAGE_LIMIT_ALERT_MESSAGE, {
+          await triggerTeamNotification(team_id, {
             transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
             ...currentPlanMetadata,
           });

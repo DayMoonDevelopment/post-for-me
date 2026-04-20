@@ -19,7 +19,7 @@ CREATE TABLE public.team_notifications(
     project_id text NULL REFERENCES public.projects(id) ON DELETE SET NULL,
     notification_type notification_type NOT NULL,
     delivery_type delivery_type NOT NULL,
-    message text NOT NULL,
+    message text NULL,
     meta_data jsonb NULL,
     created_at timestamp with time zone NOT NULL DEFAULT now()
 );
