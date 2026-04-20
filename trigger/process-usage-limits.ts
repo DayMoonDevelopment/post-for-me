@@ -316,280 +316,281 @@ export const processUsageLimits = task({
   run: async (payload: ProcessUsageLimitsPayload) => {
     const { stripe_customer_id, team_id } = payload;
 
+    if (!stripe_customer_id || STRIPE_METER_EVENT) {
+      logger.error("No stripe info provided");
+      return;
+    }
+
     logger.info("Checking usage for customer", { stripe_customer_id, team_id });
 
-    if (stripe_customer_id && STRIPE_METER_EVENT) {
-      try {
-        // Get the active subscription to determine the billing period
-        const subscriptions = await stripe.subscriptions.list({
+    try {
+      // Get the active subscription to determine the billing period
+      const subscriptions = await stripe.subscriptions.list({
+        customer: stripe_customer_id,
+        status: "active",
+        limit: 1,
+        expand: ["data.items.data.price"],
+      });
+
+      const subscription = subscriptions.data[0] as Stripe.Subscription;
+
+      if (!subscription) {
+        logger.error("No active subscirpiton for customer", { subscription });
+        return;
+      }
+      // Get plan info to determine post limit
+      const planInfo = getSubscriptionPlanInfo(subscription);
+
+      if (planInfo.isLegacy) {
+        logger.info("Legacy subscription no usage limit to check");
+        return;
+      }
+
+      if (!planInfo.postLimit) {
+        logger.error("Error getting post limit", { planInfo });
+        return;
+      }
+
+      const currentPlanItem = subscription.items.data.find(
+        (subscriptionItem) =>
+          subscriptionItem.price.product === planInfo.productId,
+      );
+
+      if (!currentPlanItem) {
+        logger.error("Could not find current plan item", {
+          subscriptionId: subscription.id,
+          productId: planInfo.productId,
+        });
+        return;
+      }
+
+      const startTime = currentPlanItem.current_period_start;
+      const endTime = Math.floor(Date.now() / 1000);
+
+      // Query meter event summaries for the current subscription period
+      const meterEventSummaries =
+        await stripe.billing.meters.listEventSummaries(STRIPE_METER_EVENT, {
           customer: stripe_customer_id,
-          status: "active",
-          limit: 1,
-          expand: ["data.items.data.price"],
+          start_time: startTime,
+          end_time: endTime,
         });
 
-        const subscription = subscriptions.data[0] as Stripe.Subscription;
+      // Sum up the usage from all meter event summaries
+      const usage = meterEventSummaries.data.reduce(
+        (sum: number, summary: { aggregated_value?: number }) =>
+          sum + (summary.aggregated_value || 0),
+        0,
+      );
 
-        if (!subscription) {
-          logger.error("No active subscirpiton for customer", { subscription });
-          return;
-        }
-        // Get plan info to determine post limit
-        const planInfo = getSubscriptionPlanInfo(subscription);
+      if (usage <= planInfo.postLimit) {
+        logger.info("Usage is within subscription limits");
+        return;
+      }
 
-        if (planInfo.isLegacy) {
-          logger.info("Legacy subscription no usage limit to check");
-          return;
-        }
+      const { data: lastNotification, error: lastNotificationError } =
+        await supabaseClient
+          .from("team_notifications")
+          .select("created_at")
+          .eq("notification_type", "usage_alert")
+          .eq("team_id", team_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (!planInfo.postLimit) {
-          logger.error("Error getting post limit", { planInfo });
-          return;
-        }
+      if (lastNotificationError) {
+        logger.error("Failed to fetch last usage notification", {
+          error: lastNotificationError,
+          team_id,
+        });
+        return;
+      }
 
-        const currentPlanItem = subscription.items.data.find(
-          (subscriptionItem) =>
-            subscriptionItem.price.product === planInfo.productId,
-        );
+      const currentPeriodStart = currentPlanItem.current_period_start;
+      const currentPeriodEnd = currentPlanItem.current_period_end;
+      const periodDuration = currentPeriodEnd - currentPeriodStart;
+      const previousPeriodStart = currentPeriodStart - periodDuration;
 
-        if (!currentPlanItem) {
-          logger.error("Could not find current plan item", {
-            subscriptionId: subscription.id,
-            productId: planInfo.productId,
-          });
-          return;
-        }
+      const lastNotificationDate = lastNotification
+        ? new Date(lastNotification.created_at)
+        : null;
 
-        const startTime = currentPlanItem.current_period_start;
-        const endTime = Math.floor(Date.now() / 1000);
-
-        // Query meter event summaries for the current subscription period
-        const meterEventSummaries =
-          await stripe.billing.meters.listEventSummaries(STRIPE_METER_EVENT, {
-            customer: stripe_customer_id,
-            start_time: startTime,
-            end_time: endTime,
-          });
-
-        // Sum up the usage from all meter event summaries
-        const usage = meterEventSummaries.data.reduce(
-          (sum: number, summary: { aggregated_value?: number }) =>
-            sum + (summary.aggregated_value || 0),
-          0,
-        );
-
-        if (usage <= planInfo.postLimit) {
-          logger.info("Usage is within subscription limits");
-          return;
-        }
-
-        const { data: lastNotification, error: lastNotificationError } =
-          await supabaseClient
-            .from("team_notifications")
-            .select("created_at")
-            .eq("notification_type", "usage_alert")
-            .eq("team_id", team_id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-        if (lastNotificationError) {
-          logger.error("Failed to fetch last usage notification", {
-            error: lastNotificationError,
-            team_id,
-          });
-          return;
-        }
-
-        const currentPeriodStart = currentPlanItem.current_period_start;
-        const currentPeriodEnd = currentPlanItem.current_period_end;
-        const periodDuration = currentPeriodEnd - currentPeriodStart;
-        const previousPeriodStart = currentPeriodStart - periodDuration;
-
-        const lastNotificationDate = lastNotification
-          ? new Date(lastNotification.created_at)
-          : null;
-
-        const currentPlanMetadata = {
-          plan_info: {
-            current_plan: {
-              product_id: planInfo.productId,
-              name: planInfo.planName,
-              post_limit: planInfo.postLimit,
-              price: planInfo.price,
-            },
+      const currentPlanMetadata = {
+        plan_info: {
+          current_plan: {
+            product_id: planInfo.productId,
+            name: planInfo.planName,
+            post_limit: planInfo.postLimit,
+            price: planInfo.price,
           },
-        };
+        },
+      };
 
-        if (!lastNotificationDate) {
+      if (!lastNotificationDate) {
+        await triggerTeamNotification(team_id, USAGE_LIMIT_ALERT_MESSAGE, {
+          transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
+          ...currentPlanMetadata,
+        });
+        return;
+      }
+
+      switch (true) {
+        //Notification is in current subscripion period
+        case isWithinInterval(lastNotificationDate, {
+          start: toDateFromUnixSeconds(currentPeriodStart),
+          end: toDateFromUnixSeconds(currentPeriodEnd),
+        }): {
+          const activeSchedules = await stripe.subscriptionSchedules.list({
+            customer: stripe_customer_id,
+          });
+
+          const activeScheduleForSubscription: Stripe.SubscriptionSchedule =
+            activeSchedules.data.find((entry: Stripe.SubscriptionSchedule) => {
+              if (entry.status !== "active") {
+                return false;
+              }
+
+              if (typeof entry.subscription === "string") {
+                return entry.subscription === subscription.id;
+              }
+
+              return entry.subscription?.id === subscription.id;
+            });
+
+          if (!activeScheduleForSubscription) {
+            logger.info("Usage notification already sent this period", {
+              team_id,
+              subscription_id: subscription.id,
+              period: {
+                lastNotificationDate,
+                start: toDateFromUnixSeconds(currentPeriodStart),
+                end: toDateFromUnixSeconds(currentPeriodEnd),
+              },
+            });
+            return;
+          }
+
+          const upgradePhaseIndex =
+            activeScheduleForSubscription.phases.findIndex(
+              (phase) => phase.start_date >= currentPeriodEnd,
+            );
+
+          if (upgradePhaseIndex === -1) {
+            logger.info("No upgrade phase found in active schedule", {
+              team_id,
+              subscription_id: subscription.id,
+              schedule_id: activeScheduleForSubscription.id,
+            });
+            return;
+          }
+
+          const upgradePhase =
+            activeScheduleForSubscription.phases[upgradePhaseIndex];
+
+          let scheduledTier: (typeof PRICING_TIERS)[number] | null = null;
+
+          for (const item of upgradePhase.items) {
+            const productId = await getProductIdFromPrice(
+              item.price as string | Stripe.Price,
+            );
+            if (!productId) {
+              continue;
+            }
+
+            const tier = PRICING_TIERS.find(
+              (candidateTier) => candidateTier.productId === productId,
+            );
+
+            if (tier) {
+              scheduledTier = tier;
+              break;
+            }
+          }
+
+          if (!scheduledTier) {
+            logger.info("Scheduled upgrade does not map to pricing tier", {
+              team_id,
+              subscription_id: subscription.id,
+              schedule_id: activeScheduleForSubscription.id,
+            });
+            return;
+          }
+
+          if (usage <= scheduledTier.posts) {
+            logger.info("Usage is within scheduled upgrade tier limit", {
+              team_id,
+              subscription_id: subscription.id,
+              usage,
+              scheduled_tier: scheduledTier,
+            });
+            return;
+          }
+
+          const scheduledTierIndex = PRICING_TIERS.findIndex(
+            (tier) => tier.productId === scheduledTier?.productId,
+          );
+          const nextScheduledTier = PRICING_TIERS[scheduledTierIndex + 1];
+
+          if (!nextScheduledTier) {
+            logger.info("Scheduled upgrade is already on highest tier", {
+              team_id,
+              subscription_id: subscription.id,
+              usage,
+              scheduled_tier: scheduledTier,
+            });
+            return;
+          }
+
+          await scheduleUpgrade({
+            stripeCustomerId: stripe_customer_id,
+            teamId: team_id,
+            subscription,
+            currentPlanItem,
+            currentPeriodEnd,
+            currentPlanMetadata,
+            nextTier: nextScheduledTier,
+          });
+
+          return;
+        }
+        //Notification is in previous subscription period
+        case isWithinInterval(lastNotificationDate, {
+          start: toDateFromUnixSeconds(previousPeriodStart),
+          end: toDateFromUnixSeconds(currentPeriodStart),
+        }): {
+          const currentTierIndex = PRICING_TIERS.findIndex(
+            (tier) => tier.productId === planInfo.productId,
+          );
+          const nextTier = PRICING_TIERS[currentTierIndex + 1];
+
+          if (!nextTier) {
+            logger.info("Team is already on highest pricing tier", {
+              team_id,
+              subscription_id: subscription.id,
+            });
+            return;
+          }
+
+          await scheduleUpgrade({
+            stripeCustomerId: stripe_customer_id,
+            teamId: team_id,
+            subscription,
+            currentPlanItem,
+            currentPeriodEnd,
+            currentPlanMetadata,
+            nextTier,
+          });
+          return;
+        }
+        default: {
           await triggerTeamNotification(team_id, USAGE_LIMIT_ALERT_MESSAGE, {
             transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
             ...currentPlanMetadata,
           });
           return;
         }
-
-        switch (true) {
-          //Notificaiont is in current subscripion period
-          case isWithinInterval(lastNotificationDate, {
-            start: toDateFromUnixSeconds(currentPeriodStart),
-            end: toDateFromUnixSeconds(currentPeriodEnd),
-          }): {
-            const activeSchedules = await stripe.subscriptionSchedules.list({
-              customer: stripe_customer_id,
-            });
-
-            const activeScheduleForSubscription: Stripe.SubscriptionSchedule =
-              activeSchedules.data.find(
-                (entry: Stripe.SubscriptionSchedule) => {
-                  if (entry.status !== "active") {
-                    return false;
-                  }
-
-                  if (typeof entry.subscription === "string") {
-                    return entry.subscription === subscription.id;
-                  }
-
-                  return entry.subscription?.id === subscription.id;
-                },
-              );
-
-            if (!activeScheduleForSubscription) {
-              logger.info("Usage notification already sent this period", {
-                team_id,
-                subscription_id: subscription.id,
-                period: {
-                  lastNotificationDate,
-                  start: toDateFromUnixSeconds(currentPeriodStart),
-                  end: toDateFromUnixSeconds(currentPeriodEnd),
-                },
-              });
-              return;
-            }
-
-            const upgradePhaseIndex =
-              activeScheduleForSubscription.phases.findIndex(
-                (phase) => phase.start_date >= currentPeriodEnd,
-              );
-
-            if (upgradePhaseIndex === -1) {
-              logger.info("No upgrade phase found in active schedule", {
-                team_id,
-                subscription_id: subscription.id,
-                schedule_id: activeScheduleForSubscription.id,
-              });
-              return;
-            }
-
-            const upgradePhase =
-              activeScheduleForSubscription.phases[upgradePhaseIndex];
-
-            let scheduledTier: (typeof PRICING_TIERS)[number] | null = null;
-
-            for (const item of upgradePhase.items) {
-              const productId = await getProductIdFromPrice(
-                item.price as string | Stripe.Price,
-              );
-              if (!productId) {
-                continue;
-              }
-
-              const tier = PRICING_TIERS.find(
-                (candidateTier) => candidateTier.productId === productId,
-              );
-
-              if (tier) {
-                scheduledTier = tier;
-                break;
-              }
-            }
-
-            if (!scheduledTier) {
-              logger.info("Scheduled upgrade does not map to pricing tier", {
-                team_id,
-                subscription_id: subscription.id,
-                schedule_id: activeScheduleForSubscription.id,
-              });
-              return;
-            }
-
-            if (usage <= scheduledTier.posts) {
-              logger.info("Usage is within scheduled upgrade tier limit", {
-                team_id,
-                subscription_id: subscription.id,
-                usage,
-                scheduled_tier: scheduledTier,
-              });
-              return;
-            }
-
-            const scheduledTierIndex = PRICING_TIERS.findIndex(
-              (tier) => tier.productId === scheduledTier?.productId,
-            );
-            const nextScheduledTier = PRICING_TIERS[scheduledTierIndex + 1];
-
-            if (!nextScheduledTier) {
-              logger.info("Scheduled upgrade is already on highest tier", {
-                team_id,
-                subscription_id: subscription.id,
-                usage,
-                scheduled_tier: scheduledTier,
-              });
-              return;
-            }
-
-            await scheduleUpgrade({
-              stripeCustomerId: stripe_customer_id,
-              teamId: team_id,
-              subscription,
-              currentPlanItem,
-              currentPeriodEnd,
-              currentPlanMetadata,
-              nextTier: nextScheduledTier,
-            });
-
-            return;
-          }
-          //Notification is in previous subscription period
-          case isWithinInterval(lastNotificationDate, {
-            start: toDateFromUnixSeconds(previousPeriodStart),
-            end: toDateFromUnixSeconds(currentPeriodStart),
-          }): {
-            const currentTierIndex = PRICING_TIERS.findIndex(
-              (tier) => tier.productId === planInfo.productId,
-            );
-            const nextTier = PRICING_TIERS[currentTierIndex + 1];
-
-            if (!nextTier) {
-              logger.info("Team is already on highest pricing tier", {
-                team_id,
-                subscription_id: subscription.id,
-              });
-              return;
-            }
-
-            await scheduleUpgrade({
-              stripeCustomerId: stripe_customer_id,
-              teamId: team_id,
-              subscription,
-              currentPlanItem,
-              currentPeriodEnd,
-              currentPlanMetadata,
-              nextTier,
-            });
-            return;
-          }
-          default: {
-            await triggerTeamNotification(team_id, USAGE_LIMIT_ALERT_MESSAGE, {
-              transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
-              ...currentPlanMetadata,
-            });
-            return;
-          }
-        }
-      } catch (error) {
-        logger.error("Error fetching usage from Stripe:", error);
       }
+    } catch (error) {
+      logger.error("Error fetching usage from Stripe:", error);
     }
   },
 });
