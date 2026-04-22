@@ -9,10 +9,12 @@ import { SocialAccountsModule } from './social-provider-connections/social-provi
 
 import { SupabaseModule } from './supabase/supabase.module';
 import { AuthGuard } from './auth/auth.guard';
+import { VerifyKeyGuard } from './auth/verify-key.guard';
 import { UnkeyModule } from './unkey/unkey.module';
 import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
+import { PrivateModule } from './private/private.module';
 
 @Module({
   imports: [
@@ -28,8 +30,9 @@ import { SocialAccountFeedsModule } from './social-account-feeds/social-account-
     SocialPostPreviewsModule,
     WebhooksModule,
     SocialAccountFeedsModule,
+    PrivateModule,
   ],
   controllers: [],
-  providers: [AuthGuard],
+  providers: [AuthGuard, VerifyKeyGuard],
 })
 export class AppModule {}
