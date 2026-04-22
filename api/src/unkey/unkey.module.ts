@@ -2,11 +2,13 @@ import { Global, Module } from '@nestjs/common';
 import { Unkey } from '@unkey/api';
 import { ConfigService } from '@nestjs/config';
 
+export const UNKEY_INSTANCE = 'UNKEY_INSTANCE';
+
 @Global()
 @Module({
   providers: [
     {
-      provide: 'UNKEY_INSTANCE',
+      provide: UNKEY_INSTANCE,
       useFactory: (configService: ConfigService): Unkey => {
         const rootKey = configService.get<string>('UNKEY_ROOT_KEY');
 
@@ -14,15 +16,11 @@ import { ConfigService } from '@nestjs/config';
           throw new Error('UNKEY_ROOT_KEY is not defined');
         }
 
-        const client = new Unkey({
-          rootKey,
-        });
-
-        return client;
+        return new Unkey({ rootKey });
       },
       inject: [ConfigService],
     },
   ],
-  exports: ['UNKEY_INSTANCE'],
+  exports: [UNKEY_INSTANCE],
 })
 export class UnkeyModule {}
