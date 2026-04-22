@@ -43,6 +43,7 @@ export type ProcessUsageLimitsPayload = {
 
 const triggerTeamNotification = async (
   teamId: string,
+  message: string,
   metadata: Json,
 ): Promise<void> => {
   await tasks.trigger("process-team-notification", {
@@ -51,7 +52,7 @@ const triggerTeamNotification = async (
     project_id: null,
     notification_type: "usage_alert",
     delivery_type: "email",
-    message: null,
+    message,
     meta_data: metadata,
     created_at: new Date().toISOString(),
   });
@@ -288,7 +289,10 @@ const scheduleUpgrade = async ({
     ],
   });
 
-  await triggerTeamNotification(teamId, {
+  await triggerTeamNotification(
+    teamId,
+    `Usage exceeded current plan limit; scheduled upgrade to ${nextTier.name} (${nextTier.posts} posts).`,
+    {
     transactional_email_id: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
     plan_info: {
       ...currentPlanMetadata.plan_info,
@@ -299,7 +303,8 @@ const scheduleUpgrade = async ({
         price: nextTier.price,
       },
     },
-  });
+    },
+  );
 };
 
 export const processUsageLimits = task({
@@ -419,10 +424,14 @@ export const processUsageLimits = task({
       };
 
       if (!lastNotificationDate) {
-        await triggerTeamNotification(team_id, {
+        await triggerTeamNotification(
+          team_id,
+          `Usage exceeded current plan limit (${usage}/${planInfo.postLimit} posts used this period).`,
+          {
           transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
           ...currentPlanMetadata,
-        });
+          },
+        );
         return;
       }
 
@@ -575,10 +584,14 @@ export const processUsageLimits = task({
           return;
         }
         default: {
-          await triggerTeamNotification(team_id, {
+          await triggerTeamNotification(
+            team_id,
+            `Usage exceeded current plan limit (${usage}/${planInfo.postLimit} posts used this period).`,
+            {
             transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
             ...currentPlanMetadata,
-          });
+            },
+          );
           return;
         }
       }
