@@ -97,6 +97,7 @@ export class PostResultsService {
         head: false,
       })
       .eq('project_id', projectId)
+      .eq('status', 'processed')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
