@@ -383,7 +383,7 @@ export class InstagramPostClient extends PostClient {
         createMediaParams.media_type = "STORIES";
         break;
       default:
-        createMediaParams.media_type = isVideo ? "REELS" : "IMAGE";
+        createMediaParams.media_type = isVideo ? "REELS" : undefined;
 
         if (
           createMediaParams.media_type === "REELS" &&
@@ -489,7 +489,7 @@ export class InstagramPostClient extends PostClient {
       }
 
       const itemPayload: {
-        media_type: string;
+        media_type?: string;
         video_url?: string;
         image_url?: string;
         is_carousel_item: boolean;
@@ -498,7 +498,7 @@ export class InstagramPostClient extends PostClient {
         location_id?: string;
         user_tags?: any[];
       } = {
-        media_type: isVideo ? "VIDEO" : "IMAGE",
+        media_type: isVideo ? "VIDEO" : undefined,
         [isVideo ? "video_url" : "image_url"]: signedUrl,
         is_carousel_item: true,
         access_token: account.access_token,
