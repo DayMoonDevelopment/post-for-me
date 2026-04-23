@@ -33,6 +33,13 @@ export async function getInstagramSocialProviderConnection({
   });
   const tokenData = await tokenResponse.json();
 
+  if (!tokenData.access_token) {
+    console.error("Error fetching accessToken", tokenData);
+    throw Error(
+      `Error fetching access token ${tokenData?.error_message || ""}`,
+    );
+  }
+
   const longLivedTokenParams = new URLSearchParams([
     ["grant_type", "ig_exchange_token"],
     ["client_secret", appCredentials.appSecret!],
@@ -40,7 +47,7 @@ export async function getInstagramSocialProviderConnection({
   ]);
 
   const longLivedResponse = await fetch(
-    `https://graph.instagram.com/access_token?${longLivedTokenParams.toString()}`
+    `https://graph.instagram.com/access_token?${longLivedTokenParams.toString()}`,
   );
 
   const longLivedData = await longLivedResponse.json();
@@ -58,7 +65,7 @@ export async function getInstagramSocialProviderConnection({
       `https://graph.instagram.com/v23.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`,
       {
         method: "GET",
-      }
+      },
     );
 
     profileData = await profileResponse.json();
@@ -70,7 +77,7 @@ export async function getInstagramSocialProviderConnection({
     {
       access_token: accessToken,
       access_token_expires_at: new Date(
-        Date.now() + longLivedData.expires_in * 1000
+        Date.now() + longLivedData.expires_in * 1000,
       ),
       social_provider_user_name:
         profileData.username || profileData.user_id || tokenData.user_id,

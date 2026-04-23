@@ -27,7 +27,12 @@ export class TikTokPostClient extends PostClient {
   #clientSecret: string;
   #localSupabaseClient;
   #maxFileSize = 20 * 1024 * 1024;
-  #allowedAspectRatios = [9 / 16, 1, 16 / 9];
+  #allowedAspectRatios = [
+    { ratio: 9 / 16, width: 1080, height: 1920 },
+    { ratio: 3 / 4, width: 1080, height: 1440 },
+    { ratio: 1, width: 1080, height: 1080 },
+    { ratio: 16 / 9, width: 1920, height: 1080 },
+  ];
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
@@ -497,7 +502,7 @@ export class TikTokPostClient extends PostClient {
 
     const imageBuffer = Buffer.from(response.data);
 
-    // Step 2: Get image metadata and crop to nearest TikTok-allowed ratio
+    // Get image metadata and choose nearest TikTok-allowed ratio
     const metadata = await sharp(imageBuffer).metadata();
     const width = metadata.width || 0;
     const height = metadata.height || 0;
@@ -506,39 +511,26 @@ export class TikTokPostClient extends PostClient {
       throw new Error("Unable to read image dimensions for TikTok upload");
     }
 
-    const aspectRatio = width / height;
-    const targetRatio = this.#allowedAspectRatios.reduce((closest, current) =>
-      Math.abs(current - aspectRatio) < Math.abs(closest - aspectRatio)
-        ? current
-        : closest,
+    const orientation = metadata.orientation || 1;
+    const isExifRotated = [5, 6, 7, 8].includes(orientation);
+    const displayedWidth = isExifRotated ? height : width;
+    const displayedHeight = isExifRotated ? width : height;
+
+    const aspectRatio = displayedWidth / displayedHeight;
+    const targetRatio = this.#allowedAspectRatios.reduce(
+      (closest, current) =>
+        Math.abs(current.ratio - aspectRatio) <
+        Math.abs(closest.ratio - aspectRatio)
+          ? current
+          : closest,
     );
 
-    let targetWidth = width;
-    let targetHeight = height;
-
-    if (aspectRatio > targetRatio) {
-      targetWidth = Math.round(height * targetRatio);
-    } else if (aspectRatio < targetRatio) {
-      targetHeight = Math.round(width / targetRatio);
-    }
-
-    let safeWidth = targetWidth;
-    let safeHeight = targetHeight;
-
-    // Downscale so the short side is <= 1080
-    const shortSide = Math.min(safeWidth, safeHeight);
-    if (shortSide > 1080) {
-      const scale = 1080 / shortSide;
-      safeWidth = Math.round(safeWidth * scale);
-      safeHeight = Math.round(safeHeight * scale);
-    }
-
-    // Step 4: Process image with Sharp (crop, resize & compress)
+    // Process image with Sharp (normalize orientation, crop, resize and compress)
     let processedImage = await sharp(imageBuffer)
       .rotate()
       .resize({
-        width: safeWidth,
-        height: safeHeight,
+        width: targetRatio.width,
+        height: targetRatio.height,
         fit: "cover",
         position: "center",
       })
