@@ -73,36 +73,65 @@ export class PostResultsService {
   ): PaginatedRequestQuery<SocialPostResultDto> {
     const { offset, limit, post_id, platform, social_account_id } = queryParams;
 
+    const postIdValues: string[] = [];
+
+    if (post_id) {
+      switch (true) {
+        case typeof post_id === 'string': {
+          postIdValues.push(...(post_id as string).split(','));
+          break;
+        }
+        case Array.isArray(post_id):
+          postIdValues.push(...post_id);
+          break;
+        default:
+          postIdValues.push(post_id);
+          break;
+      }
+    }
+
+    const postsQuery = this.supabaseService.supabaseClient
+      .from('social_posts')
+      .select('id', {
+        count: 'estimated',
+        head: false,
+      })
+      .eq('project_id', projectId)
+      .eq('status', 'processed')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (postIdValues.length) {
+      postsQuery.in('id', postIdValues);
+    }
+
+    const {
+      data: posts,
+      error: postsError,
+      count: postsCount,
+    } = await postsQuery;
+
+    if (postsError) {
+      throw postsError;
+    }
+
+    if (!posts?.length) {
+      return {
+        data: [],
+        count: postsCount || 0,
+      };
+    }
+
     const query = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
         'id, provider_connection_id, post_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
-        {
-          count: 'estimated',
-          head: false,
-        },
       )
       .eq('social_provider_connections.project_id', projectId)
-      .range(offset, offset + limit - 1);
-
-    if (post_id) {
-      const values: string[] = [];
-
-      switch (true) {
-        case typeof post_id === 'string': {
-          values.push(...(post_id as string).split(','));
-          break;
-        }
-        case Array.isArray(post_id):
-          values.push(...post_id);
-          break;
-        default:
-          values.push(post_id);
-          break;
-      }
-
-      query.in('post_id', values);
-    }
+      .in(
+        'post_id',
+        posts.map((post) => post.id),
+      );
 
     if (platform) {
       const values: string[] = [];
@@ -147,7 +176,7 @@ export class PostResultsService {
 
     query.order('created_at', { ascending: false });
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
       throw error;
@@ -185,7 +214,7 @@ export class PostResultsService {
 
     return {
       data: transformedData,
-      count: count || 0,
+      count: postsCount || 0,
     };
   }
 
