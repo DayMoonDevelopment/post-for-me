@@ -14,14 +14,43 @@ export class PaginationService {
 
   /**
    * Generates the 'next' URL for pagination based on current request and metadata.
-   * @param meta - Pagination metadata { total, offset, limit }.
+   * @param meta - Pagination metadata { total, offset, limit, next_cursor }.
    * @param currentQuery - The original query parameters object from the request.
    * @returns The full URL string for the next page, or null if there is no next page.
    */
   generateNextUrl(
-    meta: Pick<PaginationMeta, 'total' | 'offset' | 'limit'>,
+    meta: Pick<PaginationMeta, 'total' | 'offset' | 'limit' | 'next_cursor'>,
     currentQuery: Record<string, any>,
   ): string | null {
+    const useCursor = typeof currentQuery.cursor === 'string';
+
+    if (useCursor) {
+      if (!meta.next_cursor) {
+        return null;
+      }
+
+      const url = new URL(
+        `${this.request.protocol}://${this.request.get('host')}${this.request.path}`,
+      );
+
+      for (const key in currentQuery) {
+        if (
+          Object.prototype.hasOwnProperty.call(currentQuery, key) &&
+          key !== 'cursor' &&
+          key !== 'offset' &&
+          key !== 'limit' &&
+          currentQuery[key] !== undefined
+        ) {
+          url.searchParams.set(key, String(currentQuery[key]));
+        }
+      }
+
+      url.searchParams.set('limit', String(meta.limit));
+      url.searchParams.set('cursor', meta.next_cursor);
+
+      return url.toString();
+    }
+
     const hasMore = meta.offset + meta.limit < meta.total;
 
     if (!hasMore) {
@@ -60,18 +89,22 @@ export class PaginationService {
     requestQuery: PaginatedRequestQuery<T>,
     queryParams: BasePaginatedQueryDto,
   ): Promise<PaginatedResponse<T>> {
-    const { data, count } = await requestQuery;
+    const { data, count, next_cursor = null } = await requestQuery;
 
     const total = count;
     const offset = queryParams.offset;
     const limit = queryParams.limit; // Default limit
 
-    const nextUrl = this.generateNextUrl({ total, offset, limit }, queryParams);
+    const nextUrl = this.generateNextUrl(
+      { total, offset, limit, next_cursor },
+      queryParams,
+    );
 
     const meta: PaginationMeta = {
       total,
       offset,
       limit,
+      next_cursor,
       next: nextUrl,
     };
 

@@ -7,6 +7,10 @@ import { SocialPostResultQueryDto } from './dto/post-results.query.dto';
 import type { PaginatedRequestQuery } from '../pagination/pagination-request.interface';
 
 import { Database } from '@post-for-me/db';
+import {
+  decodePaginationCursor,
+  encodePaginationCursor,
+} from '../pagination/cursor';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -71,19 +75,23 @@ export class PostResultsService {
     queryParams: SocialPostResultQueryDto,
     projectId: string,
   ): PaginatedRequestQuery<SocialPostResultDto> {
-    const { offset, limit, post_id, platform, social_account_id } = queryParams;
+    const { offset, limit, post_id, platform, social_account_id, cursor } =
+      queryParams;
 
-    const query = this.supabaseService.supabaseClient
+    const decodedCursor = decodePaginationCursor(cursor);
+    const isCursorPagination = typeof cursor === 'string';
+    const pageSize = isCursorPagination ? limit + 1 : limit;
+
+    const idQuery = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
-        'id, provider_connection_id, post_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        'id, created_at, social_provider_connections!inner(provider, project_id)',
         {
           count: 'estimated',
           head: false,
         },
       )
-      .eq('social_provider_connections.project_id', projectId)
-      .range(offset, offset + limit - 1);
+      .eq('social_provider_connections.project_id', projectId);
 
     if (post_id) {
       const values: string[] = [];
@@ -101,7 +109,7 @@ export class PostResultsService {
           break;
       }
 
-      query.in('post_id', values);
+      idQuery.in('post_id', values);
     }
 
     if (platform) {
@@ -120,7 +128,7 @@ export class PostResultsService {
           break;
       }
 
-      query.in(
+      idQuery.in(
         'social_provider_connections.provider',
         values.map((provider) => provider as ProviderEnum),
       );
@@ -142,18 +150,77 @@ export class PostResultsService {
           break;
       }
 
-      query.in('provider_connection_id', values);
+      idQuery.in('provider_connection_id', values);
     }
 
-    query.order('created_at', { ascending: false });
+    if (decodedCursor && isCursorPagination) {
+      idQuery.or(
+        `created_at.lt.${decodedCursor.created_at},and(created_at.eq.${decodedCursor.created_at},id.lt.${decodedCursor.id})`,
+      );
+    }
 
-    const { data, error, count } = await query;
+    idQuery.order('created_at', { ascending: false });
+    idQuery.order('id', { ascending: false });
+
+    if (isCursorPagination) {
+      idQuery.limit(pageSize);
+    } else {
+      idQuery.range(offset, offset + limit - 1);
+    }
+
+    const { data: rawResultIds, error, count } = await idQuery;
 
     if (error) {
       throw error;
     }
 
-    const transformedData: SocialPostResultDto[] = data.map((raw) => {
+    const idRows = rawResultIds || [];
+    const hasMore = isCursorPagination ? idRows.length > limit : false;
+    const paginatedRows = isCursorPagination ? idRows.slice(0, limit) : idRows;
+    const resultIds = paginatedRows.map((row) => row.id);
+    const lastRecord = paginatedRows.length
+      ? paginatedRows[paginatedRows.length - 1]
+      : null;
+
+    const nextCursor =
+      hasMore && lastRecord
+        ? encodePaginationCursor({
+            created_at: lastRecord.created_at,
+            id: lastRecord.id,
+          })
+        : null;
+
+    if (resultIds.length === 0) {
+      return {
+        data: [],
+        count: count || 0,
+        next_cursor: nextCursor,
+      };
+    }
+
+    const { data, error: detailsError } =
+      await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .select(
+          'id, provider_connection_id, post_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        )
+        .in('id', resultIds);
+
+    if (detailsError) {
+      throw detailsError;
+    }
+
+    const positionById = new Map(
+      resultIds.map((resultId, idx) => [resultId, idx]),
+    );
+    const sortedData = [...(data || [])].sort((a, b) => {
+      const aPos = positionById.get(a.id) ?? 0;
+      const bPos = positionById.get(b.id) ?? 0;
+
+      return aPos - bPos;
+    });
+
+    const transformedData: SocialPostResultDto[] = sortedData.map((raw) => {
       let platform_data = null;
 
       if (raw.success) {
@@ -186,6 +253,7 @@ export class PostResultsService {
     return {
       data: transformedData,
       count: count || 0,
+      next_cursor: nextCursor,
     };
   }
 

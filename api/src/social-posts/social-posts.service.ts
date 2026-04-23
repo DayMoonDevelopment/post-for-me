@@ -16,6 +16,10 @@ import {
 import { Database, Json } from '@post-for-me/db';
 import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from '../social-post-meters/social-post-meters.service';
+import {
+  decodePaginationCursor,
+  encodePaginationCursor,
+} from '../pagination/cursor';
 
 type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
 
@@ -559,13 +563,169 @@ export class SocialPostsService {
     queryParams: SocialPostQueryDto,
     projectId: string,
   ): PaginatedRequestQuery<SocialPostDto> {
-    const { offset, limit, platform, status, external_id, social_account_id } =
-      queryParams;
+    const {
+      offset,
+      limit,
+      platform,
+      status,
+      external_id,
+      social_account_id,
+      cursor,
+    } = queryParams;
 
-    const query = this.supabaseService.supabaseClient
+    const decodedCursor = decodePaginationCursor(cursor);
+    const isCursorPagination = typeof cursor === 'string';
+    const pageSize = isCursorPagination ? limit + 1 : limit;
+    const requiresProviderJoin = Boolean(platform || social_account_id);
+
+    const idQuery = this.supabaseService.supabaseClient
       .from('social_posts')
       .select(
-        `
+        requiresProviderJoin
+          ? 'id, created_at, social_post_provider_connections!inner(social_provider_connections!inner(id, provider))'
+          : 'id, created_at',
+        { count: 'estimated', head: false },
+      )
+      .eq('project_id', projectId);
+
+    if (platform) {
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof platform === 'string': {
+          values.push(...(platform as string).split(','));
+          break;
+        }
+        case Array.isArray(platform):
+          values.push(...platform);
+          break;
+        default:
+          values.push(platform);
+          break;
+      }
+
+      idQuery.in(
+        'social_post_provider_connections.social_provider_connections.provider',
+        values.map((v) => v as ProviderTypeEnum),
+      );
+    }
+
+    if (social_account_id) {
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof social_account_id === 'string': {
+          values.push(...(social_account_id as string).split(','));
+          break;
+        }
+        case Array.isArray(social_account_id):
+          values.push(...social_account_id);
+          break;
+        default:
+          values.push(social_account_id);
+          break;
+      }
+
+      idQuery.in(
+        'social_post_provider_connections.social_provider_connections.id',
+        values,
+      );
+    }
+
+    if (external_id) {
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof external_id === 'string': {
+          values.push(...(external_id as string).split(','));
+          break;
+        }
+        case Array.isArray(external_id):
+          values.push(...external_id);
+          break;
+        default:
+          values.push(external_id);
+          break;
+      }
+
+      idQuery.in('external_id', values);
+    }
+
+    if (status) {
+      const values: string[] = [];
+
+      switch (true) {
+        case typeof status === 'string': {
+          values.push(...(status as string).split(','));
+          break;
+        }
+        case Array.isArray(status):
+          values.push(...status);
+          break;
+        default:
+          values.push(status);
+          break;
+      }
+
+      idQuery.in(
+        'status',
+        values.map((v) => v as PostStatusEnum),
+      );
+    }
+
+    if (decodedCursor && isCursorPagination) {
+      idQuery.or(
+        `created_at.lt.${decodedCursor.created_at},and(created_at.eq.${decodedCursor.created_at},id.lt.${decodedCursor.id})`,
+      );
+    }
+
+    idQuery.order('created_at', { ascending: false });
+    idQuery.order('id', { ascending: false });
+
+    if (isCursorPagination) {
+      idQuery.limit(pageSize);
+    } else {
+      idQuery.range(offset, offset + limit - 1);
+    }
+
+    const { data: rawPostIds, error, count } = await idQuery;
+
+    if (error) {
+      throw error;
+    }
+
+    const idRows = (rawPostIds || []) as unknown as Array<{
+      id: string;
+      created_at: string;
+    }>;
+    const hasMore = isCursorPagination ? idRows.length > limit : false;
+    const paginatedRows = isCursorPagination ? idRows.slice(0, limit) : idRows;
+    const postIds = paginatedRows.map((row) => row.id);
+    const lastRecord = paginatedRows.length
+      ? paginatedRows[paginatedRows.length - 1]
+      : null;
+
+    const nextCursor =
+      hasMore && lastRecord
+        ? encodePaginationCursor({
+            created_at: lastRecord.created_at,
+            id: lastRecord.id,
+          })
+        : null;
+
+    if (postIds.length === 0) {
+      return {
+        data: [],
+        count: count || 0,
+        next_cursor: nextCursor,
+      };
+    }
+
+    const { data: posts, error: detailError } =
+      await this.supabaseService.supabaseClient
+        .from('social_posts')
+        .select(
+          `
         id,
         project_id,
         external_id,
@@ -574,8 +734,8 @@ export class SocialPostsService {
         post_at,
         created_at,
         updated_at,
-        social_post_provider_connections!inner (
-          social_provider_connections!inner (
+        social_post_provider_connections (
+          social_provider_connections (
             id,
             provider,
             social_provider_user_name,
@@ -603,105 +763,23 @@ export class SocialPostsService {
          provider_data
         )
         `,
-        { count: 'estimated', head: false },
-      )
-      .eq('project_id', projectId)
-      .range(offset, offset + limit - 1);
+        )
+        .eq('project_id', projectId)
+        .in('id', postIds);
 
-    if (platform) {
-      const values: string[] = [];
-
-      switch (true) {
-        case typeof platform === 'string': {
-          values.push(...(platform as string).split(','));
-          break;
-        }
-        case Array.isArray(platform):
-          values.push(...platform);
-          break;
-        default:
-          values.push(platform);
-          break;
-      }
-
-      query.in(
-        'social_post_provider_connections.social_provider_connections.provider',
-        values.map((v) => v as ProviderTypeEnum),
-      );
+    if (detailError) {
+      throw detailError;
     }
 
-    if (social_account_id) {
-      const values: string[] = [];
+    const positionById = new Map(postIds.map((postId, idx) => [postId, idx]));
+    const sortedPosts = [...(posts || [])].sort((a, b) => {
+      const aPos = positionById.get(a.id) ?? 0;
+      const bPos = positionById.get(b.id) ?? 0;
 
-      switch (true) {
-        case typeof social_account_id === 'string': {
-          values.push(...(social_account_id as string).split(','));
-          break;
-        }
-        case Array.isArray(social_account_id):
-          values.push(...social_account_id);
-          break;
-        default:
-          values.push(social_account_id);
-          break;
-      }
+      return aPos - bPos;
+    });
 
-      query.in(
-        'social_post_provider_connections.social_provider_connections.id',
-        values,
-      );
-    }
-
-    if (external_id) {
-      const values: string[] = [];
-
-      switch (true) {
-        case typeof external_id === 'string': {
-          values.push(...(external_id as string).split(','));
-          break;
-        }
-        case Array.isArray(external_id):
-          values.push(...external_id);
-          break;
-        default:
-          values.push(external_id);
-          break;
-      }
-
-      query.in('external_id', values);
-    }
-
-    if (status) {
-      const values: string[] = [];
-
-      switch (true) {
-        case typeof status === 'string': {
-          values.push(...(status as string).split(','));
-          break;
-        }
-        case Array.isArray(status):
-          values.push(...status);
-          break;
-        default:
-          values.push(status);
-          break;
-      }
-
-      query.in(
-        'status',
-        values.map((v) => v as PostStatusEnum),
-      );
-    }
-
-    query.order('created_at', { ascending: false });
-
-    const { data: posts, error, count } = await query;
-
-    if (error) {
-      throw error;
-    }
-
-    const transformedData: SocialPostDto[] = posts.map((data) => {
+    const transformedData: SocialPostDto[] = sortedPosts.map((data) => {
       const postData: SocialPostDto = this.transformPostData(data);
 
       return postData;
@@ -710,6 +788,7 @@ export class SocialPostsService {
     return {
       data: transformedData,
       count: count || 0,
+      next_cursor: nextCursor,
     };
   }
 

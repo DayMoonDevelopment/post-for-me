@@ -147,6 +147,16 @@ Authorization: Bearer your_api_key
 
 - **`GET /social-post-results`** - Retrieve post analytics and metrics
 
+### Pagination
+
+List endpoints support both cursor and offset pagination.
+
+- Cursor pagination is preferred for performance.
+- If `cursor` and `offset` are both provided, the API always uses `cursor`.
+- The response includes `meta.next_cursor` for the next keyset page.
+- `meta.next` is generated using cursor pagination when a cursor is present.
+- `count` is still returned for compatibility.
+
 ### Documentation
 
 Interactive API documentation is available at `/docs` when running the server.
