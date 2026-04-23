@@ -30,7 +30,12 @@ export async function getFacebookSocialProviderConnection({
 
   const tokenData = await tokenResponse.json();
 
-  console.log(tokenData);
+  if (!tokenData.access_token) {
+    console.error("Failed fetching access token", tokenData);
+    throw Error(
+      `Error fetching access token ${tokenData?.error_message || ""}`,
+    );
+  }
   const longLivedTokenParams = new URLSearchParams([
     ["grant_type", "fb_exchange_token"],
     ["client_id", appCredentials.appId!],
