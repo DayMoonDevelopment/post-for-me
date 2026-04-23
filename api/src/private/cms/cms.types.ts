@@ -42,6 +42,7 @@ export interface CmsArticleRow {
   content: string | null;
   content_format: ContentFormat;
   cover_image_url: string | null;
+  cover_video_url: string | null;
   featured: boolean;
   status: ArticleStatus;
   attribution: unknown;
@@ -105,6 +106,7 @@ export interface ArticleResponse {
   content: string;
   featured: boolean;
   cover_image: string | null;
+  cover_video: string | null;
   published_at: string;
   updated_at: string;
   attribution: Attribution | null;

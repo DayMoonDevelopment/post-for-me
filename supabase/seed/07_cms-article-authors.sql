@@ -1,0 +1,41 @@
+-- ============================================================
+-- Seed Script: 07_cms-article-authors.sql
+-- CMS article-author joins. Captured from production snapshot.
+-- ============================================================
+
+INSERT INTO "cms"."article_authors" ("article_id", "author_id", "position") VALUES
+	('art_D5jvcc4GzBYGwpDwAj33W', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_wPSBO7Pj19dUPRXEu0Oh', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_3PvW9cFXSuCxzQATOQ3vq', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_0LbN8b0wzrrkbXS2xRCje', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_twsWTwT4CMUvHqlHIj5uV', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_fR6ETB3xNYE2hhW4Mo8Uj', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_IhYPqAxn9SBZIrhEPLx0O', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_H8nhqCPPBTmeLF1vvNBfA', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_WKjbr4xqZSViFPQr0umyv', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_CuCiDindRwUdMTaiW8pio', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_nM0i1j9o34OdHokBBby', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_94Ets5uSwsdTbwvB1dT', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_NQcUSZnB13oVGIYdLhrO', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_7i4xCxm2M00hBCdRUUZ0', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_jR6lJhrAVhvdVXWjZvpAZ', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_Oi6e8bEy3OBvtbycqBC5', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_KufYnueEgnloGhLmyxg5', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_EI77ULIQZcDq9fqWfvSKj', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_5nCk8nsR4mifPa6rZkrh', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_oSa6GYbhVsifzURjawTw9', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_6pTt1Y5aHxY8q4Dv7jGH1', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_z6fmGr1WjfOS3dQKjApCB', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_d6ULXyM5TToZT5EIPr2', 'aut_9tU4ZC9TTwZW3Gov4uQyh', 0),
+	('art_KKVCKLN8l7AJ813aMi0ie', 'aut_43a3EyBk4tvMJrYVvAMtS', 0),
+	('art_CjIXkiMxYBCHo6QRFWxpf', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_y00faRXurRyqpK6HLtbmB', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_118NVHY93c2G3R8fCrXa', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_Gyr6I41rWdL1EoZpDPlsL', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_CPVbbx5tkYZIk5qtzIWY2', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_CcsEMJd1El26H9jRTRde5', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_xt3wGKPbkeZUZ03BJ6sw9', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_x46tjf5efQM5Vo78I2Fl', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_Vm7dtekZ9HCfWcsaaSfX', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_jcCP5MOgKGYqehciOG8B', 'aut_hB6y2AKPQoebx6clZRcP', 0),
+	('art_uPoaaVSqoSgQpE0IwKj', 'aut_hB6y2AKPQoebx6clZRcP', 0);
