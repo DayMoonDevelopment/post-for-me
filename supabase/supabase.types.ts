@@ -766,6 +766,38 @@ export type Database = {
           },
         ]
       }
+      team_usage: {
+        Row: {
+          count: number
+          end_at: string
+          limit: number
+          start_at: string
+          team_id: string
+        }
+        Insert: {
+          count?: number
+          end_at: string
+          limit: number
+          start_at: string
+          team_id: string
+        }
+        Update: {
+          count?: number
+          end_at?: string
+          limit?: number
+          start_at?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_usage_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_users: {
         Row: {
           created_at: string | null
@@ -1055,6 +1087,15 @@ export type Database = {
           p_year: number
         }
         Returns: undefined
+      }
+      increment_team_usage: {
+        Args: {
+          p_end_at: string
+          p_limit: number
+          p_start_at: string
+          p_team_id: string
+        }
+        Returns: number
       }
       is_system_project: {
         Args: { project_id_param: string }

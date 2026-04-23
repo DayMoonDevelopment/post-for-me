@@ -229,30 +229,6 @@ export const postToPlatform = task({
           });
         }
 
-        try {
-          const idempotencyKey = await idempotencyKeys.create(
-            ["process-usage-limits", teamId, stripeCustomerId],
-            { scope: "global" },
-          );
-
-          await tasks.trigger(
-            "process-usage-limits",
-            {
-              stripe_customer_id: stripeCustomerId,
-              team_id: teamId,
-            },
-            {
-              idempotencyKey,
-              idempotencyKeyTTL: "1h",
-            },
-          );
-        } catch (error) {
-          logger.error("Failed to trigger process usage limits", {
-            stripe_customer_id: stripeCustomerId,
-            team_id: teamId,
-            error,
-          });
-        }
       }
     } catch (error) {
       logger.error("Failed Processing Platform Post", { error });
@@ -282,6 +258,34 @@ export const postToPlatform = task({
     if (insertResultError) {
       logger.error("Failed to insert post result", { insertResultError });
     } else {
+      if (insertedPostResult.success) {
+        void idempotencyKeys
+          .create(["increment-team-usage", insertedPostResult.id], {
+            scope: "global",
+          })
+          .then((idempotencyKey) =>
+            tasks.trigger(
+              "increment-team-usage",
+              {
+                stripe_customer_id: stripeCustomerId,
+                team_id: teamId,
+              },
+              {
+                idempotencyKey,
+                idempotencyKeyTTL: "1h",
+              },
+            ),
+          )
+          .catch((error) => {
+            logger.error("Failed to trigger increment team usage", {
+              stripe_customer_id: stripeCustomerId,
+              team_id: teamId,
+              social_post_result_id: insertedPostResult.id,
+              error,
+            });
+          });
+      }
+
       await tasks.trigger("process-webhooks", {
         projectId: projectId,
         eventType: "social.post.result.created",
