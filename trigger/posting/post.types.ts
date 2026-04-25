@@ -210,6 +210,7 @@ export interface PlatformAppCredentials {
 
 export interface IndividualPostData {
   stripeCustomerId: string;
+  teamId: string;
   platform: string;
   postId: string;
   media: PostMedia[];

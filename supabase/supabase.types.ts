@@ -674,6 +674,54 @@ export type Database = {
           },
         ]
       }
+      team_notifications: {
+        Row: {
+          created_at: string
+          delivery_types: Database["public"]["Enums"]["delivery_type"][]
+          id: string
+          message: string
+          meta_data: Json | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          project_id: string | null
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_types: Database["public"]["Enums"]["delivery_type"][]
+          id?: string
+          message: string
+          meta_data?: Json | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          project_id?: string | null
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_types?: Database["public"]["Enums"]["delivery_type"][]
+          id?: string
+          message?: string
+          meta_data?: Json | null
+          notification_type?: Database["public"]["Enums"]["notification_type"]
+          project_id?: string | null
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_notifications_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_notifications_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_social_post_meters: {
         Row: {
           count: number
@@ -711,6 +759,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "team_social_post_meters_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_usage: {
+        Row: {
+          count: number
+          end_at: string
+          limit: number
+          start_at: string
+          team_id: string
+        }
+        Insert: {
+          count?: number
+          end_at: string
+          limit: number
+          start_at: string
+          team_id: string
+        }
+        Update: {
+          count?: number
+          end_at?: string
+          limit?: number
+          start_at?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_usage_team_id_fkey"
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
@@ -1008,6 +1088,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      increment_team_usage: {
+        Args: {
+          p_end_at: string
+          p_limit: number
+          p_start_at: string
+          p_team_id: string
+        }
+        Returns: number
+      }
       is_system_project: {
         Args: { project_id_param: string }
         Returns: boolean
@@ -1032,6 +1121,8 @@ export type Database = {
       }
     }
     Enums: {
+      delivery_type: "email"
+      notification_type: "usage_alert" | "general"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1192,6 +1283,8 @@ export const Constants = {
   },
   public: {
     Enums: {
+      delivery_type: ["email"],
+      notification_type: ["usage_alert", "general"],
       social_post_status: [
         "draft",
         "scheduled",

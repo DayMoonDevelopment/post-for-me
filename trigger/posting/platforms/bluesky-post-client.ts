@@ -32,7 +32,7 @@ export class BlueskyPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
     this.#agent = new AtpAgent({
@@ -41,7 +41,7 @@ export class BlueskyPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     try {
       this.#requests.push({ refreshRequest: "Resuming Session" });
@@ -71,7 +71,7 @@ export class BlueskyPostClient extends PostClient {
         access_token: this.#agent.session?.accessJwt,
         refresh_token: this.#agent.session?.refreshJwt,
         expires_at: new Date(
-          Date.now() + 1000 * 60 * 60 * 24 * 365
+          Date.now() + 1000 * 60 * 60 * 24 * 365,
         ).toISOString(),
       };
     }
@@ -268,7 +268,7 @@ export class BlueskyPostClient extends PostClient {
     });
 
     const videoStream = metadata.streams.find(
-      (s: any) => s.codec_type === "video"
+      (s: any) => s.codec_type === "video",
     );
     if (!videoStream) {
       throw new Error("No video stream found in file");
@@ -279,7 +279,7 @@ export class BlueskyPostClient extends PostClient {
     let uploadResponseData: unknown;
     try {
       const uploadUrl = new URL(
-        "https://video.bsky.app/xrpc/app.bsky.video.uploadVideo"
+        "https://video.bsky.app/xrpc/app.bsky.video.uploadVideo",
       );
       uploadUrl.searchParams.append("did", this.#agent.session!.did);
       uploadUrl.searchParams.append("name", remoteName);
@@ -323,7 +323,7 @@ export class BlueskyPostClient extends PostClient {
       console.log(
         "Status:",
         status.jobStatus.state,
-        status.jobStatus.progress || ""
+        status.jobStatus.progress || "",
       );
       if (status.jobStatus.blob) {
         blob = status.jobStatus.blob;
@@ -331,8 +331,8 @@ export class BlueskyPostClient extends PostClient {
       }
 
       if (
-        jobStatus.state == "JOB_STATE_COMPLETED" ||
-        jobStatus.state == "JOB_STATE_FAILED"
+        jobStatus.state?.trim() == "JOB_STATE_COMPLETED" ||
+        jobStatus.state?.trim() == "JOB_STATE_FAILED"
       ) {
         jobFinished = true;
       }
@@ -463,7 +463,7 @@ export class BlueskyPostClient extends PostClient {
       // Extract metadata
       const titleTag = document.querySelector('meta[property="og:title"]');
       const descriptionTag = document.querySelector(
-        'meta[property="og:description"]'
+        'meta[property="og:description"]',
       );
       const imageTag = document.querySelector('meta[property="og:image"]');
 
@@ -500,7 +500,7 @@ export class BlueskyPostClient extends PostClient {
           new Uint8Array(imageBuffer),
           {
             encoding: imageResponse.headers.get("content-type") || "image/jpeg",
-          }
+          },
         );
 
         if (uploadData?.blob) {
