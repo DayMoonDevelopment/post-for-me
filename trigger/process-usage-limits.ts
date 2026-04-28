@@ -37,6 +37,7 @@ type TeamUsageWindow = Database["public"]["Tables"]["team_usage"]["Row"];
 type TeamUsageWindowWithTeam = TeamUsageWindow & {
   teams: {
     stripe_customer_id: string | null;
+    name: string;
   } | null;
 };
 
@@ -211,7 +212,7 @@ const getExceededUsageWindows = async (): Promise<
   const { data, error } = await supabaseClient
     .from("team_usage")
     .select(
-      "team_id, count, limit, start_at, end_at, teams!inner(stripe_customer_id)",
+      "team_id, count, limit, start_at, end_at, teams!inner(stripe_customer_id,name)",
     )
     .filter("count", "gt", "limit")
     .lte("start_at", nowIso)
@@ -273,26 +274,30 @@ const maybeTriggerUsageNotification = async ({
   periodEnd,
   message,
   metadata,
+  checkForDuplicates,
 }: {
   teamId: string;
   periodStart: string;
   periodEnd: string;
   message: string;
   metadata: Json;
+  checkForDuplicates: boolean;
 }): Promise<boolean> => {
-  const alreadySent = await hasUsageNotificationForPeriod(
-    teamId,
-    periodStart,
-    periodEnd,
-  );
+  if (checkForDuplicates) {
+    const alreadySent = await hasUsageNotificationForPeriod(
+      teamId,
+      periodStart,
+      periodEnd,
+    );
 
-  if (alreadySent) {
-    logger.info("Usage notification already sent for period", {
-      team_id: teamId,
-      period_start: periodStart,
-      period_end: periodEnd,
-    });
-    return false;
+    if (alreadySent) {
+      logger.info("Usage notification already sent for period", {
+        team_id: teamId,
+        period_start: periodStart,
+        period_end: periodEnd,
+      });
+      return false;
+    }
   }
 
   await triggerTeamNotification(teamId, message, metadata);
@@ -468,22 +473,6 @@ export const processUsageLimits = schedules.task({
           const exceededPreviousLimit =
             previousLimit !== null && usage > previousLimit;
 
-          if (!exceededPreviousLimit) {
-            await maybeTriggerUsageNotification({
-              teamId,
-              periodStart: usageWindow.start_at,
-              periodEnd: usageWindow.end_at,
-              message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period).`,
-              metadata: {
-                transactional_email_id:
-                  LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
-                previous_limit: previousLimit,
-                ...currentPlanMetadata,
-              },
-            });
-            continue;
-          }
-
           const subscriptions = await stripe.subscriptions.list({
             customer: stripeCustomerId,
             status: "active",
@@ -528,61 +517,98 @@ export const processUsageLimits = schedules.task({
           }
 
           const currentPeriodEnd = currentPlanItem.current_period_end;
+          const currentTierIndex = PRICING_TIERS.findIndex(
+            (tier) => tier.productId === planInfo.productId,
+          );
+          const nextTier = PRICING_TIERS[currentTierIndex + 1];
 
-          const currentPlanMetadata = {
-            plan_info: {
-              current_plan: {
-                product_id: planInfo.productId,
-                name: planInfo.planName,
-                post_limit: planInfo.postLimit,
-                price: planInfo.price,
-              },
-            },
-          };
+          if (!nextTier) {
+            logger.info("Team is already on highest pricing tier", {
+              team_id: teamId,
+              subscription_id: subscription.id,
+            });
+            continue;
+          }
 
-          await maybeTriggerUsageNotification({
-            teamId,
-            periodStart: usageWindow.start_at,
-            periodEnd: usageWindow.end_at,
-            message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
-            metadata: {
-              transactional_email_id:
-                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-              previous_limit: previousLimit,
-              ...currentPlanMetadata,
-            },
+          const buildUsageMetadata = (
+            transactionalEmailId: string,
+            suggestedTier: (typeof PRICING_TIERS)[number] | null,
+          ): Json => ({
+            transactional_email_id: transactionalEmailId,
+            team_name: teams?.name ?? null,
+            current_plan_post_limit: planInfo.postLimit,
+            current_plan_name: planInfo.planName,
+            suggested_plan_name: suggestedTier?.name ?? null,
+            suggested_plan_post_limit: suggestedTier?.posts ?? null,
+            billing_link: `https://app.postforme.dev/${teamId}/billing`,
           });
+
+          if (!exceededPreviousLimit) {
+            await maybeTriggerUsageNotification({
+              teamId,
+              periodStart: usageWindow.start_at,
+              periodEnd: usageWindow.end_at,
+              message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period).`,
+              metadata: buildUsageMetadata(
+                LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
+                nextTier,
+              ),
+              checkForDuplicates: true,
+            });
+            continue;
+          }
 
           const activeSchedule = await getActiveScheduleForSubscription(
             stripeCustomerId,
             subscription.id,
           );
 
-          if (activeSchedule) {
-            const scheduledTier = await getScheduledTierForSubscription({
-              schedule: activeSchedule,
+          if (!activeSchedule) {
+            await scheduleUpgrade({
+              stripeCustomerId,
+              subscription,
+              currentPlanItem,
               currentPeriodEnd,
+              nextTier,
             });
 
-            if (!scheduledTier) {
-              logger.info("Active schedule found without mapped upgrade tier", {
-                team_id: teamId,
-                subscription_id: subscription.id,
-                schedule_id: activeSchedule.id,
-              });
-              continue;
-            }
+            await maybeTriggerUsageNotification({
+              teamId,
+              periodStart: usageWindow.start_at,
+              periodEnd: usageWindow.end_at,
+              message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
+              metadata: buildUsageMetadata(
+                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+                nextTier,
+              ),
+              checkForDuplicates: false,
+            });
 
-            if (usage <= scheduledTier.posts) {
-              logger.info("Usage still within already scheduled upgrade tier", {
-                team_id: teamId,
-                subscription_id: subscription.id,
-                usage,
-                scheduled_tier_posts: scheduledTier.posts,
-              });
-              continue;
-            }
+            logger.info("Scheduled usage-based upgrade to next tier", {
+              team_id: teamId,
+              subscription_id: subscription.id,
+              next_tier: nextTier.productId,
+            });
 
+            continue;
+          }
+
+          const scheduledTier = await getScheduledTierForSubscription({
+            schedule: activeSchedule,
+            currentPeriodEnd,
+          });
+
+          if (!scheduledTier) {
+            logger.info("Active schedule found without mapped upgrade tier", {
+              team_id: teamId,
+              subscription_id: subscription.id,
+              schedule_id: activeSchedule.id,
+            });
+
+            continue;
+          }
+
+          if (usage > scheduledTier.posts) {
             const scheduledTierIndex = PRICING_TIERS.findIndex(
               (tier) => tier.productId === scheduledTier.productId,
             );
@@ -597,7 +623,6 @@ export const processUsageLimits = schedules.task({
               });
               continue;
             }
-
             await scheduleUpgrade({
               stripeCustomerId,
               subscription,
@@ -606,40 +631,33 @@ export const processUsageLimits = schedules.task({
               nextTier: nextScheduledTier,
             });
 
+            await maybeTriggerUsageNotification({
+              teamId,
+              periodStart: usageWindow.start_at,
+              periodEnd: usageWindow.end_at,
+              message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
+              metadata: buildUsageMetadata(
+                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+                nextScheduledTier,
+              ),
+              checkForDuplicates: false,
+            });
+
             logger.info("Replaced scheduled upgrade with next tier", {
               team_id: teamId,
               subscription_id: subscription.id,
               previous_scheduled_tier: scheduledTier.productId,
               next_scheduled_tier: nextScheduledTier.productId,
             });
+
             continue;
           }
 
-          const currentTierIndex = PRICING_TIERS.findIndex(
-            (tier) => tier.productId === planInfo.productId,
-          );
-          const nextTier = PRICING_TIERS[currentTierIndex + 1];
-
-          if (!nextTier) {
-            logger.info("Team is already on highest pricing tier", {
-              team_id: teamId,
-              subscription_id: subscription.id,
-            });
-            continue;
-          }
-
-          await scheduleUpgrade({
-            stripeCustomerId,
-            subscription,
-            currentPlanItem,
-            currentPeriodEnd,
-            nextTier,
-          });
-
-          logger.info("Scheduled usage-based upgrade to next tier", {
+          logger.info("Team has not exceeded next tier usage", {
             team_id: teamId,
             subscription_id: subscription.id,
-            next_tier: nextTier.productId,
+            scheduled_tier: scheduledTier.productId,
+            usage: usage,
           });
         } catch (teamError) {
           logger.error("Error processing team usage limits", {
