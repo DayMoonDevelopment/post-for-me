@@ -1,8 +1,7 @@
-import { logger, task, tasks } from "@trigger.dev/sdk";
+import { logger, schedules, tasks } from "@trigger.dev/sdk";
 import type Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { Database, Json } from "@post-for-me/db";
-import { isWithinInterval } from "date-fns";
 import { randomUUID } from "crypto";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
@@ -10,8 +9,6 @@ const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
-
-const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
 
 const STRIPE_PRICING_TIER_1K_PRODUCT_ID =
   process.env?.STRIPE_PRICING_TIER_1K_PRODUCT_ID || "";
@@ -36,9 +33,11 @@ const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
 const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
 
-export type ProcessUsageLimitsPayload = {
-  stripe_customer_id: string;
-  team_id: string;
+type TeamUsageWindow = Database["public"]["Tables"]["team_usage"]["Row"];
+type TeamUsageWindowWithTeam = TeamUsageWindow & {
+  teams: {
+    stripe_customer_id: string | null;
+  } | null;
 };
 
 const triggerTeamNotification = async (
@@ -182,9 +181,6 @@ const getDefaultPriceId = (product: Stripe.Product): string => {
   return defaultPrice.id;
 };
 
-const toDateFromUnixSeconds = (timestamp: number): Date =>
-  new Date(timestamp * 1000);
-
 const getProductIdFromPrice = async (
   price: string | Stripe.Price,
 ): Promise<string | null> => {
@@ -207,30 +203,172 @@ const getProductIdFromPrice = async (
   return product?.id ?? null;
 };
 
+const getExceededUsageWindows = async (): Promise<
+  TeamUsageWindowWithTeam[]
+> => {
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await supabaseClient
+    .from("team_usage")
+    .select(
+      "team_id, count, limit, start_at, end_at, teams!inner(stripe_customer_id)",
+    )
+    .filter("count", "gt", "limit")
+    .lte("start_at", nowIso)
+    .gt("end_at", nowIso);
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+};
+
+const getPreviousUsageWindow = async (
+  teamId: string,
+  currentWindow: TeamUsageWindow,
+): Promise<TeamUsageWindow | null> => {
+  const { data, error } = await supabaseClient
+    .from("team_usage")
+    .select("team_id, count, limit, start_at, end_at")
+    .eq("team_id", teamId)
+    .lte("end_at", currentWindow.start_at)
+    .order("end_at", { ascending: false })
+    .order("start_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? null;
+};
+
+const hasUsageNotificationForPeriod = async (
+  teamId: string,
+  periodStart: string,
+  periodEnd: string,
+): Promise<boolean> => {
+  const { data, error } = await supabaseClient
+    .from("team_notifications")
+    .select("id")
+    .eq("notification_type", "usage_alert")
+    .eq("team_id", teamId)
+    .gte("created_at", periodStart)
+    .lt("created_at", periodEnd)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return Boolean(data?.id);
+};
+
+const maybeTriggerUsageNotification = async ({
+  teamId,
+  periodStart,
+  periodEnd,
+  message,
+  metadata,
+}: {
+  teamId: string;
+  periodStart: string;
+  periodEnd: string;
+  message: string;
+  metadata: Json;
+}): Promise<boolean> => {
+  const alreadySent = await hasUsageNotificationForPeriod(
+    teamId,
+    periodStart,
+    periodEnd,
+  );
+
+  if (alreadySent) {
+    logger.info("Usage notification already sent for period", {
+      team_id: teamId,
+      period_start: periodStart,
+      period_end: periodEnd,
+    });
+    return false;
+  }
+
+  await triggerTeamNotification(teamId, message, metadata);
+  return true;
+};
+
+const getActiveScheduleForSubscription = async (
+  stripeCustomerId: string,
+  subscriptionId: string,
+): Promise<Stripe.SubscriptionSchedule | null> => {
+  const activeSchedules = await stripe.subscriptionSchedules.list({
+    customer: stripeCustomerId,
+  });
+
+  return (
+    activeSchedules.data.find((entry: Stripe.SubscriptionSchedule) => {
+      if (entry.status !== "active") {
+        return false;
+      }
+
+      if (typeof entry.subscription === "string") {
+        return entry.subscription === subscriptionId;
+      }
+
+      return entry.subscription?.id === subscriptionId;
+    }) ?? null
+  );
+};
+
+const getScheduledTierForSubscription = async ({
+  schedule,
+  currentPeriodEnd,
+}: {
+  schedule: Stripe.SubscriptionSchedule;
+  currentPeriodEnd: number;
+}): Promise<(typeof PRICING_TIERS)[number] | null> => {
+  const upgradePhase = schedule.phases.find(
+    (phase) => phase.start_date >= currentPeriodEnd,
+  );
+
+  if (!upgradePhase) {
+    return null;
+  }
+
+  for (const item of upgradePhase.items) {
+    const productId = await getProductIdFromPrice(
+      item.price as string | Stripe.Price,
+    );
+
+    if (!productId) {
+      continue;
+    }
+
+    const tier = PRICING_TIERS.find(
+      (candidate) => candidate.productId === productId,
+    );
+
+    if (tier) {
+      return tier;
+    }
+  }
+
+  return null;
+};
+
 const scheduleUpgrade = async ({
   stripeCustomerId,
-  teamId,
   subscription,
   currentPlanItem,
   currentPeriodEnd,
-  currentPlanMetadata,
   nextTier,
 }: {
   stripeCustomerId: string;
-  teamId: string;
   subscription: Stripe.Subscription;
   currentPlanItem: Stripe.SubscriptionItem;
   currentPeriodEnd: number;
-  currentPlanMetadata: {
-    plan_info: {
-      current_plan: {
-        product_id: string | null;
-        name: string | null;
-        post_limit: number | null;
-        price: number | null;
-      };
-    };
-  };
   nextTier: (typeof PRICING_TIERS)[number];
 }): Promise<void> => {
   const nextTierProduct = await stripe.products.retrieve(nextTier.productId);
@@ -288,277 +426,195 @@ const scheduleUpgrade = async ({
       },
     ],
   });
-
-  await triggerTeamNotification(
-    teamId,
-    `Usage exceeded current plan limit; scheduled upgrade to ${nextTier.name} (${nextTier.posts} posts).`,
-    {
-    transactional_email_id: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-    plan_info: {
-      ...currentPlanMetadata.plan_info,
-      next_plan: {
-        product_id: nextTier.productId,
-        name: nextTier.name,
-        post_limit: nextTier.posts,
-        price: nextTier.price,
-      },
-    },
-    },
-  );
 };
 
-export const processUsageLimits = task({
+export const processUsageLimits = schedules.task({
+  cron: { pattern: "*/5 * * * *", environments: ["PRODUCTION"] },
   id: "process-usage-limits",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
-  run: async (payload: ProcessUsageLimitsPayload) => {
-    const { stripe_customer_id, team_id } = payload;
-
-    if (!stripe_customer_id || STRIPE_METER_EVENT) {
-      logger.error("No stripe info provided");
-      return;
-    }
-
-    logger.info("Checking usage for customer", { stripe_customer_id, team_id });
-
+  run: async () => {
     try {
-      // Get the active subscription to determine the billing period
-      const subscriptions = await stripe.subscriptions.list({
-        customer: stripe_customer_id,
-        status: "active",
-        limit: 1,
-        expand: ["data.items.data.price"],
-      });
+      const exceededUsageWindows = await getExceededUsageWindows();
 
-      const subscription = subscriptions.data[0] as Stripe.Subscription;
-
-      if (!subscription) {
-        logger.error("No active subscirpiton for customer", { subscription });
-        return;
-      }
-      // Get plan info to determine post limit
-      const planInfo = getSubscriptionPlanInfo(subscription);
-
-      if (planInfo.isLegacy) {
-        logger.info("Legacy subscription no usage limit to check");
+      if (exceededUsageWindows.length === 0) {
+        logger.info("No teams currently over usage limits");
         return;
       }
 
-      if (!planInfo.postLimit) {
-        logger.error("Error getting post limit", { planInfo });
-        return;
-      }
+      for (const usageWindow of exceededUsageWindows) {
+        const {
+          team_id: teamId,
+          count: usage,
+          limit: currentLimit,
+          teams,
+        } = usageWindow;
 
-      const currentPlanItem = subscription.items.data.find(
-        (subscriptionItem) =>
-          subscriptionItem.price.product === planInfo.productId,
-      );
+        try {
+          const stripeCustomerId = teams?.stripe_customer_id ?? null;
 
-      if (!currentPlanItem) {
-        logger.error("Could not find current plan item", {
-          subscriptionId: subscription.id,
-          productId: planInfo.productId,
-        });
-        return;
-      }
-
-      const startTime = currentPlanItem.current_period_start;
-      const endTime = Math.floor(Date.now() / 1000);
-
-      // Query meter event summaries for the current subscription period
-      const meterEventSummaries =
-        await stripe.billing.meters.listEventSummaries(STRIPE_METER_EVENT, {
-          customer: stripe_customer_id,
-          start_time: startTime,
-          end_time: endTime,
-        });
-
-      // Sum up the usage from all meter event summaries
-      const usage = meterEventSummaries.data.reduce(
-        (sum: number, summary: { aggregated_value?: number }) =>
-          sum + (summary.aggregated_value || 0),
-        0,
-      );
-
-      if (usage <= planInfo.postLimit) {
-        logger.info("Usage is within subscription limits");
-        return;
-      }
-
-      const { data: lastNotification, error: lastNotificationError } =
-        await supabaseClient
-          .from("team_notifications")
-          .select("created_at")
-          .eq("notification_type", "usage_alert")
-          .eq("team_id", team_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-      if (lastNotificationError) {
-        logger.error("Failed to fetch last usage notification", {
-          error: lastNotificationError,
-          team_id,
-        });
-        return;
-      }
-
-      const currentPeriodStart = currentPlanItem.current_period_start;
-      const currentPeriodEnd = currentPlanItem.current_period_end;
-      const periodDuration = currentPeriodEnd - currentPeriodStart;
-      const previousPeriodStart = currentPeriodStart - periodDuration;
-
-      const lastNotificationDate = lastNotification
-        ? new Date(lastNotification.created_at)
-        : null;
-
-      const currentPlanMetadata = {
-        plan_info: {
-          current_plan: {
-            product_id: planInfo.productId,
-            name: planInfo.planName,
-            post_limit: planInfo.postLimit,
-            price: planInfo.price,
-          },
-        },
-      };
-
-      if (!lastNotificationDate) {
-        await triggerTeamNotification(
-          team_id,
-          `Usage exceeded current plan limit (${usage}/${planInfo.postLimit} posts used this period).`,
-          {
-          transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
-          ...currentPlanMetadata,
-          },
-        );
-        return;
-      }
-
-      switch (true) {
-        //Notification is in current subscripion period
-        case isWithinInterval(lastNotificationDate, {
-          start: toDateFromUnixSeconds(currentPeriodStart),
-          end: toDateFromUnixSeconds(currentPeriodEnd),
-        }): {
-          const activeSchedules = await stripe.subscriptionSchedules.list({
-            customer: stripe_customer_id,
-          });
-
-          const activeScheduleForSubscription: Stripe.SubscriptionSchedule =
-            activeSchedules.data.find((entry: Stripe.SubscriptionSchedule) => {
-              if (entry.status !== "active") {
-                return false;
-              }
-
-              if (typeof entry.subscription === "string") {
-                return entry.subscription === subscription.id;
-              }
-
-              return entry.subscription?.id === subscription.id;
+          if (!stripeCustomerId) {
+            logger.info("Skipping team without Stripe customer", {
+              team_id: teamId,
             });
+            continue;
+          }
 
-          if (!activeScheduleForSubscription) {
-            logger.info("Usage notification already sent this period", {
-              team_id,
-              subscription_id: subscription.id,
-              period: {
-                lastNotificationDate,
-                start: toDateFromUnixSeconds(currentPeriodStart),
-                end: toDateFromUnixSeconds(currentPeriodEnd),
+          const previousUsageWindow = await getPreviousUsageWindow(
+            teamId,
+            usageWindow,
+          );
+          const previousLimit = previousUsageWindow?.limit ?? null;
+          const exceededPreviousLimit =
+            previousLimit !== null && usage > previousLimit;
+
+          if (!exceededPreviousLimit) {
+            await maybeTriggerUsageNotification({
+              teamId,
+              periodStart: usageWindow.start_at,
+              periodEnd: usageWindow.end_at,
+              message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period).`,
+              metadata: {
+                transactional_email_id:
+                  LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
+                previous_limit: previousLimit,
+                ...currentPlanMetadata,
               },
             });
-            return;
+            continue;
           }
 
-          const upgradePhaseIndex =
-            activeScheduleForSubscription.phases.findIndex(
-              (phase) => phase.start_date >= currentPeriodEnd,
-            );
+          const subscriptions = await stripe.subscriptions.list({
+            customer: stripeCustomerId,
+            status: "active",
+            limit: 1,
+            expand: ["data.items.data.price"],
+          });
 
-          if (upgradePhaseIndex === -1) {
-            logger.info("No upgrade phase found in active schedule", {
-              team_id,
-              subscription_id: subscription.id,
-              schedule_id: activeScheduleForSubscription.id,
+          const subscription = subscriptions.data[0] as Stripe.Subscription;
+
+          if (!subscription) {
+            logger.error("No active subscription for customer", {
+              stripe_customer_id: stripeCustomerId,
+              team_id: teamId,
             });
-            return;
+            continue;
           }
 
-          const upgradePhase =
-            activeScheduleForSubscription.phases[upgradePhaseIndex];
+          const planInfo = getSubscriptionPlanInfo(subscription);
 
-          let scheduledTier: (typeof PRICING_TIERS)[number] | null = null;
+          if (planInfo.isLegacy || !planInfo.postLimit) {
+            logger.info("Skipping usage-limit automation for subscription", {
+              team_id: teamId,
+              subscription_id: subscription.id,
+              is_legacy: planInfo.isLegacy,
+              post_limit: planInfo.postLimit,
+            });
+            continue;
+          }
 
-          for (const item of upgradePhase.items) {
-            const productId = await getProductIdFromPrice(
-              item.price as string | Stripe.Price,
-            );
-            if (!productId) {
+          const currentPlanItem = subscription.items.data.find(
+            (subscriptionItem) =>
+              subscriptionItem.price.product === planInfo.productId,
+          );
+
+          if (!currentPlanItem) {
+            logger.error("Could not find current plan item", {
+              team_id: teamId,
+              subscription_id: subscription.id,
+              product_id: planInfo.productId,
+            });
+            continue;
+          }
+
+          const currentPeriodEnd = currentPlanItem.current_period_end;
+
+          const currentPlanMetadata = {
+            plan_info: {
+              current_plan: {
+                product_id: planInfo.productId,
+                name: planInfo.planName,
+                post_limit: planInfo.postLimit,
+                price: planInfo.price,
+              },
+            },
+          };
+
+          await maybeTriggerUsageNotification({
+            teamId,
+            periodStart: usageWindow.start_at,
+            periodEnd: usageWindow.end_at,
+            message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
+            metadata: {
+              transactional_email_id:
+                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+              previous_limit: previousLimit,
+              ...currentPlanMetadata,
+            },
+          });
+
+          const activeSchedule = await getActiveScheduleForSubscription(
+            stripeCustomerId,
+            subscription.id,
+          );
+
+          if (activeSchedule) {
+            const scheduledTier = await getScheduledTierForSubscription({
+              schedule: activeSchedule,
+              currentPeriodEnd,
+            });
+
+            if (!scheduledTier) {
+              logger.info("Active schedule found without mapped upgrade tier", {
+                team_id: teamId,
+                subscription_id: subscription.id,
+                schedule_id: activeSchedule.id,
+              });
               continue;
             }
 
-            const tier = PRICING_TIERS.find(
-              (candidateTier) => candidateTier.productId === productId,
-            );
-
-            if (tier) {
-              scheduledTier = tier;
-              break;
+            if (usage <= scheduledTier.posts) {
+              logger.info("Usage still within already scheduled upgrade tier", {
+                team_id: teamId,
+                subscription_id: subscription.id,
+                usage,
+                scheduled_tier_posts: scheduledTier.posts,
+              });
+              continue;
             }
-          }
 
-          if (!scheduledTier) {
-            logger.info("Scheduled upgrade does not map to pricing tier", {
-              team_id,
-              subscription_id: subscription.id,
-              schedule_id: activeScheduleForSubscription.id,
+            const scheduledTierIndex = PRICING_TIERS.findIndex(
+              (tier) => tier.productId === scheduledTier.productId,
+            );
+            const nextScheduledTier = PRICING_TIERS[scheduledTierIndex + 1];
+
+            if (!nextScheduledTier) {
+              logger.info("Scheduled upgrade already at highest pricing tier", {
+                team_id: teamId,
+                subscription_id: subscription.id,
+                usage,
+                scheduled_tier: scheduledTier,
+              });
+              continue;
+            }
+
+            await scheduleUpgrade({
+              stripeCustomerId,
+              subscription,
+              currentPlanItem,
+              currentPeriodEnd,
+              nextTier: nextScheduledTier,
             });
-            return;
-          }
 
-          if (usage <= scheduledTier.posts) {
-            logger.info("Usage is within scheduled upgrade tier limit", {
-              team_id,
+            logger.info("Replaced scheduled upgrade with next tier", {
+              team_id: teamId,
               subscription_id: subscription.id,
-              usage,
-              scheduled_tier: scheduledTier,
+              previous_scheduled_tier: scheduledTier.productId,
+              next_scheduled_tier: nextScheduledTier.productId,
             });
-            return;
+            continue;
           }
 
-          const scheduledTierIndex = PRICING_TIERS.findIndex(
-            (tier) => tier.productId === scheduledTier?.productId,
-          );
-          const nextScheduledTier = PRICING_TIERS[scheduledTierIndex + 1];
-
-          if (!nextScheduledTier) {
-            logger.info("Scheduled upgrade is already on highest tier", {
-              team_id,
-              subscription_id: subscription.id,
-              usage,
-              scheduled_tier: scheduledTier,
-            });
-            return;
-          }
-
-          await scheduleUpgrade({
-            stripeCustomerId: stripe_customer_id,
-            teamId: team_id,
-            subscription,
-            currentPlanItem,
-            currentPeriodEnd,
-            currentPlanMetadata,
-            nextTier: nextScheduledTier,
-          });
-
-          return;
-        }
-        //Notification is in previous subscription period
-        case isWithinInterval(lastNotificationDate, {
-          start: toDateFromUnixSeconds(previousPeriodStart),
-          end: toDateFromUnixSeconds(currentPeriodStart),
-        }): {
           const currentTierIndex = PRICING_TIERS.findIndex(
             (tier) => tier.productId === planInfo.productId,
           );
@@ -566,37 +622,35 @@ export const processUsageLimits = task({
 
           if (!nextTier) {
             logger.info("Team is already on highest pricing tier", {
-              team_id,
+              team_id: teamId,
               subscription_id: subscription.id,
             });
-            return;
+            continue;
           }
 
           await scheduleUpgrade({
-            stripeCustomerId: stripe_customer_id,
-            teamId: team_id,
+            stripeCustomerId,
             subscription,
             currentPlanItem,
             currentPeriodEnd,
-            currentPlanMetadata,
             nextTier,
           });
-          return;
-        }
-        default: {
-          await triggerTeamNotification(
-            team_id,
-            `Usage exceeded current plan limit (${usage}/${planInfo.postLimit} posts used this period).`,
-            {
-            transactional_email_id: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
-            ...currentPlanMetadata,
-            },
-          );
-          return;
+
+          logger.info("Scheduled usage-based upgrade to next tier", {
+            team_id: teamId,
+            subscription_id: subscription.id,
+            next_tier: nextTier.productId,
+          });
+        } catch (teamError) {
+          logger.error("Error processing team usage limits", {
+            team_id: teamId,
+            error: teamError,
+          });
         }
       }
     } catch (error) {
-      logger.error("Error fetching usage from Stripe:", error);
+      logger.error("Error processing usage limits", { error });
+      throw error;
     }
   },
 });
