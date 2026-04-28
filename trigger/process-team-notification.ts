@@ -104,22 +104,24 @@ export const processTeamNotification = task({
   run: async (payload: TeamNotification) => {
     logger.info("Processing team notification", {
       teamId: payload.team_id,
-      deliveryType: payload.delivery_type,
+      deliveryType: payload.delivery_types,
       notificationType: payload.notification_type,
     });
 
     try {
-      switch (payload.delivery_type) {
-        case "email": {
-          await sendEmailNotification(payload);
-          break;
-        }
-        default: {
-          logger.warn("Unsupported team notification delivery type", {
-            notificationId: payload.id,
-            deliveryType: payload.delivery_type,
-          });
-          break;
+      for (const deliveryType in payload.delivery_types) {
+        switch (deliveryType) {
+          case "email": {
+            await sendEmailNotification(payload);
+            break;
+          }
+          default: {
+            logger.warn("Unsupported team notification delivery type", {
+              notificationId: payload.id,
+              deliveryType: deliveryType,
+            });
+            break;
+          }
         }
       }
     } catch (error) {
