@@ -534,13 +534,20 @@ export const processUsageLimits = schedules.task({
             transactionalEmailId: string,
             suggestedTier: (typeof PRICING_TIERS)[number] | null,
           ): Json => ({
-            transactional_email_id: transactionalEmailId,
-            team_name: teams?.name ?? null,
-            current_plan_post_limit: planInfo.postLimit,
-            current_plan_name: planInfo.planName,
-            suggested_plan_name: suggestedTier?.name ?? null,
-            suggested_plan_post_limit: suggestedTier?.posts ?? null,
-            billing_link: `https://app.postforme.dev/${teamId}/billing`,
+            data: {
+              loops: {
+                transactional_id: transactionalEmailId,
+                data: {
+                  team_name: teams?.name ?? null,
+                  current_plan_post_limit: planInfo.postLimit,
+                  current_plan_name: planInfo.planName,
+                  suggested_plan_name: suggestedTier?.name ?? null,
+                  suggested_plan_post_limit: suggestedTier?.posts ?? null,
+                  billing_link: `https://app.postforme.dev/${teamId}/billing`,
+                },
+              },
+            },
+            results: [],
           });
 
           if (!exceededPreviousLimit) {

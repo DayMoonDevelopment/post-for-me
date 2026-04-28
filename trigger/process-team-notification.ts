@@ -6,6 +6,27 @@ import { Database, Json } from "@post-for-me/db";
 type TeamNotification =
   Database["public"]["Tables"]["team_notifications"]["Row"];
 
+type LoopsMetadata = {
+  transactional_id?: string;
+  data?: Record<string, Json>;
+};
+
+type TeamNotificationMetadata = {
+  data?: {
+    loops?: LoopsMetadata;
+  };
+  results?: Array<{
+    delivery_type: "email";
+    email?: string;
+    status: "sent" | "failed" | "skipped";
+    deliveryCalled: boolean;
+    statusCode?: number;
+    error?: string;
+  }>;
+};
+
+type EmailDeliveryResult = NonNullable<TeamNotificationMetadata["results"]>[number];
+
 const LOOPS_API_KEY = process.env.LOOPS_API_KEY || "";
 const LOOPS_TRANSACTIONAL_URL = "https://app.loops.so/api/v1/transactional";
 
@@ -33,68 +54,113 @@ const getTeamContactEmail = async (
 
 async function sendEmailNotification(
   notification: TeamNotification,
-): Promise<void> {
+): Promise<EmailDeliveryResult> {
   if (!LOOPS_API_KEY) {
     logger.error("LOOPS_API_KEY is not configured", {
       notificationId: notification.id,
       teamId: notification.team_id,
     });
-    throw new Error("Unable to intialize loops client");
+    return {
+      delivery_type: "email",
+      status: "failed",
+      deliveryCalled: false,
+      error: "LOOPS_API_KEY is not configured",
+    };
   }
 
-  const metadata = notification.meta_data as {
-    transactional_email_id?: string;
-  };
+  const metadata = (notification.meta_data as TeamNotificationMetadata) || {};
+  const loopsMetadata = metadata.data?.loops;
+  const transactionalEmailId = loopsMetadata?.transactional_id;
 
-  if (!metadata.transactional_email_id) {
-    throw new Error("Loops email Id not set");
+  if (!transactionalEmailId) {
+    return {
+      delivery_type: "email",
+      status: "failed",
+      deliveryCalled: false,
+      error: "Loops transactional_id not set",
+    };
   }
 
-  const transactionalEmailId = metadata.transactional_email_id;
+  try {
+    const email = await getTeamContactEmail(notification.team_id);
 
-  const email = await getTeamContactEmail(notification.team_id);
+    if (!email) {
+      logger.error("No contact email found for team notification", {
+        notificationId: notification.id,
+        teamId: notification.team_id,
+      });
+      return {
+        delivery_type: "email",
+        status: "skipped",
+        deliveryCalled: false,
+        error: "No contact email found for team notification",
+      };
+    }
 
-  if (!email) {
-    logger.error("No contact email found for team notification", {
-      notificationId: notification.id,
-      teamId: notification.team_id,
-    });
-    return;
-  }
+    const deliveryCalled = true;
 
-  const response = await fetch(LOOPS_TRANSACTIONAL_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${LOOPS_API_KEY}`,
-    },
-    body: JSON.stringify({
-      email,
-      transactionalId: transactionalEmailId,
-      dataVariables: {
-        message: notification.message,
-        ...((notification.meta_data as {}) || {}),
+    const response = await fetch(LOOPS_TRANSACTIONAL_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${LOOPS_API_KEY}`,
       },
-    }),
-  });
+      body: JSON.stringify({
+        email,
+        transactionalId: transactionalEmailId,
+        dataVariables: {
+          message: notification.message,
+          ...(loopsMetadata?.data || {}),
+        },
+      }),
+    });
 
-  if (!response.ok) {
-    const responseBody = await response.text().catch(() => "");
-    logger.error("Failed to send Loops transactional email", {
+    if (!response.ok) {
+      const responseBody = await response.text().catch(() => "");
+      logger.error("Failed to send Loops transactional email", {
+        notificationId: notification.id,
+        teamId: notification.team_id,
+        email,
+        status: response.status,
+        responseBody,
+      });
+      return {
+        delivery_type: "email",
+        email,
+        status: "failed",
+        deliveryCalled,
+        statusCode: response.status,
+        error: responseBody || "Failed to send Loops transactional email",
+      };
+    }
+
+    logger.info("Sent team notification email", {
       notificationId: notification.id,
       teamId: notification.team_id,
       email,
-      status: response.status,
-      responseBody,
     });
-    return;
-  }
 
-  logger.info("Sent team notification email", {
-    notificationId: notification.id,
-    teamId: notification.team_id,
-    email,
-  });
+    return {
+      delivery_type: "email",
+      email,
+      status: "sent",
+      deliveryCalled,
+      statusCode: response.status,
+    };
+  } catch (error) {
+    logger.error("Unable to process Loops transactional email", {
+      notificationId: notification.id,
+      teamId: notification.team_id,
+      error,
+    });
+
+    return {
+      delivery_type: "email",
+      status: "failed",
+      deliveryCalled: false,
+      error: error instanceof Error ? error.message : "Unknown email delivery error",
+    };
+  }
 }
 
 export const processTeamNotification = task({
@@ -102,6 +168,8 @@ export const processTeamNotification = task({
   maxDuration: 300,
   retry: { maxAttempts: 1 },
   run: async (payload: TeamNotification) => {
+    const deliveryResults: EmailDeliveryResult[] = [];
+
     logger.info("Processing team notification", {
       teamId: payload.team_id,
       deliveryType: payload.delivery_types,
@@ -112,7 +180,8 @@ export const processTeamNotification = task({
       for (const deliveryType in payload.delivery_types) {
         switch (deliveryType) {
           case "email": {
-            await sendEmailNotification(payload);
+            const result = await sendEmailNotification(payload);
+            deliveryResults.push(result);
             break;
           }
           default: {
@@ -127,10 +196,20 @@ export const processTeamNotification = task({
     } catch (error) {
       logger.error("Unable to deliver notification", { error });
     } finally {
+      const metadata = (payload.meta_data as TeamNotificationMetadata) || {};
+      const results = Array.isArray(metadata.results) ? metadata.results : [];
+      const payloadToInsert: TeamNotification = {
+        ...payload,
+        meta_data: {
+          ...metadata,
+          results: [...results, ...deliveryResults],
+        } as Json,
+      };
+
       logger.info("Saving notification");
       const { data: insertedNotification, error } = await supabaseClient
         .from("team_notifications")
-        .insert(payload)
+        .insert(payloadToInsert)
         .select()
         .single();
 
