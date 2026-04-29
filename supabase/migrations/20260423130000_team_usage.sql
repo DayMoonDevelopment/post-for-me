@@ -10,6 +10,10 @@ CREATE TABLE public.team_usage(
 );
 
 CREATE INDEX idx_team_usage_latest ON public.team_usage(team_id, end_at DESC, start_at DESC);
+CREATE INDEX idx_team_usage_exceeded_active_window
+    ON public.team_usage(end_at, start_at)
+    INCLUDE (team_id, count, "limit")
+    WHERE count > "limit";
 
 ALTER TABLE public.team_usage ENABLE ROW LEVEL SECURITY;
 
