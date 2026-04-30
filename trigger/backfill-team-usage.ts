@@ -36,7 +36,8 @@ type TeamRow = Pick<
   "id" | "name" | "stripe_customer_id"
 >;
 
-type TeamUsageInsert = Database["public"]["Tables"]["team_usage"]["Insert"];
+type TeamUsageInsert =
+  Database["public"]["Tables"]["social_post_team_usage"]["Insert"];
 
 const PAGE_SIZE = 500;
 const UPSERT_BATCH_SIZE = 500;
@@ -158,7 +159,7 @@ const upsertUsageWindows = async (
   usageRows: TeamUsageInsert[],
 ): Promise<void> => {
   const { error } = await supabase
-    .from("team_usage")
+    .from("social_post_team_usage")
     .upsert(usageRows, { onConflict: "team_id,start_at,end_at" });
 
   if (error) {

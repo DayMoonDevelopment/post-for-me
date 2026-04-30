@@ -766,7 +766,7 @@ export type Database = {
           },
         ]
       }
-      team_usage: {
+      social_post_team_usage: {
         Row: {
           count: number
           end_at: string
@@ -790,7 +790,7 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "team_usage_team_id_fkey"
+            foreignKeyName: "social_post_team_usage_team_id_fkey"
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
@@ -1318,4 +1318,3 @@ export const Constants = {
     },
   },
 } as const
-

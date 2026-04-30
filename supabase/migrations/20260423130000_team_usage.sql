@@ -1,21 +1,21 @@
 --
 -- Team Usage
-CREATE TABLE public.team_usage(
+CREATE TABLE public.social_post_team_usage(
     team_id text NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
     count int NOT NULL DEFAULT 0,
     "limit" int NOT NULL,
     start_at timestamptz NOT NULL,
     end_at timestamptz NOT NULL,
-    CONSTRAINT team_usage_unique_window UNIQUE (team_id, start_at, end_at)
+    CONSTRAINT social_post_team_usage_unique_window UNIQUE (team_id, start_at, end_at)
 );
 
-CREATE INDEX idx_team_usage_latest ON public.team_usage(team_id, end_at DESC, start_at DESC);
-CREATE INDEX idx_team_usage_exceeded_active_window
-    ON public.team_usage(end_at, start_at)
+CREATE INDEX idx_social_post_team_usage_latest ON public.social_post_team_usage(team_id, end_at DESC, start_at DESC);
+CREATE INDEX idx_social_post_team_usage_exceeded_active_window
+    ON public.social_post_team_usage(end_at, start_at)
     INCLUDE (team_id, count, "limit")
     WHERE count > "limit";
 
-ALTER TABLE public.team_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.social_post_team_usage ENABLE ROW LEVEL SECURITY;
 
 -- Increments the active usage window for a team.
 -- If no window exists, or the latest window has ended, a new one is created.
@@ -44,14 +44,14 @@ BEGIN
 
     SELECT tu.start_at, tu.end_at, tu."limit"
     INTO v_start_at, v_end_at, v_limit
-    FROM public.team_usage tu
+    FROM public.social_post_team_usage tu
     WHERE tu.team_id = p_team_id
     ORDER BY tu.end_at DESC, tu.start_at DESC
     LIMIT 1
     FOR UPDATE;
 
     IF v_start_at IS NULL OR v_end_at <= v_now THEN
-        INSERT INTO public.team_usage(team_id, count, "limit", start_at, end_at)
+        INSERT INTO public.social_post_team_usage(team_id, count, "limit", start_at, end_at)
             VALUES(
                 p_team_id,
                 1,
@@ -61,7 +61,7 @@ BEGIN
             )
         RETURNING count INTO v_new_count;
     ELSE
-        UPDATE public.team_usage tu
+        UPDATE public.social_post_team_usage tu
         SET count = tu.count + 1
         WHERE tu.team_id = p_team_id
           AND tu.start_at = v_start_at

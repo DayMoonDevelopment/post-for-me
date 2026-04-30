@@ -33,7 +33,8 @@ const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
 const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
 
-type TeamUsageWindow = Database["public"]["Tables"]["team_usage"]["Row"];
+type TeamUsageWindow =
+  Database["public"]["Tables"]["social_post_team_usage"]["Row"];
 type TeamUsageWindowWithTeam = TeamUsageWindow & {
   teams: {
     stripe_customer_id: string | null;
@@ -210,7 +211,7 @@ const getExceededUsageWindows = async (): Promise<
   const nowIso = new Date().toISOString();
 
   const { data, error } = await supabaseClient
-    .from("team_usage")
+    .from("social_post_team_usage")
     .select(
       "team_id, count, limit, start_at, end_at, teams!inner(stripe_customer_id,name)",
     )
@@ -230,7 +231,7 @@ const getPreviousUsageWindow = async (
   currentWindow: TeamUsageWindow,
 ): Promise<TeamUsageWindow | null> => {
   const { data, error } = await supabaseClient
-    .from("team_usage")
+    .from("social_post_team_usage")
     .select("team_id, count, limit, start_at, end_at")
     .eq("team_id", teamId)
     .lte("end_at", currentWindow.start_at)
