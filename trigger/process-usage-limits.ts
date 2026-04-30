@@ -32,6 +32,8 @@ const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID || "";
 const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
+const PROCESS_USAGE_LIMITS_DRY_RUN =
+  process.env?.PROCESS_USAGE_LIMITS_DRY_RUN?.toLowerCase() === "true";
 
 type TeamUsageWindow =
   Database["public"]["Tables"]["social_post_team_usage"]["Row"];
@@ -276,6 +278,7 @@ const maybeTriggerUsageNotification = async ({
   message,
   metadata,
   checkForDuplicates,
+  dryRun,
 }: {
   teamId: string;
   periodStart: string;
@@ -283,6 +286,7 @@ const maybeTriggerUsageNotification = async ({
   message: string;
   metadata: Json;
   checkForDuplicates: boolean;
+  dryRun: boolean;
 }): Promise<boolean> => {
   if (checkForDuplicates) {
     const alreadySent = await hasUsageNotificationForPeriod(
@@ -296,11 +300,29 @@ const maybeTriggerUsageNotification = async ({
         team_id: teamId,
         period_start: periodStart,
         period_end: periodEnd,
+        dry_run: dryRun,
       });
       return false;
     }
   }
 
+  if (dryRun) {
+    logger.info("Dry run: would trigger usage notification", {
+      team_id: teamId,
+      period_start: periodStart,
+      period_end: periodEnd,
+      message,
+      metadata,
+      dry_run: true,
+    });
+    return true;
+  }
+
+  logger.info("Triggering usage notification", {
+    team_id: teamId,
+    period_start: periodStart,
+    period_end: periodEnd,
+  });
   await triggerTeamNotification(teamId, message, metadata);
   return true;
 };
@@ -370,12 +392,14 @@ const scheduleUpgrade = async ({
   currentPlanItem,
   currentPeriodEnd,
   nextTier,
+  dryRun,
 }: {
   stripeCustomerId: string;
   subscription: Stripe.Subscription;
   currentPlanItem: Stripe.SubscriptionItem;
   currentPeriodEnd: number;
   nextTier: (typeof PRICING_TIERS)[number];
+  dryRun: boolean;
 }): Promise<void> => {
   const nextTierProduct = await stripe.products.retrieve(nextTier.productId);
   const nextTierPriceId = getDefaultPriceId(nextTierProduct);
@@ -383,6 +407,23 @@ const scheduleUpgrade = async ({
   const activeSchedules = await stripe.subscriptionSchedules.list({
     customer: stripeCustomerId,
   });
+
+  if (dryRun) {
+    logger.info("Dry run: would schedule subscription upgrade", {
+      stripe_customer_id: stripeCustomerId,
+      subscription_id: subscription.id,
+      release_schedule_ids: activeSchedules.data
+        .filter(
+          (entry: Stripe.SubscriptionSchedule) => entry.status === "active",
+        )
+        .map((entry: Stripe.SubscriptionSchedule) => entry.id),
+      next_tier_product_id: nextTier.productId,
+      next_tier_price_id: nextTierPriceId,
+      current_period_end: currentPeriodEnd,
+      dry_run: true,
+    });
+    return;
+  }
 
   for (const schedule of activeSchedules.data.filter(
     (entry: Stripe.SubscriptionSchedule) => entry.status === "active",
@@ -435,16 +476,22 @@ const scheduleUpgrade = async ({
 };
 
 export const processUsageLimits = schedules.task({
-  cron: { pattern: "*/5 * * * *", environments: ["PRODUCTION"] },
+  //cron: { pattern: "*/5 * * * *", environments: ["PRODUCTION"] },
   id: "process-usage-limits",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
   run: async () => {
     try {
+      logger.info("Starting usage limit processing", {
+        dry_run: PROCESS_USAGE_LIMITS_DRY_RUN,
+      });
+
       const exceededUsageWindows = await getExceededUsageWindows();
 
       if (exceededUsageWindows.length === 0) {
-        logger.info("No teams currently over usage limits");
+        logger.info("No teams currently over usage limits", {
+          dry_run: PROCESS_USAGE_LIMITS_DRY_RUN,
+        });
         return;
       }
 
@@ -562,6 +609,7 @@ export const processUsageLimits = schedules.task({
                 nextTier,
               ),
               checkForDuplicates: true,
+              dryRun: PROCESS_USAGE_LIMITS_DRY_RUN,
             });
             continue;
           }
@@ -578,6 +626,7 @@ export const processUsageLimits = schedules.task({
               currentPlanItem,
               currentPeriodEnd,
               nextTier,
+              dryRun: PROCESS_USAGE_LIMITS_DRY_RUN,
             });
 
             await maybeTriggerUsageNotification({
@@ -590,13 +639,20 @@ export const processUsageLimits = schedules.task({
                 nextTier,
               ),
               checkForDuplicates: false,
+              dryRun: PROCESS_USAGE_LIMITS_DRY_RUN,
             });
 
-            logger.info("Scheduled usage-based upgrade to next tier", {
-              team_id: teamId,
-              subscription_id: subscription.id,
-              next_tier: nextTier.productId,
-            });
+            logger.info(
+              PROCESS_USAGE_LIMITS_DRY_RUN
+                ? "Dry run: would schedule usage-based upgrade to next tier"
+                : "Scheduled usage-based upgrade to next tier",
+              {
+                team_id: teamId,
+                subscription_id: subscription.id,
+                next_tier: nextTier.productId,
+                dry_run: PROCESS_USAGE_LIMITS_DRY_RUN,
+              },
+            );
 
             continue;
           }
@@ -637,6 +693,7 @@ export const processUsageLimits = schedules.task({
               currentPlanItem,
               currentPeriodEnd,
               nextTier: nextScheduledTier,
+              dryRun: PROCESS_USAGE_LIMITS_DRY_RUN,
             });
 
             await maybeTriggerUsageNotification({
@@ -649,14 +706,21 @@ export const processUsageLimits = schedules.task({
                 nextScheduledTier,
               ),
               checkForDuplicates: false,
+              dryRun: PROCESS_USAGE_LIMITS_DRY_RUN,
             });
 
-            logger.info("Replaced scheduled upgrade with next tier", {
-              team_id: teamId,
-              subscription_id: subscription.id,
-              previous_scheduled_tier: scheduledTier.productId,
-              next_scheduled_tier: nextScheduledTier.productId,
-            });
+            logger.info(
+              PROCESS_USAGE_LIMITS_DRY_RUN
+                ? "Dry run: would replace scheduled upgrade with next tier"
+                : "Replaced scheduled upgrade with next tier",
+              {
+                team_id: teamId,
+                subscription_id: subscription.id,
+                previous_scheduled_tier: scheduledTier.productId,
+                next_scheduled_tier: nextScheduledTier.productId,
+                dry_run: PROCESS_USAGE_LIMITS_DRY_RUN,
+              },
+            );
 
             continue;
           }
