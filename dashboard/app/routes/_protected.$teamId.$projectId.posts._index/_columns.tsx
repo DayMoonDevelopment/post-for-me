@@ -138,13 +138,47 @@ export const columns: ColumnDef<PostWithConnections>[] = [
     },
   },
   {
-    id: "accounts",
-    header: "# Accounts",
+    id: "account_ids",
+    header: "Account IDs",
     cell: ({ row }) => {
       const post = row.original;
-      const accountCount = post.social_accounts?.length || 0;
+      const accountIds = post.social_accounts?.map((account) => account.id) || [];
 
-      return <div className="font-medium">{accountCount}</div>;
+      if (accountIds.length === 0) {
+        return <span className="text-sm text-muted-foreground">No accounts</span>;
+      }
+
+      return (
+        <div className="flex flex-col gap-1">
+          {accountIds.map((accountId) => (
+            <span key={accountId} className="font-mono text-xs">
+              {accountId}
+            </span>
+          ))}
+        </div>
+      );
+    },
+  },
+  {
+    id: "account_external_ids",
+    header: "Account External IDs",
+    cell: ({ row }) => {
+      const post = row.original;
+      const accounts = post.social_accounts || [];
+
+      if (accounts.length === 0) {
+        return <span className="text-sm text-muted-foreground">No accounts</span>;
+      }
+
+      return (
+        <div className="flex flex-col gap-1">
+          {accounts.map((account) => (
+            <span key={`${account.id}-external`} className="font-mono text-xs">
+              {account.external_id || "-"}
+            </span>
+          ))}
+        </div>
+      );
     },
   },
   {
