@@ -55,15 +55,13 @@ const getSubscriptionItemProduct = async (
 ): Promise<Stripe.Product> => {
   const product = item.price.product;
 
-  if (typeof product === "string") {
-    return stripe.products.retrieve(product);
-  }
+  const retrievedProduct = await stripe.products.retrieve(product);
 
-  if ("deleted" in product && product.deleted) {
+  if ("deleted" in retrievedProduct && retrievedProduct.deleted) {
     throw new Error("Subscription product is deleted");
   }
 
-  return product;
+  return retrievedProduct;
 };
 
 const getSubscriptionLimitDetails = async (
@@ -208,7 +206,6 @@ export const backfillTeamUsage = task({
           customer: stripeCustomerId,
           status: "active",
           limit: 1,
-          expand: ["data.items.data.price.product"],
         });
 
         const subscription: Stripe.Subscription | undefined =
