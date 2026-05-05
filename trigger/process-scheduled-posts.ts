@@ -91,6 +91,10 @@ export const processScheduledPosts = schedules.task({
               index,
               post: typedPost,
             },
+            options: {
+              idempotencyKey: `process-post:${typedPost.id}`,
+              idempotencyKeyTTL: "1h",
+            },
           };
         }),
       );

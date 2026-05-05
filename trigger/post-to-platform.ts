@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { logger, task, tags, tasks } from "@trigger.dev/sdk";
+import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -10,13 +10,14 @@ import { BlueskyPostClient } from "./posting/platforms/bluesky-post-client";
 import { ThreadsPostClient } from "./posting/platforms/threads-post-client";
 import { PinterestPostClient } from "./posting/platforms/pinterest-post-client";
 import { YouTubePostClient } from "./posting/platforms/youtube-post-client";
+import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
+
 import {
   IndividualPostData,
   PlatformAppCredentials,
   PostResult,
   SocialAccount,
 } from "./posting/post.types";
-import { TikTokBusinessPostClient } from "posting/platforms/tiktok_business-post-client";
 import { differenceInDays } from "date-fns";
 import { Database } from "@post-for-me/db";
 
@@ -149,6 +150,7 @@ export const postToPlatform = task({
       platformConfig,
       postId,
       stripeCustomerId,
+      teamId,
       appCredentials,
       projectId,
     } = payload;
@@ -226,6 +228,7 @@ export const postToPlatform = task({
             error,
           });
         }
+
       }
     } catch (error) {
       logger.error("Failed Processing Platform Post", { error });
@@ -255,6 +258,34 @@ export const postToPlatform = task({
     if (insertResultError) {
       logger.error("Failed to insert post result", { insertResultError });
     } else {
+      if (insertedPostResult.success) {
+        void idempotencyKeys
+          .create(["increment-team-usage", insertedPostResult.id], {
+            scope: "global",
+          })
+          .then((idempotencyKey) =>
+            tasks.trigger(
+              "increment-team-usage",
+              {
+                stripe_customer_id: stripeCustomerId,
+                team_id: teamId,
+              },
+              {
+                idempotencyKey,
+                idempotencyKeyTTL: "1h",
+              },
+            ),
+          )
+          .catch((error) => {
+            logger.error("Failed to trigger increment team usage", {
+              stripe_customer_id: stripeCustomerId,
+              team_id: teamId,
+              social_post_result_id: insertedPostResult.id,
+              error,
+            });
+          });
+      }
+
       await tasks.trigger("process-webhooks", {
         projectId: projectId,
         eventType: "social.post.result.created",

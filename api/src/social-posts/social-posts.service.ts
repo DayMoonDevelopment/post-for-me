@@ -836,7 +836,14 @@ export class SocialPostsService {
         .eq('id', postId)
         .single();
 
-      await tasks.trigger('process-post', { index: 0, post });
+      await tasks.trigger(
+        'process-post',
+        { index: 0, post },
+        {
+          idempotencyKey: `process-post:${postId}`,
+          idempotencyKeyTTL: '1h',
+        },
+      );
     } catch (error) {
       console.log(error);
       throw new Error('Something went wrong with processing the post.');
