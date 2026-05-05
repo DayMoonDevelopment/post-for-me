@@ -19,8 +19,9 @@ export interface SocialProviderConnection {
 
 export interface PostProviderConnection {
   id: string;
-  username: string;
+  username: string | null;
   platform: string;
+  external_id: string | null;
 }
 
 export interface PostMedia {
