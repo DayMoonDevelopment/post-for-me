@@ -52,6 +52,10 @@ const getMediaType = (
   return "image"; // Default to image if uncertain
 };
 
+const normalizeContentType = (contentType: string): string => {
+  return contentType.split(";")[0].trim().toLowerCase();
+};
+
 // Helper function to get file extension from URL or content type
 const getFileExtension = (contentType?: string): string => {
   if (contentType) {
@@ -237,9 +241,10 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
     throw new Error("No response body available for streaming");
   }
 
-  const fileExtension = getFileExtension(contentType);
+  const normalizedContentType = normalizeContentType(contentType);
+  const fileExtension = getFileExtension(normalizedContentType);
   const fileName = `${prefix}_${uuidv4()}${fileExtension}`;
-  const mediaType = getMediaType(contentType, fileExtension);
+  const mediaType = getMediaType(normalizedContentType, fileExtension);
 
   logger.info(`Streaming upload to Supabase: ${fileName}`, {
     contentType,
@@ -272,7 +277,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
         metadata: {
           bucketName: "post-media",
           objectName: fileName,
-          contentType: contentType,
+          contentType: normalizedContentType,
           cacheControl: "3600",
         },
         chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
