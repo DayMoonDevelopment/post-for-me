@@ -20,15 +20,13 @@ const getSubscriptionItemProduct = async (
 ): Promise<Stripe.Product> => {
   const product = item.price.product;
 
-  if (typeof product === "string") {
-    return stripe.products.retrieve(product);
-  }
+  const retrievedProduct = await stripe.products.retrieve(product);
 
-  if ("deleted" in product && product.deleted) {
+  if ("deleted" in retrievedProduct && retrievedProduct.deleted) {
     throw new Error("Subscription product is deleted");
   }
 
-  return product;
+  return retrievedProduct;
 };
 
 const getSocialPostLimit = async (
@@ -56,7 +54,6 @@ export const incrementTeamUsage = task({
       customer: stripe_customer_id,
       status: "active",
       limit: 1,
-      expand: ["data.items.data.price.product"],
     });
 
     const subscription: Stripe.Subscription | undefined = subscriptions.data[0];
@@ -76,7 +73,9 @@ export const incrementTeamUsage = task({
     const startAt = new Date(
       subscriptionItem.current_period_start * 1000,
     ).toISOString();
-    const endAt = new Date(subscriptionItem.current_period_end * 1000).toISOString();
+    const endAt = new Date(
+      subscriptionItem.current_period_end * 1000,
+    ).toISOString();
 
     const { data: count, error } = await supabaseClient.rpc(
       "increment_team_usage",
