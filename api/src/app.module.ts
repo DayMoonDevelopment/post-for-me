@@ -24,6 +24,7 @@ import { PrivateModule } from './private/private.module';
     SocialPostResultsModule,
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env.local', '.env'],
     }),
     SupabaseModule,
     KyselyModule,

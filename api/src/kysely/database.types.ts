@@ -201,6 +201,25 @@ interface StripeMeterEventsTable {
   synced_at: Timestamptz;
 }
 
+interface StripeSubscriptionSchedulesTable {
+  id: string;
+  customer_id: string | null;
+  subscription_id: string | null;
+  status: string | null;
+  end_behavior: string | null;
+  current_phase_start: TimestamptzNullable;
+  current_phase_end: TimestamptzNullable;
+  released_at: TimestamptzNullable;
+  canceled_at: TimestamptzNullable;
+  completed_at: TimestamptzNullable;
+  released_subscription_id: string | null;
+  metadata: JsonbColumn;
+  stripe_created: TimestamptzNullable;
+  livemode: boolean | null;
+  data: JsonbColumn;
+  synced_at: Timestamptz;
+}
+
 export interface Database {
   'stripe.events': StripeEventsTable;
   'stripe.customers': StripeCustomersTable;
@@ -212,4 +231,5 @@ export interface Database {
   'stripe.charges': StripeChargesTable;
   'stripe.meters': StripeMetersTable;
   'stripe.meter_events': StripeMeterEventsTable;
+  'stripe.subscription_schedules': StripeSubscriptionSchedulesTable;
 }

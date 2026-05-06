@@ -379,6 +379,47 @@ export class StripeSyncService {
       .execute();
   }
 
+  async upsertSubscriptionSchedule(
+    db: SyncDb,
+    schedule: Stripe.SubscriptionSchedule,
+  ): Promise<void> {
+    const customerId =
+      typeof schedule.customer === 'string'
+        ? schedule.customer
+        : (schedule.customer?.id ?? null);
+    const subscriptionId =
+      typeof schedule.subscription === 'string'
+        ? schedule.subscription
+        : (schedule.subscription?.id ?? null);
+    const releasedSubscriptionId =
+      typeof schedule.released_subscription === 'string'
+        ? schedule.released_subscription
+        : null;
+    const now = new Date();
+    const row = {
+      customer_id: customerId,
+      subscription_id: subscriptionId,
+      status: schedule.status,
+      end_behavior: schedule.end_behavior,
+      current_phase_start: this.fromSec(schedule.current_phase?.start_date),
+      current_phase_end: this.fromSec(schedule.current_phase?.end_date),
+      released_at: this.fromSec(schedule.released_at),
+      canceled_at: this.fromSec(schedule.canceled_at),
+      completed_at: this.fromSec(schedule.completed_at),
+      released_subscription_id: releasedSubscriptionId,
+      metadata: this.toJsonb(schedule.metadata ?? {}),
+      stripe_created: this.fromSec(schedule.created),
+      livemode: schedule.livemode,
+      data: this.toJsonb(schedule),
+      synced_at: now,
+    };
+    await db
+      .insertInto('stripe.subscription_schedules')
+      .values({ id: schedule.id, ...row })
+      .onConflict((oc) => oc.column('id').doUpdateSet(row))
+      .execute();
+  }
+
   async applyEvent(db: SyncDb, event: Stripe.Event): Promise<void> {
     const obj = event.data.object as { object?: string };
     switch (obj.object) {
@@ -398,6 +439,12 @@ export class StripeSyncService {
         await this.upsertSubscription(
           db,
           event.data.object as Stripe.Subscription,
+        );
+        break;
+      case 'subscription_schedule':
+        await this.upsertSubscriptionSchedule(
+          db,
+          event.data.object as Stripe.SubscriptionSchedule,
         );
         break;
       case 'invoice':
