@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 
+import type { EventsId } from '../../../kysely/types/stripe/Events';
+
 import { KyselyService } from '../../../kysely/kysely.service';
 
 import { StripeSyncService } from './stripe-sync.service';
@@ -62,9 +64,10 @@ export class StripeWebhookService {
       data: JSON.stringify(event),
     };
 
+    const eventId = event.id as EventsId;
     await db
       .insertInto('stripe.events')
-      .values({ id: event.id, ...eventRow })
+      .values({ id: eventId, ...eventRow })
       .onConflict((oc) => oc.column('id').doUpdateSet(eventRow))
       .execute();
 
@@ -73,7 +76,7 @@ export class StripeWebhookService {
       await db
         .updateTable('stripe.events')
         .set({ processed_at: new Date(), error: null })
-        .where('id', '=', event.id)
+        .where('id', '=', eventId)
         .execute();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -83,7 +86,7 @@ export class StripeWebhookService {
       await db
         .updateTable('stripe.events')
         .set({ error: message })
-        .where('id', '=', event.id)
+        .where('id', '=', eventId)
         .execute();
       throw err;
     }

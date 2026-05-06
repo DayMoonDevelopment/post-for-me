@@ -2,7 +2,20 @@ import { Injectable } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import type Stripe from 'stripe';
 
-import type { Database } from '../../../kysely/database.types';
+import type Database from '../../../kysely/types/Database';
+import type { CustomersId } from '../../../kysely/types/stripe/Customers';
+import type { ProductsId } from '../../../kysely/types/stripe/Products';
+import type { PricesId } from '../../../kysely/types/stripe/Prices';
+import type { SubscriptionsId } from '../../../kysely/types/stripe/Subscriptions';
+import type { SubscriptionItemsId } from '../../../kysely/types/stripe/SubscriptionItems';
+import type { InvoicesId } from '../../../kysely/types/stripe/Invoices';
+import type { ChargesId } from '../../../kysely/types/stripe/Charges';
+import type { MetersId } from '../../../kysely/types/stripe/Meters';
+import type { SubscriptionSchedulesId } from '../../../kysely/types/stripe/SubscriptionSchedules';
+import type {
+  MeterEventsEventName,
+  MeterEventsIdentifier,
+} from '../../../kysely/types/stripe/MeterEvents';
 
 type SyncDb = Kysely<Database>;
 
@@ -28,6 +41,10 @@ export class StripeSyncService {
     return JSON.stringify(value ?? null);
   }
 
+  private toBigintStr(n: number | null | undefined): string | null {
+    return n == null ? null : String(n);
+  }
+
   async upsertCustomer(
     db: SyncDb,
     customer: Stripe.Customer | Stripe.DeletedCustomer,
@@ -36,7 +53,7 @@ export class StripeSyncService {
       await db
         .updateTable('stripe.customers')
         .set({ deleted_at: new Date() })
-        .where('id', '=', customer.id)
+        .where('id', '=', customer.id as CustomersId)
         .execute();
       return;
     }
@@ -45,7 +62,7 @@ export class StripeSyncService {
     await db
       .insertInto('stripe.customers')
       .values({
-        id: c.id,
+        id: c.id as CustomersId,
         email: c.email,
         name: c.name,
         description: c.description,
@@ -81,7 +98,7 @@ export class StripeSyncService {
       await db
         .updateTable('stripe.products')
         .set({ deleted_at: new Date() })
-        .where('id', '=', product.id)
+        .where('id', '=', product.id as ProductsId)
         .execute();
       return;
     }
@@ -99,7 +116,7 @@ export class StripeSyncService {
     };
     await db
       .insertInto('stripe.products')
-      .values({ id: product.id, ...row })
+      .values({ id: product.id as ProductsId, ...row })
       .onConflict((oc) => oc.column('id').doUpdateSet(row))
       .execute();
   }
@@ -109,7 +126,7 @@ export class StripeSyncService {
       await db
         .updateTable('stripe.prices')
         .set({ deleted_at: new Date() })
-        .where('id', '=', price.id)
+        .where('id', '=', price.id as PricesId)
         .execute();
       return;
     }
@@ -120,7 +137,7 @@ export class StripeSyncService {
       product_id: productId ?? null,
       active: price.active,
       currency: price.currency,
-      unit_amount: price.unit_amount,
+      unit_amount: this.toBigintStr(price.unit_amount),
       type: price.type,
       recurring_interval: price.recurring?.interval ?? null,
       recurring_interval_count: price.recurring?.interval_count ?? null,
@@ -134,7 +151,7 @@ export class StripeSyncService {
     };
     await db
       .insertInto('stripe.prices')
-      .values({ id: price.id, ...row })
+      .values({ id: price.id as PricesId, ...row })
       .onConflict((oc) => oc.column('id').doUpdateSet(row))
       .execute();
   }
@@ -183,7 +200,7 @@ export class StripeSyncService {
     await db.transaction().execute(async (trx) => {
       await trx
         .insertInto('stripe.subscriptions')
-        .values({ id: subscription.id, ...row })
+        .values({ id: subscription.id as SubscriptionsId, ...row })
         .onConflict((oc) => oc.column('id').doUpdateSet(row))
         .execute();
 
@@ -191,7 +208,11 @@ export class StripeSyncService {
         .deleteFrom('stripe.subscription_items')
         .where('subscription_id', '=', subscription.id);
       if (itemIds.length > 0) {
-        deleteQuery = deleteQuery.where('id', 'not in', itemIds);
+        deleteQuery = deleteQuery.where(
+          'id',
+          'not in',
+          itemIds as SubscriptionItemsId[],
+        );
       }
       await deleteQuery.execute();
 
@@ -199,7 +220,7 @@ export class StripeSyncService {
         const itemRow = {
           subscription_id: subscription.id,
           price_id: item.price?.id ?? null,
-          quantity: item.quantity ?? null,
+          quantity: this.toBigintStr(item.quantity),
           metadata: this.toJsonb(item.metadata ?? {}),
           stripe_created: this.fromSec(item.created),
           data: this.toJsonb(item),
@@ -207,7 +228,7 @@ export class StripeSyncService {
         };
         await trx
           .insertInto('stripe.subscription_items')
-          .values({ id: item.id, ...itemRow })
+          .values({ id: item.id as SubscriptionItemsId, ...itemRow })
           .onConflict((oc) => oc.column('id').doUpdateSet(itemRow))
           .execute();
       }
@@ -240,11 +261,11 @@ export class StripeSyncService {
       status: invoice.status,
       number: invoice.number,
       currency: invoice.currency,
-      amount_due: invoice.amount_due,
-      amount_paid: invoice.amount_paid,
-      amount_remaining: invoice.amount_remaining,
-      total: invoice.total,
-      subtotal: invoice.subtotal,
+      amount_due: this.toBigintStr(invoice.amount_due),
+      amount_paid: this.toBigintStr(invoice.amount_paid),
+      amount_remaining: this.toBigintStr(invoice.amount_remaining),
+      total: this.toBigintStr(invoice.total),
+      subtotal: this.toBigintStr(invoice.subtotal),
       hosted_invoice_url: invoice.hosted_invoice_url,
       invoice_pdf: invoice.invoice_pdf,
       due_date: this.fromSec(invoice.due_date),
@@ -261,7 +282,7 @@ export class StripeSyncService {
     };
     await db
       .insertInto('stripe.invoices')
-      .values({ id: invoice.id!, ...row })
+      .values({ id: invoice.id! as InvoicesId, ...row })
       .onConflict((oc) => oc.column('id').doUpdateSet(row))
       .execute();
   }
@@ -290,9 +311,9 @@ export class StripeSyncService {
       invoice_id: invoiceId,
       payment_intent_id: paymentIntentId,
       status: charge.status,
-      amount: charge.amount,
-      amount_captured: charge.amount_captured,
-      amount_refunded: charge.amount_refunded,
+      amount: this.toBigintStr(charge.amount),
+      amount_captured: this.toBigintStr(charge.amount_captured),
+      amount_refunded: this.toBigintStr(charge.amount_refunded),
       currency: charge.currency,
       paid: charge.paid,
       refunded: charge.refunded,
@@ -309,7 +330,7 @@ export class StripeSyncService {
     };
     await db
       .insertInto('stripe.charges')
-      .values({ id: charge.id, ...row })
+      .values({ id: charge.id as ChargesId, ...row })
       .onConflict((oc) => oc.column('id').doUpdateSet(row))
       .execute();
   }
@@ -336,7 +357,7 @@ export class StripeSyncService {
     };
     await db
       .insertInto('stripe.meters')
-      .values({ id: meter.id, ...row })
+      .values({ id: meter.id as MetersId, ...row })
       .onConflict((oc) => oc.column('id').doUpdateSet(row))
       .execute();
   }
@@ -355,10 +376,11 @@ export class StripeSyncService {
     const now = new Date();
     const row = {
       customer_id: customerId,
-      value:
+      value: this.toBigintStr(
         numericValue !== null && Number.isFinite(numericValue)
           ? numericValue
           : null,
+      ),
       payload: this.toJsonb(payload),
       event_timestamp: this.fromSec(meterEvent.timestamp)!,
       stripe_created: this.fromSec(meterEvent.created),
@@ -369,8 +391,8 @@ export class StripeSyncService {
     await db
       .insertInto('stripe.meter_events')
       .values({
-        event_name: meterEvent.event_name,
-        identifier: meterEvent.identifier,
+        event_name: meterEvent.event_name as MeterEventsEventName,
+        identifier: meterEvent.identifier as MeterEventsIdentifier,
         ...row,
       })
       .onConflict((oc) =>
@@ -415,7 +437,7 @@ export class StripeSyncService {
     };
     await db
       .insertInto('stripe.subscription_schedules')
-      .values({ id: schedule.id, ...row })
+      .values({ id: schedule.id as SubscriptionSchedulesId, ...row })
       .onConflict((oc) => oc.column('id').doUpdateSet(row))
       .execute();
   }

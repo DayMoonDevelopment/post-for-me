@@ -9,14 +9,12 @@ import {
   Req,
   VERSION_NEUTRAL,
 } from '@nestjs/common';
-import { ApiExcludeController } from '@nestjs/swagger';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 
 import { StripeWebhookService } from './stripe.service';
 
 @Controller({ version: VERSION_NEUTRAL })
-@ApiExcludeController()
 export class StripeWebhookController {
   private readonly logger = new Logger(StripeWebhookController.name);
 

@@ -8,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 
-import type { Database } from './database.types';
+import type Database from './types/Database';
 
 /**
  * Provides a Kysely instance backed by a `pg` connection pool. Used by areas

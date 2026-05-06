@@ -6,10 +6,10 @@ import { StripeWebhookModule } from './webhooks/stripe/stripe.module';
 
 /**
  * PrivateModule — aggregates internal, non-customer-facing sub-modules and
- * mounts them under the `/private/*` URL prefix. Controllers stay out of the
- * public OpenAPI document via `@ApiExcludeController()`. Auth is per-route:
- * Unkey RBAC for service-to-service calls, Stripe signature verification for
- * webhooks, etc.
+ * mounts them under the `/private/*` URL prefix. The whole module is omitted
+ * from the public OpenAPI document by `SwaggerModule.createDocument`'s
+ * `include` list in `main.ts`. Auth is per-route: Unkey RBAC for
+ * service-to-service calls, Stripe signature verification for webhooks, etc.
  *
  * Add future private sub-modules by (a) importing them here and (b) adding
  * them as `children` on the `private` route below.

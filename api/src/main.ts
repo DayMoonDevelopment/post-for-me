@@ -5,6 +5,14 @@ import { apiReference } from '@scalar/nestjs-api-reference';
 
 import { AppModule } from './app.module';
 
+import { MediaModule } from './media/media.module';
+import { SocialPostsModule } from './social-posts/social-posts.module';
+import { SocialPostResultsModule } from './social-post-results/social-post-results.module';
+import { SocialAccountsModule } from './social-provider-connections/social-provider-connections.module';
+import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
+import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+
 import { mediaControllerDescription } from './media/docs/media-controller.md';
 import { postsControllerDescription } from './social-posts/docs/posts-controller.md';
 import { socialAccountsControllerDescription } from './social-provider-connections/docs/social-accounts-controller';
@@ -45,7 +53,17 @@ async function bootstrap() {
     .setTermsOfService('https://www.postforme.dev/terms')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config, {
+    include: [
+      MediaModule,
+      SocialPostsModule,
+      SocialPostResultsModule,
+      SocialAccountsModule,
+      SocialAccountFeedsModule,
+      WebhooksModule,
+      SocialPostPreviewsModule,
+    ],
+  });
 
   SwaggerModule.setup('swagger', app, document);
 

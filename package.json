@@ -24,7 +24,9 @@
   "devDependencies": {
     "@trigger.dev/build": "4.3.0",
     "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/pg": "^8.20.0",
     "eslint-plugin-react": "^7.37.5",
+    "pg": "^8.20.0",
     "supabase": "^2.30.4",
     "typescript-eslint": "^8.33.0"
   },
@@ -34,8 +36,9 @@
     "dev": "bun run dev:api & bun run dev:dashboard & bunx trigger.dev@latest dev",
     "dev:api": "bun run --filter=@post-for-me/api start:dev",
     "dev:dashboard": "bun run --filter=@post-for-me/dashboard dev",
-    "dev:init": "supabase db reset && bun supabase:typegen",
+    "dev:init": "supabase db reset && bun supabase:typegen && bun kysely:typegen",
     "dev:trigger": "bunx trigger.dev@4.3.0 dev",
+    "kysely:typegen": "bun run --filter=@post-for-me/api typegen",
     "lint": "bun run --filter=\"*\" lint",
     "supabase:typegen": "supabase gen types typescript --local > ./supabase/supabase.types.ts",
     "typecheck": "bun run --filter=\"*\" typecheck"

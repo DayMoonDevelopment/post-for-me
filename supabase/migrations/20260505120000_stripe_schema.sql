@@ -1,13 +1,8 @@
-------------------------------- 0. SCHEMA & GRANTS ---------------
+------------------------------- 0. SCHEMA ------------------------
+-- The stripe schema is accessed exclusively via the direct database
+-- connection (Kysely). No grants are issued to anon/authenticated/service_role
+-- because none of the Supabase roles should ever read or write here.
 create schema if not exists stripe;
-
-grant usage on schema stripe to anon, authenticated, service_role;
-grant all on all tables in schema stripe to anon, authenticated, service_role;
-grant all on all routines in schema stripe to anon, authenticated, service_role;
-grant all on all sequences in schema stripe to anon, authenticated, service_role;
-alter default privileges for role postgres in schema stripe grant all on tables to anon, authenticated, service_role;
-alter default privileges for role postgres in schema stripe grant all on routines to anon, authenticated, service_role;
-alter default privileges for role postgres in schema stripe grant all on sequences to anon, authenticated, service_role;
 
 ------------------------------- 1. RAW EVENTS LOG ----------------
 create table stripe.events (
@@ -236,9 +231,47 @@ create table stripe.meter_events (
 create index stripe_meter_events_customer_idx on stripe.meter_events (customer_id);
 create index stripe_meter_events_timestamp_idx on stripe.meter_events (event_timestamp desc);
 
-------------------------------- 11. RLS --------------------------
--- Stripe data is internal/admin-only. Lock down everything; only service_role
--- (which bypasses RLS) and direct DB access can read or write.
+------------------------------- 11. SUBSCRIPTION SCHEDULES -------
+-- Mirrors Stripe subscription schedules. We need these locally so the
+-- excess-use report can answer "is this team's upgrade scheduled, and to
+-- what plan?" without a live Stripe round-trip per row.
+--
+-- `phases` lives inside `data jsonb` only — phases are small (typically
+-- 2 entries: current and next), and the report walks them in app code.
+-- If we ever need to filter/index on phase contents we can promote a
+-- separate stripe.subscription_schedule_phases table later.
+create table stripe.subscription_schedules (
+  id                       text primary key,
+  -- See note in stripe.prices: mirror tables intentionally have no FKs
+  -- to the rest of the stripe schema. We index for joins instead.
+  customer_id              text,
+  subscription_id          text,
+  status                   text,
+  end_behavior             text,
+  current_phase_start      timestamptz,
+  current_phase_end        timestamptz,
+  released_at              timestamptz,
+  canceled_at              timestamptz,
+  completed_at             timestamptz,
+  released_subscription_id text,
+  metadata                 jsonb,
+  stripe_created           timestamptz,
+  livemode                 boolean,
+  data                     jsonb not null,
+  synced_at                timestamptz not null default now()
+);
+
+create index stripe_subscription_schedules_customer_idx
+  on stripe.subscription_schedules (customer_id);
+create index stripe_subscription_schedules_subscription_idx
+  on stripe.subscription_schedules (subscription_id);
+create index stripe_subscription_schedules_status_idx
+  on stripe.subscription_schedules (status);
+
+------------------------------- 12. RLS --------------------------
+-- Stripe data is accessed exclusively via the direct database connection,
+-- never through PostgREST. We enable RLS on every table without granting
+-- any policies so that anon/authenticated/service_role have no access.
 alter table stripe.events enable row level security;
 alter table stripe.customers enable row level security;
 alter table stripe.products enable row level security;
@@ -249,3 +282,4 @@ alter table stripe.invoices enable row level security;
 alter table stripe.charges enable row level security;
 alter table stripe.meters enable row level security;
 alter table stripe.meter_events enable row level security;
+alter table stripe.subscription_schedules enable row level security;
