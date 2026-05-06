@@ -19,7 +19,11 @@ import { socialPostPreviewControllerDescription } from './social-posts-previews/
 import { socialAccountFeedsControllerDescription } from './social-account-feeds/docs/social-account-feeds-controller.md';
 
 async function bootstrap() {
-  const app: NestExpressApplication = await NestFactory.create(AppModule);
+  const app: NestExpressApplication = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
+
+  app.enableShutdownHooks();
 
   app.enableVersioning({
     type: VersioningType.URI,

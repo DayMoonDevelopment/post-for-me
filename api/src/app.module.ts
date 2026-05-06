@@ -8,6 +8,7 @@ import { SocialPostResultsModule } from './social-post-results/social-post-resul
 import { SocialAccountsModule } from './social-provider-connections/social-provider-connections.module';
 
 import { SupabaseModule } from './supabase/supabase.module';
+import { KyselyModule } from './kysely/kysely.module';
 import { AuthGuard } from './auth/auth.guard';
 import { VerifyKeyGuard } from './auth/verify-key.guard';
 import { UnkeyModule } from './unkey/unkey.module';
@@ -25,6 +26,7 @@ import { PrivateModule } from './private/private.module';
       isGlobal: true,
     }),
     SupabaseModule,
+    KyselyModule,
     UnkeyModule,
     SocialAccountsModule,
     SocialPostPreviewsModule,
