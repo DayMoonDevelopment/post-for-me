@@ -203,9 +203,7 @@ const getProductIdFromPrice = async (
   return product?.id ?? null;
 };
 
-const getExceededUsageWindows = async (): Promise<
-  ExceededUsageWindow[]
-> => {
+const getExceededUsageWindows = async (): Promise<ExceededUsageWindow[]> => {
   const { data, error } = await supabaseClient.rpc(
     "get_exceeded_team_usage_windows",
   );
@@ -217,10 +215,10 @@ const getExceededUsageWindows = async (): Promise<
   return data ?? [];
 };
 
-const getPreviousUsageWindow = async (
+const hasExceededPreviouseLimit = async (
   teamId: string,
   currentWindow: TeamUsageWindow,
-): Promise<TeamUsageWindow | null> => {
+): Promise<boolean> => {
   const { data, error } = await supabaseClient
     .from("social_post_team_usage")
     .select("team_id, count, limit, start_at, end_at")
@@ -232,10 +230,15 @@ const getPreviousUsageWindow = async (
     .maybeSingle();
 
   if (error) {
-    throw error;
+    logger.error("Unable to get previouse usage window");
+    return false;
   }
 
-  return data ?? null;
+  if (!data) {
+    return false;
+  }
+
+  return data.count > data.limit;
 };
 
 const hasUsageNotificationForPeriod = async (
@@ -323,10 +326,19 @@ const getActiveScheduleForSubscription = async (
   const activeSchedules = await stripe.subscriptionSchedules.list({
     customer: stripeCustomerId,
   });
+  const todayUnix = Math.floor(Date.now() / 1000);
 
   return (
     activeSchedules.data.find((entry: Stripe.SubscriptionSchedule) => {
       if (entry.status !== "active") {
+        return false;
+      }
+
+      const hasNextPhaseInFuture = entry.phases.some(
+        (phase) => phase.start_date > todayUnix,
+      );
+
+      if (!hasNextPhaseInFuture) {
         return false;
       }
 
@@ -493,6 +505,17 @@ export const processUsageLimits = schedules.task({
           team_name: teamName,
         } = usageWindow;
 
+        logger.info("Processing exceeded usage window", {
+          team_id: teamId,
+          team_name: teamName,
+          stripe_customer_id: stripeCustomerId,
+          usage_window_start_at: usageWindow.start_at,
+          usage_window_end_at: usageWindow.end_at,
+          usage_count: usage,
+          usage_limit: currentLimit,
+          dry_run: PROCESS_USAGE_LIMITS_DRY_RUN,
+        });
+
         try {
           if (!stripeCustomerId) {
             logger.info("Skipping team without Stripe customer", {
@@ -501,13 +524,10 @@ export const processUsageLimits = schedules.task({
             continue;
           }
 
-          const previousUsageWindow = await getPreviousUsageWindow(
+          const exceededPreviousLimit = await hasExceededPreviouseLimit(
             teamId,
             usageWindow,
           );
-          const previousLimit = previousUsageWindow?.limit ?? null;
-          const exceededPreviousLimit =
-            previousLimit !== null && usage > previousLimit;
 
           const subscriptions = await stripe.subscriptions.list({
             customer: stripeCustomerId,
@@ -655,6 +675,7 @@ export const processUsageLimits = schedules.task({
               team_id: teamId,
               subscription_id: subscription.id,
               schedule_id: activeSchedule.id,
+              activeSchedule,
             });
 
             continue;
