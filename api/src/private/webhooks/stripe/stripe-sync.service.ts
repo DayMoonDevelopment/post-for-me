@@ -12,10 +12,6 @@ import type { InvoicesId } from '../../../kysely/types/stripe/invoices';
 import type { ChargesId } from '../../../kysely/types/stripe/charges';
 import type { MetersId } from '../../../kysely/types/stripe/meters';
 import type { SubscriptionSchedulesId } from '../../../kysely/types/stripe/subscription-schedules';
-import type {
-  MeterEventsEventName,
-  MeterEventsIdentifier,
-} from '../../../kysely/types/stripe/meter-events';
 
 type SyncDb = Kysely<Database>;
 
@@ -372,46 +368,6 @@ export class StripeSyncService {
       .execute();
   }
 
-  async upsertMeterEvent(
-    db: SyncDb,
-    meterEvent: Stripe.Billing.MeterEvent,
-  ): Promise<void> {
-    const payload = (meterEvent.payload ?? {}) as Record<string, string>;
-    const customerId = payload.stripe_customer_id ?? null;
-    // Column is `numeric` — pass the raw string straight through so values
-    // beyond 2^53 (byte counts, microsecond timestamps) keep full precision.
-    // Number() would round; we only use it to validate finiteness.
-    const rawValue = payload.value;
-    const valueStr =
-      typeof rawValue === 'string' &&
-      rawValue !== '' &&
-      /^-?\d+(\.\d+)?$/.test(rawValue.trim())
-        ? rawValue.trim()
-        : null;
-    const now = new Date();
-    const row = {
-      customer_id: customerId,
-      value: valueStr,
-      payload: this.toJsonb(payload),
-      event_timestamp: this.fromSec(meterEvent.timestamp)!,
-      stripe_created: this.fromSec(meterEvent.created),
-      livemode: meterEvent.livemode,
-      data: this.toJsonb(meterEvent),
-      synced_at: now,
-    };
-    await db
-      .insertInto('stripe.meter_events')
-      .values({
-        event_name: meterEvent.event_name as MeterEventsEventName,
-        identifier: meterEvent.identifier as MeterEventsIdentifier,
-        ...row,
-      })
-      .onConflict((oc) =>
-        oc.columns(['event_name', 'identifier']).doUpdateSet(row),
-      )
-      .execute();
-  }
-
   async upsertSubscriptionSchedule(
     db: SyncDb,
     schedule: Stripe.SubscriptionSchedule,
@@ -488,12 +444,6 @@ export class StripeSyncService {
         break;
       case 'billing.meter':
         await this.upsertMeter(db, event.data.object as Stripe.Billing.Meter);
-        break;
-      case 'billing.meter_event':
-        await this.upsertMeterEvent(
-          db,
-          event.data.object as unknown as Stripe.Billing.MeterEvent,
-        );
         break;
       default:
         // No-op: events for objects we don't mirror are ignored. Stripe

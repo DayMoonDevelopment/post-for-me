@@ -6,7 +6,6 @@ import type { default as PricesTable } from './prices';
 import type { default as ChargesTable } from './charges';
 import type { default as MetersTable } from './meters';
 import type { default as CustomersTable } from './customers';
-import type { default as MeterEventsTable } from './meter-events';
 import type { default as SubscriptionsTable } from './subscriptions';
 
 export default interface StripeSchema {
@@ -25,8 +24,6 @@ export default interface StripeSchema {
   'stripe.meters': MetersTable;
 
   'stripe.customers': CustomersTable;
-
-  'stripe.meter_events': MeterEventsTable;
 
   'stripe.subscriptions': SubscriptionsTable;
 }

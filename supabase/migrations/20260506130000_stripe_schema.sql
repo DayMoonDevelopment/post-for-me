@@ -194,30 +194,7 @@ create table stripe.meters (
 create index stripe_meters_event_name_idx on stripe.meters (event_name);
 create index stripe_meters_status_idx on stripe.meters (status);
 
-------------------------------- 9. METER EVENTS -----------------
--- meter events are append-only usage records. Stripe identifies them by
--- (event_name, identifier) where `identifier` is the caller's idempotency
--- key. They typically don't flow through webhooks at high volume — the
--- application path also calls `upsertMeterEvent` directly when it sends
--- usage to Stripe so we capture a local copy.
-create table stripe.meter_events (
-  event_name      text not null,
-  identifier      text not null,
-  customer_id     text,
-  value           numeric,
-  payload         jsonb not null,
-  event_timestamp timestamptz not null,
-  stripe_created  timestamptz,
-  livemode        boolean,
-  data            jsonb not null,
-  synced_at       timestamptz not null default now(),
-  primary key (event_name, identifier)
-);
-
-create index stripe_meter_events_customer_idx on stripe.meter_events (customer_id);
-create index stripe_meter_events_timestamp_idx on stripe.meter_events (event_timestamp desc);
-
-------------------------------- 10. SUBSCRIPTION SCHEDULES ------
+------------------------------- 9. SUBSCRIPTION SCHEDULES ------
 -- Mirrors Stripe subscription schedules. We need these locally so the
 -- excess-use report can answer "is this team's upgrade scheduled, and to
 -- what plan?" without a live Stripe round-trip per row.
@@ -254,7 +231,7 @@ create index stripe_subscription_schedules_subscription_idx
 create index stripe_subscription_schedules_status_idx
   on stripe.subscription_schedules (status);
 
-------------------------------- 11. RLS --------------------------
+------------------------------- 10. RLS --------------------------
 -- Stripe data is accessed exclusively via the direct database connection,
 -- never through PostgREST. We enable RLS on every table without granting
 -- any policies so that anon/authenticated/service_role have no access.
@@ -266,5 +243,4 @@ alter table stripe.subscription_items enable row level security;
 alter table stripe.invoices enable row level security;
 alter table stripe.charges enable row level security;
 alter table stripe.meters enable row level security;
-alter table stripe.meter_events enable row level security;
 alter table stripe.subscription_schedules enable row level security;
