@@ -50,7 +50,7 @@ const triggerTeamNotification = async (
     team_id: teamId,
     project_id: null,
     notification_type: "usage_alert",
-    delivery_type: "email",
+    delivery_types: ["email"],
     message,
     meta_data: metadata,
     created_at: new Date().toISOString(),
@@ -296,18 +296,6 @@ const maybeTriggerUsageNotification = async ({
       });
       return false;
     }
-  }
-
-  if (dryRun) {
-    logger.info("Dry run: would trigger usage notification", {
-      team_id: teamId,
-      period_start: periodStart,
-      period_end: periodEnd,
-      message,
-      metadata,
-      dry_run: true,
-    });
-    return true;
   }
 
   logger.info("Triggering usage notification", {
