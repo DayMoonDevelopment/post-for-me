@@ -37,12 +37,8 @@ const PROCESS_USAGE_LIMITS_DRY_RUN =
 
 type TeamUsageWindow =
   Database["public"]["Tables"]["social_post_team_usage"]["Row"];
-type TeamUsageWindowWithTeam = TeamUsageWindow & {
-  teams: {
-    stripe_customer_id: string | null;
-    name: string;
-  } | null;
-};
+type ExceededUsageWindow =
+  Database["public"]["Functions"]["get_exceeded_team_usage_windows"]["Returns"][number];
 
 const triggerTeamNotification = async (
   teamId: string,
@@ -208,18 +204,11 @@ const getProductIdFromPrice = async (
 };
 
 const getExceededUsageWindows = async (): Promise<
-  TeamUsageWindowWithTeam[]
+  ExceededUsageWindow[]
 > => {
-  const nowIso = new Date().toISOString();
-
-  const { data, error } = await supabaseClient
-    .from("social_post_team_usage")
-    .select(
-      "team_id, count, limit, start_at, end_at, teams!inner(stripe_customer_id,name)",
-    )
-    .filter("count", "gt", "limit")
-    .lte("start_at", nowIso)
-    .gt("end_at", nowIso);
+  const { data, error } = await supabaseClient.rpc(
+    "get_exceeded_team_usage_windows",
+  );
 
   if (error) {
     throw error;
@@ -500,12 +489,11 @@ export const processUsageLimits = schedules.task({
           team_id: teamId,
           count: usage,
           limit: currentLimit,
-          teams,
+          stripe_customer_id: stripeCustomerId,
+          team_name: teamName,
         } = usageWindow;
 
         try {
-          const stripeCustomerId = teams?.stripe_customer_id ?? null;
-
           if (!stripeCustomerId) {
             logger.info("Skipping team without Stripe customer", {
               team_id: teamId,
@@ -586,7 +574,7 @@ export const processUsageLimits = schedules.task({
               loops: {
                 transactional_id: transactionalEmailId,
                 data: {
-                  team_name: teams?.name ?? null,
+                  team_name: teamName,
                   current_plan_post_limit: planInfo.postLimit,
                   current_plan_name: planInfo.planName,
                   suggested_plan_name: suggestedTier?.name ?? null,
