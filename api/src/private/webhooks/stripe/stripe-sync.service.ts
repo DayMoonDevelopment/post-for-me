@@ -164,18 +164,28 @@ export class StripeSyncService {
       typeof subscription.customer === 'string'
         ? subscription.customer
         : (subscription.customer?.id ?? null);
+    // Stripe SDK v18 (API version 2025-08-27.basil) moved current_period_*
+    // off Subscription onto each SubscriptionItem. Items in a single
+    // subscription share the same period, so we read it from the first
+    // item. Older SDK responses still carry the field at the top level —
+    // fall back so a mid-flight upgrade doesn't drop the column.
+    const firstItem = subscription.items?.data?.[0] as
+      | { current_period_start?: number; current_period_end?: number }
+      | undefined;
+    const legacy = subscription as unknown as {
+      current_period_start?: number;
+      current_period_end?: number;
+    };
     const now = new Date();
     const row = {
       customer_id: customerId,
       status: subscription.status,
       cancel_at_period_end: subscription.cancel_at_period_end,
       current_period_start: this.fromSec(
-        (subscription as unknown as { current_period_start?: number })
-          .current_period_start,
+        firstItem?.current_period_start ?? legacy.current_period_start,
       ),
       current_period_end: this.fromSec(
-        (subscription as unknown as { current_period_end?: number })
-          .current_period_end,
+        firstItem?.current_period_end ?? legacy.current_period_end,
       ),
       cancel_at: this.fromSec(subscription.cancel_at),
       canceled_at: this.fromSec(subscription.canceled_at),
@@ -368,19 +378,20 @@ export class StripeSyncService {
   ): Promise<void> {
     const payload = (meterEvent.payload ?? {}) as Record<string, string>;
     const customerId = payload.stripe_customer_id ?? null;
+    // Column is `numeric` — pass the raw string straight through so values
+    // beyond 2^53 (byte counts, microsecond timestamps) keep full precision.
+    // Number() would round; we only use it to validate finiteness.
     const rawValue = payload.value;
-    const numericValue =
-      rawValue !== undefined && rawValue !== null && rawValue !== ''
-        ? Number(rawValue)
+    const valueStr =
+      typeof rawValue === 'string' &&
+      rawValue !== '' &&
+      /^-?\d+(\.\d+)?$/.test(rawValue.trim())
+        ? rawValue.trim()
         : null;
     const now = new Date();
     const row = {
       customer_id: customerId,
-      value: this.toBigintStr(
-        numericValue !== null && Number.isFinite(numericValue)
-          ? numericValue
-          : null,
-      ),
+      value: valueStr,
       payload: this.toJsonb(payload),
       event_timestamp: this.fromSec(meterEvent.timestamp)!,
       stripe_created: this.fromSec(meterEvent.created),
@@ -485,8 +496,8 @@ export class StripeSyncService {
         );
         break;
       default:
-        // No-op: events for objects we don't sync are still recorded in
-        // stripe.events for auditing, but require no schema mutation.
+        // No-op: events for objects we don't mirror are ignored. Stripe
+        // Dashboard remains the audit log for all events.
         break;
     }
   }

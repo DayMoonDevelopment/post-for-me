@@ -31,7 +31,16 @@ export class KyselyService implements OnModuleInit, OnApplicationShutdown {
       throw new Error('DATABASE_URL is not defined');
     }
 
-    this.pool = new Pool({ connectionString: url });
+    this.pool = new Pool({
+      connectionString: url,
+      max: 10,
+      idleTimeoutMillis: 30_000,
+      // Hard cap on any single statement — webhook handlers and the
+      // excess-use report don't run anything that should take longer.
+      // Without this, a runaway query can pin a connection until pg's
+      // default (none) kicks in.
+      statement_timeout: 10_000,
+    });
     this.db = new Kysely<Database>({
       dialect: new PostgresDialect({ pool: this.pool }),
     });

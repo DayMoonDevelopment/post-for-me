@@ -4,26 +4,12 @@
 -- because none of the Supabase roles should ever read or write here.
 create schema if not exists stripe;
 
-------------------------------- 1. RAW EVENTS LOG ----------------
-create table stripe.events (
-  id            text primary key,
-  type          text not null,
-  api_version   text,
-  livemode      boolean,
-  request_id    text,
-  idempotency_key text,
-  stripe_created timestamptz,
-  received_at   timestamptz not null default now(),
-  processed_at  timestamptz,
-  error         text,
-  data          jsonb not null
-);
+-- The stripe schema is a current-state mirror of Stripe's API; we don't
+-- persist webhook events. Stripe Dashboard already has an event log, and
+-- the upserts below are inherently idempotent on replay. If the mirror
+-- gets out of sync, the canonical recovery is `bun run stripe:sync`.
 
-create index stripe_events_type_idx on stripe.events (type);
-create index stripe_events_received_at_idx on stripe.events (received_at desc);
-create index stripe_events_processed_at_idx on stripe.events (processed_at);
-
-------------------------------- 2. CUSTOMERS ---------------------
+------------------------------- 1. CUSTOMERS ---------------------
 create table stripe.customers (
   id           text primary key,
   email        text,
@@ -41,7 +27,7 @@ create table stripe.customers (
 
 create index stripe_customers_email_idx on stripe.customers (email);
 
-------------------------------- 3. PRODUCTS ----------------------
+------------------------------- 2. PRODUCTS ----------------------
 create table stripe.products (
   id           text primary key,
   active       boolean,
@@ -57,7 +43,7 @@ create table stripe.products (
 
 create index stripe_products_active_idx on stripe.products (active);
 
-------------------------------- 4. PRICES ------------------------
+------------------------------- 3. PRICES ------------------------
 create table stripe.prices (
   id            text primary key,
   -- product_id, customer_id, etc. are intentionally NOT foreign keys.
@@ -85,7 +71,7 @@ create table stripe.prices (
 create index stripe_prices_product_idx on stripe.prices (product_id);
 create index stripe_prices_active_idx on stripe.prices (active);
 
-------------------------------- 5. SUBSCRIPTIONS ------------------
+------------------------------- 4. SUBSCRIPTIONS ------------------
 create table stripe.subscriptions (
   id              text primary key,
   customer_id     text,
@@ -111,7 +97,7 @@ create table stripe.subscriptions (
 create index stripe_subscriptions_customer_idx on stripe.subscriptions (customer_id);
 create index stripe_subscriptions_status_idx on stripe.subscriptions (status);
 
-------------------------------- 6. SUBSCRIPTION ITEMS -------------
+------------------------------- 5. SUBSCRIPTION ITEMS -------------
 create table stripe.subscription_items (
   id              text primary key,
   subscription_id text not null,
@@ -126,7 +112,7 @@ create table stripe.subscription_items (
 create index stripe_subscription_items_subscription_idx on stripe.subscription_items (subscription_id);
 create index stripe_subscription_items_price_idx on stripe.subscription_items (price_id);
 
-------------------------------- 7. INVOICES ----------------------
+------------------------------- 6. INVOICES ----------------------
 create table stripe.invoices (
   id                text primary key,
   customer_id       text,
@@ -158,7 +144,7 @@ create index stripe_invoices_customer_idx on stripe.invoices (customer_id);
 create index stripe_invoices_subscription_idx on stripe.invoices (subscription_id);
 create index stripe_invoices_status_idx on stripe.invoices (status);
 
-------------------------------- 8. CHARGES -----------------------
+------------------------------- 7. CHARGES -----------------------
 create table stripe.charges (
   id              text primary key,
   customer_id     text,
@@ -187,7 +173,7 @@ create index stripe_charges_customer_idx on stripe.charges (customer_id);
 create index stripe_charges_invoice_idx on stripe.charges (invoice_id);
 create index stripe_charges_status_idx on stripe.charges (status);
 
-------------------------------- 9. METERS ------------------------
+------------------------------- 8. METERS ------------------------
 create table stripe.meters (
   id              text primary key,
   display_name    text,
@@ -208,7 +194,7 @@ create table stripe.meters (
 create index stripe_meters_event_name_idx on stripe.meters (event_name);
 create index stripe_meters_status_idx on stripe.meters (status);
 
-------------------------------- 10. METER EVENTS -----------------
+------------------------------- 9. METER EVENTS -----------------
 -- meter events are append-only usage records. Stripe identifies them by
 -- (event_name, identifier) where `identifier` is the caller's idempotency
 -- key. They typically don't flow through webhooks at high volume — the
@@ -231,7 +217,7 @@ create table stripe.meter_events (
 create index stripe_meter_events_customer_idx on stripe.meter_events (customer_id);
 create index stripe_meter_events_timestamp_idx on stripe.meter_events (event_timestamp desc);
 
-------------------------------- 11. SUBSCRIPTION SCHEDULES -------
+------------------------------- 10. SUBSCRIPTION SCHEDULES ------
 -- Mirrors Stripe subscription schedules. We need these locally so the
 -- excess-use report can answer "is this team's upgrade scheduled, and to
 -- what plan?" without a live Stripe round-trip per row.
@@ -268,11 +254,10 @@ create index stripe_subscription_schedules_subscription_idx
 create index stripe_subscription_schedules_status_idx
   on stripe.subscription_schedules (status);
 
-------------------------------- 12. RLS --------------------------
+------------------------------- 11. RLS --------------------------
 -- Stripe data is accessed exclusively via the direct database connection,
 -- never through PostgREST. We enable RLS on every table without granting
 -- any policies so that anon/authenticated/service_role have no access.
-alter table stripe.events enable row level security;
 alter table stripe.customers enable row level security;
 alter table stripe.products enable row level security;
 alter table stripe.prices enable row level security;

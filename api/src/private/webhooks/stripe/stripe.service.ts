@@ -2,8 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 
-import type { EventsId } from '../../../kysely/types/stripe/Events';
-
 import { KyselyService } from '../../../kysely/kysely.service';
 
 import { StripeSyncService } from './stripe-sync.service';
@@ -31,7 +29,13 @@ export class StripeWebhookService {
       throw new Error('STRIPE_WEBHOOK_SECRET is not defined');
     }
 
-    this.stripe = new Stripe(secretKey, { typescript: true });
+    // Pin the API version explicitly so SDK upgrades don't silently shift
+    // response shapes. This matches what stripe@18.x is built against —
+    // bump in lockstep when upgrading the SDK and re-running tests.
+    this.stripe = new Stripe(secretKey, {
+      typescript: true,
+      apiVersion: '2025-08-27.basil',
+    });
     this.webhookSecret = webhookSecret;
   }
 
@@ -44,50 +48,16 @@ export class StripeWebhookService {
   }
 
   async handleEvent(event: Stripe.Event): Promise<void> {
-    const db = this.kysely.db;
-
-    const requestId =
-      typeof event.request === 'string'
-        ? event.request
-        : (event.request?.id ?? null);
-    const idempotencyKey =
-      typeof event.request === 'object'
-        ? (event.request?.idempotency_key ?? null)
-        : null;
-    const eventRow = {
-      type: event.type,
-      api_version: event.api_version,
-      livemode: event.livemode,
-      request_id: requestId,
-      idempotency_key: idempotencyKey,
-      stripe_created: new Date(event.created * 1000),
-      data: JSON.stringify(event),
-    };
-
-    const eventId = event.id as EventsId;
-    await db
-      .insertInto('stripe.events')
-      .values({ id: eventId, ...eventRow })
-      .onConflict((oc) => oc.column('id').doUpdateSet(eventRow))
-      .execute();
-
+    // The mirror is current-state, not an event log — we don't persist
+    // the envelope. Upserts in applyEvent are idempotent on replay; if
+    // the mirror drifts, recover with `bun run stripe:sync`.
     try {
-      await this.syncService.applyEvent(db, event);
-      await db
-        .updateTable('stripe.events')
-        .set({ processed_at: new Date(), error: null })
-        .where('id', '=', eventId)
-        .execute();
+      await this.syncService.applyEvent(this.kysely.db, event);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(
         `Failed to apply stripe event ${event.id} (${event.type}): ${message}`,
       );
-      await db
-        .updateTable('stripe.events')
-        .set({ error: message })
-        .where('id', '=', eventId)
-        .execute();
       throw err;
     }
   }

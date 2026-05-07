@@ -56,7 +56,8 @@ export class StripeWebhookController {
     try {
       await this.stripeWebhookService.handleEvent(event);
     } catch (err) {
-      // Persisted as `error` on stripe.events; respond 500 so Stripe retries.
+      // Respond 500 so Stripe retries. We don't persist the event log
+      // ourselves — Stripe Dashboard is the audit source of truth.
       this.logger.error(`Failed to process stripe event ${event.id}`, err);
       throw new HttpException(
         'Internal Server Error',
