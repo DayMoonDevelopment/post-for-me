@@ -2,20 +2,20 @@ import { Injectable } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import type Stripe from 'stripe';
 
-import type Database from '../../../kysely/types/Database';
-import type { CustomersId } from '../../../kysely/types/stripe/Customers';
-import type { ProductsId } from '../../../kysely/types/stripe/Products';
-import type { PricesId } from '../../../kysely/types/stripe/Prices';
-import type { SubscriptionsId } from '../../../kysely/types/stripe/Subscriptions';
-import type { SubscriptionItemsId } from '../../../kysely/types/stripe/SubscriptionItems';
-import type { InvoicesId } from '../../../kysely/types/stripe/Invoices';
-import type { ChargesId } from '../../../kysely/types/stripe/Charges';
-import type { MetersId } from '../../../kysely/types/stripe/Meters';
-import type { SubscriptionSchedulesId } from '../../../kysely/types/stripe/SubscriptionSchedules';
+import type Database from '../../../kysely/types/database';
+import type { CustomersId } from '../../../kysely/types/stripe/customers';
+import type { ProductsId } from '../../../kysely/types/stripe/products';
+import type { PricesId } from '../../../kysely/types/stripe/prices';
+import type { SubscriptionsId } from '../../../kysely/types/stripe/subscriptions';
+import type { SubscriptionItemsId } from '../../../kysely/types/stripe/subscription-items';
+import type { InvoicesId } from '../../../kysely/types/stripe/invoices';
+import type { ChargesId } from '../../../kysely/types/stripe/charges';
+import type { MetersId } from '../../../kysely/types/stripe/meters';
+import type { SubscriptionSchedulesId } from '../../../kysely/types/stripe/subscription-schedules';
 import type {
   MeterEventsEventName,
   MeterEventsIdentifier,
-} from '../../../kysely/types/stripe/MeterEvents';
+} from '../../../kysely/types/stripe/meter-events';
 
 type SyncDb = Kysely<Database>;
 
