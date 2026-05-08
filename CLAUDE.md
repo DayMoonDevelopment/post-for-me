@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `bun run dev:init` - Reset Supabase database and regenerate types
 - `supabase db reset` - Reset local database with migrations and seed data
+- `cd api && bun run typegen` - Regenerate Kysely types for the `stripe` schema (run locally after any migration that changes that schema; output in `api/src/kysely/types/` is committed to git and consumed by CD/Docker without re-running kanel)
 
 **API-specific (in api/ directory):**
 
