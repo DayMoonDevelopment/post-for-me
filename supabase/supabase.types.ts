@@ -1271,18 +1271,6 @@ export type Database = {
         }
         Returns: number
       }
-      get_exceeded_team_usage_windows: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          count: number
-          end_at: string
-          limit: number
-          stripe_customer_id: string | null
-          start_at: string
-          team_name: string | null
-          team_id: string
-        }[]
-      }
       is_system_project: {
         Args: { project_id_param: string }
         Returns: boolean
