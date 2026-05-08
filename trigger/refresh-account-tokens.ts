@@ -17,7 +17,7 @@ import { Database } from "@post-for-me/db";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 const createPostClient = ({
@@ -64,7 +64,7 @@ const handleTokenRefresh = async ({
 }): Promise<{ success: boolean; error?: string; accountId: string }> => {
   try {
     logger.info(
-      `Refreshing token for ${account.provider} account ${account.id}`
+      `Refreshing token for ${account.provider} account ${account.id}`,
     );
 
     const { access_token, expires_at, refresh_token } =
@@ -110,7 +110,7 @@ const handleTokenRefresh = async ({
     }
 
     logger.info(
-      `Successfully refreshed token for ${account.provider} account ${account.id}`
+      `Successfully refreshed token for ${account.provider} account ${account.id}`,
     );
     return {
       success: true,
@@ -119,7 +119,7 @@ const handleTokenRefresh = async ({
   } catch (refreshError) {
     logger.error(
       `Token refresh error for account ${account.id}:`,
-      refreshError
+      refreshError,
     );
     return {
       success: false,
@@ -141,7 +141,7 @@ const refreshAccountsByProviderAndProject = async ({
   appCredentials: PlatformAppCredentials;
 }): Promise<{ success: number; failed: number; errors: string[] }> => {
   logger.info(
-    `Processing ${accounts.length} ${provider} accounts for project ${projectId}`
+    `Processing ${accounts.length} ${provider} accounts for project ${projectId}`,
   );
 
   try {
@@ -152,7 +152,7 @@ const refreshAccountsByProviderAndProject = async ({
     });
 
     const refreshPromises = accounts.map((account) =>
-      handleTokenRefresh({ postClient, account })
+      handleTokenRefresh({ postClient, account }),
     );
 
     const results = await Promise.allSettled(refreshPromises);
@@ -167,19 +167,19 @@ const refreshAccountsByProviderAndProject = async ({
       } else {
         failed++;
         errors.push(
-          `Account ${accounts[index].id}: ${result.status == "rejected" ? result.reason : result.value.error}`
+          `Account ${accounts[index].id}: ${result.status == "rejected" ? result.reason : result.value.error}`,
         );
       }
     });
 
     logger.info(
-      `${provider} (project ${projectId}) refresh complete: ${success} success, ${failed} failed`
+      `${provider} (project ${projectId}) refresh complete: ${success} success, ${failed} failed`,
     );
     return { success, failed, errors };
   } catch (error) {
     logger.error(
       `Error processing ${provider} accounts for project ${projectId}:`,
-      error
+      error,
     );
     return {
       success: 0,
@@ -192,7 +192,7 @@ const refreshAccountsByProviderAndProject = async ({
 };
 
 export const refreshAccountTokens = schedules.task({
-  cron: "0 */12 * * *",
+  cron: { pattern: "0 */12 * * *", environments: ["PRODUCTION"] },
   id: "refresh-account-tokens",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
@@ -240,14 +240,14 @@ export const refreshAccountTokens = schedules.task({
       {} as Record<
         string,
         { provider: string; projectId: string; accounts: SocialAccount[] }
-      >
+      >,
     );
 
     const groupSummary = Object.keys(accountsByProviderAndProject).map(
       (groupKey) => {
         const group = accountsByProviderAndProject[groupKey];
         return `${group.provider} (project: ${group.projectId}): ${group.accounts.length} accounts`;
-      }
+      },
     );
     logger.info(`Grouped accounts by provider and project:`, {
       groups: groupSummary,
@@ -257,8 +257,8 @@ export const refreshAccountTokens = schedules.task({
     const projectIds = [
       ...new Set(
         Object.values(accountsByProviderAndProject).map(
-          (group) => group.projectId
-        )
+          (group) => group.projectId,
+        ),
       ),
     ];
     const { data: appCredentials, error: credentialsError } =
@@ -272,7 +272,7 @@ export const refreshAccountTokens = schedules.task({
         error: credentialsError,
       });
       throw new Error(
-        `Failed to fetch app credentials: ${credentialsError.message}`
+        `Failed to fetch app credentials: ${credentialsError.message}`,
       );
     }
 
@@ -296,12 +296,12 @@ export const refreshAccountTokens = schedules.task({
         } else {
           const providerCredentials = appCredentials?.find(
             (cred) =>
-              cred.provider === provider && cred.project_id === projectId
+              cred.provider === provider && cred.project_id === projectId,
           );
 
           if (!providerCredentials) {
             logger.error(
-              `No app credentials found for provider ${provider} in project ${projectId}`
+              `No app credentials found for provider ${provider} in project ${projectId}`,
             );
             return {
               provider,
@@ -327,7 +327,7 @@ export const refreshAccountTokens = schedules.task({
           appCredentials: credentials,
         });
         return { provider, projectId, ...result };
-      }
+      },
     );
 
     const groupResults = await Promise.allSettled(groupPromises);
