@@ -1,5 +1,4 @@
 import { Controller, Get, Param, Query, VERSION_NEUTRAL } from '@nestjs/common';
-import { ApiExcludeController } from '@nestjs/swagger';
 
 import { VerifyKey } from '../../auth/verify-key.decorator';
 
@@ -14,7 +13,6 @@ import type {
 } from './cms.types';
 
 @Controller({ version: VERSION_NEUTRAL })
-@ApiExcludeController()
 @VerifyKey({ permissions: 'cms.read' })
 export class CmsController {
   constructor(private readonly cmsService: CmsService) {}

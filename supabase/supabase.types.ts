@@ -9,70 +9,232 @@ export type Json =
 export type Database = {
   cms: {
     Tables: {
-      resources: {
+      article_authors: {
         Row: {
-          body_blocks: Json
+          article_id: string
+          author_id: string
+          position: number
+        }
+        Insert: {
+          article_id: string
+          author_id: string
+          position?: number
+        }
+        Update: {
+          article_id?: string
+          author_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_authors_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_authors_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "authors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_tags: {
+        Row: {
+          article_id: string
+          tag_id: string
+        }
+        Insert: {
+          article_id: string
+          tag_id: string
+        }
+        Update: {
+          article_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_tags_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      articles: {
+        Row: {
+          attribution: Json | null
+          category_id: string | null
+          content: string | null
+          content_format: string
+          cover_image_url: string | null
+          cover_video_url: string | null
           created_at: string
+          deleted_at: string | null
+          description: string | null
+          featured: boolean
           id: string
-          seo_meta: Json | null
+          published_at: string | null
           slug: string
           status: string
-          summary: string | null
           title: string
           updated_at: string
         }
         Insert: {
-          body_blocks: Json
+          attribution?: Json | null
+          category_id?: string | null
+          content?: string | null
+          content_format?: string
+          cover_image_url?: string | null
+          cover_video_url?: string | null
           created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          featured?: boolean
           id?: string
-          seo_meta?: Json | null
+          published_at?: string | null
           slug: string
-          status: string
-          summary?: string | null
+          status?: string
           title: string
           updated_at?: string
         }
         Update: {
-          body_blocks?: Json
+          attribution?: Json | null
+          category_id?: string | null
+          content?: string | null
+          content_format?: string
+          cover_image_url?: string | null
+          cover_video_url?: string | null
           created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          featured?: boolean
           id?: string
-          seo_meta?: Json | null
+          published_at?: string | null
           slug?: string
           status?: string
-          summary?: string | null
           title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "articles_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      authors: {
+        Row: {
+          bio: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          image_url: string | null
+          name: string
+          role: string | null
+          slug: string
+          socials: Json
+          updated_at: string
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          image_url?: string | null
+          name: string
+          role?: string | null
+          slug: string
+          socials?: Json
+          updated_at?: string
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string
+          role?: string | null
+          slug?: string
+          socials?: Json
           updated_at?: string
         }
         Relationships: []
       }
-      slug_redirects: {
+      categories: {
         Row: {
-          added_at: string
-          http_status: number
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          id: string
+          name: string
           slug: string
-          target_slug: string
+          updated_at: string
         }
         Insert: {
-          added_at?: string
-          http_status?: number
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
           slug: string
-          target_slug: string
+          updated_at?: string
         }
         Update: {
-          added_at?: string
-          http_status?: number
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
           slug?: string
-          target_slug?: string
+          updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "slug_redirects_target_slug_fkey"
-            columns: ["target_slug"]
-            isOneToOne: false
-            referencedRelation: "resources"
-            referencedColumns: ["slug"]
-          },
-        ]
+        Relationships: []
+      }
+      tags: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          id: string
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -403,6 +565,38 @@ export type Database = {
             columns: ["provider_connection_id"]
             isOneToOne: false
             referencedRelation: "social_provider_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_post_team_usage: {
+        Row: {
+          count: number
+          end_at: string
+          limit: number
+          start_at: string
+          team_id: string
+        }
+        Insert: {
+          count?: number
+          end_at: string
+          limit: number
+          start_at: string
+          team_id: string
+        }
+        Update: {
+          count?: number
+          end_at?: string
+          limit?: number
+          start_at?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_post_team_usage_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -766,38 +960,6 @@ export type Database = {
           },
         ]
       }
-      social_post_team_usage: {
-        Row: {
-          count: number
-          end_at: string
-          limit: number
-          start_at: string
-          team_id: string
-        }
-        Insert: {
-          count?: number
-          end_at: string
-          limit: number
-          start_at: string
-          team_id: string
-        }
-        Update: {
-          count?: number
-          end_at?: string
-          limit?: number
-          start_at?: string
-          team_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "social_post_team_usage_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       team_users: {
         Row: {
           created_at: string | null
@@ -1076,6 +1238,18 @@ export type Database = {
       }
     }
     Functions: {
+      get_exceeded_team_usage_windows: {
+        Args: never
+        Returns: {
+          count: number
+          end_at: string
+          limit: number
+          start_at: string
+          stripe_customer_id: string
+          team_id: string
+          team_name: string
+        }[]
+      }
       increment_team_social_post_meter: {
         Args: {
           p_day: number
@@ -1096,18 +1270,6 @@ export type Database = {
           p_team_id: string
         }
         Returns: number
-      }
-      get_exceeded_team_usage_windows: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          count: number
-          end_at: string
-          limit: number
-          stripe_customer_id: string | null
-          start_at: string
-          team_name: string | null
-          team_id: string
-        }[]
       }
       is_system_project: {
         Args: { project_id_param: string }
@@ -1330,3 +1492,4 @@ export const Constants = {
     },
   },
 } as const
+

@@ -91,6 +91,37 @@ bun run start        # Standard mode
 bun run --filter=@post-for-me/api start:prod
 ```
 
+### Manual Stripe sync (webhook simulator)
+
+The Stripe webhook at `POST /private/webhooks/stripe` keeps the `stripe`
+schema up to date going forward. For backfills (or syncing against a
+different environment) the manual sync replays existing Stripe records
+*through that same webhook* — it pulls each entity from the Stripe API,
+wraps it in a synthetic event, signs with `STRIPE_WEBHOOK_SECRET`, and
+POSTs to a target URL. No separate DB-write path means no risk of the
+backfill drifting out of sync with the live event handler.
+
+From the `api/` directory:
+
+```bash
+# default — POSTs to http://localhost:3000/private/webhooks/stripe
+bun run stripe:sync -- --env=.env
+
+# different env file (path resolved against the api/ cwd)
+bun run stripe:sync -- --env=.env.production
+
+# point at a different host (e.g. a deployed env)
+bun run stripe:sync -- --env=.env --url=https://api.example.com/private/webhooks/stripe
+
+# limit which entities to walk
+bun run stripe:sync -- --env=.env --only=customers,prices
+```
+
+Required env keys: `STRIPE_SECRET_KEY` (to list from Stripe) and
+`STRIPE_WEBHOOK_SECRET` (must match what the target API verifies with).
+The receiving API needs to be running. `meter_events` have no list API
+and are append-only, so they only flow in via real webhook traffic.
+
 The API will be available at `http://localhost:3000` with interactive documentation at `http://localhost:3000/docs`.
 
 ## Build (Production)

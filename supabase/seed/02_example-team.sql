@@ -10,7 +10,8 @@ INSERT INTO public.teams(name, created_by, updated_by)
 INSERT INTO public.team_users(team_id, user_id, created_by, updated_by)
     VALUES (get_team_id('Example Team'), get_user_id('user2@example.com'), get_user_id('user1@example.com'), get_user_id('user1@example.com')),
 (get_team_id('Example Team'), get_user_id('user3@example.com'), get_user_id('user1@example.com'), get_user_id('user1@example.com')),
-(get_team_id('Example Team'), get_user_id('user4@example.com'), get_user_id('user2@example.com'), get_user_id('user2@example.com'));
+(get_team_id('Example Team'), get_user_id('user4@example.com'), get_user_id('user2@example.com'), get_user_id('user2@example.com')),
+(get_team_id('Example Team'), get_user_id('caleb@daymoon.dev'), get_user_id('user1@example.com'), get_user_id('user1@example.com'));
 
 -- Create example project
 INSERT INTO public.projects(name, description, team_id, created_by, updated_by)
