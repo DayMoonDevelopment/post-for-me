@@ -441,7 +441,7 @@ const scheduleUpgrade = async ({
 };
 
 export const processUsageLimits = schedules.task({
-  //cron: { pattern: "*/5 * * * *", environments: ["PRODUCTION"] },
+  cron: { pattern: "*/5 * * * *", environments: ["PRODUCTION"] },
   id: "process-usage-limits",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
