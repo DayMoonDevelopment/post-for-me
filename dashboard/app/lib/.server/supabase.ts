@@ -13,7 +13,7 @@ import {
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import type { SupabaseClient as SupabaseClientType } from "@supabase/supabase-js";
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 
 export interface SupabaseContext {
   supabase: SupabaseClientType<Database>;

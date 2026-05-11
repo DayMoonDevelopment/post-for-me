@@ -5,7 +5,7 @@ import {
   SquareGridCircleIcon,
   PencilLineIcon,
   BookIcon,
-} from "icons";
+} from "~/components/icons";
 import { Link, useParams } from "react-router";
 
 const items = [

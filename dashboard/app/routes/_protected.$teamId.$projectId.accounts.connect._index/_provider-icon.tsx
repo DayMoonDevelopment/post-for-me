@@ -7,7 +7,7 @@ import {
   LinkedInIcon,
   BlueskyIcon,
   ThreadsIcon,
-} from "icons";
+} from "~/components/icons";
 
 import { YouTubeImageIcon } from "~/components/youtube-icon";
 

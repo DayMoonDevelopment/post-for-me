@@ -1,6 +1,6 @@
 import { useFormContext } from "react-hook-form";
 
-import { BracketsIcon } from "icons";
+import { BracketsIcon } from "~/components/icons";
 
 import {
   CodeBlock,

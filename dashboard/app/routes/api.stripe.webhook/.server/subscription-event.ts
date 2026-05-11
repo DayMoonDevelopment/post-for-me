@@ -2,7 +2,7 @@ import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request"
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Stripe } from "stripe";
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 
 export async function handleSubscriptionEvent(
   subscription: Stripe.Subscription,

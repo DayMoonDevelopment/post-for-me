@@ -13,7 +13,7 @@ import {
   // GoogleIcon,
   // GitHubIcon,
   MagicWandIcon,
-} from "icons";
+} from "~/components/icons";
 
 import { EmailAlert } from "./_email-alert";
 

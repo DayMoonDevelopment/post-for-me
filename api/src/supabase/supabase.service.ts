@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import * as jwt from 'jsonwebtoken';
 
-import { Database } from '@post-for-me/db';
+import { Database } from '../../supabase';
 
 @Injectable({ scope: Scope.REQUEST })
 export class SupabaseService {

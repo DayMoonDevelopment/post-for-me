@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Form, Link, useLoaderData } from "react-router";
-import { CheckmarkSmallIcon, CrossSmallIcon } from "icons";
+import { CheckmarkSmallIcon, CrossSmallIcon } from "~/components/icons";
 
 import { Badge } from "~/ui/badge";
 import { Button } from "~/ui/button";

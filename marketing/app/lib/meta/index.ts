@@ -1,0 +1,730 @@
+import {
+  generateBreadcrumbStructuredData,
+  type BreadcrumbItem,
+} from "~/lib/utils";
+
+import type { MetaDescriptor } from "react-router";
+
+export class MetadataComposer {
+  private explicitMeta: MetaDescriptor[] = [];
+  private _siteUrl: string = "https://www.postforme.dev";
+  private _siteName: string = "Post For Me";
+  private _title?: string;
+  private _description?: string;
+  private _canonical?: string;
+  private _keywords?: string;
+  private _image?: string;
+  private _contentType: "website" | "article" = "website";
+  private _publishedTime?: string;
+  private _modifiedTime?: string;
+  private _author?: string;
+  private _locale: string = "en_US";
+  private _imageWidth: number = 1200;
+  private _imageHeight: number = 630;
+  private _robots?: string;
+  private _ogSiteName?: string;
+  private _videoYouTubeId?: string;
+  private _videoTitle?: string;
+  private _videoDescription?: string;
+  private _videoUploadDate?: string;
+  private _videoWidth: number = 1280;
+  private _videoHeight: number = 720;
+
+  constructor() {
+    // Add base site metadata on construction
+    this.explicitMeta.push(
+      { property: "og:site_name", content: this._siteName },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:site", content: "@postforme" },
+      { name: "theme-color", content: "#000000" },
+      { tagName: "link", rel: "icon", href: "/favicon.ico" },
+    );
+  }
+
+  /**
+   * Set the page title
+   */
+  set title(value: string) {
+    this._title = value;
+  }
+
+  get title(): string | undefined {
+    return this._title;
+  }
+
+  /**
+   * Set the page description
+   */
+  set description(value: string) {
+    this._description = value;
+  }
+
+  get description(): string | undefined {
+    return this._description;
+  }
+
+  /**
+   * Set the canonical URL
+   */
+  set canonical(value: string) {
+    this._canonical = value;
+  }
+
+  get canonical(): string | undefined {
+    return this._canonical;
+  }
+
+  /**
+   * Set keywords
+   */
+  set keywords(value: string) {
+    this._keywords = value;
+  }
+
+  get keywords(): string | undefined {
+    return this._keywords;
+  }
+
+  /**
+   * Set the cover/social image
+   */
+  set image(value: string) {
+    this._image = value;
+  }
+
+  get image(): string | undefined {
+    return this._image;
+  }
+
+  /**
+   * Set content type (website or article)
+   */
+  set contentType(value: "website" | "article") {
+    this._contentType = value;
+  }
+
+  get contentType(): "website" | "article" {
+    return this._contentType;
+  }
+
+  /**
+   * Set published time (for articles)
+   */
+  set publishedTime(value: string) {
+    this._publishedTime = value;
+  }
+
+  get publishedTime(): string | undefined {
+    return this._publishedTime;
+  }
+
+  /**
+   * Set modified time (for articles)
+   */
+  set modifiedTime(value: string) {
+    this._modifiedTime = value;
+  }
+
+  get modifiedTime(): string | undefined {
+    return this._modifiedTime;
+  }
+
+  /**
+   * Set author (for articles)
+   */
+  set author(value: string) {
+    this._author = value;
+  }
+
+  get author(): string | undefined {
+    return this._author;
+  }
+
+  /**
+   * Set the site URL (used for generating absolute URLs)
+   */
+  set siteUrl(value: string) {
+    this._siteUrl = value;
+  }
+
+  get siteUrl(): string {
+    return this._siteUrl;
+  }
+
+  /**
+   * Set the site name
+   */
+  set siteName(value: string) {
+    this._siteName = value;
+    // Update the og:site_name that was added in constructor
+    const siteNameIndex = this.explicitMeta.findIndex(
+      (meta) => "property" in meta && meta.property === "og:site_name",
+    );
+    if (siteNameIndex !== -1) {
+      this.explicitMeta[siteNameIndex] = {
+        property: "og:site_name",
+        content: value,
+      };
+    }
+  }
+
+  get siteName(): string {
+    return this._siteName;
+  }
+
+  /**
+   * Set the locale (for og:locale)
+   */
+  set locale(value: string) {
+    this._locale = value;
+  }
+
+  get locale(): string {
+    return this._locale;
+  }
+
+  /**
+   * Set image width (used for both OG and Twitter)
+   */
+  set imageWidth(value: number) {
+    this._imageWidth = value;
+  }
+
+  get imageWidth(): number {
+    return this._imageWidth;
+  }
+
+  /**
+   * Set image height (used for both OG and Twitter)
+   */
+  set imageHeight(value: number) {
+    this._imageHeight = value;
+  }
+
+  get imageHeight(): number {
+    return this._imageHeight;
+  }
+
+  /**
+   * Set robots meta tag (e.g., "index, follow", "noindex, nofollow")
+   */
+  set robots(value: string) {
+    this._robots = value;
+  }
+
+  get robots(): string | undefined {
+    return this._robots;
+  }
+
+  /**
+   * Attach a YouTube video to the page.
+   *
+   * Emits OpenGraph video tags (og:video, og:video:secure_url, og:video:type,
+   * og:video:width, og:video:height) and a schema.org VideoObject JSON-LD.
+   *
+   * Only `youtubeId` is required — everything else falls back to the page's
+   * title/description/publishedTime when omitted.
+   */
+  setVideo(config: {
+    youtubeId: string;
+    title?: string;
+    description?: string;
+    uploadDate?: string;
+    width?: number;
+    height?: number;
+  }): this {
+    this._videoYouTubeId = config.youtubeId;
+    this._videoTitle = config.title;
+    this._videoDescription = config.description;
+    this._videoUploadDate = config.uploadDate;
+    if (config.width) this._videoWidth = config.width;
+    if (config.height) this._videoHeight = config.height;
+    return this;
+  }
+
+  /**
+   * Set breadcrumb structured data
+   */
+  setBreadcrumbs(breadcrumbs?: BreadcrumbItem[]): this {
+    const breadcrumbStructuredData = generateBreadcrumbStructuredData(
+      breadcrumbs || [{ title: "Resources", href: "/resources" }],
+      this._siteUrl,
+    );
+    this.explicitMeta.push({
+      "script:ld+json": breadcrumbStructuredData,
+    } as MetaDescriptor);
+    return this;
+  }
+
+  /**
+   * Add custom schema.org structured data
+   */
+  addSchema(schemaData: Record<string, unknown>): this {
+    this.explicitMeta.push({ "script:ld+json": schemaData } as MetaDescriptor);
+    return this;
+  }
+
+  /**
+   * Generate automatic metadata based on shared properties
+   */
+  private generateAutoMetadata(): MetaDescriptor[] {
+    const autoMeta: MetaDescriptor[] = [];
+
+    // Core metadata
+    if (this._title) {
+      autoMeta.push({ title: this._title });
+    }
+
+    if (this._description) {
+      autoMeta.push({ name: "description", content: this._description });
+    }
+
+    if (this._canonical) {
+      autoMeta.push({
+        tagName: "link",
+        rel: "canonical",
+        href: this._canonical,
+      });
+    }
+
+    if (this._keywords) {
+      autoMeta.push({ name: "keywords", content: this._keywords });
+    }
+
+    if (this._robots) {
+      autoMeta.push({ name: "robots", content: this._robots });
+    }
+
+    // Open Graph metadata (generated automatically)
+    if (this._title && this._description && this._canonical) {
+      const ogImage = this._image || `${this._siteUrl}/og-image-16x9.png`;
+
+      autoMeta.push(
+        { property: "og:type", content: this._contentType },
+        { property: "og:title", content: this._title },
+        { property: "og:description", content: this._description },
+        { property: "og:url", content: this._canonical },
+        { property: "og:image", content: ogImage },
+        {
+          property: "og:image:alt",
+          content: this._title,
+        },
+        { property: "og:image:width", content: this._imageWidth.toString() },
+        { property: "og:image:height", content: this._imageHeight.toString() },
+      );
+
+      autoMeta.push({ property: "og:locale", content: this._locale });
+    }
+
+    // Twitter metadata (generated automatically)
+    if (this._title && this._description) {
+      const twitterImage = this._image || `${this._siteUrl}/og-image-16x9.png`;
+
+      autoMeta.push(
+        { name: "twitter:title", content: this._title },
+        { name: "twitter:description", content: this._description },
+        { name: "twitter:image", content: twitterImage },
+        { name: "twitter:image:width", content: this._imageWidth.toString() },
+        { name: "twitter:image:height", content: this._imageHeight.toString() },
+      );
+    }
+
+    // OpenGraph video tags (YouTube)
+    if (this._videoYouTubeId) {
+      const embedUrl = `https://www.youtube-nocookie.com/embed/${this._videoYouTubeId}`;
+      autoMeta.push(
+        { property: "og:video", content: embedUrl },
+        { property: "og:video:secure_url", content: embedUrl },
+        { property: "og:video:type", content: "text/html" },
+        { property: "og:video:width", content: this._videoWidth.toString() },
+        { property: "og:video:height", content: this._videoHeight.toString() },
+      );
+    }
+
+    // Article-specific metadata
+    if (this._contentType === "article") {
+      if (this._publishedTime) {
+        autoMeta.push({
+          property: "article:published_time",
+          content: this._publishedTime,
+        });
+      }
+      if (this._modifiedTime) {
+        autoMeta.push({
+          property: "article:modified_time",
+          content: this._modifiedTime,
+        });
+      }
+      if (this._author) {
+        autoMeta.push({ property: "article:author", content: this._author });
+      }
+    }
+
+    return autoMeta;
+  }
+
+  /**
+   * Generate automatic schema.org structured data based on content type and properties
+   */
+  private generateAutoSchema(): MetaDescriptor[] {
+    const schemas: MetaDescriptor[] = [];
+
+    // Auto-generate article schema for articles
+    if (
+      this._contentType === "article" &&
+      this._title &&
+      this._description &&
+      this._canonical
+    ) {
+      const articleSchema = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        mainEntityOfPage: { "@type": "WebPage", "@id": this._canonical },
+        headline: this._title,
+        description: this._description,
+        datePublished: this._publishedTime,
+        dateModified: this._modifiedTime,
+        inLanguage: "en",
+        image: this._image
+          ? [{ url: this._image }]
+          : [{ url: `${this._siteUrl}/og-image-16x9.png` }],
+        author: this._author
+          ? {
+              "@type": "Person",
+              name: this._author,
+            }
+          : {
+              "@type": "Organization",
+              name: this._siteName,
+              url: this._siteUrl,
+            },
+        publisher: {
+          "@type": "Organization",
+          name: this._siteName,
+          logo: {
+            "@type": "ImageObject",
+            url: `${this._siteUrl}/logo.png`,
+            width: 512,
+            height: 512,
+          },
+        },
+        ...(this._keywords && { keywords: this._keywords }),
+        isAccessibleForFree: true,
+      };
+
+      schemas.push({ "script:ld+json": articleSchema } as MetaDescriptor);
+    }
+
+    // Auto-generate VideoObject schema when a YouTube video is attached
+    if (this._videoYouTubeId) {
+      const videoTitle = this._videoTitle ?? this._title;
+      const videoDescription = this._videoDescription ?? this._description;
+      const uploadDate =
+        this._videoUploadDate ??
+        this._publishedTime ??
+        new Date().toISOString();
+
+      if (videoTitle && videoDescription) {
+        schemas.push({
+          "script:ld+json": {
+            "@context": "https://schema.org",
+            "@type": "VideoObject",
+            name: videoTitle,
+            description: videoDescription,
+            thumbnailUrl: `https://img.youtube.com/vi/${this._videoYouTubeId}/maxresdefault.jpg`,
+            uploadDate,
+            contentUrl: `https://www.youtube.com/watch?v=${this._videoYouTubeId}`,
+            embedUrl: `https://www.youtube-nocookie.com/embed/${this._videoYouTubeId}`,
+            publisher: {
+              "@type": "Organization",
+              name: this._siteName,
+              url: this._siteUrl,
+            },
+          },
+        } as MetaDescriptor);
+      }
+    }
+
+    return schemas;
+  }
+
+  /**
+   * Create CollectionPage schema for listing pages
+   */
+  createCollectionPageSchema(config: {
+    title: string;
+    description: string;
+    canonical: string;
+    dateModified?: string;
+    datePublished?: string;
+    about?: Record<string, unknown>;
+    hasPart?: Array<{
+      "@type": string;
+      name: string;
+      description?: string;
+      url: string;
+      datePublished?: string;
+      image?: string;
+    }>;
+    totalItems?: number;
+    itemListElements?: Array<{
+      name: string;
+      description?: string;
+      url: string;
+      datePublished?: string;
+    }>;
+  }): Record<string, unknown> {
+    return {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: config.title,
+      description: config.description,
+      url: config.canonical,
+      ...(config.dateModified && { dateModified: config.dateModified }),
+      ...(config.datePublished && { datePublished: config.datePublished }),
+      ...(config.about && { about: config.about }),
+      ...(config.hasPart && { hasPart: config.hasPart }),
+      inLanguage: "en",
+      isPartOf: {
+        "@type": "WebSite",
+        name: this._siteName,
+        url: this._siteUrl,
+        sameAs: [
+          "https://twitter.com/postforme",
+          "https://github.com/postforme",
+          "https://linkedin.com/company/postforme",
+          "https://discord.gg/postforme",
+        ],
+      },
+      ...(config.totalItems && { numberOfItems: config.totalItems }),
+    };
+  }
+
+  /**
+   * Create ItemList schema for structured list content
+   */
+  createItemListSchema(config: {
+    title: string;
+    description: string;
+    items: Array<{
+      name: string;
+      description?: string;
+      url: string;
+      datePublished?: string;
+      image?: string;
+    }>;
+  }): Record<string, unknown> {
+    return {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: config.title,
+      description: config.description,
+      numberOfItems: config.items.length,
+      itemListElement: config.items.map((item, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        item: {
+          "@type": "Article",
+          name: item.name,
+          description: item.description,
+          url: item.url,
+          ...(item.datePublished && { datePublished: item.datePublished }),
+          ...(item.image && { image: item.image }),
+        },
+      })),
+    };
+  }
+
+  /**
+   * Create FAQ schema for frequently asked questions
+   */
+  createFAQSchema(config: {
+    questions: Array<{
+      question: string;
+      answer: string;
+    }>;
+    id?: string;
+  }): Record<string, unknown> {
+    return {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "@id": config.id || `${this._siteUrl}#faq`,
+      mainEntity: config.questions.map((qa) => ({
+        "@type": "Question",
+        name: qa.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: qa.answer,
+        },
+      })),
+    };
+  }
+
+  /**
+   * Create Organization schema
+   */
+  createOrganizationSchema(config: {
+    name: string;
+    url: string;
+    logo?: string;
+    description?: string;
+    foundingDate?: string;
+    sameAs?: string[];
+    contactEmail?: string;
+    parentOrganization?: Record<string, unknown>;
+  }): Record<string, unknown> {
+    return {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": `${config.url}#organization`,
+      name: config.name,
+      url: config.url,
+      ...(config.logo && {
+        logo: {
+          "@type": "ImageObject",
+          url: config.logo,
+          width: 512,
+          height: 512,
+        },
+      }),
+      ...(config.description && { description: config.description }),
+      ...(config.foundingDate && { foundingDate: config.foundingDate }),
+      ...(config.parentOrganization && {
+        parentOrganization: config.parentOrganization,
+      }),
+      ...(config.sameAs && { sameAs: config.sameAs }),
+      ...(config.contactEmail && {
+        contactPoint: {
+          "@type": "ContactPoint",
+          email: config.contactEmail,
+          contactType: "Customer Support",
+          availableLanguage: "English",
+        },
+      }),
+    };
+  }
+
+  /**
+   * Create Product schema with all required fields for Google
+   */
+  createProductSchema(config: {
+    name: string;
+    description: string;
+    url: string;
+    image?: string[];
+    brand?: string;
+    manufacturer?: Record<string, unknown>;
+    category?: string;
+    aggregateRating?: {
+      ratingValue: string;
+      reviewCount: string;
+      bestRating?: string;
+      worstRating?: string;
+    };
+    reviews?: Array<{
+      rating: string;
+      author: string;
+      reviewBody: string;
+      datePublished: string;
+    }>;
+    offers?: Array<Record<string, unknown>>;
+  }): Record<string, unknown> {
+    return {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: config.name,
+      description: config.description,
+      url: config.url,
+      ...(config.image && { image: config.image }),
+      ...(config.brand && {
+        brand: {
+          "@type": "Brand",
+          name: config.brand,
+        },
+      }),
+      ...(config.manufacturer && { manufacturer: config.manufacturer }),
+      ...(config.category && { category: config.category }),
+      ...(config.aggregateRating && {
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: config.aggregateRating.ratingValue,
+          reviewCount: config.aggregateRating.reviewCount,
+          bestRating: config.aggregateRating.bestRating || "5",
+          worstRating: config.aggregateRating.worstRating || "1",
+        },
+      }),
+      ...(config.reviews && {
+        review: config.reviews.map((review) => ({
+          "@type": "Review",
+          reviewRating: {
+            "@type": "Rating",
+            ratingValue: review.rating,
+            bestRating: "5",
+          },
+          author: {
+            "@type": "Person",
+            name: review.author,
+          },
+          reviewBody: review.reviewBody,
+          datePublished: review.datePublished,
+        })),
+      }),
+      ...(config.offers && { offers: config.offers }),
+    };
+  }
+
+  /**
+   * Create SoftwareApplication schema
+   */
+  createSoftwareApplicationSchema(config: {
+    name: string;
+    description: string;
+    url: string;
+    applicationCategory?: string;
+    operatingSystem?: string;
+    featureList?: string[];
+    offers?: Record<string, unknown>;
+    aggregateRating?: {
+      ratingValue: string;
+      reviewCount: string;
+    };
+    author?: Record<string, unknown>;
+    keywords?: string;
+  }): Record<string, unknown> {
+    return {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "@id": `${config.url}#software`,
+      name: config.name,
+      url: config.url,
+      description: config.description,
+      ...(config.applicationCategory && {
+        applicationCategory: config.applicationCategory,
+      }),
+      ...(config.operatingSystem && { operatingSystem: config.operatingSystem }),
+      ...(config.featureList && { featureList: config.featureList }),
+      ...(config.offers && { offers: config.offers }),
+      ...(config.aggregateRating && {
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: config.aggregateRating.ratingValue,
+          reviewCount: config.aggregateRating.reviewCount,
+          bestRating: "5",
+          worstRating: "1",
+        },
+      }),
+      ...(config.author && { author: config.author }),
+      ...(config.keywords && { keywords: config.keywords }),
+    };
+  }
+
+  /**
+   * Build and return the complete metadata array
+   */
+  build(): MetaDescriptor[] {
+    const autoMeta = this.generateAutoMetadata();
+    const autoSchemas = this.generateAutoSchema();
+
+    return [...this.explicitMeta, ...autoMeta, ...autoSchemas];
+  }
+}

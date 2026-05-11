@@ -46,7 +46,6 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "googleapis": "^166.0.0",
-    "icons": "workspace:*",
     "isbot": "^5.1.27",
     "lodash": "^4.17.21",
     "loops": "^5.0.1",
@@ -67,7 +66,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@post-for-me/db": "workspace:*",
     "@react-router/dev": "^7.5.3",
     "@tailwindcss/vite": "^4.1.4",
     "@types/lodash": "^4.17.17",

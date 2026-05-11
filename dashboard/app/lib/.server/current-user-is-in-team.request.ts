@@ -1,4 +1,4 @@
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 export async function currentUserIsInTeam(

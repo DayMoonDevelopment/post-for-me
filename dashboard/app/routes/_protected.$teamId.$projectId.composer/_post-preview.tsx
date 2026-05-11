@@ -5,7 +5,7 @@ import {
   MessageCircleIcon,
   ShareIcon,
 } from "lucide-react";
-import { EyeOpenIcon } from "icons";
+import { EyeOpenIcon } from "~/components/icons";
 
 import { cn } from "~/lib/utils";
 

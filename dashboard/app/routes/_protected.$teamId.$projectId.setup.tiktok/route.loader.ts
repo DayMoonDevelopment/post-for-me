@@ -2,7 +2,7 @@ import { data } from "react-router";
 
 import { withSupabase } from "~/lib/.server/supabase";
 
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 
 type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 

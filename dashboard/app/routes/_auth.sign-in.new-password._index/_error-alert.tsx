@@ -1,6 +1,6 @@
 import { useSearchParams } from "react-router";
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
-import { TriangleExclamationIcon } from "icons";
+import { TriangleExclamationIcon } from "~/components/icons";
 
 function errorMessage(code: string | null) {
   switch (code) {

@@ -1,4 +1,4 @@
-import { CircleInfoIcon } from "icons";
+import { CircleInfoIcon } from "~/components/icons";
 
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
 

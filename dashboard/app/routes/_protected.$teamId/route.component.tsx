@@ -1,6 +1,6 @@
 import { Link, Outlet, useLoaderData, useParams } from "react-router";
 
-import { TriangleExclamationIcon } from "icons";
+import { TriangleExclamationIcon } from "~/components/icons";
 
 import { OnboardingProvider } from "~/components/onboarding-provider";
 

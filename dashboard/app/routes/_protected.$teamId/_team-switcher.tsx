@@ -11,7 +11,7 @@ import {
 } from "~/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "~/ui/sidebar";
 
-import { ChevronDownSmallIcon, PlusSmallIcon } from "icons";
+import { ChevronDownSmallIcon, PlusSmallIcon } from "~/components/icons";
 
 import { CreateTeamModal } from "./_create-team-modal";
 import type { Route } from "./+types/route";

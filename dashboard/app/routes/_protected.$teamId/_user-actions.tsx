@@ -6,7 +6,7 @@ import {
   PersonCircleIcon,
   ReceiptBillIcon,
   RescueRingIcon,
-} from "icons";
+} from "~/components/icons";
 
 import { AccountDialog } from "~/components/account-dialog";
 

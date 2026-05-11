@@ -5,7 +5,7 @@ import { TwitterApi, type TwitterApiTokens } from 'twitter-api-v2';
 import { google } from 'googleapis';
 import type { SupabaseService } from '../../supabase/supabase.service';
 import type { AuthUrlProviderData } from '../dto/create-provider-auth-url.dto';
-import type { Database } from '@post-for-me/db';
+import type { Database } from '../../../supabase';
 
 type SocialProviderEnum = Database['public']['Enums']['social_provider'];
 

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import type { Database } from '@post-for-me/db';
+import type { Database } from '../../supabase';
 import { ConfigService } from '@nestjs/config';
 
 type SocialProviderEnum = Database['public']['Enums']['social_provider'];

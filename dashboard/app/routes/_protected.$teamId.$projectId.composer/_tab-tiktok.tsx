@@ -1,5 +1,5 @@
 import { AlertCircleIcon } from "lucide-react";
-import { CircleInfoIcon } from "icons";
+import { CircleInfoIcon } from "~/components/icons";
 import { useFormContext } from "react-hook-form";
 import { cn } from "~/lib/utils";
 

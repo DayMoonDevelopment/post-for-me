@@ -1,0 +1,94 @@
+# Dependencies
+/node_modules/
+/.pnp
+.pnp.js
+
+# React Router
+/.react-router/
+/build/
+/dist/
+
+# Environment variables (keep .env.example for reference)
+.env*
+!.env.example
+
+# Testing
+/coverage/
+*.lcov
+.nyc_output/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+
+# Claude Code
+.claude/
+
+# AI Agent directories
+.agent/
+.agents/
+.cline/
+.codebuddy/
+.codex/
+.commandcode/
+.continue/
+.crush/
+.cursor/
+.factory/
+.gemini/
+.goose/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.opencode/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.windsurf/
+.zencoder/
+
+# Skills directories
+skills/
+.github/skills/
+
+# Editor directories
+.zed/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.turbo/
+.vercel/

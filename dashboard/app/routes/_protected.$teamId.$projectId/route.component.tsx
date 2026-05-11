@@ -1,4 +1,4 @@
-import { TriangleExclamationIcon } from "icons";
+import { TriangleExclamationIcon } from "~/components/icons";
 import {
   Link,
   Outlet,

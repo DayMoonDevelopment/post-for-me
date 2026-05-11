@@ -13,7 +13,7 @@ import {
 
 import { useForm } from "~/hooks/use-form";
 import { Alert, AlertDescription } from "~/ui/alert";
-import { TriangleExclamationIcon } from "icons";
+import { TriangleExclamationIcon } from "~/components/icons";
 
 export function Component() {
   const [searchParams] = useSearchParams();

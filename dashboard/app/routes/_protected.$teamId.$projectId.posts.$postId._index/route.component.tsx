@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useLoaderData, useRevalidator } from "react-router";
-import { ArrowRotateRightLeftIcon } from "icons";
+import { ArrowRotateRightLeftIcon } from "~/components/icons";
 
 import { cn } from "~/lib/utils";
 

@@ -2,7 +2,7 @@ import { Outlet, useRouteLoaderData } from "react-router";
 
 import { useForm } from "~/hooks/use-form";
 
-import { KeyIcon } from "icons";
+import { KeyIcon } from "~/components/icons";
 
 import { Button } from "~/ui/button";
 

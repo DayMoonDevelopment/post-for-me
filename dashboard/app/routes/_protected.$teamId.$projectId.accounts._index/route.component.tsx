@@ -2,7 +2,7 @@ import { Outlet, useLoaderData, useRouteLoaderData } from "react-router";
 import { Link } from "react-router";
 import { SocialConnectionsDataTable } from "./_data-table";
 import { Button } from "~/ui/button";
-import { PersonAddIcon } from "icons";
+import { PersonAddIcon } from "~/components/icons";
 
 import type { loader } from "./route.loader";
 import type { loader as teamData } from "../_protected.$teamId/route.loader";

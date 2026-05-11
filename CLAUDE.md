@@ -2,129 +2,126 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Commands
+## Repository model
 
-**Root level (runs all services):**
+`post-for-me` is a "dumb" monorepo: one git repo containing self-contained sibling directories. There are **no bun workspaces, no `workspace:*` deps, no shared root tooling**. Each sibling owns its own `package.json`, scripts, dependencies, lockfile, and CI surface.
 
-- `bun run dev` - Start API, Dashboard, and Trigger.dev concurrently
-- `bun run lint` - Lint all packages
-- `bun run typecheck` - Type check all packages
-- `bun supabase:typegen` - Generate Supabase types from local database
+```
+post-for-me/
+├── api/             # NestJS API + Trigger.dev jobs + Supabase
+│   ├── src/         # NestJS source (uses `api/src/supabase/` for the Nest module)
+│   ├── trigger/     # Trigger.dev background jobs
+│   └── supabase/    # DB config, migrations, types, seed (the supabase project)
+├── dashboard/       # React Router v7 dashboard
+└── marketing/       # React Router v7 marketing site
+```
 
-**Individual services:**
+### Conventions
 
-- `bun run dev:api` - Start NestJS API (port 3000)
-- `bun run dev:dashboard` - Start React Router dashboard (port 5173)
-- `bun run dev:trigger` - Start Trigger.dev for background jobs
+- **Do not run `bun install` at the repo root.** Root has no deps.
+- **Do not add a root `package.json` workspace** to "share" anything between siblings. If two siblings need the same code, vendor a copy into each. The dumb-monorepo principle is non-negotiable.
+- **Do not create a workspace alias for "convenience"** (e.g. tsconfig path mapping pretending to be an npm package). Use relative imports. Inter-sibling resolution is forbidden.
+- **Each sibling has its own `node_modules`, lockfile, scripts, and CI surface.**
 
-**Database:**
+## Working on a sibling
 
-- `bun run dev:init` - Reset Supabase database and regenerate types
-- `supabase db reset` - Reset local database with migrations and seed data
-- `cd api && bun run typegen` - Regenerate Kysely types for the `stripe` schema (run locally after any migration that changes that schema; output in `api/src/kysely/types/` is committed to git and consumed by CD/Docker without re-running kanel)
+Always `cd` into the sibling first.
 
-**API-specific (in api/ directory):**
+### API (`api/`)
+- `bun run start:dev` — NestJS dev server (port 3000)
+- `bun run trigger:dev` — Trigger.dev local jobs runner
+- `bun run supabase:start` / `supabase:reset` / `supabase:typegen` — local DB lifecycle
+- `bun run typegen` — Kysely types (Stripe schema)
+- `bun run test` / `test:e2e` — Jest suites
+- `bun run lint`
 
-- `bun run test` - Run Jest tests
-- `bun run test:e2e` - Run end-to-end tests
-- `bun run start:prod` - Start production server
+### Dashboard (`dashboard/`)
+- `bun run dev` — React Router dev (port 5173)
+- `bun run typecheck` — `react-router typegen && tsc`
+- `bun run test` — Vitest
+- `bun run lint`
 
-**Frontend-specific (in dashboard/ and marketing/ directories):**
+### Marketing (`marketing/`)
+- `bun run dev` — React Router dev
+- `bun run typecheck` — `react-router typegen && tsc`
+- `bun run lint`
 
-- `bun run test` - Run Vitest tests
-- `react-router build` - Build for production
-
-## Architecture Overview
-
-This is a monorepo social media automation platform with 5 main components:
+## Architecture overview
 
 ### API (`api/`)
 
 - **Framework**: NestJS with TypeScript
-- **Database**: Supabase (PostgreSQL) with generated types
+- **Database**: Supabase (PostgreSQL) with generated types in `api/supabase/supabase.types.ts`
 - **Authentication**: Unkey API key management with custom auth guard
-- **Job Processing**: Trigger.dev for background tasks
-- **Core Modules**:
-  - `social-posts/` - Create and manage social media posts
-  - `media/` - Handle file uploads and media processing
-  - `social-provider-connections/` - OAuth connections to social platforms
-  - `social-post-results/` - Track posting results and analytics
-  - `auth/` - API key authentication and user decorators
-  - `supabase/` - Database client and service
+- **Job processing**: Trigger.dev jobs in `api/trigger/`
+- **Core modules**:
+  - `social-posts/` — create/manage social media posts
+  - `media/` — file uploads and media processing
+  - `social-provider-connections/` — OAuth connections to social platforms
+  - `social-post-results/` — track posting results and analytics
+  - `auth/` — API key authentication and user decorators
+  - `supabase/` — Nest module wrapping the Supabase client (note: distinct from the `supabase/` config dir at `api/supabase/`)
 
 ### Dashboard (`dashboard/`)
 
 - **Framework**: React Router v7 with TypeScript
 - **UI**: Shadcn/ui components with Tailwind CSS v4
 - **State**: React Hook Form with Zod validation
-- **Features**: Multi-tenant project management, social account connections, post composer
+- **Vendored from former workspace deps**: icons in `app/components/icons/`, Supabase Database types in `app/lib/.server/database.types.ts`
 
 ### Marketing (`marketing/`)
 
-- **Framework**: React Router v7 for marketing site
+- **Framework**: React Router v7 marketing site
 - **UI**: Shadcn/ui components with Tailwind CSS v4
-- **Content**: Markdown-based content management
+- **Content**: Markdown-based content management with private CMS read endpoints on the API
 
-### Database (`supabase/`)
+### Database (`api/supabase/`)
 
 - **Platform**: Supabase (hosted PostgreSQL)
-- **Migrations**: Located in `supabase/migrations/`
-- **Types**: Auto-generated in `supabase/supabase.types.ts`
-- **Seed Data**: Located in `supabase/seed/`
+- **Migrations**: `api/supabase/migrations/`
+- **Types**: Auto-generated in `api/supabase/supabase.types.ts`
+- **Seed Data**: `api/supabase/seed/`
 
-### Background Jobs (`trigger/`)
+### Background jobs (`api/trigger/`)
 
 - **Platform**: Trigger.dev v3
-- **Jobs**: Post processing, media handling, scheduled posts
-- **Key Files**:
-  - `post-to-platform.ts` - Publish posts to social platforms
-  - `process-post.ts` - Process and validate post content
-  - `ffmpeg-process-video.ts` - Video processing with FFmpeg
+- **Config**: `api/trigger.config.ts`
+- **Key files**:
+  - `post-to-platform.ts` — publish to social platforms
+  - `process-post.ts` — validate post content
+  - `ffmpeg-process-video.ts` — video processing with FFmpeg
 
-### Icons (`icons/`)
+## Key architectural patterns
 
-- Shared React icon components used across dashboard and marketing
-- Commercial icon library wrapper
-- Import via: `import { IconName } from "icons"`
-
-## Key Architectural Patterns
-
-### Authentication Flow
-
+### Authentication flow
 - API uses Unkey for API key management
 - Custom `@Protect()` decorator for route protection
 - `@User()` decorator extracts user info from API keys
 - Frontend uses Supabase Auth with SSR support
 
-### Database Access
-
+### Database access
 - API uses `@SupabaseClient()` decorator for database access
-- Type-safe queries with generated Supabase types
+- Type-safe queries with generated Supabase types from `api/supabase/`
 - Row Level Security (RLS) policies enforce data access
 
-### Social Platform Integration
+### Cross-sibling type sharing
+- The `Database` type for Supabase is **vendored** into each consumer:
+  - Source of truth: `api/supabase/supabase.types.ts` (regenerated via `bun run supabase:typegen` inside `api/`)
+  - Dashboard copy: `dashboard/app/lib/.server/database.types.ts`
+- When the schema changes, copy the regenerated types into the dashboard:
+  - `cp api/supabase/supabase.types.ts dashboard/app/lib/.server/database.types.ts`
 
-- Modular platform clients in `trigger/posting/platforms/`
-- OAuth flows handled in `social-provider-connections/`
-- Each platform has dedicated DTOs and validation
+## Testing
 
-### Media Processing
-
-- File uploads via Supabase Storage
-- Video processing with FFmpeg through Trigger.dev
-- Sharp for image optimization
-
-## Testing Approach
-
-- **API**: Jest for unit tests, Supertest for integration tests
+- **API**: Jest unit tests, Supertest integration tests
 - **Frontend**: Vitest for components and utilities
 - **E2E**: Jest configuration for API endpoints
 
-## Key Dependencies
+## Key dependencies
 
 - **Runtime**: Bun (package manager and runtime)
 - **Database**: Supabase with generated TypeScript types
-- **Background Jobs**: Trigger.dev v3 with Node.js runtime
+- **Background jobs**: Trigger.dev v3 with Node.js runtime
 - **Authentication**: Unkey API key management
 - **UI**: Radix UI primitives with Tailwind CSS v4
 - **Validation**: Zod schemas with class-validator for API

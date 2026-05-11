@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
-import { PaperPlaneIcon } from "icons";
+import { PaperPlaneIcon } from "~/components/icons";
 
 export function EmailAlert() {
   return (

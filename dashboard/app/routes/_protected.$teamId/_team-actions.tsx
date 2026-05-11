@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
 } from "~/ui/dropdown-menu";
 
-import { TrashCanIcon, PencilLineIcon, EllipsisIcon } from "icons";
+import { TrashCanIcon, PencilLineIcon, EllipsisIcon } from "~/components/icons";
 
 export function TeamActions() {
   const { teamId } = useParams();

@@ -9,7 +9,7 @@ import {
   TikTokIcon,
   XIcon,
   TriangleExclamationIcon,
-} from "icons";
+} from "~/components/icons";
 
 import { YouTubeImageIcon } from "~/components/youtube-icon";
 

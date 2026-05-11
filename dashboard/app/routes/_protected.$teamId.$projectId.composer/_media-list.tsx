@@ -1,5 +1,5 @@
 import { VideoIcon } from "lucide-react";
-import { CrossSmallIcon } from "icons";
+import { CrossSmallIcon } from "~/components/icons";
 
 import type { MediaListProps, MediaListItemProps } from "./types";
 

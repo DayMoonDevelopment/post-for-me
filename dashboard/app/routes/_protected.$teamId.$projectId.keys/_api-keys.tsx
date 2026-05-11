@@ -1,5 +1,5 @@
 import { Link, useLoaderData } from "react-router";
-import { EllipsisIcon, TrashCanIcon } from "icons";
+import { EllipsisIcon, TrashCanIcon } from "~/components/icons";
 
 import { cn } from "~/lib/utils";
 
