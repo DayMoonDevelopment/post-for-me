@@ -19,7 +19,7 @@ import {
   SocialAccount,
 } from "./posting/post.types";
 import { differenceInDays } from "date-fns";
-import { Database } from "../supabase";
+import { Database } from "./supabase.types";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
 const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";

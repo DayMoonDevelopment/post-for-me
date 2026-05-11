@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       api: ${{ steps.filter.outputs.api }}
+      trigger: ${{ steps.filter.outputs.trigger }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
       marketing: ${{ steps.filter.outputs.marketing }}
     steps:
@@ -28,6 +29,8 @@ jobs:
           filters: |
             api:
               - 'api/**'
+            trigger:
+              - 'trigger/**'
             dashboard:
               - 'dashboard/**'
             marketing:
@@ -36,7 +39,7 @@ jobs:
   notify-start:
     name: Notify Slack — Start
     needs: changes
-    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.marketing == 'true'
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.trigger == 'true' || needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.marketing == 'true'
     runs-on: ubuntu-latest
     outputs:
       slack_ts: ${{ steps.notify.outputs.slack_ts }}
@@ -69,7 +72,6 @@ jobs:
       lint: ${{ steps.lint.outcome }}
       typecheck: ${{ steps.typecheck.outcome }}
       supabase: ${{ steps.supabase.outcome }}
-      trigger: ${{ steps.trigger.outcome }}
       docker: ${{ steps.docker.outcome }}
       unkey: ${{ steps.unkey.outcome }}
       railway: ${{ steps.railway.outcome }}
@@ -109,14 +111,6 @@ jobs:
         id: supabase
         working-directory: api
         run: supabase db push
-
-      - name: 🚀 Deploy Trigger.dev
-        id: trigger
-        working-directory: api
-        env:
-          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
-          TRIGGER_PROJECT_ID: ${{ secrets.TRIGGER_PROJECT_ID }}
-        run: bunx trigger.dev@4.3.0 deploy
 
       - name: Install Railway CLI
         run: bun add -g @railway/cli
@@ -161,6 +155,37 @@ jobs:
           SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway up --service=${{ env.SVC_ID }} --ci
+
+  deploy-trigger:
+    name: Deploy Trigger
+    needs: [changes, notify-start]
+    if: needs.changes.outputs.trigger == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trigger
+    permissions:
+      contents: read
+    outputs:
+      lint: ${{ steps.lint.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
+      deploy: ${{ steps.deploy.outcome }}
+    env:
+      TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+      TRIGGER_PROJECT_ID: ${{ secrets.TRIGGER_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: trigger/.bun-version
+      - run: bun install --frozen-lockfile
+      - id: lint
+        run: bun run lint
+      - id: typecheck
+        run: bun run typecheck
+      - name: 🚀 Deploy Trigger.dev
+        id: deploy
+        run: bun run deploy
 
   deploy-dashboard:
     name: Deploy Dashboard
@@ -225,8 +250,8 @@ jobs:
 
   notify-final:
     name: Notify Slack — Final
-    needs: [changes, notify-start, deploy-api, deploy-dashboard, deploy-marketing]
-    if: always() && (needs.changes.outputs.api == 'true' || needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.marketing == 'true')
+    needs: [changes, notify-start, deploy-api, deploy-trigger, deploy-dashboard, deploy-marketing]
+    if: always() && (needs.changes.outputs.api == 'true' || needs.changes.outputs.trigger == 'true' || needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.marketing == 'true')
     runs-on: ubuntu-latest
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -258,16 +283,18 @@ jobs:
           }
 
           API_LINT="${{ needs.deploy-api.outputs.lint }}"
+          TRG_LINT="${{ needs.deploy-trigger.outputs.lint }}"
           DASH_LINT="${{ needs.deploy-dashboard.outputs.lint }}"
           MKT_LINT="${{ needs.deploy-marketing.outputs.lint }}"
           API_TC="${{ needs.deploy-api.outputs.typecheck }}"
+          TRG_TC="${{ needs.deploy-trigger.outputs.typecheck }}"
           DASH_TC="${{ needs.deploy-dashboard.outputs.typecheck }}"
           MKT_TC="${{ needs.deploy-marketing.outputs.typecheck }}"
 
-          LINT_STATUS=$(status "$(combine "$API_LINT" "$DASH_LINT" "$MKT_LINT")")
-          TYPECHECK_STATUS=$(status "$(combine "$API_TC" "$DASH_TC" "$MKT_TC")")
+          LINT_STATUS=$(status "$(combine "$API_LINT" "$TRG_LINT" "$DASH_LINT" "$MKT_LINT")")
+          TYPECHECK_STATUS=$(status "$(combine "$API_TC" "$TRG_TC" "$DASH_TC" "$MKT_TC")")
           SUPABASE_STATUS=$(status "${{ needs.deploy-api.outputs.supabase }}")
-          TRIGGER_STATUS=$(status "${{ needs.deploy-api.outputs.trigger }}")
+          TRIGGER_STATUS=$(status "${{ needs.deploy-trigger.outputs.deploy }}")
           API_STATUS=$(status "${{ needs.deploy-api.outputs.railway }}")
           UNKEY_STATUS=$(status "${{ needs.deploy-api.outputs.unkey }}")
           DASHBOARD_STATUS=$(status "${{ needs.deploy-dashboard.outputs.vercel }}")

@@ -8,10 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 post-for-me/
-├── api/             # NestJS API + Trigger.dev jobs + Supabase
+├── api/             # NestJS API + Supabase config
 │   ├── src/         # NestJS source (uses `api/src/supabase/` for the Nest module)
-│   ├── trigger/     # Trigger.dev background jobs
 │   └── supabase/    # DB config, migrations, types, seed (the supabase project)
+├── trigger/         # Trigger.dev background jobs (own deploy lifecycle)
 ├── dashboard/       # React Router v7 dashboard
 └── marketing/       # React Router v7 marketing site
 ```
@@ -22,6 +22,7 @@ post-for-me/
 - **Do not add a root `package.json` workspace** to "share" anything between siblings. If two siblings need the same code, vendor a copy into each. The dumb-monorepo principle is non-negotiable.
 - **Do not create a workspace alias for "convenience"** (e.g. tsconfig path mapping pretending to be an npm package). Use relative imports. Inter-sibling resolution is forbidden.
 - **Each sibling has its own `node_modules`, lockfile, scripts, and CI surface.**
+- **Each sibling generates its own DB types** via its own `supabase:typegen` script. No `cp` of generated artifacts between siblings.
 
 ## Working on a sibling
 
@@ -29,14 +30,23 @@ Always `cd` into the sibling first.
 
 ### API (`api/`)
 - `bun run start:dev` — NestJS dev server (port 3000)
-- `bun run trigger:dev` — Trigger.dev local jobs runner
-- `bun run supabase:start` / `supabase:reset` / `supabase:typegen` — local DB lifecycle
-- `bun run typegen` — Kysely types (Stripe schema)
+- `bun run supabase:start` / `supabase:reset` / `supabase:stop` — local DB lifecycle
+- `bun run supabase:typegen` — regen Supabase types → `./supabase/supabase.types.ts`
+- `bun run kanel:typegen` — regen Kysely types (Stripe schema)
+- `bun run typegen` — runs both kanel and supabase typegen
 - `bun run test` / `test:e2e` — Jest suites
+- `bun run lint`
+
+### Trigger (`trigger/`)
+- `bun run dev` — Trigger.dev local jobs runner (`trigger.dev dev`)
+- `bun run deploy` — Deploy jobs to trigger.dev cloud (`trigger.dev deploy`)
+- `bun run supabase:typegen` — regen Supabase types → `./supabase.types.ts` (needs local Supabase running from `api/`)
+- `bun run typecheck`
 - `bun run lint`
 
 ### Dashboard (`dashboard/`)
 - `bun run dev` — React Router dev (port 5173)
+- `bun run supabase:typegen` — regen Supabase types → `app/lib/.server/database.types.ts` (needs local Supabase running from `api/`)
 - `bun run typecheck` — `react-router typegen && tsc`
 - `bun run test` — Vitest
 - `bun run lint`
@@ -53,7 +63,6 @@ Always `cd` into the sibling first.
 - **Framework**: NestJS with TypeScript
 - **Database**: Supabase (PostgreSQL) with generated types in `api/supabase/supabase.types.ts`
 - **Authentication**: Unkey API key management with custom auth guard
-- **Job processing**: Trigger.dev jobs in `api/trigger/`
 - **Core modules**:
   - `social-posts/` — create/manage social media posts
   - `media/` — file uploads and media processing
@@ -62,12 +71,26 @@ Always `cd` into the sibling first.
   - `auth/` — API key authentication and user decorators
   - `supabase/` — Nest module wrapping the Supabase client (note: distinct from the `supabase/` config dir at `api/supabase/`)
 
+### Trigger (`trigger/`)
+
+- **Platform**: Trigger.dev v3
+- **Config**: `trigger/trigger.config.ts`
+- **Deploy lifecycle**: independent of `api/` — ships via `trigger.dev deploy` to trigger.dev cloud
+- **Database access**: uses the same Supabase service-role client; consumes the `Database` type from `trigger/supabase.types.ts`, regenerated locally via `bun run supabase:typegen` against the local Supabase instance started by `api/`
+- **Key jobs**:
+  - `post-to-platform.ts` — publish to social platforms
+  - `process-post.ts` — validate post content
+  - `process-scheduled-posts.ts` — cron job that fans scheduled posts out to `process-post`
+  - `ffmpeg-process-video.ts` — video processing with FFmpeg
+  - `supabase-media-cleanup.ts` — cleanup unreferenced media
+
 ### Dashboard (`dashboard/`)
 
 - **Framework**: React Router v7 with TypeScript
 - **UI**: Shadcn/ui components with Tailwind CSS v4
 - **State**: React Hook Form with Zod validation
-- **Vendored from former workspace deps**: icons in `app/components/icons/`, Supabase Database types in `app/lib/.server/database.types.ts`
+- **Icons**: vendored copy of the former `icons/` workspace package in `app/components/icons/`
+- **Database types**: regenerated locally via `bun run supabase:typegen` → `app/lib/.server/database.types.ts` (needs local Supabase running from `api/`)
 
 ### Marketing (`marketing/`)
 
@@ -79,17 +102,8 @@ Always `cd` into the sibling first.
 
 - **Platform**: Supabase (hosted PostgreSQL)
 - **Migrations**: `api/supabase/migrations/`
-- **Types**: Auto-generated in `api/supabase/supabase.types.ts`
+- **Types**: Auto-generated in `api/supabase/supabase.types.ts` (source of truth)
 - **Seed Data**: `api/supabase/seed/`
-
-### Background jobs (`api/trigger/`)
-
-- **Platform**: Trigger.dev v3
-- **Config**: `api/trigger.config.ts`
-- **Key files**:
-  - `post-to-platform.ts` — publish to social platforms
-  - `process-post.ts` — validate post content
-  - `ffmpeg-process-video.ts` — video processing with FFmpeg
 
 ## Key architectural patterns
 
@@ -105,11 +119,16 @@ Always `cd` into the sibling first.
 - Row Level Security (RLS) policies enforce data access
 
 ### Cross-sibling type sharing
-- The `Database` type for Supabase is **vendored** into each consumer:
-  - Source of truth: `api/supabase/supabase.types.ts` (regenerated via `bun run supabase:typegen` inside `api/`)
-  - Dashboard copy: `dashboard/app/lib/.server/database.types.ts`
-- When the schema changes, copy the regenerated types into the dashboard:
-  - `cp api/supabase/supabase.types.ts dashboard/app/lib/.server/database.types.ts`
+- **DB schema source of truth**: SQL migrations in `api/supabase/migrations/`. `api/` owns `supabase:start` / `supabase:reset` and the migration lifecycle.
+- **Each consumer generates its own `Database` types** against the running local Supabase. No `cp` between siblings.
+  - `api/`: `bun run supabase:typegen` → `api/supabase/supabase.types.ts` (includes `public`, `cms`, `graphql_public`)
+  - `dashboard/`: `bun run supabase:typegen` → `app/lib/.server/database.types.ts` (just `public` — narrowed to what dashboard queries)
+  - `trigger/`: `bun run supabase:typegen` → `supabase.types.ts` (just `public`)
+- Each consumer has a minimal `supabase/config.toml` declaring `project_id = "post-for-me"` and `[db] port = 54322` so the CLI targets the same local instance api started.
+- **Schema change workflow**:
+  1. Add migration in `api/supabase/migrations/`
+  2. `cd api && bun run supabase:reset` — apply migrations + seed locally
+  3. In each consumer that touches the changed tables, run `bun run supabase:typegen`
 
 ## Testing
 

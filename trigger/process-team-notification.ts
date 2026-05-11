@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 
-import { Database, Json } from "../supabase";
+import { Database, Json } from "./supabase.types";
 
 type TeamNotification =
   Database["public"]["Tables"]["team_notifications"]["Row"];

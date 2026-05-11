@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 import type Stripe from "stripe";
-import { Database } from "../supabase";
+import { Database } from "./supabase.types";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
 

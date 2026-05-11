@@ -11,6 +11,10 @@
 - `bun run test:cov` - Run tests with coverage
 - `bun run test:e2e` - Run end-to-end tests
 - `bun run start:dev` - Start development server with watch mode
+- `bun run typegen` - Regenerate both Kysely (Kanel) and Supabase types
+- `bun run supabase:typegen` - Regenerate just the Supabase Database types
+- `bun run kanel:typegen` - Regenerate just the Kysely (Stripe schema) types
+- `bun run supabase:start` / `supabase:reset` / `supabase:stop` - Local Supabase lifecycle
 
 ## Code Style Guidelines
 

@@ -13,7 +13,7 @@ import { YouTubePostClient } from "./posting/platforms/youtube-post-client";
 import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
 import { PlatformAppCredentials, SocialAccount } from "./posting/post.types";
 
-import { Database } from "../supabase";
+import { Database } from "./supabase.types";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,

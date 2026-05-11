@@ -7,6 +7,7 @@
 - **Test**: `bun run test` (Vitest run), `bun run test:watch` (watch mode)
 - **Lint**: `bun run lint` (ESLint check), `bun run lint:fix` (auto-fix)
 - **Typecheck**: `bun run typecheck` (React Router typegen + tsc)
+- **Supabase typegen**: `bun run supabase:typegen` (regen Database types into `app/lib/.server/database.types.ts`; requires `cd api && bun run supabase:start` first)
 
 ## Code Style
 

@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       api: ${{ steps.filter.outputs.api }}
+      trigger: ${{ steps.filter.outputs.trigger }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
       marketing: ${{ steps.filter.outputs.marketing }}
       migrations: ${{ steps.filter.outputs.migrations }}
@@ -25,6 +26,8 @@ jobs:
           filters: |
             api:
               - 'api/**'
+            trigger:
+              - 'trigger/**'
             dashboard:
               - 'dashboard/**'
             marketing:
@@ -51,6 +54,25 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run test
+
+  trigger:
+    name: Trigger
+    needs: changes
+    if: needs.changes.outputs.trigger == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trigger
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: trigger/.bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
 
   dashboard:
     name: Dashboard
