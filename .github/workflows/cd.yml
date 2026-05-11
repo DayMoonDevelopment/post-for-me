@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feat/ghcr-docker-build
 
 concurrency:
   group: cd-${{ github.workflow }}-${{ github.ref }}
@@ -52,7 +51,7 @@ jobs:
       - name: Post initial Slack message
         id: notify
         run: |
-          source ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄
+          source ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄 🔄
           echo "slack_ts=${SLACK_TS}" >> "$GITHUB_OUTPUT"
           echo "slack_channel_id=${SLACK_CHANNEL_ID}" >> "$GITHUB_OUTPUT"
 
@@ -298,5 +297,6 @@ jobs:
           API_STATUS=$(status "${{ needs.deploy-api.outputs.railway }}")
           UNKEY_STATUS=$(status "${{ needs.deploy-api.outputs.unkey }}")
           DASHBOARD_STATUS=$(status "${{ needs.deploy-dashboard.outputs.vercel }}")
+          MARKETING_STATUS=$(status "${{ needs.deploy-marketing.outputs.build }}")
 
-          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$UNKEY_STATUS" "$DASHBOARD_STATUS"
+          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$UNKEY_STATUS" "$DASHBOARD_STATUS" "$MARKETING_STATUS"
