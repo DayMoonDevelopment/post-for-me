@@ -53,6 +53,8 @@ export const processScheduledPosts = schedules.task({
         )
         .eq("status", "scheduled")
         .lte("post_at", new Date().toISOString())
+        .order("post_at", { ascending: true })
+        .order("id", { ascending: true })
         .limit(80);
 
       if (postsError) {
