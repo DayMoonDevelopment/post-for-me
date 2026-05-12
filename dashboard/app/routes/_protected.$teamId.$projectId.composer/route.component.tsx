@@ -1,7 +1,7 @@
 import { Outlet } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PaperPlaneIcon } from "icons";
+import { PaperPlaneIcon } from "~/components/icons";
 
 import { useForm as useFormFetcher } from "~/hooks/use-form";
 

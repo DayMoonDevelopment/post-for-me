@@ -2,7 +2,7 @@ import { Link } from "react-router";
 
 import { cn } from "~/lib/utils";
 
-import { ArrowUpRightIcon, CheckmarkSmallIcon, CrossSmallIcon } from "icons";
+import { ArrowUpRightIcon, CheckmarkSmallIcon, CrossSmallIcon } from "~/components/icons";
 
 import { Copyable } from "~/components/copyable";
 

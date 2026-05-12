@@ -1,5 +1,5 @@
 import { useFetcher } from "react-router";
-import { TriangleExclamationIcon } from "icons";
+import { TriangleExclamationIcon } from "~/components/icons";
 
 import { Button } from "~/ui/button";
 import {

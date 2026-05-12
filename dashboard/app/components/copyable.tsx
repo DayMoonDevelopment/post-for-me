@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { CheckmarkSmallIcon, CopyIcon } from "icons";
+import { CheckmarkSmallIcon, CopyIcon } from "~/components/icons";
 
 import { cn } from "~/lib/utils";
 

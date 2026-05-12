@@ -1,4 +1,4 @@
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 import { redirect } from "react-router";
 import { addSocialAccountConnections } from "~/lib/.server/social-accounts/social-account";
 import { withSupabase } from "~/lib/.server/supabase";

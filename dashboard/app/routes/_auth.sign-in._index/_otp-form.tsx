@@ -10,7 +10,7 @@ import { Input } from "~/ui/input";
 import { Label } from "~/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
 
-import { PaperPlaneIcon, KeyIcon } from "icons";
+import { PaperPlaneIcon, KeyIcon } from "~/components/icons";
 
 export function OtpForm() {
   const { Form, isSubmitting, data } = useForm();

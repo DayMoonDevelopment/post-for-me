@@ -249,7 +249,7 @@ export class InstagramService implements SocialPlatformService {
             total_interactions: insights.total_interactions,
           }
         : undefined,
-    } as PlatformPost;
+    };
 
     return post;
   }

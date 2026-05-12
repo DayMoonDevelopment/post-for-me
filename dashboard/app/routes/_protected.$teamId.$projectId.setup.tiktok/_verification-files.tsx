@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useFetcher, useLoaderData } from "react-router";
 import { useEffect, useState } from "react";
-import { CircleInfoIcon } from "icons/";
+import { CircleInfoIcon } from "~/components/icons";
 
 import { useFileUpload } from "~/hooks/use-file-upload";
 import { useForm } from "~/hooks/use-form";

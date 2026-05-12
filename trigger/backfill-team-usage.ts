@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
-import type Stripe from "stripe";
-import { Database } from "@post-for-me/db";
+import Stripe from "stripe";
+import { Database } from "./supabase.types";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -24,7 +24,7 @@ if (!STRIPE_METER_EVENT_ID) {
   throw new Error("Missing STRIPE_METER_EVENT_ID");
 }
 
-const stripe = require("stripe")(STRIPE_SECRET_KEY);
+const stripe = new Stripe(STRIPE_SECRET_KEY);
 
 const supabase = createClient<Database>(
   SUPABASE_URL,
@@ -54,8 +54,9 @@ const getSubscriptionItemProduct = async (
   item: Stripe.SubscriptionItem,
 ): Promise<Stripe.Product> => {
   const product = item.price.product;
+  const productId = typeof product === "string" ? product : product.id;
 
-  const retrievedProduct = await stripe.products.retrieve(product);
+  const retrievedProduct = await stripe.products.retrieve(productId);
 
   if ("deleted" in retrievedProduct && retrievedProduct.deleted) {
     throw new Error("Subscription product is deleted");

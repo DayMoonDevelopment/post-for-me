@@ -4,159 +4,98 @@ A modern social media automation platform built with NestJS, React Router, and S
 
 **[Visit Post for Me →](https://www.postforme.dev)**
 
-## 🏗️ Architecture
+## Repository layout
 
-This is a monorepo containing:
+This repo is a "dumb" monorepo: each surface is a self-contained sibling directory with its own `package.json`, deps, scripts, lockfile, and CI surface. There are no shared workspaces, no `workspace:*` deps, and no root-level package management.
 
-- **API** (`api/`) - NestJS backend with REST API and job scheduling
-- **Dashboard App** (`dashboard/`) - React Router v7 frontend for user management
-- **Marketing Site** (`marketing/`) - React Router v7 frontend for marketing the service
-- **Database** - Supabase (PostgreSQL) for data persistence
-
-## 🚀 Tech Stack
-
-### Backend (API)
-
-- **Framework**: NestJS with TypeScript
-- **Database**: Supabase (PostgreSQL)
-- **Job Processing**: Trigger.dev
-- **Authentication**: Unkey API
-
-### Frontend (Dashboard & marketing)
-
-- **Framework**: React Router with TypeScript
-- **Styling**: Tailwind CSS v4
-- **UI Components**: Shadcn UI
-
-### Icons (shared icons)
-
-Icons is a collection of icons used across the project. These icons come from a paid service that gives us access to the SVG's for commercial use.
-
-The local package is a wrapper around the icons to make them easier to use as React components in the projects.
-
-```ts
-// from your components
-
-import { MyIcon } from "icons";
-
-...
+```
+post-for-me/
+├── api/             # NestJS API + Supabase config
+│   ├── src/         # NestJS source
+│   └── supabase/    # DB config, migrations, types, seed
+├── trigger/         # Trigger.dev background jobs (own deploy lifecycle)
+├── dashboard/       # React Router v7 dashboard app
+├── marketing/       # React Router v7 marketing site
+└── .github/         # Singular CI/CD that targets the right sibling per change
 ```
 
-## 📋 Prerequisites
+> **Why "dumb"?** Co-locating code in one repo gives us singular CI/CD and easy cross-sibling navigation, but each sibling stays self-contained so it can be installed, run, tested, and deployed without root involvement. No shared `package.json` and no inter-package resolution — just sibling apps that happen to live next to each other.
 
-- [Bun](https://bun.sh) v1.1.29 or later
-- Node.js 18+ (for compatibility)
+## Working on a sibling
 
-## ⚙️ Setup
+Pick the sibling you want to work on, `cd` into it, and use its scripts. **Do not run `bun install` at the repo root** — it will install nothing useful, and there's no root tooling.
 
-1. **Clone the repository**
-
-```bash
-git clone https://github.com/DayMoonDevelopment/post-for-me.git
-cd post-for-me
-```
-
-2. **Install dependencies**
+### API (`api/`)
 
 ```bash
+cd api
 bun install
+bun run start:dev          # NestJS, port 3000
+bun run supabase:start     # Local Supabase
+bun run supabase:reset     # Reset local DB + apply migrations + seed
+bun run supabase:typegen   # Regenerate Supabase types → ./supabase/supabase.types.ts
+bun run kanel:typegen      # Regenerate Kysely types (Stripe schema)
+bun run typegen            # Runs both kanel + supabase typegen
+bun run test
+bun run lint
 ```
 
-3. **Environment Configuration**
-
-   Set up environment variables for both API and Dashboard:
-   - Copy `.env.example` files in each app directory
-   - Configure Supabase, social media API keys, and other required services
-
-4. **Database Setup**
-
-   Initialize your Supabase database with the required schema (migrations should be provided in the project).
+### Trigger (`trigger/`)
 
 ```bash
-bun supabase start
-bun supabase db reset
+cd trigger
+bun install
+bun run dev                # trigger.dev dev (local jobs runner)
+bun run deploy             # trigger.dev deploy (push to trigger.dev cloud)
+bun run supabase:typegen   # Regenerate Supabase types → ./supabase.types.ts (needs api's local Supabase running)
+bun run typecheck
+bun run lint
 ```
 
-## 🛠️ Development
-
-### Start all services
+### Dashboard (`dashboard/`)
 
 ```bash
-bun run dev
+cd dashboard
+bun install
+bun run dev                # React Router, port 5173
+bun run supabase:typegen   # Regenerate Supabase types → app/lib/.server/database.types.ts (needs api's local Supabase running)
+bun run typecheck
+bun run test
+bun run lint
 ```
-
-This runs both the API and Dashboard concurrently.
-
-### Start individual services
-
-**API only (port 3000)**
-
-```bash
-bun run dev:api
-```
-
-**Dashboard only (port 5173)**
-
-```bash
-bun run dev:dashboard
-```
-
-## 📝 Available Scripts
-
-### Root Level
-
-- `bun run dev` - Start both API and Dashboard
-- `bun run lint` - Lint all packages
-- `bun run typecheck` - Type check all packages
-
-### API (`apps/api/`)
-
-- `bun run build` - Build for production
-- `bun run start` - Start production server
-- `bun run start:dev` - Start development server with watch mode
-- `bun run test` - Run tests
-- `bun run lint` - Lint API code
-
-### Dashboard (`apps/dashboard/`)
-
-- `bun run build` - Build for production
-- `bun run dev` - Start development server
-- `bun run start` - Start production server
-- `bun run test` - Run tests
-- `bun run lint` - Lint dashboard code
 
 ### Marketing (`marketing/`)
 
-- `bun run build` - Build for production
-- `bun run dev` - Start development server
-- `bun run start` - Start production server
-- `bun run test` - Run tests
-- `bun run lint` - Lint dashboard code
-
-## 🗂️ Project Structure
-
-````
-post-for-me/
-├── api/
-│   ├── src/                # Source code
-│   ├── test/               # Tests
-│   └── dist/               # Built files
-├── dashboard/
-│   ├── app/                # App routes and components
-│   ├── public/             # Static assets
-│   └── build/              # Built files
-├── marketing/
-│   ├── app/                # App routes and components
-│   ├── public/             # Static assets
-│   └── build/              # Built files
-├── icons/
-│   ├── icons/              # Icon components
-│   └── index.ts            # Root-level export
-├── package.json            # Root package configuration
-└── README.md
+```bash
+cd marketing
+bun install
+bun run dev                # React Router
+bun run typecheck
+bun run lint
 ```
 
-## 📄 License
+## Tech stack
 
-This project is owned fully by Day Moon Development LLC - see the package.json files for details.
-````
+### Backend (`api/`)
+- **Framework**: NestJS with TypeScript
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Unkey API key management
+
+### Background jobs (`trigger/`)
+- **Platform**: Trigger.dev v3
+- **Database access**: vendored `Database` type from `api/supabase/`
+- **Deploy**: independent of `api/` via `trigger.dev deploy`
+
+### Frontend (`dashboard/`, `marketing/`)
+- **Framework**: React Router v7 with TypeScript
+- **Styling**: Tailwind CSS v4
+- **UI**: Shadcn/ui
+
+## Prerequisites
+
+- [Bun](https://bun.sh) v1.3.3 or later
+- Supabase CLI (installed as a dev dep inside `api/`)
+
+## License
+
+This project is owned fully by Day Moon Development LLC — see the package.json files for details.

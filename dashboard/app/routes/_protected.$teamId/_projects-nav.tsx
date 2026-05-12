@@ -8,7 +8,7 @@ import {
   SidebarMenu,
 } from "~/ui/sidebar";
 
-import { PlusSmallIcon } from "icons";
+import { PlusSmallIcon } from "~/components/icons";
 
 import { ProjectNavItem } from "./_projects-nav-item";
 

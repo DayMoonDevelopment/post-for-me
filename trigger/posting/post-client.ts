@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await */
+ 
 import { randomUUID } from "crypto";
 import { createWriteStream } from "fs";
 import * as fsp from "fs/promises";
@@ -25,16 +25,10 @@ import type {
 } from "./post.types";
 
 export class PostClient {
-  #supabaseClient: SupabaseClient;
-  #appCredentials: PlatformAppCredentials;
-
   constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
-  ) {
-    this.#supabaseClient = supabaseClient;
-    this.#appCredentials = appCredentials;
-  }
+    _supabaseClient: SupabaseClient,
+    _appCredentials: PlatformAppCredentials,
+  ) {}
 
   //##ABSTRACT METHODS##
   async refreshAccessToken(

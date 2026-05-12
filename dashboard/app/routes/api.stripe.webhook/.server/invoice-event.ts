@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Stripe } from "stripe";
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request";
 import { customerHasActiveSubscriptions } from "~/lib/.server/customer-has-active-subscriptions.request";
 

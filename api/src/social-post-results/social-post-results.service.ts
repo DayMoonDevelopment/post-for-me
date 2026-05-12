@@ -6,7 +6,7 @@ import { SocialPostResultQueryDto } from './dto/post-results.query.dto';
 
 import type { PaginatedRequestQuery } from '../pagination/pagination-request.interface';
 
-import { Database } from '@post-for-me/db';
+import { Database } from '../../supabase';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 

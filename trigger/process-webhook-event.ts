@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { logger, retry, task } from "@trigger.dev/sdk";
-import { Database } from "@post-for-me/db";
+import { Database } from "./supabase.types";
 
 type EventTypeEnum = Database["public"]["Enums"]["webhook_event_type"];
 type EventStatusEnum = Database["public"]["Enums"]["webhook_event_status"];
@@ -24,7 +24,7 @@ export const processWebhooks = task({
   }) => {
     const { id, url, type, data, secret } = payload;
     let status: EventStatusEnum = "processing";
-    let details: {
+    const details: {
       response?: { status?: number; statusText?: string; body?: string };
     } = {};
     try {

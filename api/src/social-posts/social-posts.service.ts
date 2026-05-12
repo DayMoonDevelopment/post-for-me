@@ -13,7 +13,7 @@ import {
   PlatformConfiguration,
   PlatformConfigurationsDto,
 } from './dto/post-configurations.dto';
-import { Database, Json } from '@post-for-me/db';
+import { Database, Json } from '../../supabase';
 import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from '../social-post-meters/social-post-meters.service';
 

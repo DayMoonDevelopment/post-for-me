@@ -1,0 +1,11 @@
+# Minimal Supabase CLI config for dashboard.
+# The DB schema, migrations, and seed live in api/supabase/. This sibling only
+# uses the CLI to read types from the running local instance.
+#
+# Workflow:
+#   1. Start the local stack from api/:  cd api && bun run supabase:start
+#   2. Regenerate types in dashboard:    cd dashboard && bun run supabase:typegen
+project_id = "post-for-me"
+
+[db]
+port = 54322

@@ -7,7 +7,7 @@ import {
   XIcon,
   PinterestIcon,
   ThreadsIcon,
-} from "icons";
+} from "~/components/icons";
 
 import { YouTubeImageIcon } from "~/components/youtube-icon";
 

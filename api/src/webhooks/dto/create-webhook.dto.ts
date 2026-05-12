@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Database } from '@post-for-me/db';
+import { Database } from '../../../supabase';
 
 export type EventType = Database['public']['Enums']['webhook_event_type'];
 

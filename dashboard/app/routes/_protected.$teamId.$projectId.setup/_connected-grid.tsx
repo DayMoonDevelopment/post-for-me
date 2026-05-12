@@ -3,7 +3,7 @@ import {
   CircleFilledIcon,
   TriangleExclamationIcon,
   CircleInfoIcon,
-} from "icons";
+} from "~/components/icons";
 
 import { getProviderLabel } from "~/lib/utils";
 

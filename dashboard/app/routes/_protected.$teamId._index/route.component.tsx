@@ -1,5 +1,5 @@
 import { Link, useRouteLoaderData } from "react-router";
-import { FolderIcon, PlusLargeIcon } from "icons";
+import { FolderIcon, PlusLargeIcon } from "~/components/icons";
 
 import { Card, CardContent, CardFooter } from "~/ui/card";
 import { Separator } from "~/ui/separator";

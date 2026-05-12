@@ -10,7 +10,7 @@ import { unkey } from "../unkey";
 import { RATE_LIMITS, UNKEY_API_ID } from "../unkey.constants";
 import type { SupabaseContext } from "../supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 import { customerHasActiveSubscriptions } from "../customer-has-active-subscriptions.request";
 import { stripe } from "../stripe";
 import { getSubscriptionPlanInfo } from "../get-subscription-plan-info";

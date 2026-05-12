@@ -27,7 +27,6 @@ A robust NestJS API that provides secure endpoints for social media content mana
 - **Background Jobs**: Trigger.dev for async processing
 - **Media Storage**: Supabase Storage with CDN
 - **Documentation**: Scalar for interactive API docs
-- **Testing**: Jest for unit tests, Supertest for integration tests
 
 ## Core Modules
 
@@ -273,10 +272,9 @@ api/
 ## Contributing
 
 1. Follow NestJS conventions and patterns
-2. Write comprehensive tests for new features
-3. Update API documentation for endpoint changes
-4. Ensure all security checks pass
-5. Test OAuth flows with actual platform credentials
+2. Update API documentation for endpoint changes
+3. Ensure all security checks pass
+4. Test OAuth flows with actual platform credentials
 
 ---
 

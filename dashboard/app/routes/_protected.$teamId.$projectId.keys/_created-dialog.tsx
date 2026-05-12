@@ -12,7 +12,7 @@ import {
 } from "~/ui/dialog";
 import { Button } from "~/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
-import { TriangleExclamationIcon } from "icons";
+import { TriangleExclamationIcon } from "~/components/icons";
 
 export function CreatedDialog() {
   const fetcher = useFetcher({ key: "create-api-key" });

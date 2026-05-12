@@ -85,7 +85,7 @@ import {
   //   SiWebassembly,
   type IconType,
 } from "@icons-pack/react-simple-icons";
-import { CheckmarkSmallIcon, CopyIcon } from "icons";
+import { CheckmarkSmallIcon, CopyIcon } from "~/components/icons";
 
 import { cn } from "~/lib/utils";
 

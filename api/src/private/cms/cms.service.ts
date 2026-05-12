@@ -48,8 +48,7 @@ export class CmsService {
   }
 
   private get client(): SupabaseClient {
-    return this.supabaseService
-      .supabaseServiceRole as unknown as SupabaseClient;
+    return this.supabaseService.supabaseServiceRole;
   }
 
   private articlesTable() {

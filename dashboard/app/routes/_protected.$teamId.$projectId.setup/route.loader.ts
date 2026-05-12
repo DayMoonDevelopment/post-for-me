@@ -3,7 +3,7 @@ import isEmpty from "lodash/isEmpty";
 
 import { withSupabase } from "~/lib/.server/supabase";
 
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 
 function getCredentialStatus(credential: {
   app_id: string | null;

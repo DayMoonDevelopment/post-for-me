@@ -7,6 +7,7 @@ TRIGGER=$4
 API=$5
 UNKEY=$6
 DASHBOARD=$7
+MARKETING=$8
 
 DASHBOARD_URL="https://post-for-me-app.vercel.app/"
 
@@ -22,6 +23,7 @@ Trigger.dev  | ${TRIGGER}
 API          | ${API}
 UNKEY        | ${UNKEY}
 Dashboard    | ${DASHBOARD}
+Marketing    | ${MARKETING}
 \`\`\`
 EOF
 )

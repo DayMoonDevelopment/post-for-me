@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "~/ui/table";
 
-import { EllipsisIcon, PersonRemoveIcon, PersonAddIcon } from "icons";
+import { EllipsisIcon, PersonRemoveIcon, PersonAddIcon } from "~/components/icons";
 
 import type { Route } from "./+types/route";
 

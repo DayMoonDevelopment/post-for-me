@@ -5,7 +5,7 @@ import { withSupabase } from "~/lib/.server/supabase";
 import { sendInviteEmail } from "~/lib/.server/send-invite-email.request";
 import { currentUserIsInTeam } from "~/lib/.server/current-user-is-in-team.request";
 
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function upsertUserByEmail(

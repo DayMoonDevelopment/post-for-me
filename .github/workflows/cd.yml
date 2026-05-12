@@ -4,52 +4,97 @@ on:
   push:
     branches:
       - main
-      - feat/ghcr-docker-build
 
 concurrency:
   group: cd-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy Full App
+  changes:
+    name: Detect changed siblings
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      trigger: ${{ steps.filter.outputs.trigger }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+      marketing: ${{ steps.filter.outputs.marketing }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'api/**'
+            trigger:
+              - 'trigger/**'
+            dashboard:
+              - 'dashboard/**'
+            marketing:
+              - 'marketing/**'
+
+  notify-start:
+    name: Notify Slack — Start
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.trigger == 'true' || needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.marketing == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      slack_ts: ${{ steps.notify.outputs.slack_ts }}
+      slack_channel_id: ${{ steps.notify.outputs.slack_channel_id }}
+    env:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_CHANNEL: "#notifications-postforme"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Post initial Slack message
+        id: notify
+        run: |
+          source ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄 🔄
+          echo "slack_ts=${SLACK_TS}" >> "$GITHUB_OUTPUT"
+          echo "slack_channel_id=${SLACK_CHANNEL_ID}" >> "$GITHUB_OUTPUT"
+
+  deploy-api:
+    name: Deploy API
+    needs: [changes, notify-start]
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     permissions:
       packages: write
       contents: read
-
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-      SLACK_CHANNEL: "#notifications-postforme"
-
+    outputs:
+      lint: ${{ steps.lint.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
+      supabase: ${{ steps.supabase.outcome }}
+      docker: ${{ steps.docker.outcome }}
+      unkey: ${{ steps.unkey.outcome }}
+      railway: ${{ steps.railway.outcome }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Notify Slack - Start
-        run: ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.3
+          bun-version-file: api/.bun-version
 
-      - name: Install dependencies
-        run: bun install
+      - name: Install
+        working-directory: api
+        run: bun install --frozen-lockfile
 
       - name: Lint
         id: lint
+        working-directory: api
         run: bun run lint
 
-      - name: Type check
+      - name: Typecheck
         id: typecheck
+        working-directory: api
         run: bun run typecheck
 
       - name: Set up Supabase CLI
@@ -58,18 +103,13 @@ jobs:
           version: latest
 
       - name: Link Supabase project
+        working-directory: api
         run: supabase link --project-ref $SUPABASE_PROJECT_ID
 
       - name: Apply Supabase migrations
         id: supabase
+        working-directory: api
         run: supabase db push
-
-      - name: 🚀 Deploy Trigger.dev
-        id: trigger
-        env:
-          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
-          TRIGGER_PROJECT_ID: ${{ secrets.TRIGGER_PROJECT_ID }}
-        run: bunx trigger.dev@4.3.0 deploy
 
       - name: Install Railway CLI
         run: bun add -g @railway/cli
@@ -88,7 +128,7 @@ jobs:
         id: docker
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: api
           file: api/Dockerfile
           push: true
           tags: ghcr.io/daymoondevelopment/api:${{ github.sha }},ghcr.io/daymoondevelopment/api:latest
@@ -99,43 +139,164 @@ jobs:
         run: |
           curl -sL https://github.com/unkeyed/unkey/releases/latest/download/unkey_Linux_x86_64.tar.gz | tar xz
           ./unkey --version
-          ./unkey deploy --help
 
       - name: Deploy API to Unkey
         id: unkey
         env:
           UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
-          UNKEY_PROJECT: post-for-me-api # project slug, not id
-          UNKEY_APP: default # leave this as is until we allow multiple apps per project
+          UNKEY_PROJECT: post-for-me-api
+          UNKEY_APP: default
         run: ./unkey deploy --env=production ghcr.io/daymoondevelopment/api:${{ github.sha }}
 
       - name: Deploy API to Railway
-        id: api
+        id: railway
         env:
           SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway up --service=${{ env.SVC_ID }} --ci
 
-      - name: Link Dashboard to Vercel Project
-        run: bunx vercel link --project post-for-me-app --scope day-moon --token=${{ secrets.VERCEL_TOKEN }} --yes
+  deploy-trigger:
+    name: Deploy Trigger
+    needs: [changes, notify-start]
+    if: needs.changes.outputs.trigger == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trigger
+    permissions:
+      contents: read
+    outputs:
+      lint: ${{ steps.lint.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
+      deploy: ${{ steps.deploy.outcome }}
+    env:
+      TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+      TRIGGER_PROJECT_ID: ${{ secrets.TRIGGER_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: trigger/.bun-version
+      - run: bun install --frozen-lockfile
+      - id: lint
+        run: bun run lint
+      - id: typecheck
+        run: bun run typecheck
+      - name: 🚀 Deploy Trigger.dev
+        id: deploy
+        run: bun run deploy
 
-      - name: Deploy Dashboard
-        id: dashboard
-        run: bunx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
-        continue-on-error: true
+  deploy-dashboard:
+    name: Deploy Dashboard
+    needs: [changes, notify-start]
+    if: needs.changes.outputs.dashboard == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    permissions:
+      contents: read
+    outputs:
+      lint: ${{ steps.lint.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
+      vercel: ${{ steps.vercel.outcome }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: dashboard/.bun-version
+      - run: bun install --frozen-lockfile
+      - id: lint
+        run: bun run lint
+      - id: typecheck
+        run: bun run typecheck
+      - name: Link Dashboard to Vercel project
+        run: bunx vercel link --project post-for-me-app --scope day-moon --token=$VERCEL_TOKEN --yes
+      - name: Deploy Dashboard to Vercel
+        id: vercel
+        run: bunx vercel deploy --prod --token=$VERCEL_TOKEN --yes
 
-      - name: Update Slack - Final Status
-        if: always()
+  deploy-marketing:
+    name: Deploy Marketing
+    needs: [changes, notify-start]
+    if: needs.changes.outputs.marketing == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketing
+    permissions:
+      contents: read
+    outputs:
+      lint: ${{ steps.lint.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
+      build: ${{ steps.build.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: marketing/.bun-version
+      - run: bun install --frozen-lockfile
+      - id: lint
+        run: bun run lint
+      - id: typecheck
+        run: bun run typecheck
+      # NOTE: production marketing deploys are still driven from the standalone post-for-me-marketing repo until PFM-463 retires it.
+      # Until then, validate the build but don't push to Vercel from here.
+      - id: build
+        run: bun run build
+
+  notify-final:
+    name: Notify Slack — Final
+    needs: [changes, notify-start, deploy-api, deploy-trigger, deploy-dashboard, deploy-marketing]
+    if: always() && (needs.changes.outputs.api == 'true' || needs.changes.outputs.trigger == 'true' || needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.marketing == 'true')
+    runs-on: ubuntu-latest
+    env:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_CHANNEL: "#notifications-postforme"
+      SLACK_TS: ${{ needs.notify-start.outputs.slack_ts }}
+      SLACK_CHANNEL_ID: ${{ needs.notify-start.outputs.slack_channel_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Slack with final status
         run: |
-          LINT_STATUS="${{ steps.lint.outcome == 'success' && '✅' || '❌' }}"
-          TYPECHECK_STATUS="${{ steps.typecheck.outcome == 'success' && '✅' || (steps.typecheck.outcome == 'skipped' && '⏸️' || '❌') }}"
-          SUPABASE_STATUS="${{ steps.supabase.outcome == 'success' && '🚀' || (steps.supabase.outcome == 'skipped' && '⏸️' || '❌') }}"
-          TRIGGER_STATUS="${{ steps.trigger.outcome == 'success' && '🚀' || (steps.trigger.outcome == 'skipped' && '⏸️' || '❌') }}"
-          API_STATUS="${{ steps.api.outcome == 'success' && '🚀' || (steps.api.outcome == 'skipped' && '⏸️' || '❌') }}"
-          UNKEY_STATUS="${{ steps.unkey.outcome == 'success' && '🚀' || (steps.unkey.outcome == 'skipped' && '⏸️' || '❌') }}"
-          DASHBOARD_STATUS="${{ steps.dashboard.outcome == 'success' && '🚀' || (steps.dashboard.outcome == 'skipped' && '⏸️' || '❌') }}"
+          status() {
+            case "$1" in
+              success) echo "🚀" ;;
+              failure) echo "❌" ;;
+              skipped|"") echo "⏸️" ;;
+              *)        echo "⏸️" ;;
+            esac
+          }
 
-          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$UNKEY_STATUS" "$DASHBOARD_STATUS"
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+          # Combined lint/typecheck across whichever siblings ran
+          combine() {
+            for s in "$@"; do
+              [ "$s" = "failure" ] && { echo "failure"; return; }
+            done
+            for s in "$@"; do
+              [ "$s" = "success" ] && { echo "success"; return; }
+            done
+            echo "skipped"
+          }
+
+          API_LINT="${{ needs.deploy-api.outputs.lint }}"
+          TRG_LINT="${{ needs.deploy-trigger.outputs.lint }}"
+          DASH_LINT="${{ needs.deploy-dashboard.outputs.lint }}"
+          MKT_LINT="${{ needs.deploy-marketing.outputs.lint }}"
+          API_TC="${{ needs.deploy-api.outputs.typecheck }}"
+          TRG_TC="${{ needs.deploy-trigger.outputs.typecheck }}"
+          DASH_TC="${{ needs.deploy-dashboard.outputs.typecheck }}"
+          MKT_TC="${{ needs.deploy-marketing.outputs.typecheck }}"
+
+          LINT_STATUS=$(status "$(combine "$API_LINT" "$TRG_LINT" "$DASH_LINT" "$MKT_LINT")")
+          TYPECHECK_STATUS=$(status "$(combine "$API_TC" "$TRG_TC" "$DASH_TC" "$MKT_TC")")
+          SUPABASE_STATUS=$(status "${{ needs.deploy-api.outputs.supabase }}")
+          TRIGGER_STATUS=$(status "${{ needs.deploy-trigger.outputs.deploy }}")
+          API_STATUS=$(status "${{ needs.deploy-api.outputs.railway }}")
+          UNKEY_STATUS=$(status "${{ needs.deploy-api.outputs.unkey }}")
+          DASHBOARD_STATUS=$(status "${{ needs.deploy-dashboard.outputs.vercel }}")
+          MARKETING_STATUS=$(status "${{ needs.deploy-marketing.outputs.build }}")
+
+          ./.github/scripts/update_status.sh "$LINT_STATUS" "$TYPECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$UNKEY_STATUS" "$DASHBOARD_STATUS" "$MARKETING_STATUS"

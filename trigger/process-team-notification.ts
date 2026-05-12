@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 
-import { Database, Json } from "@post-for-me/db";
+import { Database, Json } from "./supabase.types";
 
 type TeamNotification =
   Database["public"]["Tables"]["team_notifications"]["Row"];
@@ -300,14 +300,13 @@ export const processTeamNotification = task({
           teamId: payload.team_id,
           error,
         });
-        return;
+      } else {
+        logger.info("Inserted notification", {
+          id: insertedNotification.id,
+          originalNotificationId: payload.id,
+          teamId: payload.team_id,
+        });
       }
-
-      logger.info("Inserted notification", {
-        id: insertedNotification.id,
-        originalNotificationId: payload.id,
-        teamId: payload.team_id,
-      });
     }
   },
 });

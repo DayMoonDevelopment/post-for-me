@@ -1,5 +1,5 @@
 import { data } from "react-router";
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 
 import { withSupabase } from "~/lib/.server/supabase";
 

@@ -6,7 +6,7 @@ import { cn } from "~/lib/utils";
 
 import { Input } from "~/ui/input";
 
-import { CrossSmallIcon } from "icons";
+import { CrossSmallIcon } from "~/components/icons";
 
 import type { InputHTMLAttributes, KeyboardEvent } from "react";
 

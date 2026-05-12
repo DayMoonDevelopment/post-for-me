@@ -1,4 +1,4 @@
-import { Database } from "@post-for-me/db";
+import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, schedules, wait } from "@trigger.dev/sdk";
 
@@ -22,12 +22,12 @@ export const supabaseMediaCleanup = schedules.task({
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-    let allOldFiles: any[] = [];
+    const allOldFiles: any[] = [];
     let offset = 0;
     const limit = 1000; // Process in larger batches
 
     // Fetch all old files from storage
-    do {
+    for (;;) {
       const { data: files, error } = await supabaseClient.storage
         .from("post-media")
         .list(undefined, {
@@ -46,6 +46,7 @@ export const supabaseMediaCleanup = schedules.task({
       // Filter files older than 1 day
       const oldFiles = files.filter(
         (file) =>
+          file.created_at !== null &&
           new Date(file.created_at) < oneDayAgo &&
           file.metadata?.mimetype !== "text/plain",
       );
@@ -60,7 +61,7 @@ export const supabaseMediaCleanup = schedules.task({
 
       // If we got less than the limit, we've reached the end
       if (files.length < limit) break;
-    } while (true);
+    }
 
     if (allOldFiles.length === 0) {
       logger.info("No old files found to potentially clean up");
@@ -70,11 +71,11 @@ export const supabaseMediaCleanup = schedules.task({
     logger.info(`Found ${allOldFiles.length} files older than 1 day`);
 
     logger.info("Fetching Scheduled Post Urls");
-    let allScheduledPostUrls: string[] = [];
+    const allScheduledPostUrls: string[] = [];
     let scheduledPostOffset = 0;
     const scheduledPostLimit = 1000;
 
-    do {
+    for (;;) {
       const { data: scheduledPostUrls, error: scheduledPostError } =
         await supabaseClient
           .from("social_post_media")
@@ -99,7 +100,7 @@ export const supabaseMediaCleanup = schedules.task({
       scheduledPostOffset += scheduledPostLimit;
 
       if (scheduledPostUrls.length < scheduledPostLimit) break;
-    } while (true);
+    }
 
     logger.info("Completed fetching scheduled post urls", {
       scheduledPostUrls: allScheduledPostUrls.length,

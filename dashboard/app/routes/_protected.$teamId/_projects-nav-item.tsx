@@ -11,7 +11,7 @@ import {
 } from "~/ui/sidebar";
 import { Collapsible, CollapsibleContent } from "~/ui/collapsible";
 
-import { FolderIcon, EllipsisIcon, TrashCanIcon, PencilLineIcon } from "icons";
+import { FolderIcon, EllipsisIcon, TrashCanIcon, PencilLineIcon } from "~/components/icons";
 
 import {
   DropdownMenu,

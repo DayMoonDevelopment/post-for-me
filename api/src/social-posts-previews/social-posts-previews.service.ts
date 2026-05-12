@@ -43,7 +43,7 @@ export class SocialPostPreviewsService {
         const configuration = {
           ...accountConfig,
           ...platformConfig,
-        } as PlatformConfiguration;
+        };
 
         return {
           platform: account.platform,

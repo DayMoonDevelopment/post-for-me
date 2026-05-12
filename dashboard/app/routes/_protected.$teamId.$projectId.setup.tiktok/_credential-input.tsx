@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { EyeOpenIcon, EyeClosedIcon } from "icons";
+import { EyeOpenIcon, EyeClosedIcon } from "~/components/icons";
 import { Input } from "~/ui/input";
 import { FormControl, FormField, FormItem, FormLabel } from "~/ui/form";
 

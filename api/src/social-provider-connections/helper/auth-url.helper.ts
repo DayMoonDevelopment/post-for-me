@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { ConfigService } from '@nestjs/config';
 import type { SocialProviderAppCredentialsDto } from '../../social-provider-app-credentials/dto/social-provider-app-credentials.dto';
-import { TwitterApi, type TwitterApiTokens } from 'twitter-api-v2';
+import { TwitterApi } from 'twitter-api-v2';
 import { google } from 'googleapis';
 import type { SupabaseService } from '../../supabase/supabase.service';
 import type { AuthUrlProviderData } from '../dto/create-provider-auth-url.dto';
-import type { Database } from '@post-for-me/db';
+import type { Database } from '../../../supabase';
 
 type SocialProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -207,7 +207,7 @@ export async function generateAuthUrl({
       const client = new TwitterApi({
         appKey: appId,
         appSecret: appSecret,
-      } as TwitterApiTokens);
+      });
 
       const authLink = await client.generateAuthLink(callbackUrl, {
         linkMode: 'authorize',

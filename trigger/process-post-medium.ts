@@ -1,4 +1,4 @@
-import { Database } from "@post-for-me/db";
+import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 import fetch from "node-fetch";

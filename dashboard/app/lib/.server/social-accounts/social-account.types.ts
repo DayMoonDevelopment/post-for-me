@@ -1,4 +1,4 @@
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

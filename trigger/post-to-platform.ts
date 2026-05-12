@@ -19,9 +19,10 @@ import {
   SocialAccount,
 } from "./posting/post.types";
 import { differenceInDays } from "date-fns";
-import { Database } from "@post-for-me/db";
+import Stripe from "stripe";
+import { Database } from "./supabase.types";
 
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
 
 const supabaseClient = createClient<Database>(

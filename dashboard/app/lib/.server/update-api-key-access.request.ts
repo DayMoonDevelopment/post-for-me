@@ -4,7 +4,7 @@ import { stripe } from "~/lib/.server/stripe";
 import { getSubscriptionPlanInfo } from "./get-subscription-plan-info";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@post-for-me/db";
+import type { Database } from "~/lib/.server/database.types";
 import { customerHasSubscriptionSystemCredsAddon } from "./customer-has-subscription-system-creds-addon.request";
 
 type UpdateAPIKeyAccessParams = {

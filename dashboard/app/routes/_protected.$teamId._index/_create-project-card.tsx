@@ -1,4 +1,4 @@
-import { FolderAddLeftIcon } from "icons";
+import { FolderAddLeftIcon } from "~/components/icons";
 import { Link } from "react-router";
 import { Card, CardContent, CardFooter } from "~/ui/card";
 

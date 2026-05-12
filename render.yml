@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: post-for-me/api
-    runtime: node
-    rootDir: apps/api
-    buildCommand: bun install; bun run build
-    startCommand: bun start:prod

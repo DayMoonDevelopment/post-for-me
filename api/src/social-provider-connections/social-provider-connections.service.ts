@@ -14,7 +14,7 @@ import {
   CreateSocialAccountDto,
   SocialAccountMetadata,
 } from './dto/create-social-account.dto';
-import { Database } from '@post-for-me/db';
+import { Database } from '../../supabase';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 

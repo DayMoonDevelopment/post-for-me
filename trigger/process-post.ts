@@ -9,7 +9,7 @@ import type {
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
 
-import { Database, Json } from "@post-for-me/db";
+import { Database, Json } from "./supabase.types";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
