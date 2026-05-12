@@ -34,7 +34,6 @@ Always `cd` into the sibling first.
 - `bun run supabase:typegen` — regen Supabase types → `./supabase/supabase.types.ts`
 - `bun run kanel:typegen` — regen Kysely types (Stripe schema)
 - `bun run typegen` — runs both kanel and supabase typegen
-- `bun run test` / `test:e2e` — Jest suites
 - `bun run lint`
 
 ### Trigger (`trigger/`)
@@ -48,7 +47,6 @@ Always `cd` into the sibling first.
 - `bun run dev` — React Router dev (port 5173)
 - `bun run supabase:typegen` — regen Supabase types → `app/lib/.server/database.types.ts` (needs local Supabase running from `api/`)
 - `bun run typecheck` — `react-router typegen && tsc`
-- `bun run test` — Vitest
 - `bun run lint`
 
 ### Marketing (`marketing/`)
@@ -129,12 +127,6 @@ Always `cd` into the sibling first.
   1. Add migration in `api/supabase/migrations/`
   2. `cd api && bun run supabase:reset` — apply migrations + seed locally
   3. In each consumer that touches the changed tables, run `bun run supabase:typegen`
-
-## Testing
-
-- **API**: Jest unit tests, Supertest integration tests
-- **Frontend**: Vitest for components and utilities
-- **E2E**: Jest configuration for API endpoints
 
 ## Key dependencies
 
