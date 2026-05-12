@@ -23,8 +23,12 @@ jobs:
         with:
           bun-version-file: api/.bun-version
       - run: bun install --frozen-lockfile
-      - run: bun run lint
-      - run: bun run typecheck
+      - name: Lint
+        id: lint
+        run: bun run lint
+      - name: Typecheck
+        id: typecheck
+        run: bun run typecheck
 
   trigger:
     name: Trigger
@@ -40,8 +44,12 @@ jobs:
         with:
           bun-version-file: trigger/.bun-version
       - run: bun install --frozen-lockfile
-      - run: bun run lint
-      - run: bun run typecheck
+      - name: Lint
+        id: lint
+        run: bun run lint
+      - name: Typecheck
+        id: typecheck
+        run: bun run typecheck
 
   dashboard:
     name: Dashboard
@@ -57,8 +65,12 @@ jobs:
         with:
           bun-version-file: dashboard/.bun-version
       - run: bun install --frozen-lockfile
-      - run: bun run lint
-      - run: bun run typecheck
+      - name: Lint
+        id: lint
+        run: bun run lint
+      - name: Typecheck
+        id: typecheck
+        run: bun run typecheck
 
   marketing:
     name: Marketing
@@ -74,5 +86,9 @@ jobs:
         with:
           bun-version-file: marketing/.bun-version
       - run: bun install --frozen-lockfile
-      - run: bun run lint
-      - run: bun run typecheck
+      - name: Lint
+        id: lint
+        run: bun run lint
+      - name: Typecheck
+        id: typecheck
+        run: bun run typecheck
