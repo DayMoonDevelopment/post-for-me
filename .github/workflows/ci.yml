@@ -17,7 +17,6 @@ jobs:
       trigger: ${{ steps.filter.outputs.trigger }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
       marketing: ${{ steps.filter.outputs.marketing }}
-      migrations: ${{ steps.filter.outputs.migrations }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -32,8 +31,6 @@ jobs:
               - 'dashboard/**'
             marketing:
               - 'marketing/**'
-            migrations:
-              - 'api/supabase/migrations/**'
 
   api:
     name: API
@@ -114,8 +111,7 @@ jobs:
   deploy-dashboard-preview:
     name: Deploy Dashboard Preview
     needs: [changes, dashboard]
-    # Skip the preview when there are migrations in the same PR — preview DB hasn't migrated yet.
-    if: needs.changes.outputs.dashboard == 'true' && needs.changes.outputs.migrations == 'false'
+    if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
