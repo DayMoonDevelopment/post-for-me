@@ -24,7 +24,7 @@ export const processWebhooks = task({
   }) => {
     const { id, url, type, data, secret } = payload;
     let status: EventStatusEnum = "processing";
-    let details: {
+    const details: {
       response?: { status?: number; statusText?: string; body?: string };
     } = {};
     try {

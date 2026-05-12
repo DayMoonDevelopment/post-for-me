@@ -1,5 +1,9 @@
 {
   "name": "post-for-me",
   "private": true,
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "scripts": {
+    "typecheck": "(cd api && bun run typecheck) && (cd trigger && bun run typecheck) && (cd dashboard && bun run typecheck) && (cd marketing && bun run typecheck)",
+    "lint": "(cd api && bun run lint) && (cd trigger && bun run lint) && (cd dashboard && bun run lint) && (cd marketing && bun run lint)"
+  }
 }

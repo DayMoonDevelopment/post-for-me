@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/require-await */
+ 
+ 
+ 
+ 
+ 
 import { PostClient } from "../post-client";
 import axios from "axios";
 import FormData from "form-data";
@@ -250,7 +250,11 @@ export class PinterestPostClient extends PostClient {
     });
     const filename =
       new URL(fileUrl).pathname.split("/").pop() || `video_${mediaId}.mp4`;
-    const contentType = fileResponse.headers["content-type"] || "video/mp4";
+    const contentTypeHeader = fileResponse.headers["content-type"];
+    const contentType =
+      typeof contentTypeHeader === "string" && contentTypeHeader
+        ? contentTypeHeader
+        : "video/mp4";
     const knownLengthRaw = fileResponse.headers["content-length"];
     const knownLength = knownLengthRaw ? Number(knownLengthRaw) : undefined;
 

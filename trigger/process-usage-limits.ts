@@ -1,10 +1,10 @@
 import { logger, schedules, tasks } from "@trigger.dev/sdk";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { Database, Json } from "./supabase.types";
 import { randomUUID } from "crypto";
 
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY!);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,

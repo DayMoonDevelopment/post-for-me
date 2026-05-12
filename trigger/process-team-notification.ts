@@ -300,14 +300,13 @@ export const processTeamNotification = task({
           teamId: payload.team_id,
           error,
         });
-        return;
+      } else {
+        logger.info("Inserted notification", {
+          id: insertedNotification.id,
+          originalNotificationId: payload.id,
+          teamId: payload.team_id,
+        });
       }
-
-      logger.info("Inserted notification", {
-        id: insertedNotification.id,
-        originalNotificationId: payload.id,
-        teamId: payload.team_id,
-      });
     }
   },
 });

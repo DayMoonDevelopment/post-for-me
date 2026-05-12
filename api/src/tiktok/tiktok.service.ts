@@ -118,7 +118,7 @@ export class TikTokService implements SocialPlatformService {
             view_count: video.view_count || 0,
           }
         : undefined,
-    } as PlatformPost;
+    };
 
     return post;
   }

@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/require-await */
+ 
+ 
+ 
+ 
+ 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -374,7 +374,6 @@ export class FacebookPostClient extends PostClient {
       platformConfig?.set_caption_for_each_image ?? true;
 
     // Upload each image
-    let index = 0;
     for (const medium of media) {
       if (medium.type == "video") {
         continue;
@@ -424,7 +423,6 @@ export class FacebookPostClient extends PostClient {
         );
       }
       mediaIds.push({ media_fbid: photoResponse.data.id });
-      index++;
     }
 
     this.#requests.push({
