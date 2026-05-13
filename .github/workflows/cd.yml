@@ -188,7 +188,7 @@ jobs:
         # The `trigger.dev` CLI package is not in trigger/package.json (only
         # @trigger.dev/sdk and @trigger.dev/build are). Invoke via bunx so it's
         # fetched on demand instead of expecting it on PATH or in node_modules/.bin.
-        run: bunx trigger.dev@latest deploy
+        run: bunx trigger.dev@4.4.4 deploy
 
   deploy-dashboard:
     name: Deploy Dashboard
