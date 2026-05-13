@@ -8,6 +8,9 @@ import type {
 } from '../lib/dto/global.dto';
 import { google } from 'googleapis';
 import { SupabaseService } from '../supabase/supabase.service';
+import { mapWithConcurrency } from '../lib/async.utils';
+
+const YOUTUBE_METRICS_CONCURRENCY = 3;
 
 interface YouTubeVideo {
   id: string;
@@ -302,9 +305,9 @@ export class YouTubeService implements SocialPlatformService {
       }
 
       // Fetch analytics for each video and combine with basic stats
-      const posts: PlatformPost[] = await Promise.all(
-        videos.map(async (video) => {
-          // Only fetch analytics if metrics are requested
+      const posts = await mapWithConcurrency(
+        videos,
+        async (video): Promise<PlatformPost> => {
           const analyticsMetrics = includeMetrics
             ? await this.getVideoAnalytics(
                 video.id,
@@ -335,7 +338,6 @@ export class YouTubeService implements SocialPlatformService {
             ],
             metrics: includeMetrics
               ? {
-                  // Use Analytics API data when available, fallback to Data API
                   views:
                     analyticsMetrics.views ||
                     parseInt(video.statistics.viewCount || '0', 10),
@@ -348,7 +350,6 @@ export class YouTubeService implements SocialPlatformService {
                   dislikes:
                     analyticsMetrics.dislikes ||
                     parseInt(video.statistics.dislikeCount || '0', 10),
-                  // Analytics-only metrics
                   engagedViews: analyticsMetrics.engagedViews,
                   redViews: analyticsMetrics.redViews,
                   videosAddedToPlaylists:
@@ -383,7 +384,8 @@ export class YouTubeService implements SocialPlatformService {
                 }
               : undefined,
           };
-        }),
+        },
+        includeMetrics ? YOUTUBE_METRICS_CONCURRENCY : 8,
       );
 
       return {

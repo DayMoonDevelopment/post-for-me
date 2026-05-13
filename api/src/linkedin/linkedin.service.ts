@@ -8,6 +8,9 @@ import type {
 } from '../lib/dto/global.dto';
 import { LinkedInPostMetricsDto } from './dto/linkedin-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
+import { mapWithConcurrency } from '../lib/async.utils';
+
+const LINKEDIN_METRICS_CONCURRENCY = 3;
 
 type LinkedInBatchGetResponse<T> = {
   results?: Record<string, T>;
@@ -54,10 +57,6 @@ export class LinkedInService implements SocialPlatformService {
   ) {
     this.apiVersion =
       this.configService.get<string>('LinkedInVersion') || '202601';
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private getRestHeaders(accessToken: string): Record<string, string> {
@@ -458,74 +457,65 @@ export class LinkedInService implements SocialPlatformService {
         posts as LinkedInPostElement[],
       );
 
-      const platformPostsPromises = posts.map(async (post, index) => {
-        const postUrn: string = post.id || post.urn;
-        const content = post.content;
-        const createdObj = post.created;
+      const platformPosts = await mapWithConcurrency(
+        posts,
+        async (post) => {
+          const postUrn: string = post.id || post.urn;
+          const content = post.content;
+          const createdObj = post.created;
 
-        // Stagger metrics requests slightly so we don't fan out a burst of
-        // requests at the exact same time.
-        if (includeMetrics) {
-          const baseDelayMs = 150;
-          const maxDelayMs = 2000;
-          const delayMs = Math.min(index * baseDelayMs, maxDelayMs);
-          if (delayMs > 0) {
-            await this.sleep(delayMs);
+          const metrics = includeMetrics
+            ? await this.getPostMetrics(
+                account,
+                postUrn,
+                content,
+                encodedAuthorUrn,
+              )
+            : undefined;
+
+          const media = [];
+
+          const contentMediaId: unknown = content?.media?.id;
+          if (typeof contentMediaId === 'string') {
+            const resolved = resolvedContentMedia.get(contentMediaId);
+            if (resolved) {
+              media.push(resolved);
+            }
           }
-        }
 
-        const metrics = includeMetrics
-          ? await this.getPostMetrics(
-              account,
-              postUrn,
-              content,
-              encodedAuthorUrn,
-            )
-          : undefined;
-
-        const media = [];
-
-        const contentMediaId: unknown = content?.media?.id;
-        if (typeof contentMediaId === 'string') {
-          const resolved = resolvedContentMedia.get(contentMediaId);
-          if (resolved) {
-            media.push(resolved);
-          }
-        }
-
-        if (content?.['com.linkedin.ugc.ShareContent']?.media) {
-          for (const mediaItem of content['com.linkedin.ugc.ShareContent']
-            .media) {
-            const mediaObj = mediaItem['com.linkedin.ugc.Media'];
-            if (mediaObj?.thumbnails) {
-              const url = mediaObj.thumbnails[0].url;
-              if (
-                typeof url === 'string' &&
-                url.length > 0 &&
-                !media.some((m) => m.url === url)
-              ) {
-                media.push({
-                  url,
-                  thumbnail_url: url,
-                });
+          if (content?.['com.linkedin.ugc.ShareContent']?.media) {
+            for (const mediaItem of content['com.linkedin.ugc.ShareContent']
+              .media) {
+              const mediaObj = mediaItem['com.linkedin.ugc.Media'];
+              if (mediaObj?.thumbnails) {
+                const url = mediaObj.thumbnails[0].url;
+                if (
+                  typeof url === 'string' &&
+                  url.length > 0 &&
+                  !media.some((m) => m.url === url)
+                ) {
+                  media.push({
+                    url,
+                    thumbnail_url: url,
+                  });
+                }
               }
             }
           }
-        }
 
-        return {
-          provider: 'linkedin',
-          id: postUrn,
-          account_id: account.id,
-          caption: post.commentary || '',
-          url: `https://www.linkedin.com/posts/${postUrn.split(':').pop()}`,
-          posted_at: createdObj?.time,
-          media,
-          metrics,
-        };
-      });
-
-      const platformPosts = await Promise.all(platformPostsPromises);
+          return {
+            provider: 'linkedin',
+            id: postUrn,
+            account_id: account.id,
+            caption: post.commentary || '',
+            url: `https://www.linkedin.com/posts/${postUrn.split(':').pop()}`,
+            posted_at: createdObj?.time,
+            media,
+            metrics,
+          };
+        },
+        includeMetrics ? LINKEDIN_METRICS_CONCURRENCY : 8,
+      );
 
       return {
         posts: platformPosts as any,

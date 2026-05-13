@@ -8,6 +8,9 @@ import type {
 } from '../lib/dto/global.dto';
 import axios from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
+import { mapWithConcurrency } from '../lib/async.utils';
+
+const THREADS_METRICS_CONCURRENCY = 3;
 
 interface ThreadsPost {
   id: string;
@@ -148,62 +151,79 @@ export class ThreadsService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
-      let postsPromises: Promise<PlatformPost>[];
-      let responseData: ThreadsPostsResponse | undefined;
-
       if (platformIds && platformIds.length > 0) {
-        // Fetch specific threads by IDs
-        postsPromises = platformIds.map(async (platformId) => {
-          const threadResponse = await axios.get<ThreadsPost>(
-            `https://graph.threads.net/v1.0/${platformId}`,
-            {
-              params: {
-                fields:
-                  'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
-                access_token: account.access_token,
+        const posts = await mapWithConcurrency(
+          platformIds,
+          async (platformId): Promise<PlatformPost> => {
+            const threadResponse = await axios.get<ThreadsPost>(
+              `https://graph.threads.net/v1.0/${platformId}`,
+              {
+                params: {
+                  fields:
+                    'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
+                  access_token: account.access_token,
+                },
               },
-            },
-          );
+            );
 
-          const thread = threadResponse.data;
-          const post: PlatformPost = {
-            provider: 'threads',
-            id: thread.id,
-            account_id: account.social_provider_user_id,
-            caption: thread.text ?? '',
-            url: thread.permalink ?? '',
-            posted_at: thread.timestamp,
-            media: thread.media_url
-              ? [{ url: thread.media_url, thumbnail_url: thread.thumbnail_url }]
-              : [],
-          };
+            const thread = threadResponse.data;
+            const post: PlatformPost = {
+              provider: 'threads',
+              id: thread.id,
+              account_id: account.social_provider_user_id,
+              caption: thread.text ?? '',
+              url: thread.permalink ?? '',
+              posted_at: thread.timestamp,
+              media: thread.media_url
+                ? [
+                    {
+                      url: thread.media_url,
+                      thumbnail_url: thread.thumbnail_url,
+                    },
+                  ]
+                : [],
+            };
 
-          if (includeMetrics) {
-            await this.addMetricsToPost(post, thread.id, account.access_token);
-          }
+            if (includeMetrics) {
+              await this.addMetricsToPost(
+                post,
+                thread.id,
+                account.access_token,
+              );
+            }
 
-          return post;
-        });
-      } else {
-        const safeLimit = Math.min(limit, 25);
-
-        // Fetch threads from user's profile
-        const response = await axios.get<ThreadsPostsResponse>(
-          `https://graph.threads.net/v1.0/me/threads`,
-          {
-            params: {
-              fields:
-                'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
-              access_token: account.access_token,
-              limit: safeLimit,
-              after: cursor,
-            },
+            return post;
           },
+          includeMetrics ? THREADS_METRICS_CONCURRENCY : 8,
         );
 
-        responseData = response.data;
+        return {
+          posts,
+          count: posts.length,
+          has_more: false,
+        };
+      }
 
-        postsPromises = (responseData.data ?? []).map(async (thread) => {
+      const safeLimit = Math.min(limit, 25);
+
+      const response = await axios.get<ThreadsPostsResponse>(
+        `https://graph.threads.net/v1.0/me/threads`,
+        {
+          params: {
+            fields:
+              'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
+            access_token: account.access_token,
+            limit: safeLimit,
+            after: cursor,
+          },
+        },
+      );
+
+      const responseData = response.data;
+
+      const posts = await mapWithConcurrency(
+        responseData.data ?? [],
+        async (thread): Promise<PlatformPost> => {
           const post: PlatformPost = {
             provider: 'threads',
             id: thread.id,
@@ -221,10 +241,9 @@ export class ThreadsService implements SocialPlatformService {
           }
 
           return post;
-        });
-      }
-
-      const posts = await Promise.all(postsPromises);
+        },
+        includeMetrics ? THREADS_METRICS_CONCURRENCY : 8,
+      );
 
       return {
         posts,

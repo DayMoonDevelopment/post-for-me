@@ -16,6 +16,10 @@ import type {
   FacebookInsight,
 } from './facebook.types';
 import { FacebookPostMetricsDto } from './dto/facebook-post-metrics.dto';
+import { mapWithConcurrency } from '../lib/async.utils';
+
+const FACEBOOK_METRICS_POST_CONCURRENCY = 3;
+const FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY = 2;
 
 @Injectable({ scope: Scope.REQUEST })
 export class FacebookService implements SocialPlatformService {
@@ -92,27 +96,28 @@ export class FacebookService implements SocialPlatformService {
   }): Promise<PlatformPostsResponse> {
     try {
       if (platformIds && platformIds.length > 0) {
-        // Fetch specific posts by ID
-        const postPromises = platformIds.map((id) =>
-          axios.get(`https://graph.facebook.com/v20.0/${id}`, {
-            params: {
-              fields:
-                'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
-              access_token: account.access_token,
-            },
-          }),
-        );
+        const posts = await mapWithConcurrency(
+          platformIds,
+          async (id) => {
+            const response = await axios.get(
+              `https://graph.facebook.com/v20.0/${id}`,
+              {
+                params: {
+                  fields:
+                    'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
+                  access_token: account.access_token,
+                },
+              },
+            );
 
-        const responses = await Promise.all(postPromises);
-        const posts: PlatformPost[] = await Promise.all(
-          responses.map(async (response) => {
             const post = response.data as FacebookPost;
             return this.mapFacebookPostToPlatformPost(
               post,
               account,
               includeMetrics,
             );
-          }),
+          },
+          includeMetrics ? FACEBOOK_METRICS_POST_CONCURRENCY : 8,
         );
 
         return {
@@ -137,10 +142,11 @@ export class FacebookService implements SocialPlatformService {
       );
 
       const feedResponse = response.data as FacebookFeedResponse;
-      const posts: PlatformPost[] = await Promise.all(
-        (feedResponse.data || []).map((post) =>
+      const posts = await mapWithConcurrency(
+        feedResponse.data || [],
+        async (post) =>
           this.mapFacebookPostToPlatformPost(post, account, includeMetrics),
-        ),
+        includeMetrics ? FACEBOOK_METRICS_POST_CONCURRENCY : 8,
       );
 
       return {
@@ -235,8 +241,9 @@ export class FacebookService implements SocialPlatformService {
         'post_activity_by_action_type_unique',
       ];
 
-      const allInsightsResponses = await Promise.all(
-        intervals.map((interval) =>
+      const allInsightsResponses = await mapWithConcurrency(
+        intervals,
+        async (interval) =>
           axios.get(`https://graph.facebook.com/v20.0/${postId}/insights`, {
             params: {
               metric: metricsList.join(','),
@@ -245,7 +252,7 @@ export class FacebookService implements SocialPlatformService {
               until: interval.until,
             },
           }),
-        ),
+        FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY,
       );
 
       // Aggregate insights from all intervals
