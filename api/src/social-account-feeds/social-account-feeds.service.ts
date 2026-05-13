@@ -23,6 +23,7 @@ import { PlatformPostDto } from './dto/platform-post.dto';
 @Injectable()
 export class SocialAccountFeedsService {
   platformsToAlwaysRefresh = ['youtube', 'bluesky'];
+  facebookMetricsLimitCap = 10;
   constructor(
     private readonly supabaseService: SupabaseService,
     @Inject(REQUEST) private request: Request,
@@ -42,6 +43,7 @@ export class SocialAccountFeedsService {
     queryParams: PlatformPostQueryDto,
     hasMore: boolean,
     cursor?: string,
+    limitOverride?: number,
   ): string | null {
     if (!hasMore) {
       return null;
@@ -55,7 +57,7 @@ export class SocialAccountFeedsService {
       url.searchParams.set('cursor', cursor);
     }
 
-    url.searchParams.set('limit', String(queryParams.limit));
+    url.searchParams.set('limit', String(limitOverride ?? queryParams.limit));
 
     if (queryParams.social_post_id) {
       const values: string[] = [];
@@ -234,6 +236,11 @@ export class SocialAccountFeedsService {
       includeMetrics = values.includes('metrics');
     }
 
+    const effectiveLimit =
+      includeMetrics && account.provider === 'facebook'
+        ? Math.min(queryParams.limit, this.facebookMetricsLimitCap)
+        : queryParams.limit;
+
     // Fetch account posts and social post results in parallel
     const accountPostsResult = await platformService.getAccountPosts({
       account: socialAccount,
@@ -242,7 +249,7 @@ export class SocialAccountFeedsService {
         postFilters.platformPostsMetadata.length > 0
           ? postFilters.platformPostsMetadata
           : undefined,
-      limit: queryParams.limit,
+      limit: effectiveLimit,
       cursor: queryParams.cursor,
       includeMetrics,
     });
@@ -298,11 +305,12 @@ export class SocialAccountFeedsService {
       }),
       meta: {
         cursor: accountPostsResult.cursor || '',
-        limit: queryParams.limit,
+        limit: effectiveLimit,
         next: this.generateNextUrl(
           queryParams,
           accountPostsResult.has_more,
           accountPostsResult.cursor,
+          effectiveLimit,
         ),
         has_more: accountPostsResult.has_more,
       },

@@ -17,6 +17,9 @@ import type {
   InstagramInsightsResponse,
   InstagramInsight,
 } from './instagram.types';
+import { mapWithConcurrency } from '../lib/async.utils';
+
+const INSTAGRAM_METRICS_CONCURRENCY = 3;
 
 @Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
@@ -368,37 +371,36 @@ export class InstagramService implements SocialPlatformService {
         'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp';
 
       if (platformIds && platformIds.length > 0) {
-        // Fetch specific media by IDs with insights
-        const mediaPromises = platformIds.map(async (id) => {
-          const mediaResponse = await axios.get<InstagramMediaItem>(
-            `${baseUrl}/${id}`,
-            {
-              params: {
-                fields: baseFields,
-                access_token: account.access_token,
+        const mediaItems = await mapWithConcurrency(
+          platformIds,
+          async (id) => {
+            const mediaResponse = await axios.get<InstagramMediaItem>(
+              `${baseUrl}/${id}`,
+              {
+                params: {
+                  fields: baseFields,
+                  access_token: account.access_token,
+                },
               },
-            },
-          );
+            );
 
-          const mediaItem = mediaResponse.data;
+            const mediaItem = mediaResponse.data;
+            const insights = includeMetrics
+              ? await this.fetchMediaInsights(
+                  id,
+                  mediaItem.media_product_type,
+                  baseUrl,
+                  account.access_token,
+                )
+              : undefined;
 
-          // Fetch insights for this media only if metrics are requested
-          const insights = includeMetrics
-            ? await this.fetchMediaInsights(
-                id,
-                mediaItem.media_product_type,
-                baseUrl,
-                account.access_token,
-              )
-            : undefined;
-
-          return {
-            ...mediaItem,
-            insights,
-          };
-        });
-
-        const mediaItems = await Promise.all(mediaPromises);
+            return {
+              ...mediaItem,
+              insights,
+            };
+          },
+          includeMetrics ? INSTAGRAM_METRICS_CONCURRENCY : 8,
+        );
 
         const posts: PlatformPost[] = mediaItems.map(
           (item: InstagramMediaItem) =>
@@ -428,8 +430,9 @@ export class InstagramService implements SocialPlatformService {
 
       // Fetch insights for each media item only if metrics are requested
       const mediaWithInsights = includeMetrics
-        ? await Promise.all(
-            (response.data.data || []).map(async (item) => {
+        ? await mapWithConcurrency(
+            response.data.data || [],
+            async (item) => {
               const insights = await this.fetchMediaInsights(
                 item.id,
                 item.media_product_type,
@@ -441,7 +444,8 @@ export class InstagramService implements SocialPlatformService {
                 ...item,
                 insights,
               };
-            }),
+            },
+            INSTAGRAM_METRICS_CONCURRENCY,
           )
         : response.data.data.map((item) => ({ ...item, insights: undefined }));
 
