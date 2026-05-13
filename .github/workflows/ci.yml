@@ -29,6 +29,9 @@ jobs:
       - name: Typecheck
         id: typecheck
         run: bun run typecheck
+      - name: Build
+        id: build
+        run: bun run build
 
   trigger:
     name: Trigger
@@ -71,6 +74,9 @@ jobs:
       - name: Typecheck
         id: typecheck
         run: bun run typecheck
+      - name: Build
+        id: build
+        run: bun run build
 
   marketing:
     name: Marketing
@@ -92,3 +98,6 @@ jobs:
       - name: Typecheck
         id: typecheck
         run: bun run typecheck
+      - name: Build
+        id: build
+        run: bun run build

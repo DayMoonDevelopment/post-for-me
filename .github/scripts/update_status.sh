@@ -1,13 +1,12 @@
 #!/bin/bash
 
-LINTER=$1
-TYPECHECK=$2
-SUPABASE=$3
-TRIGGER=$4
-API=$5
-UNKEY=$6
-DASHBOARD=$7
-MARKETING=$8
+PRECHECK=$1
+SUPABASE=$2
+TRIGGER=$3
+API=$4
+UNKEY=$5
+DASHBOARD=$6
+MARKETING=$7
 
 DASHBOARD_URL="https://post-for-me-app.vercel.app/"
 
@@ -16,8 +15,7 @@ BLOCK=$(cat <<EOF
 \`\`\`
 Step         | Status
 -------------|--------
-Linter       | ${LINTER}
-Typecheck    | ${TYPECHECK}
+Precheck     | ${PRECHECK}
 Supabase     | ${SUPABASE}
 Trigger.dev  | ${TRIGGER}
 API          | ${API}

@@ -242,6 +242,11 @@ export class StripeSyncService {
   }
 
   async upsertInvoice(db: SyncDb, invoice: Stripe.Invoice): Promise<void> {
+    // `invoice.upcoming` previews arrive without an `id` — Stripe synthesises
+    // them ~1h before renewal and they never become real invoices. Persisting
+    // them would violate the NOT NULL PK; skip and let the eventual real
+    // `invoice.created` / `.finalized` event populate the row.
+    if (!invoice.id) return;
     const customerId =
       typeof invoice.customer === 'string'
         ? invoice.customer
@@ -288,7 +293,7 @@ export class StripeSyncService {
     };
     await db
       .insertInto('stripe.invoices')
-      .values({ id: invoice.id! as InvoicesId, ...row })
+      .values({ id: invoice.id as InvoicesId, ...row })
       .onConflict((oc) => oc.column('id').doUpdateSet(row))
       .execute();
   }
