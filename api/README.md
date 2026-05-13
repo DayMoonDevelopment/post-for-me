@@ -71,6 +71,10 @@ UNKEY_API_ID=your_unkey_api_id
 DASHBOARD_APP_URL=http://localhost:5173
 
 TRIGGER_SECRET_KEY=your_trigger_secret
+
+# Social account feeds (optional)
+# Caps Facebook expand=metrics page size; defaults to 10 when unset.
+FacebookFeedMetricsLimitCap=10
 ```
 
 ## Development
