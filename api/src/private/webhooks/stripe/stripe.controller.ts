@@ -53,6 +53,11 @@ export class StripeWebhookController {
       );
     }
 
+    // early return for failed invoice.upcoming event
+    if (event.type === 'invoice.upcoming') {
+      return { received: true };
+    }
+
     try {
       await this.stripeWebhookService.handleEvent(event);
     } catch (err) {
