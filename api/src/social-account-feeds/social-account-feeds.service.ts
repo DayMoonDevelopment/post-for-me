@@ -5,6 +5,7 @@ import { PlatformPostQueryDto } from './dto/platform-post-query.dto';
 import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-response.dto';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { SocialAccount, PlatformPostMetadata } from '../lib/dto/global.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
@@ -23,8 +24,9 @@ import { PlatformPostDto } from './dto/platform-post.dto';
 @Injectable()
 export class SocialAccountFeedsService {
   platformsToAlwaysRefresh = ['youtube', 'bluesky'];
-  facebookMetricsLimitCap = 10;
+  facebookMetricsLimitCap: number;
   constructor(
+    private readonly configService: ConfigService,
     private readonly supabaseService: SupabaseService,
     @Inject(REQUEST) private request: Request,
     private readonly tiktokBusinessService: TikTokBusinessService,
@@ -37,7 +39,13 @@ export class SocialAccountFeedsService {
     private readonly threadsService: ThreadsService,
     private readonly twitterService: TwitterService,
     private readonly blueskyService: BlueskyService,
-  ) {}
+  ) {
+    const configuredCap = Number(
+      this.configService.get<string>('FacebookFeedMetricsLimitCap') ?? 10,
+    );
+    this.facebookMetricsLimitCap =
+      Number.isFinite(configuredCap) && configuredCap > 0 ? configuredCap : 10;
+  }
 
   generateNextUrl(
     queryParams: PlatformPostQueryDto,
