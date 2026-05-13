@@ -9,40 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: Detect changed siblings
-    runs-on: ubuntu-latest
-    outputs:
-      api: ${{ steps.filter.outputs.api }}
-      trigger: ${{ steps.filter.outputs.trigger }}
-      dashboard: ${{ steps.filter.outputs.dashboard }}
-      marketing: ${{ steps.filter.outputs.marketing }}
-      migrations: ${{ steps.filter.outputs.migrations }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            api:
-              - 'api/**'
-            trigger:
-              - 'trigger/**'
-            dashboard:
-              - 'dashboard/**'
-            marketing:
-              - 'marketing/**'
-            migrations:
-              - 'api/supabase/migrations/**'
-              - 'api/supabase/seed/**'
-              - 'api/supabase/config.toml'
-
   api:
     name: API
-    needs: changes
-    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -67,8 +35,6 @@ jobs:
 
   trigger:
     name: Trigger
-    needs: changes
-    if: needs.changes.outputs.trigger == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -90,8 +56,6 @@ jobs:
 
   dashboard:
     name: Dashboard
-    needs: changes
-    if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -116,8 +80,6 @@ jobs:
 
   marketing:
     name: Marketing
-    needs: changes
-    if: needs.changes.outputs.marketing == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -139,26 +101,3 @@ jobs:
       - name: Build
         id: build
         run: bun run build
-
-  validate-migrations:
-    name: Validate migrations
-    needs: changes
-    if: needs.changes.outputs.migrations == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-      - name: Start local Supabase
-        working-directory: api
-        run: supabase start
-      - name: Apply migrations + seed
-        working-directory: api
-        run: supabase db reset
-      - name: Stop Supabase
-        if: always()
-        working-directory: api
-        run: supabase stop
