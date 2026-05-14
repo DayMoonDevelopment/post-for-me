@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 
 import { ConfigModule } from '@nestjs/config';
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 
 import { SocialPostsModule } from './social-posts/social-posts.module';
 import { MediaModule } from './media/media.module';
@@ -20,6 +22,7 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     MediaModule,
     SocialPostsModule,
     SocialPostResultsModule,
@@ -38,6 +41,10 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
     HealthcheckModule,
   ],
   controllers: [],
-  providers: [AuthGuard, VerifyKeyGuard],
+  providers: [
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
+    AuthGuard,
+    VerifyKeyGuard,
+  ],
 })
 export class AppModule {}
