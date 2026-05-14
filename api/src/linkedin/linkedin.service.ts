@@ -100,7 +100,10 @@ export class LinkedInService implements SocialPlatformService {
     const data =
       (await response.json()) as unknown as LinkedInBatchGetResponse<LinkedInImageEntity>;
     if (!response.ok) {
-      console.error('Error batch getting LinkedIn images', data);
+      console.error('Error batch getting LinkedIn images', {
+        status: response.status,
+        statusText: response.statusText,
+      });
       return resolved;
     }
 
@@ -145,7 +148,10 @@ export class LinkedInService implements SocialPlatformService {
     const data =
       (await response.json()) as unknown as LinkedInBatchGetResponse<LinkedInVideoEntity>;
     if (!response.ok) {
-      console.error('Error batch getting LinkedIn videos', data);
+      console.error('Error batch getting LinkedIn videos', {
+        status: response.status,
+        statusText: response.statusText,
+      });
       return resolved;
     }
 
@@ -292,7 +298,10 @@ export class LinkedInService implements SocialPlatformService {
     const analyticsData: any = await analyticsResponse.json();
 
     if (!analyticsResponse.ok) {
-      console.error('Error getting LinkedIn Post metrics', analyticsData);
+      console.error('Error getting LinkedIn post metrics', {
+        status: analyticsResponse.status,
+        statusText: analyticsResponse.statusText,
+      });
     } else {
       const stats = Array.isArray(analyticsData?.elements)
         ? analyticsData.elements?.[0]?.totalShareStatistics
@@ -340,7 +349,8 @@ export class LinkedInService implements SocialPlatformService {
           console.error('Error getting LinkedIn video metric', {
             postUrn,
             type,
-            videoData,
+            status: videoResponse.status,
+            statusText: videoResponse.statusText,
           });
           return undefined;
         }
@@ -439,7 +449,10 @@ export class LinkedInService implements SocialPlatformService {
 
         const data: any = await response.json();
         if (!response.ok) {
-          console.error('Error fetching LinkedIn API posts', data);
+          console.error('Error fetching LinkedIn API posts', {
+            status: response.status,
+            statusText: response.statusText,
+          });
           throw new Error(`LinkedIn API error: ${response.statusText}`);
         }
 
@@ -524,7 +537,13 @@ export class LinkedInService implements SocialPlatformService {
         has_more: totalCount > posts.length,
       };
     } catch (error) {
-      console.error('Error fetching LinkedIn posts:', error);
+      if (error instanceof Error) {
+        console.error('Error fetching LinkedIn posts', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching LinkedIn posts');
+      }
       return {
         posts: [],
         count: 0,
