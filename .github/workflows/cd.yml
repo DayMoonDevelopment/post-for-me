@@ -111,16 +111,8 @@ jobs:
     outputs:
       docker: ${{ steps.docker.outcome }}
       unkey: ${{ steps.unkey.outcome }}
-      railway: ${{ steps.railway.outcome }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: api/.bun-version
-
-      - name: Install Railway CLI
-        run: bun add -g @railway/cli
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -161,6 +153,37 @@ jobs:
           UNKEY_PROJECT: post-for-me-api
           UNKEY_APP: default
         run: ./unkey deploy --env=production ghcr.io/daymoondevelopment/api:${{ github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # Railway backup deploy — secondary, non-blocking.
+  #
+  # Unkey (deploy-api) is the primary host for the API; Railway is a warm
+  # backup. This job builds + deploys the API to Railway from source via
+  # `railway up` (Railway's own builder). It is deliberately:
+  #   - gated on deploy-api, so it only fires after the Unkey deploy succeeds
+  #   - absent from deploy-trigger/dashboard/marketing's `needs`, so a slow or
+  #     broken Railway build never holds up the rest of the deploy
+  #   - continue-on-error, so a Railway failure surfaces in Slack and the job
+  #     badge without failing the overall workflow run
+  # ---------------------------------------------------------------------------
+  deploy-api-railway-backup:
+    name: Deploy API to Railway (backup)
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    outputs:
+      railway: ${{ steps.railway.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: api/.bun-version
+
+      - name: Install Railway CLI
+        run: bun add -g @railway/cli
 
       - name: Deploy API to Railway
         id: railway
@@ -264,7 +287,7 @@ jobs:
 
   notify-final:
     name: Notify Slack — Final
-    needs: [notify-start, precheck, migrate, deploy-api, deploy-trigger, deploy-dashboard, deploy-marketing]
+    needs: [notify-start, precheck, migrate, deploy-api, deploy-api-railway-backup, deploy-trigger, deploy-dashboard, deploy-marketing]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -288,7 +311,7 @@ jobs:
           PRECHECK_STATUS=$(status "${{ needs.precheck.result }}")
           SUPABASE_STATUS=$(status "${{ needs.migrate.outputs.supabase }}")
           TRIGGER_STATUS=$(status "${{ needs.deploy-trigger.outputs.deploy }}")
-          API_STATUS=$(status "${{ needs.deploy-api.outputs.railway }}")
+          API_STATUS=$(status "${{ needs.deploy-api-railway-backup.outputs.railway }}")
           UNKEY_STATUS=$(status "${{ needs.deploy-api.outputs.unkey }}")
           DASHBOARD_STATUS=$(status "${{ needs.deploy-dashboard.outputs.vercel }}")
           MARKETING_STATUS=$(status "${{ needs.deploy-marketing.outputs.vercel }}")

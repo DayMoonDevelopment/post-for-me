@@ -2,6 +2,9 @@
 #
 # Multi-stage build for the PostForMe API.
 #
+# NOTE: ./Dockerfile.railway is a near-copy of this file for Railway's Metal
+# builder, which cannot use the --mount=type=secret below. Keep them in sync.
+#
 # Stages:
 #   deps    — install dependencies with Bun (cached layer, reused by build)
 #   build   — compile TypeScript, upload Sentry source maps

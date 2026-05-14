@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1
+#
+# Railway-specific multi-stage build for the PostForMe API.
+#
+# This is a near-copy of ./Dockerfile, kept separate ONLY because Railway's
+# Metal builder rejects BuildKit secret mounts (--mount=type=secret). Two
+# deliberate differences from ./Dockerfile:
+#   1. No Sentry source map upload. The GitHub Actions build (./Dockerfile)
+#      already uploads source maps to Sentry for every release, so repeating
+#      it from the Railway build would be redundant.
+#   2. Because there is no upload, the build stage drops the Sentry build
+#      args and the ca-certificates install (that CA bundle existed solely
+#      for sentry-cli's HTTPS upload).
+# Keep this file in sync with ./Dockerfile for every other change.
+#
+# Temporary: when Railway is retired, delete this file and point the
+# dockerfilePath in api/railway.json back at ./Dockerfile.
+#
+# Stages:
+#   deps    — install dependencies with Bun (cached layer, reused by build)
+#   build   — compile TypeScript
+#   runtime — minimal Node.js image that actually runs in production
+#
+# Build context is the api/ directory.
+#
+# Optional build arg (non-sensitive, safe to pass via --build-arg):
+#   SENTRY_RELEASE — release identifier (typically the git SHA). Baked into the
+#                    runtime image so the Sentry SDK tags errors with the same
+#                    release the source maps were uploaded under by the
+#                    ./Dockerfile build. Unset just leaves it blank.
+
+# -----------------------------------------------------------------------------
+# Stage 1 — deps
+# Install all dependencies. Kept as its own stage so the node_modules layer is
+# shared with `build` without re-running install when source files change.
+# -----------------------------------------------------------------------------
+FROM oven/bun:1.3.3 AS deps
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Stage 2 — build
+# Compile TypeScript. No Sentry source map upload here (see header) — so no
+# ca-certificates install and no Sentry build args, unlike ./Dockerfile.
+# -----------------------------------------------------------------------------
+FROM deps AS build
+WORKDIR /app
+COPY . .
+RUN bun run build
+
+# -----------------------------------------------------------------------------
+# Stage 3 — runtime
+# Minimal Node.js image. Bun is not present here — only the compiled output
+# from the build stage and its node_modules are copied across.
+#
+# node_modules is copied from the build stage rather than re-installed so that
+# the runtime image uses exactly the same dependency tree that was compiled
+# against.
+# -----------------------------------------------------------------------------
+FROM node:22-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package.json ./package.json
+
+# Baked in so the Sentry runtime SDK reports the same release that source maps
+# were uploaded under (by the ./Dockerfile build). Declared after the COPYs so
+# node_modules remains cacheable across commits (ARG changes invalidate all
+# subsequent layers).
+ARG SENTRY_RELEASE
+ENV SENTRY_RELEASE=$SENTRY_RELEASE
+
+EXPOSE 3000
+CMD ["node", "dist/src/main"]
