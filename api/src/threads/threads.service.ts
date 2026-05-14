@@ -6,7 +6,7 @@ import type {
   SocialAccount,
   SocialProviderAppCredentials,
 } from '../lib/dto/global.dto';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapWithConcurrency } from '../lib/async.utils';
 
@@ -112,7 +112,19 @@ export class ThreadsService implements SocialPlatformService {
         };
       }
     } catch (error) {
-      console.error(`Error fetching insights for post ${threadId}:`, error);
+      if (error instanceof AxiosError) {
+        console.error(`Error fetching insights for post ${threadId}`, {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error(`Error fetching insights for post ${threadId}`, {
+          message: error.message,
+        });
+      } else {
+        console.error(`Error fetching insights for post ${threadId}`);
+      }
     }
   }
 
@@ -252,7 +264,19 @@ export class ThreadsService implements SocialPlatformService {
         cursor: responseData?.paging?.cursors?.after,
       };
     } catch (error) {
-      console.error('Error fetching Threads posts:', error);
+      if (error instanceof AxiosError) {
+        console.error('Error fetching Threads posts', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error fetching Threads posts', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching Threads posts');
+      }
       return {
         posts: [],
         count: 0,

@@ -217,7 +217,13 @@ export class TwitterService implements SocialPlatformService {
         cursor: tweets.meta.next_token,
       };
     } catch (error) {
-      console.error('Error fetching Twitter/X posts:', error);
+      if (error instanceof Error) {
+        console.error('Error fetching Twitter/X posts', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching Twitter/X posts');
+      }
       return {
         posts: [],
         count: 0,

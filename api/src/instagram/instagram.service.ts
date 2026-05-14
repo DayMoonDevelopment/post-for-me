@@ -341,7 +341,11 @@ export class InstagramService implements SocialPlatformService {
       );
 
       if (error instanceof AxiosError) {
-        console.error(error.response?.data);
+        console.error('Error fetching Instagram media insights', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
       }
 
       return undefined;
@@ -465,9 +469,17 @@ export class InstagramService implements SocialPlatformService {
       };
     } catch (error) {
       if (error instanceof AxiosError) {
-        console.error(error.response?.data);
+        console.error('Error fetching Instagram posts', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error fetching Instagram posts', {
+          message: error.message,
+        });
       } else {
-        console.error('unkown error', error);
+        console.error('Error fetching Instagram posts');
       }
 
       return {
