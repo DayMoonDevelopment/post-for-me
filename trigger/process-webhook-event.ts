@@ -7,7 +7,7 @@ type EventStatusEnum = Database["public"]["Enums"]["webhook_event_status"];
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 export const processWebhooks = task({
@@ -30,7 +30,7 @@ export const processWebhooks = task({
       error?: string;
     } = {};
 
-    await tags.add([`webhook_id:${webhookId}`, `webhook_event_id:${id}`]);
+    await tags.add([`${webhookId}`, `${id}`]);
 
     try {
       const backoffResponse = await retry.fetch(url, {
@@ -87,7 +87,9 @@ export const processWebhooks = task({
     } catch (error) {
       status = "failed";
       details.error =
-        error instanceof Error ? error.message : "Unknown webhook delivery error";
+        error instanceof Error
+          ? error.message
+          : "Unknown webhook delivery error";
       logger.error("Failed to process webhook", {
         webhookId,
         webhookEventId: id,
