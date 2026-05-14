@@ -142,6 +142,12 @@ jobs:
           tags: ghcr.io/daymoondevelopment/api:${{ github.sha }},ghcr.io/daymoondevelopment/api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            SENTRY_ORG=${{ secrets.SENTRY_ORG }}
+            SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
+            SENTRY_RELEASE=${{ github.sha }}
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
 
       - name: Install Unkey CLI
         run: |
