@@ -16,6 +16,7 @@ import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-p
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 import { PrivateModule } from './private/private.module';
+import { HealthcheckModule } from './healthcheck/healthcheck.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { PrivateModule } from './private/private.module';
     WebhooksModule,
     SocialAccountFeedsModule,
     PrivateModule,
+    HealthcheckModule,
   ],
   controllers: [],
   providers: [AuthGuard, VerifyKeyGuard],
