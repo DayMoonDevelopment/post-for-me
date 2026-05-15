@@ -175,3 +175,6 @@ dist
 .DS_Store
 
 .trigger
+
+# Claude Code worktrees
+.claude/worktrees/

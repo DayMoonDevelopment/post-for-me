@@ -224,11 +224,18 @@ export class TikTokService implements SocialPlatformService {
         cursor: data.data?.cursor?.toString(),
       };
     } catch (error) {
-      console.error('Error getting TikTok posts');
       if (error instanceof AxiosError) {
-        console.error(error.response?.data);
+        console.error('Error getting TikTok posts', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error getting TikTok posts', {
+          message: error.message,
+        });
       } else {
-        console.error(error);
+        console.error('Error getting TikTok posts');
       }
 
       return {
@@ -365,11 +372,18 @@ export class TikTokService implements SocialPlatformService {
         has_more: false,
       };
     } catch (error) {
-      console.error('Error matching TikTok videos by metadata');
       if (error instanceof AxiosError) {
-        console.error(error.response?.data);
+        console.error('Error matching TikTok videos by metadata', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error matching TikTok videos by metadata', {
+          message: error.message,
+        });
       } else {
-        console.error(error);
+        console.error('Error matching TikTok videos by metadata');
       }
 
       return {

@@ -9,7 +9,7 @@ export default defineConfig({
     extensions: [ffmpeg()],
     external: ["fluent-ffmpeg", "jsdom", "sharp", "tus-js-client"],
   },
-  runtime: "node",
+  runtime: "node-22",
   logLevel: "log",
   // The max compute seconds a task is allowed to run. If the task run exceeds this duration, it will be stopped.
   // You can override this on an individual task.

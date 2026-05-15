@@ -9,5 +9,6 @@
 
 .env
 **/.env
+**/.env.local
 
 **/*.log
