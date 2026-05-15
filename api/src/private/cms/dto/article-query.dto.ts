@@ -4,11 +4,40 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsISO8601,
+  IsObject,
   IsOptional,
   IsString,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
+
+export class DateComparisonFilterDto {
+  @IsOptional()
+  @IsISO8601()
+  gt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  gte?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  lt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  lte?: string;
+}
+
+export class ArticleSingleQueryDto {
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => DateComparisonFilterDto)
+  published_at?: DateComparisonFilterDto;
+}
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
@@ -99,4 +128,10 @@ export class ArticleQueryDto {
   @Transform(toBoolean)
   @IsBoolean()
   featured?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => DateComparisonFilterDto)
+  published_at?: DateComparisonFilterDto;
 }
