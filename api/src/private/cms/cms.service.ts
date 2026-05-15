@@ -106,7 +106,9 @@ export class CmsService {
       .range(offset, offset + limit - 1);
 
     if (!this.showDrafts) {
-      builder = builder.eq('status', 'published');
+      builder = builder
+        .eq('status', 'published')
+        .lte('published_at', new Date().toISOString());
     }
 
     if (query.category?.length) {
@@ -203,7 +205,9 @@ export class CmsService {
       .limit(1);
 
     if (!this.showDrafts) {
-      builder = builder.eq('status', 'published');
+      builder = builder
+        .eq('status', 'published')
+        .lte('published_at', new Date().toISOString());
     }
 
     const { data, error } = await builder.maybeSingle();
