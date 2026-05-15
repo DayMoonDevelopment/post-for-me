@@ -109,8 +109,17 @@ export class CmsService {
       builder = builder.eq('status', 'published');
     }
 
-    if (query.published_before) {
-      builder = builder.lte('published_at', query.published_before);
+    if (query.published_at?.gt) {
+      builder = builder.gt('published_at', query.published_at.gt);
+    }
+    if (query.published_at?.gte) {
+      builder = builder.gte('published_at', query.published_at.gte);
+    }
+    if (query.published_at?.lt) {
+      builder = builder.lt('published_at', query.published_at.lt);
+    }
+    if (query.published_at?.lte) {
+      builder = builder.lte('published_at', query.published_at.lte);
     }
 
     if (query.category?.length) {

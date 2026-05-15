@@ -30,6 +30,20 @@ export class CMS {
   }
 }
 
+interface DateComparison {
+  gt?: string;
+  gte?: string;
+  lt?: string;
+  lte?: string;
+}
+
+interface DateComparisonInput {
+  gt?: Date | string;
+  gte?: Date | string;
+  lt?: Date | string;
+  lte?: Date | string;
+}
+
 interface ArticleQueryOpts {
   limitValue?: number | "all";
   pageValue?: number;
@@ -40,7 +54,19 @@ interface ArticleQueryOpts {
   excludeTagSlugs?: string[];
   query?: string;
   featured?: boolean;
-  publishedBefore?: string;
+  publishedAt?: DateComparison;
+}
+
+function normalizeDateComparison(
+  input: DateComparisonInput,
+): DateComparison {
+  const out: DateComparison = {};
+  for (const op of ["gt", "gte", "lt", "lte"] as const) {
+    const value = input[op];
+    if (value === undefined) continue;
+    out[op] = value instanceof Date ? value.toISOString() : value;
+  }
+  return out;
 }
 
 export class PostsQueryBuilder {
@@ -91,9 +117,8 @@ export class PostsQueryBuilder {
     return this;
   }
 
-  publishedBefore(value: Date | string): this {
-    this.opts.publishedBefore =
-      value instanceof Date ? value.toISOString() : value;
+  publishedAt(filter: DateComparisonInput): this {
+    this.opts.publishedAt = normalizeDateComparison(filter);
     return this;
   }
 
@@ -107,8 +132,9 @@ export class PostsQueryBuilder {
 
     const fetchAll = this.opts.limitValue === "all";
     const startPage = this.opts.pageValue ?? 1;
-    const publishedBefore =
-      this.opts.publishedBefore ?? new Date().toISOString();
+    const publishedAt: DateComparison = this.opts.publishedAt ?? {
+      lte: new Date().toISOString(),
+    };
 
     try {
       const all: Post[] = [];
@@ -127,7 +153,7 @@ export class PostsQueryBuilder {
           exclude_tag: this.opts.excludeTagSlugs,
           q: this.opts.query,
           featured: this.opts.featured,
-          published_before: publishedBefore,
+          published_at: publishedAt,
         });
 
         if (!response) return undefined;
@@ -296,7 +322,7 @@ interface FetchArticlesParams {
   exclude_tag?: string[];
   q?: string;
   featured?: boolean;
-  published_before?: string;
+  published_at?: DateComparison;
 }
 
 async function fetchArticles(
@@ -319,8 +345,11 @@ async function fetchArticles(
   if (typeof params.featured === "boolean") {
     search.set("featured", String(params.featured));
   }
-  if (params.published_before) {
-    search.set("published_before", params.published_before);
+  if (params.published_at) {
+    for (const op of ["gt", "gte", "lt", "lte"] as const) {
+      const value = params.published_at[op];
+      if (value) search.set(`published_at[${op}]`, value);
+    }
   }
 
   return apiGet<ApiArticlesList>(`/private/cms/articles?${search.toString()}`);
