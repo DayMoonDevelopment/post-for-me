@@ -33,6 +33,12 @@ async function bootstrap() {
     rawBody: true,
   });
 
+  // Express 5 defaults the query parser to "simple" (built-in querystring),
+  // which does not support nested bracket notation. We rely on Stripe-style
+  // `column[op]=value` for date-range filters (see DateComparisonFilterDto),
+  // so opt back into the extended parser (qs).
+  app.set('query parser', 'extended');
+
   app.enableShutdownHooks();
 
   app.enableVersioning({
