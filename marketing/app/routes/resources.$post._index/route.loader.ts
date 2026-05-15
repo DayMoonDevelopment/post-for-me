@@ -16,11 +16,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Look up post by slug
   const postData = await cms.post(postSlug).get();
 
-  if (
-    !postData?.post ||
-    postData.post.category.slug !== "resources" ||
-    postData.post.publishedAt > new Date()
-  ) {
+  if (!postData?.post || postData.post.category.slug !== "resources") {
     throw new Response("Not Found", { status: 404 });
   }
 

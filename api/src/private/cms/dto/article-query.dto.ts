@@ -31,6 +31,14 @@ export class DateComparisonFilterDto {
   lte?: string;
 }
 
+export class ArticleSingleQueryDto {
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => DateComparisonFilterDto)
+  published_at?: DateComparisonFilterDto;
+}
+
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 

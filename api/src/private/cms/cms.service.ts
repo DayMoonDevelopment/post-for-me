@@ -4,7 +4,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { SupabaseService } from '../../supabase/supabase.service';
 
-import type { ArticleQueryDto } from './dto/article-query.dto';
+import type {
+  ArticleQueryDto,
+  ArticleSingleQueryDto,
+} from './dto/article-query.dto';
 import type {
   ArticleResponse,
   ArticlesListResponse,
@@ -182,7 +185,10 @@ export class CmsService {
     };
   }
 
-  async getArticle(identifier: string): Promise<ArticleResponse> {
+  async getArticle(
+    identifier: string,
+    query: ArticleSingleQueryDto = {},
+  ): Promise<ArticleResponse> {
     const lookupColumn = identifier.startsWith(ARTICLE_ID_PREFIX)
       ? 'id'
       : 'slug';
@@ -217,6 +223,19 @@ export class CmsService {
 
     if (!this.showDrafts) {
       builder = builder.eq('status', 'published');
+    }
+
+    if (query.published_at?.gt) {
+      builder = builder.gt('published_at', query.published_at.gt);
+    }
+    if (query.published_at?.gte) {
+      builder = builder.gte('published_at', query.published_at.gte);
+    }
+    if (query.published_at?.lt) {
+      builder = builder.lt('published_at', query.published_at.lt);
+    }
+    if (query.published_at?.lte) {
+      builder = builder.lte('published_at', query.published_at.lte);
     }
 
     const { data, error } = await builder.maybeSingle();

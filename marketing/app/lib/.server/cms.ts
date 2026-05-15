@@ -25,8 +25,8 @@ export class CMS {
     return new PostsQueryBuilder();
   }
 
-  post(identifier: string): SinglePostQuery {
-    return new SinglePostQuery(identifier);
+  post(identifier: string): SinglePostQueryBuilder {
+    return new SinglePostQueryBuilder(identifier);
   }
 }
 
@@ -179,14 +179,32 @@ export class PostsQueryBuilder {
   }
 }
 
-export class SinglePostQuery {
+export class SinglePostQueryBuilder {
+  private opts: { publishedAt?: DateComparison } = {};
+
   constructor(private readonly identifier: string) {}
 
+  publishedAt(filter: DateComparisonInput): this {
+    this.opts.publishedAt = normalizeDateComparison(filter);
+    return this;
+  }
+
   async get(): Promise<PostResponse | undefined> {
+    const publishedAt: DateComparison = this.opts.publishedAt ?? {
+      lte: new Date().toISOString(),
+    };
+
+    const search = new URLSearchParams();
+    for (const op of ["gt", "gte", "lt", "lte"] as const) {
+      const value = publishedAt[op];
+      if (value) search.set(`published_at[${op}]`, value);
+    }
+
+    const path = `/private/cms/articles/${encodeURIComponent(this.identifier)}`;
+    const url = search.size ? `${path}?${search.toString()}` : path;
+
     try {
-      const response = await apiGet<ApiArticleSingle>(
-        `/private/cms/articles/${encodeURIComponent(this.identifier)}`,
-      );
+      const response = await apiGet<ApiArticleSingle>(url);
 
       if (!response) return undefined;
 
