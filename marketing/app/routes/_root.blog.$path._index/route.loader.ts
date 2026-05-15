@@ -8,7 +8,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   // Fetch the specific blog post
   const postResponse = await cms.post(params.path).get();
 
-  if (!postResponse) {
+  if (!postResponse || postResponse.post.publishedAt > new Date()) {
     throw new Response("Blog post not found", { status: 404 });
   }
 

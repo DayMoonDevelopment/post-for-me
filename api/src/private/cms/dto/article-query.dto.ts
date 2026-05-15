@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   Max,
@@ -99,4 +100,8 @@ export class ArticleQueryDto {
   @Transform(toBoolean)
   @IsBoolean()
   featured?: boolean;
+
+  @IsOptional()
+  @IsISO8601()
+  published_before?: string;
 }

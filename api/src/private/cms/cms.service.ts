@@ -106,9 +106,11 @@ export class CmsService {
       .range(offset, offset + limit - 1);
 
     if (!this.showDrafts) {
-      builder = builder
-        .eq('status', 'published')
-        .lte('published_at', new Date().toISOString());
+      builder = builder.eq('status', 'published');
+    }
+
+    if (query.published_before) {
+      builder = builder.lte('published_at', query.published_before);
     }
 
     if (query.category?.length) {
@@ -205,9 +207,7 @@ export class CmsService {
       .limit(1);
 
     if (!this.showDrafts) {
-      builder = builder
-        .eq('status', 'published')
-        .lte('published_at', new Date().toISOString());
+      builder = builder.eq('status', 'published');
     }
 
     const { data, error } = await builder.maybeSingle();

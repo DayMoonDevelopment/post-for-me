@@ -40,6 +40,7 @@ interface ArticleQueryOpts {
   excludeTagSlugs?: string[];
   query?: string;
   featured?: boolean;
+  publishedBefore?: string;
 }
 
 export class PostsQueryBuilder {
@@ -90,6 +91,12 @@ export class PostsQueryBuilder {
     return this;
   }
 
+  publishedBefore(value: Date | string): this {
+    this.opts.publishedBefore =
+      value instanceof Date ? value.toISOString() : value;
+    return this;
+  }
+
   async get(): Promise<PostsListResponse | undefined> {
     const pageSize =
       this.opts.limitValue === "all"
@@ -100,6 +107,8 @@ export class PostsQueryBuilder {
 
     const fetchAll = this.opts.limitValue === "all";
     const startPage = this.opts.pageValue ?? 1;
+    const publishedBefore =
+      this.opts.publishedBefore ?? new Date().toISOString();
 
     try {
       const all: Post[] = [];
@@ -118,6 +127,7 @@ export class PostsQueryBuilder {
           exclude_tag: this.opts.excludeTagSlugs,
           q: this.opts.query,
           featured: this.opts.featured,
+          published_before: publishedBefore,
         });
 
         if (!response) return undefined;
@@ -286,6 +296,7 @@ interface FetchArticlesParams {
   exclude_tag?: string[];
   q?: string;
   featured?: boolean;
+  published_before?: string;
 }
 
 async function fetchArticles(
@@ -307,6 +318,9 @@ async function fetchArticles(
   if (params.q) search.set("q", params.q);
   if (typeof params.featured === "boolean") {
     search.set("featured", String(params.featured));
+  }
+  if (params.published_before) {
+    search.set("published_before", params.published_before);
   }
 
   return apiGet<ApiArticlesList>(`/private/cms/articles?${search.toString()}`);
