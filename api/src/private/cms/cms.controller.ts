@@ -2,7 +2,10 @@ import { Controller, Get, Param, Query, VERSION_NEUTRAL } from '@nestjs/common';
 
 import { VerifyKey } from '../../auth/verify-key.decorator';
 
-import { ArticleQueryDto } from './dto/article-query.dto';
+import {
+  ArticleQueryDto,
+  ArticleSingleQueryDto,
+} from './dto/article-query.dto';
 import { CmsService } from './cms.service';
 import type {
   ArticleSingleResponse,
@@ -27,8 +30,9 @@ export class CmsController {
   @Get('articles/:identifier')
   async getArticle(
     @Param('identifier') identifier: string,
+    @Query() query: ArticleSingleQueryDto,
   ): Promise<ArticleSingleResponse> {
-    const data = await this.cmsService.getArticle(identifier);
+    const data = await this.cmsService.getArticle(identifier, query);
     return { data };
   }
 

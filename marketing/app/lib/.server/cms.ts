@@ -25,9 +25,23 @@ export class CMS {
     return new PostsQueryBuilder();
   }
 
-  post(identifier: string): SinglePostQuery {
-    return new SinglePostQuery(identifier);
+  post(identifier: string): SinglePostQueryBuilder {
+    return new SinglePostQueryBuilder(identifier);
   }
+}
+
+interface DateComparison {
+  gt?: string;
+  gte?: string;
+  lt?: string;
+  lte?: string;
+}
+
+interface DateComparisonInput {
+  gt?: Date | string;
+  gte?: Date | string;
+  lt?: Date | string;
+  lte?: Date | string;
 }
 
 interface ArticleQueryOpts {
@@ -40,6 +54,19 @@ interface ArticleQueryOpts {
   excludeTagSlugs?: string[];
   query?: string;
   featured?: boolean;
+  publishedAt?: DateComparison;
+}
+
+function normalizeDateComparison(
+  input: DateComparisonInput,
+): DateComparison {
+  const out: DateComparison = {};
+  for (const op of ["gt", "gte", "lt", "lte"] as const) {
+    const value = input[op];
+    if (value === undefined) continue;
+    out[op] = value instanceof Date ? value.toISOString() : value;
+  }
+  return out;
 }
 
 export class PostsQueryBuilder {
@@ -90,6 +117,11 @@ export class PostsQueryBuilder {
     return this;
   }
 
+  publishedAt(filter: DateComparisonInput): this {
+    this.opts.publishedAt = normalizeDateComparison(filter);
+    return this;
+  }
+
   async get(): Promise<PostsListResponse | undefined> {
     const pageSize =
       this.opts.limitValue === "all"
@@ -100,6 +132,9 @@ export class PostsQueryBuilder {
 
     const fetchAll = this.opts.limitValue === "all";
     const startPage = this.opts.pageValue ?? 1;
+    const publishedAt: DateComparison = this.opts.publishedAt ?? {
+      lte: new Date().toISOString(),
+    };
 
     try {
       const all: Post[] = [];
@@ -118,6 +153,7 @@ export class PostsQueryBuilder {
           exclude_tag: this.opts.excludeTagSlugs,
           q: this.opts.query,
           featured: this.opts.featured,
+          published_at: publishedAt,
         });
 
         if (!response) return undefined;
@@ -143,14 +179,32 @@ export class PostsQueryBuilder {
   }
 }
 
-export class SinglePostQuery {
+export class SinglePostQueryBuilder {
+  private opts: { publishedAt?: DateComparison } = {};
+
   constructor(private readonly identifier: string) {}
 
+  publishedAt(filter: DateComparisonInput): this {
+    this.opts.publishedAt = normalizeDateComparison(filter);
+    return this;
+  }
+
   async get(): Promise<PostResponse | undefined> {
+    const publishedAt: DateComparison = this.opts.publishedAt ?? {
+      lte: new Date().toISOString(),
+    };
+
+    const search = new URLSearchParams();
+    for (const op of ["gt", "gte", "lt", "lte"] as const) {
+      const value = publishedAt[op];
+      if (value) search.set(`published_at[${op}]`, value);
+    }
+
+    const path = `/private/cms/articles/${encodeURIComponent(this.identifier)}`;
+    const url = search.size ? `${path}?${search.toString()}` : path;
+
     try {
-      const response = await apiGet<ApiArticleSingle>(
-        `/private/cms/articles/${encodeURIComponent(this.identifier)}`,
-      );
+      const response = await apiGet<ApiArticleSingle>(url);
 
       if (!response) return undefined;
 
@@ -286,6 +340,7 @@ interface FetchArticlesParams {
   exclude_tag?: string[];
   q?: string;
   featured?: boolean;
+  published_at?: DateComparison;
 }
 
 async function fetchArticles(
@@ -307,6 +362,12 @@ async function fetchArticles(
   if (params.q) search.set("q", params.q);
   if (typeof params.featured === "boolean") {
     search.set("featured", String(params.featured));
+  }
+  if (params.published_at) {
+    for (const op of ["gt", "gte", "lt", "lte"] as const) {
+      const value = params.published_at[op];
+      if (value) search.set(`published_at[${op}]`, value);
+    }
   }
 
   return apiGet<ApiArticlesList>(`/private/cms/articles?${search.toString()}`);
