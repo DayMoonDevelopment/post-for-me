@@ -286,7 +286,10 @@ export class TikTokPostClient extends PostClient {
       !this.#processedStatuses.includes(status) &&
       !this.#processingStatuses.includes(status)
     ) {
-      throw new Error(`Upload failed with status: ${status}.`);
+      const failReason = statusResponse?.data?.data?.fail_reason;
+      throw new Error(
+        `Upload failed with status: ${status}${failReason ? ` (${failReason})` : ""}.`,
+      );
     }
 
     return status;
