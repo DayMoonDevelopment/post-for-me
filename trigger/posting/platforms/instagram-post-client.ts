@@ -369,6 +369,7 @@ export class InstagramPostClient extends PostClient {
       product_tags?: any[];
       location_id?: string;
       user_tags?: any[];
+      audio_name?: string;
       trial_params?: {
         graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
       };
@@ -421,6 +422,13 @@ export class InstagramPostClient extends PostClient {
           platformConfig?.share_to_feed !== null
         ) {
           createMediaParams.share_to_feed = platformConfig?.share_to_feed;
+        }
+
+        if (
+          createMediaParams.media_type === "REELS" &&
+          platformConfig?.audio_name
+        ) {
+          createMediaParams.audio_name = platformConfig.audio_name;
         }
 
         break;
