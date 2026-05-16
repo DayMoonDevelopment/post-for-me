@@ -346,7 +346,7 @@ export class TikTokPostClient extends PostClient {
           "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
         payload: {
           post_info: {
-            title: caption,
+            title: platformData?.title ?? caption,
             video_cover_timestamp_ms: coverTimestamp
               ? coverTimestamp
               : undefined,
@@ -368,7 +368,7 @@ export class TikTokPostClient extends PostClient {
       postUrl: "https://open.tiktokapis.com/v2/post/publish/video/init/",
       payload: {
         post_info: {
-          title: caption,
+          title: platformData?.title ?? caption,
           privacy_level:
             platformData.privacy_status == "private"
               ? "SELF_ONLY"
@@ -436,7 +436,7 @@ export class TikTokPostClient extends PostClient {
       postUrl: "https://open.tiktokapis.com/v2/post/publish/content/init/",
       payload: {
         post_info: {
-          title: (title || caption).slice(0, this.#titleLength),
+          title: (title ?? caption).slice(0, this.#titleLength),
           description: caption,
           privacy_level:
             platformData.privacy_status == "private"
