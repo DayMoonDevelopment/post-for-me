@@ -219,38 +219,22 @@ jobs:
         # fetched on demand instead of expecting it on PATH or in node_modules/.bin.
         run: bunx trigger.dev@4.4.4 deploy
 
+  # Dashboard build/deploy is owned by Vercel's own framework integration
+  # (project Settings → Git, with production auto-deploy disabled). CD just
+  # fires the production deploy hook once the API + migrations are live, so
+  # Vercel can pick up the same SHA and run its built-in React Router preset.
   deploy-dashboard:
     name: Deploy Dashboard
     needs: deploy-api
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dashboard
-    permissions:
-      contents: read
     outputs:
       vercel: ${{ steps.vercel.outcome }}
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: dashboard/.bun-version
-      # Vercel CLI's `vercel build` spawns `bun` via child_process and only
-      # searches system PATH (not $GITHUB_PATH-injected dirs). Symlink so it resolves.
-      - name: Symlink bun for Vercel CLI
-        run: sudo ln -sf "$(which bun)" /usr/local/bin/bun
-      - run: bun install --frozen-lockfile
-      - name: Link Dashboard to Vercel project
-        run: bunx vercel link --project post-for-me-app --scope day-moon --token=$VERCEL_TOKEN --yes
-      - name: Pull Vercel environment (production)
-        run: bunx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-      - name: Build with Vercel
-        run: bunx vercel build --prod --token=$VERCEL_TOKEN
-      - name: Deploy Dashboard to Vercel
+      - name: Fire Vercel deploy hook
         id: vercel
-        run: bunx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN --yes
+        run: |
+          curl -fSs -X POST \
+            "${{ secrets.VERCEL_DASHBOARD_DEPLOY_HOOK_URL }}?ref=${{ github.sha }}"
 
   deploy-marketing:
     name: Deploy Marketing
