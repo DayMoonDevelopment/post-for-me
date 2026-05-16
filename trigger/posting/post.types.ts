@@ -157,6 +157,9 @@ export interface TwitterConfiguration {
 export interface YoutubeConfiguration {
   caption?: string;
   title?: string;
+  description?: string;
+  tags?: string[];
+  category_id?: string;
   privacy_status?: string;
   made_for_kids?: boolean;
   media?: PostMedia[];
