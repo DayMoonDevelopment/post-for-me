@@ -44,9 +44,19 @@ export class TwitterPostClient extends PostClient {
     account: SocialAccount
   ): Promise<RefreshTokenResult> {
     //No Need to refresh tokens for Twitter
+    const accessTokenExpiresAt = account.access_token_expires_at;
+    const expiresAtDate =
+      accessTokenExpiresAt instanceof Date
+        ? accessTokenExpiresAt
+        : new Date(accessTokenExpiresAt ?? Date.now());
+
+    const expiresAt = Number.isNaN(expiresAtDate.getTime())
+      ? new Date().toISOString()
+      : expiresAtDate.toISOString();
+
     return {
       access_token: account.access_token,
-      expires_at: account.access_token_expires_at!.toISOString(),
+      expires_at: expiresAt,
       refresh_token: account.refresh_token,
     };
   }
