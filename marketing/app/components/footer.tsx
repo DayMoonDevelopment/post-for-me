@@ -40,6 +40,10 @@ const getFooterSections = (resources: ResourcePreview[] = []) => [
         title: "API Documentation",
         href: "https://api.postforme.dev/docs",
       },
+      {
+        title: "Open Source",
+        href: "/open-source-social-media-api",
+      },
     ],
   },
   {
