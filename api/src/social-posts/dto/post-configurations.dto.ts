@@ -317,6 +317,14 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
     default: false,
   })
   made_for_kids?: boolean;
+
+  @ApiProperty({
+    description:
+      'If true, marks the video as containing altered or synthetic content per YouTube\'s disclosure policy. Sets status.containsSyntheticMedia on the YouTube Data API videos.insert call; YouTube adds a "How this content was made" label to the description automatically.',
+    nullable: true,
+    required: false,
+  })
+  contains_synthetic_media?: boolean;
 }
 
 export class FacebookConfigurationDto extends BaseConfigurationDto {
@@ -519,6 +527,14 @@ export class AccountConfigurationDetailsDto {
     default: false,
   })
   made_for_kids?: boolean;
+
+  @ApiProperty({
+    description:
+      'If true, marks the YouTube video as containing altered or synthetic content per YouTube\'s disclosure policy. Sets status.containsSyntheticMedia on the videos.insert call; YouTube adds a "How this content was made" label to the description automatically.',
+    nullable: true,
+    required: false,
+  })
+  contains_synthetic_media?: boolean;
 
   @ApiProperty({
     description: 'Allow comments on TikTok',
