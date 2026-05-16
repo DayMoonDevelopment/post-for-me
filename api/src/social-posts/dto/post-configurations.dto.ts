@@ -301,6 +301,31 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
   title?: string;
 
   @ApiProperty({
+    description:
+      'Description for the YouTube video. Falls back to the post caption when not provided.',
+    nullable: true,
+    required: false,
+  })
+  description?: string;
+
+  @ApiProperty({
+    description: 'YouTube video tags',
+    type: Array,
+    items: { type: 'string' },
+    nullable: true,
+    required: false,
+  })
+  tags?: string[];
+
+  @ApiProperty({
+    description:
+      'YouTube video category id (see YouTube Data API videoCategories.list)',
+    nullable: true,
+    required: false,
+  })
+  category_id?: string;
+
+  @ApiProperty({
     description: 'Sets the privacy status of the video, will default to public',
     nullable: true,
     required: false,
@@ -519,6 +544,31 @@ export class AccountConfigurationDetailsDto {
     default: false,
   })
   made_for_kids?: boolean;
+
+  @ApiProperty({
+    description:
+      'YouTube video description. Falls back to the post caption when not provided.',
+    nullable: true,
+    required: false,
+  })
+  description?: string;
+
+  @ApiProperty({
+    description: 'YouTube video tags',
+    type: Array,
+    items: { type: 'string' },
+    nullable: true,
+    required: false,
+  })
+  tags?: string[];
+
+  @ApiProperty({
+    description:
+      'YouTube video category id (see YouTube Data API videoCategories.list)',
+    nullable: true,
+    required: false,
+  })
+  category_id?: string;
 
   @ApiProperty({
     description: 'Allow comments on TikTok',
