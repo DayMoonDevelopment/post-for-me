@@ -155,6 +155,7 @@ const getFooterSections = (resources: ResourcePreview[] = []) => [
       { title: "vs. Buffer", href: "/compare/buffer" },
       { title: "vs. Hootsuite", href: "/compare/hootsuite" },
       { title: "vs. Ayrshare", href: "/compare/ayrshare" },
+      { title: "vs. Late", href: "/compare/late" },
       { title: "vs. Zernio", href: "/compare/zernio" },
       { title: "vs. Upload-Post", href: "/compare/upload-post" },
       { title: "vs. Outstand", href: "/compare/outstand" },
