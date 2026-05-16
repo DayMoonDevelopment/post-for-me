@@ -3,8 +3,9 @@ The social account feed is every post made for the social account, including pos
 Use this endpoint to get the platform details for any post made under the connected account. To use this endpoint accounts must be connected with the **"feeds" permission**. 
 
 Details will include: 
- - Post information including caption, url, media, etc.. 
- - When passing **expand=metrics**, Metrics information including views, likes, follows, etc..
+  - Post information including caption, url, media, etc.. 
+  - When passing **expand=metrics**, Metrics information including views, likes, follows, etc..
+  - For **Facebook** feeds with **expand=metrics**, page size is capped by the server-side **FacebookFeedMetricsLimitCap** setting (default: **10**) to protect API memory usage.
 
 Note: Currently the following platforms are supported: 
  - **Instagram**, may take up to 48 hours for some metrics to be avaialbe 
