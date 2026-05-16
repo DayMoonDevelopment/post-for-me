@@ -417,6 +417,7 @@ export class InstagramPostClient extends PostClient {
         }
 
         if (
+          createMediaParams.media_type === "REELS" &&
           platformConfig?.share_to_feed !== undefined &&
           platformConfig?.share_to_feed !== null
         ) {
