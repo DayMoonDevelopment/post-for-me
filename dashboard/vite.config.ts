@@ -27,7 +27,13 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
     ssr: {
-      noExternal: ["posthog-js", "posthog-js/react"],
+      // next-themes must be bundled, not externalized: on Vercel the deployed
+      // function has both /var/task/node_modules and /var/task/dashboard/node_modules,
+      // so an externalized next-themes resolves React from the root tree while
+      // react-dom uses dashboard's local tree — two React instances, useContext
+      // returns null, SSR throws. Bundling pins it to the same React the SSR
+      // entry imports.
+      noExternal: ["posthog-js", "posthog-js/react", "next-themes"],
     },
     server: {
       ...(allowedHosts ? { allowedHosts } : {}),
