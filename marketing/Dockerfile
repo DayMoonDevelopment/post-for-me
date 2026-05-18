@@ -4,17 +4,16 @@ COPY package.json bun.lockb ./
 COPY scripts ./scripts
 RUN bun install --frozen-lockfile
 
-FROM oven/bun:1.3.3 AS build
+FROM deps AS build
 WORKDIR /app
 COPY . .
-COPY --from=deps /app/node_modules ./node_modules
 RUN bun run build
 
-FROM oven/bun:1.3.3 AS runtime
+FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package.json bun.lockb ./
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
+COPY --from=build /app/package.json ./package.json
 EXPOSE 3000
-CMD ["bun", "run", "start"]
+CMD ["node", "./build/server/index.js"]
