@@ -150,8 +150,19 @@ export class YouTubePostClient extends PostClient {
       if (videoId && medium.thumbnail_url) {
         try {
           await this.#uploadThumbnail(youtube, videoId, medium);
-        } catch (thumbnailError) {
+        } catch (thumbnailError: any) {
           console.error("Failed to upload thumbnail:", thumbnailError);
+          this.#responses.push({
+            thumbnailError: {
+              message: thumbnailError?.message,
+              status:
+                thumbnailError?.response?.status ?? thumbnailError?.code,
+              body:
+                thumbnailError?.response?.data ??
+                thumbnailError?.errors ??
+                null,
+            },
+          });
           // Don't fail the entire post if thumbnail upload fails
         }
       }
