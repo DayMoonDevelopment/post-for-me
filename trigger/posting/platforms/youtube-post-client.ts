@@ -97,6 +97,15 @@ export class YouTubePostClient extends PostClient {
           ? false
           : platformConfig.made_for_kids;
 
+      const status: youtube_v3.Schema$VideoStatus = {
+        privacyStatus: platformConfig?.privacy_status || "public",
+        selfDeclaredMadeForKids: madeForKids,
+      };
+
+      if (platformConfig?.contains_synthetic_media !== undefined) {
+        status.containsSyntheticMedia = platformConfig.contains_synthetic_media;
+      }
+
       const videoRequest = {
         part: ["snippet", "status"],
         requestBody: {
@@ -106,10 +115,7 @@ export class YouTubePostClient extends PostClient {
               : sanitizedCaption,
             description: this.#sanitizeYouTubeDescription(caption),
           },
-          status: {
-            privacyStatus: platformConfig?.privacy_status || "public",
-            selfDeclaredMadeForKids: madeForKids,
-          },
+          status,
         },
       };
 
