@@ -34,6 +34,18 @@ export function Component() {
         without surprises.
       </h1>
 
+      <p className="mt-6 max-w-xl text-center text-lg text-muted-foreground">
+        Usage-based pricing for the{" "}
+        <Link
+          to="/social-media/posting"
+          className="text-primary hover:underline"
+        >
+          social media posting API
+        </Link>
+        . Pick a tier by monthly post volume — every plan ships with unlimited
+        social accounts, projects, and team members.
+      </p>
+
       <div className="my-12 sm:mt-16 max-w-(--breakpoint-sm) mx-auto">
         <div className="border rounded-lg p-6 mx-auto">
           <div className="flex flex-row gap-4 items-start justify-between">

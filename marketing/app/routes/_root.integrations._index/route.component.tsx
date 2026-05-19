@@ -56,7 +56,14 @@ export function Component() {
               Platform Integrations
             </h1>
             <p className="mt-6 text-lg md:text-xl text-muted-foreground leading-relaxed">
-              Integrate posting, feeds, and analytics across TikTok, Facebook,
+              These integrations all plug into our{" "}
+              <Link
+                to="/social-media/posting"
+                className="text-primary hover:underline"
+              >
+                social media posting API
+              </Link>{" "}
+              — posting, feeds, and analytics across TikTok, Facebook,
               Instagram, X, LinkedIn, Pinterest, Bluesky, Threads, and YouTube.
               One REST API replaces months of platform-by-platform integration
               work.
