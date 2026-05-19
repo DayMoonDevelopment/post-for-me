@@ -3,10 +3,13 @@ import {
   ExecutionContext,
   Inject,
   Injectable,
+  TooManyRequestsException,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Unkey } from '@unkey/api';
-import type { Request } from 'express';
+import type { VerifyKeyRatelimitData } from '@unkey/api/models/components';
+import { TooManyRequestsErrorResponse } from '@unkey/api/models/errors';
+import type { Request, Response } from 'express';
 
 import { SupabaseService } from '../supabase/supabase.service';
 import type { RequestUser } from './user.interface';
@@ -19,6 +22,18 @@ declare module 'express' {
   }
 }
 
+type TokenValidationResult = {
+  valid: boolean;
+  code?: string;
+  userId?: string;
+  projectId?: string;
+  keyId?: string;
+  teamId?: string;
+  planType?: string;
+  ratelimits?: VerifyKeyRatelimitData[];
+  requestId?: string;
+};
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
@@ -28,16 +43,21 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Get the request object early
-    const request = context.switchToHttp().getRequest<Request>();
+    const httpContext = context.switchToHttp();
+    const request = httpContext.getRequest<Request>();
+    const response = httpContext.getResponse<Response>();
     if (!request) {
       // Should typically not happen in HTTP context, but good to check
       throw new UnauthorizedException('Request object not available.');
     }
 
-    return this.validateRequest(request); // Pass request directly
+    return this.validateRequest(request, response); // Pass request and response directly
   }
 
-  private async validateRequest(request: Request): Promise<boolean> {
+  private async validateRequest(
+    request: Request,
+    response: Response,
+  ): Promise<boolean> {
     try {
       const token = this.getBearerTokenFromRequest(request); // Get token from request
 
@@ -47,10 +67,21 @@ export class AuthGuard implements CanActivate {
 
       const validationResult = await this.validateBearerToken(token);
 
+      if (validationResult.code === 'RATE_LIMITED') {
+        this.applyRateLimitHeaders(
+          response,
+          validationResult.ratelimits,
+          validationResult.requestId,
+        );
+        throw new TooManyRequestsException('API key rate limit exceeded.');
+      }
+
       // Strict check: valid must be true AND userId must exist
       if (
         !validationResult.valid ||
         !validationResult.userId ||
+        !validationResult.projectId ||
+        !validationResult.keyId ||
         !validationResult.teamId
       ) {
         throw new UnauthorizedException(
@@ -59,11 +90,13 @@ export class AuthGuard implements CanActivate {
       }
 
       // --- Validation successful ---
-      const userId = validationResult.userId; // Guaranteed to be a string here
-      const projectId = validationResult.projectId!; // Guaranteed to be a string here
-      const keyId = validationResult.keyId!; // Guaranteed to be a string here
-      const teamId = validationResult.teamId; //Guranteed to be a string here
-      const planType = validationResult.planType; // Optional plan type from metadata
+      const {
+        userId,
+        projectId,
+        keyId,
+        teamId,
+        planType,
+      } = validationResult;
 
       // Check if this is a request to social-account-feeds endpoint
       const isSocialAccountFeedsEndpoint = request.path.includes(
@@ -86,7 +119,21 @@ export class AuthGuard implements CanActivate {
 
       return true; // Access granted
     } catch (error: unknown) {
-      if (error instanceof UnauthorizedException) {
+      if (error instanceof TooManyRequestsErrorResponse) {
+        this.applyExternalRateLimitHeaders(
+          response,
+          error.headers,
+          error.data$?.meta?.requestId,
+        );
+        throw new TooManyRequestsException(
+          error?.error?.detail ?? 'Rate limit exceeded.',
+        );
+      }
+
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof TooManyRequestsException
+      ) {
         throw error;
       }
       // Throw a generic one for other unexpected errors during validation
@@ -120,22 +167,22 @@ export class AuthGuard implements CanActivate {
     return token || null;
   }
 
-  private async validateBearerToken(token: string): Promise<{
-    valid: boolean;
-    userId?: string;
-    projectId?: string;
-    keyId?: string;
-    teamId?: string;
-    planType?: string;
-  }> {
+  private async validateBearerToken(token: string): Promise<TokenValidationResult> {
     try {
       const response = await this.unkey.keys.verifyKey({
         key: token,
       });
 
-      if (!response.data?.valid) {
+      const { data, meta } = response;
+
+      if (!data?.valid) {
         // Token itself is invalid according to Unkey
-        return { valid: false };
+        return {
+          valid: false,
+          code: data?.code,
+          ratelimits: data?.ratelimits,
+          requestId: meta?.requestId,
+        };
       }
 
       let userId: string | undefined = undefined;
@@ -143,20 +190,20 @@ export class AuthGuard implements CanActivate {
       let teamId: string | undefined = undefined;
       let planType: string | undefined = undefined;
 
-      if (response.data.meta?.created_by) {
-        userId = response.data.meta?.created_by as string;
+      if (data.meta?.created_by) {
+        userId = data.meta?.created_by as string;
       }
 
-      if (response.data.meta?.team_id) {
-        teamId = response.data.meta?.team_id as string;
+      if (data.meta?.team_id) {
+        teamId = data.meta?.team_id as string;
       }
 
-      if (response.data.meta?.plan_type) {
-        planType = response.data.meta?.plan_type as string;
+      if (data.meta?.plan_type) {
+        planType = data.meta?.plan_type as string;
       }
 
-      if (response?.data.identity?.externalId) {
-        projectId = response.data.identity.externalId;
+      if (data?.identity?.externalId) {
+        projectId = data.identity.externalId;
       }
 
       if (!userId || !projectId) {
@@ -175,16 +222,99 @@ export class AuthGuard implements CanActivate {
         valid: true,
         userId,
         projectId,
-        keyId: response.data.keyId,
+        keyId: data.keyId,
         teamId,
         planType,
+        code: data.code,
+        ratelimits: data.ratelimits,
+        requestId: meta?.requestId,
       };
     } catch (error) {
+      if (error instanceof TooManyRequestsErrorResponse) {
+        throw error;
+      }
       console.error(
         '[validateBearerToken] Error during token verification:',
         error,
       );
       return { valid: false }; // Failed validation due to error
+    }
+  }
+
+  private applyRateLimitHeaders(
+    response: Response,
+    ratelimits?: VerifyKeyRatelimitData[],
+    requestId?: string,
+  ): void {
+    if (!response) {
+      return;
+    }
+
+    const exceededLimit =
+      ratelimits?.find((limit) => limit.exceeded) ?? ratelimits?.[0];
+
+    if (exceededLimit) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil(exceededLimit.reset / 1000),
+      );
+
+      response.setHeader('Retry-After', retryAfterSeconds.toString());
+      response.setHeader('X-Rate-Limit-Limit', exceededLimit.limit.toString());
+      response.setHeader(
+        'X-Rate-Limit-Remaining',
+        Math.max(exceededLimit.remaining, 0).toString(),
+      );
+      response.setHeader(
+        'X-Rate-Limit-Reset',
+        retryAfterSeconds.toString(),
+      );
+      response.setHeader('X-Rate-Limit-Name', exceededLimit.name);
+      response.setHeader(
+        'X-Rate-Limit-Duration',
+        Math.max(1, Math.ceil(exceededLimit.duration / 1000)).toString(),
+      );
+    }
+
+    if (requestId) {
+      response.setHeader('X-Request-Id', requestId);
+    }
+  }
+
+  private applyExternalRateLimitHeaders(
+    response: Response,
+    headers?: Headers,
+    fallbackRequestId?: string,
+  ): void {
+    if (!response) {
+      return;
+    }
+
+    if (headers) {
+      const headerMap: Record<string, string> = {
+        'retry-after': 'Retry-After',
+        'x-ratelimit-limit': 'X-Rate-Limit-Limit',
+        'x-ratelimit-remaining': 'X-Rate-Limit-Remaining',
+        'x-ratelimit-reset': 'X-Rate-Limit-Reset',
+        'x-ratelimit-name': 'X-Rate-Limit-Name',
+        'x-request-id': 'X-Request-Id',
+      };
+
+      for (const [source, target] of Object.entries(headerMap)) {
+        const value = headers.get(source);
+        if (value) {
+          response.setHeader(target, value);
+        }
+      }
+
+      if (!headers.get('x-request-id') && fallbackRequestId) {
+        response.setHeader('X-Request-Id', fallbackRequestId);
+      }
+      return;
+    }
+
+    if (fallbackRequestId) {
+      response.setHeader('X-Request-Id', fallbackRequestId);
     }
   }
 }
