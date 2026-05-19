@@ -37,11 +37,15 @@ export const Hero = () => {
           <span>in hours, not weeks.</span>
         </h1>
         <p className="mt-6 md:text-lg text-balance">
-          Quickly integrate social media platforms directly into your product to
-          power <span className="font-bold">posting</span>,{" "}
+          Quickly integrate social media platforms directly into your product
+          with the unified{" "}
+          <Link to="/social-media/posting" highlight>
+            social media posting API
+          </Link>
+          . Power <span className="font-bold">posting</span>,{" "}
           <span className="font-bold">feeds</span>,{" "}
           <span className="font-bold">analytics</span>, and more through a
-          single, simple API.
+          single, simple endpoint.
         </p>
         <div className="mt-12 flex items-center justify-center gap-4">
           <Button size="lg" className="rounded-full text-base" asChild>

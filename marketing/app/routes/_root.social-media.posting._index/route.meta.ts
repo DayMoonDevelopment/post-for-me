@@ -2,9 +2,10 @@ import type { Route } from "./+types/route";
 
 export const meta: Route.MetaFunction = () => {
   const canonicalUrl = "https://www.postforme.dev/social-media/posting";
-  const title = "Social Media Posting API — Post for Me";
+  const title =
+    "Social Media Posting API — Post to 9 Platforms with One Endpoint | Post for Me";
   const description =
-    "Post text, images, and video to TikTok, Instagram, Facebook, X, LinkedIn, and more through one API. Schedule and customize per platform.";
+    "A unified social media posting API for TikTok, Facebook, Instagram, X, LinkedIn, Pinterest, Bluesky, Threads, and YouTube. One endpoint, nine platforms, $10/mo to start.";
 
   return [
     { title },
@@ -52,9 +53,45 @@ export const meta: Route.MetaFunction = () => {
         name: title,
         description,
         url: canonicalUrl,
-        about: { "@id": "https://www.postforme.dev/#product" },
+        about: { "@id": `${canonicalUrl}/#software` },
         isPartOf: { "@id": "https://www.postforme.dev/#website" },
         breadcrumb: { "@id": `${canonicalUrl}/#breadcrumb` },
+      },
+    },
+
+    // SoftwareApplication structured data — targets "social media posting API"
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "@id": `${canonicalUrl}/#software`,
+        name: "Post for Me — Social Media Posting API",
+        url: canonicalUrl,
+        description:
+          "Post for Me is a social media posting API that publishes text, images, and video to TikTok, Facebook, Instagram, X, LinkedIn, Pinterest, Bluesky, Threads, and YouTube through one unified endpoint. The social media posting API handles scheduling, drafts, multi-account delivery, and per-platform customization.",
+        applicationCategory: "DeveloperApplication",
+        operatingSystem: "Web",
+        keywords:
+          "social media posting API, schedule social media posts API, post to multiple platforms API, cross-platform posting, TikTok posting API, Instagram posting API, Facebook posting API, X posting API, LinkedIn posting API, YouTube posting API, Pinterest posting API, Threads posting API, Bluesky posting API, social media automation API",
+        featureList: [
+          "Post to 9 platforms through one social media posting API",
+          "Captions, images, video, and thumbnails",
+          "Scheduled posting with timezone handling",
+          "Draft mode with TikTok app review",
+          "Multi-account posting in a single call",
+          "Per-platform customization (YouTube titles, Instagram reels, Pinterest boards, X polls, LinkedIn pages)",
+        ],
+        offers: {
+          "@type": "AggregateOffer",
+          priceCurrency: "USD",
+          lowPrice: "10",
+          highPrice: "1000",
+          offerCount: "8",
+          availability: "https://schema.org/InStock",
+          description: "Monthly subscription tiers based on post volume",
+          url: "https://www.postforme.dev/pricing",
+        },
+        provider: { "@id": "https://www.postforme.dev/#organization" },
       },
     },
 
