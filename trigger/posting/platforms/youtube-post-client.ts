@@ -88,20 +88,6 @@ export class YouTubePostClient extends PostClient {
         auth: this.#oauth2Client,
       }) as youtube_v3.Youtube;
 
-      const madeForKids =
-        platformConfig?.made_for_kids == undefined
-          ? false
-          : platformConfig.made_for_kids;
-
-      const status: youtube_v3.Schema$VideoStatus = {
-        privacyStatus: platformConfig?.privacy_status || "public",
-        selfDeclaredMadeForKids: madeForKids,
-        containsSyntheticMedia:
-          platformConfig?.contains_synthetic_media === undefined
-            ? false
-            : platformConfig?.contains_synthetic_media,
-      };
-
       const videoRequest = {
         part: ["snippet", "status"],
         requestBody: {
@@ -111,7 +97,17 @@ export class YouTubePostClient extends PostClient {
               : sanitizedCaption,
             description: this.#sanitizeYouTubeDescription(caption),
           },
-          status,
+          status: {
+            privacyStatus: platformConfig?.privacy_status || "public",
+            selfDeclaredMadeForKids:
+              platformConfig?.made_for_kids == undefined
+                ? false
+                : platformConfig.made_for_kids,
+            containsSyntheticMedia:
+              platformConfig?.contains_synthetic_media === undefined
+                ? false
+                : platformConfig?.contains_synthetic_media,
+          },
         },
       };
 
