@@ -1,8 +1,3 @@
- 
- 
- 
- 
- 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
@@ -439,7 +434,7 @@ export class TikTokPostClient extends PostClient {
       postUrl: "https://open.tiktokapis.com/v2/post/publish/content/init/",
       payload: {
         post_info: {
-          title: (title || caption).slice(0, this.#titleLength),
+          title: (title ?? "").slice(0, this.#titleLength),
           description: caption,
           privacy_level:
             platformData.privacy_status == "private"
@@ -520,12 +515,11 @@ export class TikTokPostClient extends PostClient {
     const displayedHeight = isExifRotated ? width : height;
 
     const aspectRatio = displayedWidth / displayedHeight;
-    const targetRatio = this.#allowedAspectRatios.reduce(
-      (closest, current) =>
-        Math.abs(current.ratio - aspectRatio) <
-        Math.abs(closest.ratio - aspectRatio)
-          ? current
-          : closest,
+    const targetRatio = this.#allowedAspectRatios.reduce((closest, current) =>
+      Math.abs(current.ratio - aspectRatio) <
+      Math.abs(closest.ratio - aspectRatio)
+        ? current
+        : closest,
     );
 
     // Process image with Sharp (normalize orientation, crop, resize and compress)
@@ -577,10 +571,9 @@ export class TikTokPostClient extends PostClient {
       bucket: this.#bucket,
     });
 
-    const { data: processedImageUpload } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .getPublicUrl(processedKey);
+    const { data: processedImageUpload } = this.#localSupabaseClient.storage
+      .from(this.#bucket)
+      .getPublicUrl(processedKey);
 
     return processedImageUpload!.publicUrl;
   }
