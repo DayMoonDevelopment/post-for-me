@@ -1,5 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -221,7 +221,19 @@ export class PinterestService implements SocialPlatformService {
         cursor: response.data.bookmark,
       };
     } catch (error) {
-      console.error('Error fetching Pinterest pins:', error);
+      if (error instanceof AxiosError) {
+        console.error('Error fetching Pinterest pins', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error fetching Pinterest pins', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching Pinterest pins');
+      }
       return {
         posts: [],
         count: 0,

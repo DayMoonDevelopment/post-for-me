@@ -156,7 +156,19 @@ export class FacebookService implements SocialPlatformService {
         cursor: feedResponse.paging?.cursors?.after,
       };
     } catch (error) {
-      console.error('Error fetching Facebook posts:', error);
+      if (error instanceof AxiosError) {
+        console.error('Error fetching Facebook posts', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error fetching Facebook posts', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching Facebook posts');
+      }
       return {
         posts: [],
         count: 0,
@@ -529,9 +541,18 @@ export class FacebookService implements SocialPlatformService {
 
       return metrics;
     } catch (error) {
-      console.error('Error fetching Facebook post insights');
       if (error instanceof AxiosError) {
-        console.error(error.response?.data);
+        console.error('Error fetching Facebook post insights', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error fetching Facebook post insights', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching Facebook post insights');
       }
 
       // Return empty metrics object on error

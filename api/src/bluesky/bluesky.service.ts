@@ -144,7 +144,13 @@ export class BlueskyService implements SocialPlatformService {
         cursor: feed.data.cursor,
       };
     } catch (error) {
-      console.error('Error fetching Bluesky posts:', error);
+      if (error instanceof Error) {
+        console.error('Error fetching Bluesky posts', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching Bluesky posts');
+      }
       return {
         posts: [],
         count: 0,

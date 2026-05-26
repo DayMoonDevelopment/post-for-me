@@ -395,7 +395,13 @@ export class YouTubeService implements SocialPlatformService {
         cursor: nextPageToken,
       };
     } catch (error) {
-      console.error('Error fetching YouTube posts:', error);
+      if (error instanceof Error) {
+        console.error('Error fetching YouTube posts', {
+          message: error.message,
+        });
+      } else {
+        console.error('Error fetching YouTube posts');
+      }
       throw new Error(
         `Failed to fetch YouTube posts: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );

@@ -462,11 +462,18 @@ export class TikTokBusinessService implements SocialPlatformService {
         has_more: false,
       };
     } catch (error) {
-      console.error('Error matching TikTok Business videos by metadata');
       if (error instanceof AxiosError) {
-        console.error(error.response?.data);
+        console.error('Error matching TikTok Business videos by metadata', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+        });
+      } else if (error instanceof Error) {
+        console.error('Error matching TikTok Business videos by metadata', {
+          message: error.message,
+        });
       } else {
-        console.error(error);
+        console.error('Error matching TikTok Business videos by metadata');
       }
 
       return {

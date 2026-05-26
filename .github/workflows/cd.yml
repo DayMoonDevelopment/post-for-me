@@ -24,7 +24,7 @@ jobs:
       - name: Post initial Slack message
         id: notify
         run: |
-          source ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄
+          source ./.github/scripts/update_status.sh 🔄 🔄 🔄 🔄 🔄 🔄 🔄 🔄 🔄
           echo "slack_ts=${SLACK_TS}" >> "$GITHUB_OUTPUT"
           echo "slack_channel_id=${SLACK_CHANNEL_ID}" >> "$GITHUB_OUTPUT"
 
@@ -111,16 +111,8 @@ jobs:
     outputs:
       docker: ${{ steps.docker.outcome }}
       unkey: ${{ steps.unkey.outcome }}
-      railway: ${{ steps.railway.outcome }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: api/.bun-version
-
-      - name: Install Railway CLI
-        run: bun add -g @railway/cli
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -142,6 +134,12 @@ jobs:
           tags: ghcr.io/daymoondevelopment/api:${{ github.sha }},ghcr.io/daymoondevelopment/api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            SENTRY_ORG=${{ secrets.SENTRY_ORG }}
+            SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
+            SENTRY_RELEASE=${{ github.sha }}
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
 
       - name: Install Unkey CLI
         run: |
@@ -155,6 +153,37 @@ jobs:
           UNKEY_PROJECT: post-for-me-api
           UNKEY_APP: default
         run: ./unkey deploy --env=production ghcr.io/daymoondevelopment/api:${{ github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # Railway backup deploy — secondary, non-blocking.
+  #
+  # Unkey (deploy-api) is the primary host for the API; Railway is a warm
+  # backup. This job builds + deploys the API to Railway from source via
+  # `railway up` (Railway's own builder). It is deliberately:
+  #   - gated on deploy-api, so it only fires after the Unkey deploy succeeds
+  #   - absent from deploy-trigger/dashboard/marketing's `needs`, so a slow or
+  #     broken Railway build never holds up the rest of the deploy
+  #   - continue-on-error, so a Railway failure surfaces in Slack and the job
+  #     badge without failing the overall workflow run
+  # ---------------------------------------------------------------------------
+  deploy-api-railway-backup:
+    name: Deploy API to Railway (backup)
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    outputs:
+      railway: ${{ steps.railway.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: api/.bun-version
+
+      - name: Install Railway CLI
+        run: bun add -g @railway/cli
 
       - name: Deploy API to Railway
         id: railway
@@ -190,75 +219,125 @@ jobs:
         # fetched on demand instead of expecting it on PATH or in node_modules/.bin.
         run: bunx trigger.dev@4.4.4 deploy
 
+  # Dashboard build/deploy is owned by Vercel's own framework integration
+  # (project Settings → Git, with production auto-deploy disabled). CD just
+  # fires the production deploy hook once the API + migrations are live, so
+  # Vercel can pick up the same SHA and run its built-in React Router preset.
   deploy-dashboard:
     name: Deploy Dashboard
     needs: deploy-api
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dashboard
     permissions:
+      packages: write
       contents: read
     outputs:
+      docker: ${{ steps.docker.outcome }}
+      unkey: ${{ steps.unkey.outcome }}
       vercel: ${{ steps.vercel.outcome }}
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: dashboard/.bun-version
-      # Vercel CLI's `vercel build` spawns `bun` via child_process and only
-      # searches system PATH (not $GITHUB_PATH-injected dirs). Symlink so it resolves.
-      - name: Symlink bun for Vercel CLI
-        run: sudo ln -sf "$(which bun)" /usr/local/bin/bun
-      - run: bun install --frozen-lockfile
-      - name: Link Dashboard to Vercel project
-        run: bunx vercel link --project post-for-me-app --scope day-moon --token=$VERCEL_TOKEN --yes
-      - name: Pull Vercel environment (production)
-        run: bunx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-      - name: Build with Vercel
-        run: bunx vercel build --prod --token=$VERCEL_TOKEN
-      - name: Deploy Dashboard to Vercel
-        id: vercel
-        run: bunx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN --yes
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: docker
+        uses: docker/build-push-action@v6
+        with:
+          context: dashboard
+          file: dashboard/Dockerfile
+          push: true
+          tags: ghcr.io/daymoondevelopment/dashboard:${{ github.sha }},ghcr.io/daymoondevelopment/dashboard:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Unkey CLI
+        run: |
+          curl -sL https://github.com/unkeyed/unkey/releases/latest/download/unkey_Linux_x86_64.tar.gz | tar xz
+          ./unkey --version
+
+      - name: Deploy Dashboard to Unkey
+        id: unkey
+        env:
+          UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
+          UNKEY_PROJECT: post-for-me-app
+          UNKEY_APP: default
+        run: ./unkey deploy --env=production ghcr.io/daymoondevelopment/dashboard:${{ github.sha }}
+
+      - name: Fire Vercel deploy hook
+        id: vercel
+        run: |
+          curl -fSs -X POST \
+            "${{ secrets.VERCEL_DASHBOARD_DEPLOY_HOOK_URL }}?ref=${{ github.sha }}"
+
+  # Marketing build/deploy is owned by Vercel's own framework integration
+  # (project Settings → Git, with production auto-deploy disabled). CD just
+  # fires the production deploy hook once the API + migrations are live, so
+  # Vercel can pick up the same SHA and run its built-in React Router preset.
   deploy-marketing:
     name: Deploy Marketing
     needs: deploy-api
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: marketing
     permissions:
+      packages: write
       contents: read
     outputs:
+      docker: ${{ steps.docker.outcome }}
+      unkey: ${{ steps.unkey.outcome }}
       vercel: ${{ steps.vercel.outcome }}
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          bun-version-file: marketing/.bun-version
-      # Vercel CLI's `vercel build` spawns `bun` via child_process and only
-      # searches system PATH (not $GITHUB_PATH-injected dirs). Symlink so it resolves.
-      - name: Symlink bun for Vercel CLI
-        run: sudo ln -sf "$(which bun)" /usr/local/bin/bun
-      - run: bun install --frozen-lockfile
-      - name: Link Marketing to Vercel project
-        run: bunx vercel link --project post-for-me-marketing --scope day-moon --token=$VERCEL_TOKEN --yes
-      - name: Pull Vercel environment (production)
-        run: bunx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-      - name: Build with Vercel
-        run: bunx vercel build --prod --token=$VERCEL_TOKEN
-      - name: Deploy Marketing to Vercel
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: docker
+        uses: docker/build-push-action@v6
+        with:
+          context: marketing
+          file: marketing/Dockerfile
+          push: true
+          tags: ghcr.io/daymoondevelopment/marketing:${{ github.sha }},ghcr.io/daymoondevelopment/marketing:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Unkey CLI
+        run: |
+          curl -sL https://github.com/unkeyed/unkey/releases/latest/download/unkey_Linux_x86_64.tar.gz | tar xz
+          ./unkey --version
+
+      - name: Deploy Marketing to Unkey
+        id: unkey
+        env:
+          UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
+          UNKEY_PROJECT: post-for-me-marketing
+          UNKEY_APP: default
+        run: ./unkey deploy --env=production ghcr.io/daymoondevelopment/marketing:${{ github.sha }}
+
+      - name: Fire Vercel deploy hook
         id: vercel
-        run: bunx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN --yes
+        run: |
+          curl -fSs -X POST \
+            "${{ secrets.VERCEL_MARKETING_DEPLOY_HOOK_URL }}?ref=${{ github.sha }}"
 
   notify-final:
     name: Notify Slack — Final
-    needs: [notify-start, precheck, migrate, deploy-api, deploy-trigger, deploy-dashboard, deploy-marketing]
+    needs: [notify-start, precheck, migrate, deploy-api, deploy-api-railway-backup, deploy-trigger, deploy-dashboard, deploy-marketing]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -282,9 +361,11 @@ jobs:
           PRECHECK_STATUS=$(status "${{ needs.precheck.result }}")
           SUPABASE_STATUS=$(status "${{ needs.migrate.outputs.supabase }}")
           TRIGGER_STATUS=$(status "${{ needs.deploy-trigger.outputs.deploy }}")
-          API_STATUS=$(status "${{ needs.deploy-api.outputs.railway }}")
-          UNKEY_STATUS=$(status "${{ needs.deploy-api.outputs.unkey }}")
-          DASHBOARD_STATUS=$(status "${{ needs.deploy-dashboard.outputs.vercel }}")
-          MARKETING_STATUS=$(status "${{ needs.deploy-marketing.outputs.vercel }}")
+          API_RAILWAY_STATUS=$(status "${{ needs.deploy-api-railway-backup.outputs.railway }}")
+          API_UNKEY_STATUS=$(status "${{ needs.deploy-api.outputs.unkey }}")
+          DASHBOARD_UNKEY_STATUS=$(status "${{ needs.deploy-dashboard.outputs.unkey }}")
+          DASHBOARD_VERCEL_STATUS=$(status "${{ needs.deploy-dashboard.outputs.vercel }}")
+          MARKETING_UNKEY_STATUS=$(status "${{ needs.deploy-marketing.outputs.unkey }}")
+          MARKETING_VERCEL_STATUS=$(status "${{ needs.deploy-marketing.outputs.vercel }}")
 
-          ./.github/scripts/update_status.sh "$PRECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_STATUS" "$UNKEY_STATUS" "$DASHBOARD_STATUS" "$MARKETING_STATUS"
+          ./.github/scripts/update_status.sh "$PRECHECK_STATUS" "$SUPABASE_STATUS" "$TRIGGER_STATUS" "$API_RAILWAY_STATUS" "$API_UNKEY_STATUS" "$DASHBOARD_UNKEY_STATUS" "$DASHBOARD_VERCEL_STATUS" "$MARKETING_UNKEY_STATUS" "$MARKETING_VERCEL_STATUS"

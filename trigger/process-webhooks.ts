@@ -77,15 +77,20 @@ export const processWebhooks = task({
       throw new Error("Unable to add events");
     }
 
-    const batch = tasks.batchTrigger(
+    const batch = await tasks.batchTrigger(
       "process-webhook-event",
       webhookEvents.data.map((we) => ({
         payload: {
           id: we.id,
+          webhookId: we.webhook_id,
           url: we.webhooks.url,
           type: we.type,
           data: we.data,
           secret: we.webhooks.secret_key,
+        },
+        options: {
+          idempotencyKey: `process-webhook-event:${we.id}`,
+          idempotencyKeyTTL: "1h",
         },
       }))
     );
