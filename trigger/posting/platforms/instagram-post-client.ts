@@ -403,12 +403,10 @@ export class InstagramPostClient extends PostClient {
           ) {
             createMediaParams.share_to_feed = platformConfig?.share_to_feed;
           }
-          
-          if (
-          platformConfig?.audio_name
-        ) {
-          createMediaParams.audio_name = platformConfig.audio_name;
-        }
+
+          if (platformConfig?.audio_name) {
+            createMediaParams.audio_name = platformConfig.audio_name;
+          }
         }
 
         if (
@@ -423,7 +421,6 @@ export class InstagramPostClient extends PostClient {
             .filter((t) => t.platform == "instagram" && t.type == "product")
             .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
         }
-
 
         break;
     }
