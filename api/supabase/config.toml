@@ -185,13 +185,13 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
-[auth.email.template.magic_link]
-subject = "Magic Link"
-content_path = "./supabase/templates/magic-link.html"
+#[auth.email.template.magic_link]
+#subject = "Magic Link"
+#content_path = "./supabase/templates/magic-link.html"
 
-[auth.email.template.confirm_signup]
-subject = "Confirm Sign Up"
-content_path = "./supabase/templates/confirm-signup.html"
+#[auth.email.template.confirm_signup]
+#subject = "Confirm Sign Up"
+#content_path = "./supabase/templates/confirm-signup.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
