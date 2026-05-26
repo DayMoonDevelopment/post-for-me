@@ -2,12 +2,28 @@ import { useCallback } from "react";
 import { useSearchParams, useSubmit } from "react-router";
 
 import {
+  CalendarClock4Icon,
+  CircleCheckIcon,
+  FileEditIcon,
+  LoadingCircleIcon,
+  SquareGridCircleIcon,
+} from "~/components/icons";
+
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "~/ui/select";
+
+const statusOptions = [
+  { value: "all", label: "All Status", icon: SquareGridCircleIcon },
+  { value: "draft", label: "Draft", icon: FileEditIcon },
+  { value: "scheduled", label: "Scheduled", icon: CalendarClock4Icon },
+  { value: "processing", label: "Processing", icon: LoadingCircleIcon },
+  { value: "processed", label: "Processed", icon: CircleCheckIcon },
+] as const;
 
 export function TableFilters() {
   const [searchParams] = useSearchParams();
@@ -71,11 +87,14 @@ export function TableFilters() {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Status</SelectItem>
-          <SelectItem value="draft">Draft</SelectItem>
-          <SelectItem value="scheduled">Scheduled</SelectItem>
-          <SelectItem value="processing">Processing</SelectItem>
-          <SelectItem value="processed">Processed</SelectItem>
+          {statusOptions.map(({ value, label, icon: Icon }) => (
+            <SelectItem key={value} value={value}>
+              <span className="flex items-center gap-2">
+                <Icon className="size-4 text-muted-foreground" />
+                {label}
+              </span>
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       {/* <Select value={currentSort} onValueChange={handleSortChange}>

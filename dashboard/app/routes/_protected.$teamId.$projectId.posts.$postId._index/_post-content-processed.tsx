@@ -4,6 +4,7 @@ import { Link, useLoaderData } from "react-router";
 import { cn } from "~/lib/utils";
 
 import {
+  ArrowCornerDownRightIcon,
   CheckmarkSmallIcon,
   CopyIcon,
   CircleFilledIcon,
@@ -61,12 +62,12 @@ export function PostContentProcessed() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[22%]">Account</TableHead>
-              <TableHead className="w-[88px]">Status</TableHead>
+              <TableHead className="w-22">Status</TableHead>
               <TableHead>Result ID</TableHead>
               <TableHead>Account ID</TableHead>
               <TableHead>Platform post ID</TableHead>
               <TableHead>URL</TableHead>
-              <TableHead className="w-[112px]" />
+              <TableHead className="w-28" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -87,61 +88,79 @@ function ResultRow({ result }: { result: PostResult }) {
     result.platform_data?.username ??
     result.social_account_id;
 
+  const showError = !result.success && Boolean(result.error);
+
   return (
-    <TableRow>
-      <TableCell>
-        <div className="flex min-w-0 flex-row items-center gap-2">
-          <div className="relative shrink-0">
-            <Avatar className="size-6">
-              <AvatarImage src={result.account?.profile_photo_url || ""} />
-              <AvatarFallback>
-                <BrandIcon brand={provider} className="size-3.5" />
-              </AvatarFallback>
-            </Avatar>
-            {provider ? (
-              <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
-                <BrandIcon brand={provider} className="size-2.5" />
+    <>
+      <TableRow className={cn(showError && "border-0")}>
+        <TableCell>
+          <div className="flex min-w-0 flex-row items-center gap-2">
+            <div className="relative shrink-0">
+              <Avatar className="size-6">
+                <AvatarImage src={result.account?.profile_photo_url || ""} />
+                <AvatarFallback>
+                  <BrandIcon brand={provider} className="size-3.5" />
+                </AvatarFallback>
+              </Avatar>
+              {provider ? (
+                <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
+                  <BrandIcon brand={provider} className="size-2.5" />
+                </span>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-medium">{handle}</span>
+              <span className="truncate text-xs capitalize text-muted-foreground">
+                {result.account?.provider ?? "unknown account"}
               </span>
-            ) : null}
+            </div>
           </div>
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-medium">{handle}</span>
-            <span className="truncate text-xs capitalize text-muted-foreground">
-              {result.account?.provider ?? "unknown account"}
-            </span>
-          </div>
-        </div>
-      </TableCell>
+        </TableCell>
 
-      <TableCell>
-        <span
-          title={!result.success && result.error ? result.error : undefined}
-          className={cn(
-            "text-sm",
-            result.success ? "text-affirmative" : "text-destructive",
-          )}
-        >
-          {result.success ? "Posted" : "Failed"}
-        </span>
-      </TableCell>
+        <TableCell>
+          <span
+            title={!result.success && result.error ? result.error : undefined}
+            className={cn(
+              "text-sm",
+              result.success ? "text-affirmative" : "text-destructive",
+            )}
+          >
+            {result.success ? "Posted" : "Failed"}
+          </span>
+        </TableCell>
 
-      <TableCell>
-        <CopyCell value={result.id} />
-      </TableCell>
-      <TableCell>
-        <CopyCell value={result.social_account_id} />
-      </TableCell>
-      <TableCell>
-        <CopyCell value={result.platform_data?.id} />
-      </TableCell>
-      <TableCell>
-        <CopyCell value={result.platform_data?.url} href={result.platform_data?.url} />
-      </TableCell>
+        <TableCell>
+          <CopyCell value={result.id} />
+        </TableCell>
+        <TableCell>
+          <CopyCell value={result.social_account_id} />
+        </TableCell>
+        <TableCell>
+          <CopyCell value={result.platform_data?.id} />
+        </TableCell>
+        <TableCell>
+          <CopyCell
+            value={result.platform_data?.url}
+            href={result.platform_data?.url}
+          />
+        </TableCell>
 
-      <TableCell>
-        <RawDataDialog result={result} />
-      </TableCell>
-    </TableRow>
+        <TableCell>
+          <RawDataDialog result={result} />
+        </TableCell>
+      </TableRow>
+
+      {showError ? (
+        <TableRow className="border-destructive/8 bg-destructive/5 hover:bg-destructive/5">
+          <TableCell colSpan={7} className="py-2">
+            <div className="flex flex-row items-start gap-2 text-sm text-destructive pl-2">
+              <ArrowCornerDownRightIcon className="size-4 shrink-0 text-destructive" />
+              <span className="wrap-break-word">{result.error}</span>
+            </div>
+          </TableCell>
+        </TableRow>
+      ) : null}
+    </>
   );
 }
 
@@ -166,7 +185,7 @@ function CopyCell({
   }, [value]);
 
   if (!value) {
-    return <span className="text-sm text-muted-foreground">—</span>;
+    return <span className="text-sm text-foreground/25">—</span>;
   }
 
   return (
@@ -205,8 +224,7 @@ function RawDataDialog({ result }: { result: PostResult }) {
   const [copied, setCopied] = useState(false);
 
   const provider = result.account?.provider?.split("_")[0] ?? "";
-  const handle =
-    result.account?.username ?? result.social_account_id;
+  const handle = result.account?.username ?? result.social_account_id;
 
   const json =
     result.details != null
@@ -227,7 +245,7 @@ function RawDataDialog({ result }: { result: PostResult }) {
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="w-full">
-          Raw JSON
+          View Logs
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-5xl lg:max-w-6xl">
