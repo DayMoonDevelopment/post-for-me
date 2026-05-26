@@ -1,18 +1,21 @@
 import {
   CanActivate,
   ExecutionContext,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
-  TooManyRequestsException,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Unkey } from '@unkey/api';
-import type { VerifyKeyRatelimitData } from '@unkey/api/models/components';
-import { TooManyRequestsErrorResponse } from '@unkey/api/models/errors';
 import type { Request, Response } from 'express';
 
 import { SupabaseService } from '../supabase/supabase.service';
 import type { RequestUser } from './user.interface';
+import {
+  Code,
+  VerifyKeyRatelimitData,
+} from '@unkey/api/dist/commonjs/models/components';
 
 // Augment Express Request type (good practice)
 declare module 'express' {
@@ -24,14 +27,14 @@ declare module 'express' {
 
 type TokenValidationResult = {
   valid: boolean;
-  code?: string;
   userId?: string;
   projectId?: string;
   keyId?: string;
   teamId?: string;
   planType?: string;
-  ratelimits?: VerifyKeyRatelimitData[];
   requestId?: string;
+  code?: Code;
+  ratelimits?: VerifyKeyRatelimitData[];
 };
 
 @Injectable()
@@ -67,36 +70,18 @@ export class AuthGuard implements CanActivate {
 
       const validationResult = await this.validateBearerToken(token);
 
-      if (validationResult.code === 'RATE_LIMITED') {
-        this.applyRateLimitHeaders(
-          response,
-          validationResult.ratelimits,
-          validationResult.requestId,
+      if (!validationResult.valid && validationResult.code === 'RATE_LIMITED') {
+        this.applyRateLimitHeaders(response, validationResult.ratelimits);
+        throw new HttpException(
+          'Too many requests, please try again later',
+          HttpStatus.TOO_MANY_REQUESTS,
         );
-        throw new TooManyRequestsException('API key rate limit exceeded.');
-      }
-
-      // Strict check: valid must be true AND userId must exist
-      if (
-        !validationResult.valid ||
-        !validationResult.userId ||
-        !validationResult.projectId ||
-        !validationResult.keyId ||
-        !validationResult.teamId
-      ) {
-        throw new UnauthorizedException(
-          'Invalid or expired token, or missing user identifier.',
-        );
+      } else if (!validationResult.valid) {
+        throw new UnauthorizedException('Invalid or expired token');
       }
 
       // --- Validation successful ---
-      const {
-        userId,
-        projectId,
-        keyId,
-        teamId,
-        planType,
-      } = validationResult;
+      const { userId, projectId, keyId, teamId, planType } = validationResult;
 
       // Check if this is a request to social-account-feeds endpoint
       const isSocialAccountFeedsEndpoint = request.path.includes(
@@ -111,28 +96,22 @@ export class AuthGuard implements CanActivate {
       }
 
       // Set the userId in the SupabaseService for subsequent use *within this request scope*
-      this.supabaseService.setUser(userId);
+      this.supabaseService.setUser(userId!);
 
       // Attach the guaranteed user object to the request
-      request.user = { id: userId, projectId, apiKey: keyId, teamId };
+      request.user = {
+        id: userId!,
+        projectId: projectId!,
+        apiKey: keyId || '',
+        teamId: teamId || '',
+      };
       request.planType = planType;
 
       return true; // Access granted
     } catch (error: unknown) {
-      if (error instanceof TooManyRequestsErrorResponse) {
-        this.applyExternalRateLimitHeaders(
-          response,
-          error.headers,
-          error.data$?.meta?.requestId,
-        );
-        throw new TooManyRequestsException(
-          error?.error?.detail ?? 'Rate limit exceeded.',
-        );
-      }
-
       if (
         error instanceof UnauthorizedException ||
-        error instanceof TooManyRequestsException
+        error instanceof HttpException
       ) {
         throw error;
       }
@@ -167,7 +146,9 @@ export class AuthGuard implements CanActivate {
     return token || null;
   }
 
-  private async validateBearerToken(token: string): Promise<TokenValidationResult> {
+  private async validateBearerToken(
+    token: string,
+  ): Promise<TokenValidationResult> {
     try {
       const response = await this.unkey.keys.verifyKey({
         key: token,
@@ -179,8 +160,8 @@ export class AuthGuard implements CanActivate {
         // Token itself is invalid according to Unkey
         return {
           valid: false,
-          code: data?.code,
-          ratelimits: data?.ratelimits,
+          code: data.code,
+          ratelimits: data.ratelimits,
           requestId: meta?.requestId,
         };
       }
@@ -214,25 +195,21 @@ export class AuthGuard implements CanActivate {
             8,
           )}...`,
         );
-        return { valid: false }; // Treat as invalid for our purpose
+        return { valid: false, code: data.code };
       }
 
       // Both token valid AND userId present
       return {
         valid: true,
+        code: data.code,
         userId,
         projectId,
         keyId: data.keyId,
         teamId,
         planType,
-        code: data.code,
-        ratelimits: data.ratelimits,
         requestId: meta?.requestId,
       };
     } catch (error) {
-      if (error instanceof TooManyRequestsErrorResponse) {
-        throw error;
-      }
       console.error(
         '[validateBearerToken] Error during token verification:',
         error,
@@ -244,7 +221,6 @@ export class AuthGuard implements CanActivate {
   private applyRateLimitHeaders(
     response: Response,
     ratelimits?: VerifyKeyRatelimitData[],
-    requestId?: string,
   ): void {
     if (!response) {
       return;
@@ -265,56 +241,12 @@ export class AuthGuard implements CanActivate {
         'X-Rate-Limit-Remaining',
         Math.max(exceededLimit.remaining, 0).toString(),
       );
-      response.setHeader(
-        'X-Rate-Limit-Reset',
-        retryAfterSeconds.toString(),
-      );
+      response.setHeader('X-Rate-Limit-Reset', retryAfterSeconds.toString());
       response.setHeader('X-Rate-Limit-Name', exceededLimit.name);
       response.setHeader(
         'X-Rate-Limit-Duration',
         Math.max(1, Math.ceil(exceededLimit.duration / 1000)).toString(),
       );
-    }
-
-    if (requestId) {
-      response.setHeader('X-Request-Id', requestId);
-    }
-  }
-
-  private applyExternalRateLimitHeaders(
-    response: Response,
-    headers?: Headers,
-    fallbackRequestId?: string,
-  ): void {
-    if (!response) {
-      return;
-    }
-
-    if (headers) {
-      const headerMap: Record<string, string> = {
-        'retry-after': 'Retry-After',
-        'x-ratelimit-limit': 'X-Rate-Limit-Limit',
-        'x-ratelimit-remaining': 'X-Rate-Limit-Remaining',
-        'x-ratelimit-reset': 'X-Rate-Limit-Reset',
-        'x-ratelimit-name': 'X-Rate-Limit-Name',
-        'x-request-id': 'X-Request-Id',
-      };
-
-      for (const [source, target] of Object.entries(headerMap)) {
-        const value = headers.get(source);
-        if (value) {
-          response.setHeader(target, value);
-        }
-      }
-
-      if (!headers.get('x-request-id') && fallbackRequestId) {
-        response.setHeader('X-Request-Id', fallbackRequestId);
-      }
-      return;
-    }
-
-    if (fallbackRequestId) {
-      response.setHeader('X-Request-Id', fallbackRequestId);
     }
   }
 }
