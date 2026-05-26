@@ -32,9 +32,12 @@ export const Header = () => {
       <div className="flex flex-col gap-6 pt-4">
         <SocialIconsRow iconClassName="size-6" className="gap-3 flex-wrap" />
         <p className="text-lg md:text-xl text-muted-foreground">
-          A unified API that simplifies posting across all major social
-          platforms. One integration, all platform customizations, unlimited
-          possibilities.
+          Our{" "}
+          <Link to="/social-media/posting" highlight>
+            social media posting API
+          </Link>{" "}
+          exposes one unified endpoint for every major platform. One
+          integration, all platform customizations, unlimited possibilities.
         </p>
       </div>
     </div>
