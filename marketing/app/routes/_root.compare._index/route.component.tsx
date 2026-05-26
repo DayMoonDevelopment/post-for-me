@@ -9,18 +9,18 @@ export function Component() {
   const data = useLoaderData<Route.ComponentProps["loaderData"]>();
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-      <div className="text-center mb-16">
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+    <div className="max-w-(--breakpoint-lg) w-full mx-auto px-6 py-16 md:py-24">
+      <div className="max-w-3xl mb-16">
+        <h1 className="text-4xl md:text-6xl font-semibold tracking-[-0.03em]">
           Compare Post for Me
         </h1>
-        <p className="mt-6 text-lg leading-8 text-muted-foreground">
+        <p className="mt-6 text-lg md:text-xl text-muted-foreground leading-relaxed">
           See how Post for Me stacks up against other social media API solutions.
           Find the right tool for your development needs.
         </p>
       </div>
 
-      <div className="flex flex-col gap-0 w-full max-w-lg mx-auto">
+      <div className="flex flex-col gap-0 w-full">
         {Object.entries(data.comparisons).map(([slug, comparison]) => (
           <Link
             key={slug}

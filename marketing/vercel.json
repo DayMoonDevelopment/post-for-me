@@ -1,8 +1,4 @@
 {
-  "git": {
-    "deploymentEnabled": false
-  },
-  "ignoreCommand": "exit 0",
   "headers": [
     {
       "source": "/(.*)",
