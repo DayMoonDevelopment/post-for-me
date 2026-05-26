@@ -1,6 +1,7 @@
 import { Hero } from "./components/hero";
 import { IntentOfUseNotice } from "./components/intent-of-use-notice";
 import { KeyFeatures } from "./components/key-features";
+import { OpenSourceCallout } from "./components/open-source-callout";
 import { PricingTable } from "./components/pricing-table";
 import { Proposition } from "./components/proposition";
 import { SdkComparison } from "./components/sdk-comparison";
@@ -12,6 +13,7 @@ export function Component() {
       <Hero />
       <KeyFeatures />
       <PricingTable />
+      <OpenSourceCallout />
       <Proposition />
       <YouMightUse />
       <SdkComparison />

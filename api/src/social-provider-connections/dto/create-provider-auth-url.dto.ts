@@ -13,7 +13,7 @@ export class LinkedInUrlProviderData {
   @ApiProperty({
     enum: ['personal', 'organization'],
     description:
-      'The type of connection; If using our provided credentials always use "organization". If using your own crednetials then only use "organization" if you are using the Community API',
+      'The type of connection; If using our provided credentials always use "organization". If using your own credentials then only use "organization" if you are using the Community API',
     default: 'personal',
   })
   connection_type: 'personal' | 'organization';
@@ -196,7 +196,7 @@ export class CreateSocialAccountProviderAuthUrlDto {
   external_id?: string;
 
   @ApiProperty({
-    description: `Override the default redirect URL for the OAuth flow. If provided, this URL will be used instead of our redirect URL. Make sure this URL is included in your app's authorized redirect urls. This override will not work when using our system credientals.`,
+    description: `Override the default redirect URL for the OAuth flow. If provided, this URL will be used instead of our redirect URL. Make sure this URL is included in your app's authorized redirect urls. This override will not work when using our system credentials; configure the project redirect URL in the dashboard instead.`,
     required: false,
   })
   redirect_url_override?: string;

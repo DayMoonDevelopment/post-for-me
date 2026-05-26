@@ -154,7 +154,7 @@ export class SocialAccountsController {
 
     if (createAuthUrlInput.redirect_url_override && isSystem) {
       throw new HttpException(
-        'Redirect URL Override is not allowed for Quickstart Projects, please set the Project Redirect URL using the dahsboard instead.',
+        'Redirect URL Override is not allowed for Quickstart Projects, please set the Project Redirect URL using the dashboard instead.',
         HttpStatus.BAD_REQUEST,
       );
     }
