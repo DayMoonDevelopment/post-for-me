@@ -1,7 +1,3 @@
- 
- 
- 
-
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
@@ -100,11 +96,11 @@ export class YouTubePostClient extends PostClient {
       const status: youtube_v3.Schema$VideoStatus = {
         privacyStatus: platformConfig?.privacy_status || "public",
         selfDeclaredMadeForKids: madeForKids,
+        containsSyntheticMedia:
+          platformConfig?.contains_synthetic_media === undefined
+            ? false
+            : platformConfig?.contains_synthetic_media,
       };
-
-      if (platformConfig?.contains_synthetic_media !== undefined) {
-        status.containsSyntheticMedia = platformConfig.contains_synthetic_media;
-      }
 
       const videoRequest = {
         part: ["snippet", "status"],
