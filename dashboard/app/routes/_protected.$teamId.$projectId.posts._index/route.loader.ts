@@ -97,12 +97,54 @@ export const loader = withSupabase(
       }
 
       const postsData: PostsResponse = await postsResponse.json();
+      const posts = postsData.data || [];
+
+      // Fetch per-account results for the page in a single query and fold them
+      // into a per-platform pass/fail status (failure is prioritized).
+      const postIds = posts.map((p) => p.id);
+      if (postIds.length > 0) {
+        const { data: resultRows } = await supabase
+          .from("social_post_results")
+          .select("post_id, provider_connection_id, success")
+          .in("post_id", postIds);
+
+        const resultsByPost = new Map<
+          string,
+          { provider_connection_id: string; success: boolean }[]
+        >();
+        for (const r of resultRows ?? []) {
+          const arr = resultsByPost.get(r.post_id) ?? [];
+          arr.push({
+            provider_connection_id: r.provider_connection_id,
+            success: r.success,
+          });
+          resultsByPost.set(r.post_id, arr);
+        }
+
+        for (const post of posts) {
+          const rows = resultsByPost.get(post.id);
+          if (!rows?.length) continue;
+
+          const accountPlatform = new Map(
+            (post.social_accounts ?? []).map((a) => [a.id, a.platform]),
+          );
+
+          const status: Record<string, boolean> = {};
+          for (const r of rows) {
+            const platform = accountPlatform.get(r.provider_connection_id);
+            if (!platform) continue;
+            // true && success folds any failure down to false for the platform.
+            status[platform] = (status[platform] ?? true) && r.success;
+          }
+          post.provider_status = status;
+        }
+      }
 
       const totalPages = Math.ceil((postsData.meta?.total || 0) / limit);
 
       return data({
         success: true,
-        posts: postsData.data || [],
+        posts,
         totalCount: postsData.meta?.total || 0,
         currentPage: page,
         totalPages,
