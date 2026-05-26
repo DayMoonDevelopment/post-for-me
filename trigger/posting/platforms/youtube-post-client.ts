@@ -82,20 +82,34 @@ export class YouTubePostClient extends PostClient {
       });
 
       // Trim and sanitize the caption
-      const sanitizedCaption = this.#sanitizeYouTubeCaption(caption);
       const youtube = google.youtube({
         version: "v3",
         auth: this.#oauth2Client,
       }) as youtube_v3.Youtube;
 
+      const parts = new Set(["snippet", "status"]);
+      if (platformConfig?.localizations) parts.add("localizations");
+      if (platformConfig?.recording_date) parts.add("recordingDetails");
+
       const videoRequest = {
-        part: ["snippet", "status"],
+        part: [...parts],
         requestBody: {
           snippet: {
-            title: platformConfig?.title
-              ? this.#sanitizeYouTubeCaption(platformConfig.title)
-              : sanitizedCaption,
-            description: this.#sanitizeYouTubeDescription(caption),
+            title: this.#sanitizeYouTubeCaption(
+              platformConfig?.title || caption,
+            ),
+            description: this.#sanitizeYouTubeDescription(
+              platformConfig?.description || caption,
+            ),
+            ...(platformConfig?.tags !== undefined && {
+              tags: platformConfig.tags,
+            }),
+            ...(platformConfig?.category_id !== undefined && {
+              categoryId: platformConfig.category_id,
+            }),
+            ...(platformConfig?.default_language !== undefined && {
+              defaultLanguage: platformConfig.default_language,
+            }),
           },
           status: {
             privacyStatus: platformConfig?.privacy_status || "public",
@@ -107,7 +121,27 @@ export class YouTubePostClient extends PostClient {
               platformConfig?.contains_synthetic_media === undefined
                 ? false
                 : platformConfig?.contains_synthetic_media,
+            ...(platformConfig?.embeddable !== undefined && {
+              embeddable: platformConfig.embeddable,
+            }),
+            ...(platformConfig?.license !== undefined && {
+              license: platformConfig.license,
+            }),
+            ...(platformConfig?.public_stats_viewable !== undefined && {
+              publicStatsViewable: platformConfig.public_stats_viewable,
+            }),
+            ...(platformConfig?.publish_at !== undefined && {
+              publishAt: platformConfig.publish_at,
+            }),
           },
+          ...(platformConfig?.localizations !== undefined && {
+            localizations: platformConfig.localizations,
+          }),
+          ...(platformConfig?.recording_date !== undefined && {
+            recordingDetails: {
+              recordingDate: platformConfig.recording_date,
+            },
+          }),
         },
       };
 
