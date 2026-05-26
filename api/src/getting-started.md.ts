@@ -38,7 +38,7 @@ The below example shows how to create a media post from start to finish.
 
   \`\`\`js
    // Step 1: Fetch the social accounts you want to post to. In this case we are getting all facebook and instagram accounts.
-   const socialAccountResponse = await fetch('https://api.postforme.app/v1/social-accounts?platform=facebook&platform=instagram', {
+   const socialAccountResponse = await fetch('https://api.postforme.dev/v1/social-accounts?platform=facebook&platform=instagram', {
      method: 'GET',
      headers: {
        'Content-Type': 'application/json',
