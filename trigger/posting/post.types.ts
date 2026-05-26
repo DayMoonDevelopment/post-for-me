@@ -128,6 +128,7 @@ export interface InstagramConfiguration {
   share_to_feed?: boolean;
   location?: string;
   trial_reel_type?: string;
+  audio_name?: string;
 }
 
 export interface TiktokConfiguration {
@@ -162,6 +163,7 @@ export interface YoutubeConfiguration {
   category_id?: string;
   privacy_status?: string;
   made_for_kids?: boolean;
+  contains_synthetic_media?: boolean;
   media?: PostMedia[];
 }
 

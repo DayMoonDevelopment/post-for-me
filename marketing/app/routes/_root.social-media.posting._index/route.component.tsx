@@ -173,15 +173,17 @@ export function Component() {
           <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <Badge variant="pop" className="mb-6">
-                Social Media Posting
+                Social Media Posting API
               </Badge>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-[-0.03em] text-balance">
-                Post to every major social media platform through one API
+                The Social Media Posting API for every major platform
               </h1>
               <p className="mt-6 text-lg text-muted-foreground leading-relaxed text-balance">
-                Post text, images, and video to 9 platforms in a single call.
-                Schedule for later, save as draft, or publish now. Media
-                processing and platform-specific formatting handled for you.
+                Post for Me is a unified social media posting API that publishes
+                text, images, and video to 9 platforms in a single call.
+                Schedule for later, save as draft, or publish now. The social
+                media posting API handles media processing and platform-specific
+                formatting for you.
               </p>
               <p className="mt-3 text-base italic text-muted-foreground/80">
                 No platform credentials required to get started.

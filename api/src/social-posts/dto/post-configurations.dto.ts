@@ -119,6 +119,14 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   trial_reel_type?: string;
+
+  @ApiProperty({
+    description:
+      'Display name for the audio track on Instagram Reels. Only honored on Reels uploads, and only when the audio is original (Meta silently ignores it on licensed/fingerprinted tracks).',
+    nullable: true,
+    required: false,
+  })
+  audio_name?: string;
 }
 
 export class TiktokConfigurationDto extends BaseConfigurationDto {
@@ -342,6 +350,14 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
     default: false,
   })
   made_for_kids?: boolean;
+
+  @ApiProperty({
+    description:
+      'If true, marks the video as containing altered or synthetic content per YouTube\'s disclosure policy. Sets status.containsSyntheticMedia on the YouTube Data API videos.insert call; YouTube adds a "How this content was made" label to the description automatically.',
+    nullable: true,
+    required: false,
+  })
+  contains_synthetic_media?: boolean;
 }
 
 export class FacebookConfigurationDto extends BaseConfigurationDto {
@@ -547,11 +563,11 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'YouTube video description. Falls back to the post caption when not provided.',
+      'If true, marks the YouTube video as containing altered or synthetic content per YouTube\'s disclosure policy. Sets status.containsSyntheticMedia on the videos.insert call; YouTube adds a "How this content was made" label to the description automatically.',
     nullable: true,
     required: false,
   })
-  description?: string;
+  contains_synthetic_media?: boolean;
 
   @ApiProperty({
     description: 'YouTube video tags',
@@ -699,6 +715,14 @@ export class AccountConfigurationDetailsDto {
     required: false,
   })
   trial_reel_type?: string;
+
+  @ApiProperty({
+    description:
+      'Display name for the audio track on Instagram Reels. Only honored on Reels uploads, and only when the audio is original (Meta silently ignores it on licensed/fingerprinted tracks).',
+    nullable: true,
+    required: false,
+  })
+  audio_name?: string;
 
   @ApiProperty({
     description:

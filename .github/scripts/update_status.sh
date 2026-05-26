@@ -3,25 +3,29 @@
 PRECHECK=$1
 SUPABASE=$2
 TRIGGER=$3
-API=$4
-UNKEY=$5
-DASHBOARD=$6
-MARKETING=$7
+API_RAILWAY=$4
+API_UNKEY=$5
+DASHBOARD_UNKEY=$6
+DASHBOARD_VERCEL=$7
+MARKETING_UNKEY=$8
+MARKETING_VERCEL=$9
 
 DASHBOARD_URL="https://post-for-me-app.vercel.app/"
 
 # Table block (monospaced layout)
 BLOCK=$(cat <<EOF
 \`\`\`
-Step         | Status
--------------|--------
-Precheck     | ${PRECHECK}
-Supabase     | ${SUPABASE}
-Trigger.dev  | ${TRIGGER}
-API          | ${API}
-UNKEY        | ${UNKEY}
-Dashboard    | ${DASHBOARD}
-Marketing    | ${MARKETING}
+Step                 | Status
+---------------------|--------
+Precheck             | ${PRECHECK}
+Supabase             | ${SUPABASE}
+Trigger.dev          | ${TRIGGER}
+API (Railway)        | ${API_RAILWAY}
+API (Unkey)          | ${API_UNKEY}
+Dashboard (Unkey)    | ${DASHBOARD_UNKEY}
+Dashboard (Vercel)   | ${DASHBOARD_VERCEL}
+Marketing (Unkey)    | ${MARKETING_UNKEY}
+Marketing (Vercel)   | ${MARKETING_VERCEL}
 \`\`\`
 EOF
 )

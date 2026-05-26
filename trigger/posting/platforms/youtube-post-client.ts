@@ -1,7 +1,3 @@
- 
- 
- 
-
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
@@ -92,35 +88,25 @@ export class YouTubePostClient extends PostClient {
         auth: this.#oauth2Client,
       }) as youtube_v3.Youtube;
 
-      const madeForKids =
-        platformConfig?.made_for_kids == undefined
-          ? false
-          : platformConfig.made_for_kids;
-
-      const snippet: youtube_v3.Schema$VideoSnippet = {
-        title: platformConfig?.title
-          ? this.#sanitizeYouTubeCaption(platformConfig.title)
-          : sanitizedCaption,
-        description: this.#sanitizeYouTubeDescription(
-          platformConfig?.description ?? caption,
-        ),
-      };
-
-      if (platformConfig?.tags && platformConfig.tags.length > 0) {
-        snippet.tags = platformConfig.tags;
-      }
-
-      if (platformConfig?.category_id) {
-        snippet.categoryId = platformConfig.category_id;
-      }
-
       const videoRequest = {
         part: ["snippet", "status"],
         requestBody: {
-          snippet,
+          snippet: {
+            title: platformConfig?.title
+              ? this.#sanitizeYouTubeCaption(platformConfig.title)
+              : sanitizedCaption,
+            description: this.#sanitizeYouTubeDescription(caption),
+          },
           status: {
             privacyStatus: platformConfig?.privacy_status || "public",
-            selfDeclaredMadeForKids: madeForKids,
+            selfDeclaredMadeForKids:
+              platformConfig?.made_for_kids == undefined
+                ? false
+                : platformConfig.made_for_kids,
+            containsSyntheticMedia:
+              platformConfig?.contains_synthetic_media === undefined
+                ? false
+                : platformConfig?.contains_synthetic_media,
           },
         },
       };

@@ -1,8 +1,3 @@
- 
- 
- 
- 
- 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
@@ -369,6 +364,7 @@ export class InstagramPostClient extends PostClient {
       product_tags?: any[];
       location_id?: string;
       user_tags?: any[];
+      audio_name?: string;
       trial_params?: {
         graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
       };
@@ -385,22 +381,32 @@ export class InstagramPostClient extends PostClient {
       default:
         createMediaParams.media_type = isVideo ? "REELS" : undefined;
 
-        if (
-          createMediaParams.media_type === "REELS" &&
-          platformConfig?.trial_reel_type
-        ) {
-          createMediaParams.trial_params = {
-            graduation_strategy:
-              platformConfig.trial_reel_type === "performance"
-                ? "SS_PERFORMANCE"
-                : "MANUAL",
-          };
-        }
+        if (createMediaParams.media_type === "REELS") {
+          if (platformConfig?.trial_reel_type) {
+            createMediaParams.trial_params = {
+              graduation_strategy:
+                platformConfig.trial_reel_type === "performance"
+                  ? "SS_PERFORMANCE"
+                  : "MANUAL",
+            };
+          }
 
-        if (thumbnailUrl) {
-          createMediaParams.cover_url = thumbnailUrl;
-        } else if (medium.thumbnail_timestamp_ms) {
-          createMediaParams.thumb_offset = medium.thumbnail_timestamp_ms;
+          if (thumbnailUrl) {
+            createMediaParams.cover_url = thumbnailUrl;
+          } else if (medium.thumbnail_timestamp_ms) {
+            createMediaParams.thumb_offset = medium.thumbnail_timestamp_ms;
+          }
+
+          if (
+            platformConfig?.share_to_feed !== undefined &&
+            platformConfig?.share_to_feed !== null
+          ) {
+            createMediaParams.share_to_feed = platformConfig?.share_to_feed;
+          }
+
+          if (platformConfig?.audio_name) {
+            createMediaParams.audio_name = platformConfig.audio_name;
+          }
         }
 
         if (
@@ -414,13 +420,6 @@ export class InstagramPostClient extends PostClient {
           createMediaParams.product_tags = medium.tags
             .filter((t) => t.platform == "instagram" && t.type == "product")
             .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
-        }
-
-        if (
-          platformConfig?.share_to_feed !== undefined &&
-          platformConfig?.share_to_feed !== null
-        ) {
-          createMediaParams.share_to_feed = platformConfig?.share_to_feed;
         }
 
         break;
