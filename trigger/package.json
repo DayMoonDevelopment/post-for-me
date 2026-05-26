@@ -4,9 +4,9 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "dev": "trigger.dev dev",
-    "deploy": "trigger.dev deploy",
-    "build": "trigger.dev deploy --dry-run",
+    "dev": "bunx trigger.dev@4.4.4 dev",
+    "deploy": "bunx trigger.dev@4.4.4 deploy",
+    "build": " bunx trigger.dev@4.4.4 deploy --dry-run",
     "typegen": "bun run supabase:typegen",
     "supabase:typegen": "supabase gen types typescript --local > supabase.types.ts",
     "typecheck": "tsc --noEmit",
