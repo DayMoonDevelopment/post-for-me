@@ -160,6 +160,7 @@ export interface YoutubeConfiguration {
   title?: string;
   privacy_status?: string;
   made_for_kids?: boolean;
+  contains_synthetic_media?: boolean;
   media?: PostMedia[];
 }
 
