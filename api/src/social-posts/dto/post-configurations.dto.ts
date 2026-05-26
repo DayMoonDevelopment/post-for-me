@@ -119,6 +119,14 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   trial_reel_type?: string;
+
+  @ApiProperty({
+    description:
+      'Display name for the audio track on Instagram Reels. Only honored on Reels uploads, and only when the audio is original (Meta silently ignores it on licensed/fingerprinted tracks).',
+    nullable: true,
+    required: false,
+  })
+  audio_name?: string;
 }
 
 export class TiktokConfigurationDto extends BaseConfigurationDto {
@@ -665,6 +673,14 @@ export class AccountConfigurationDetailsDto {
     required: false,
   })
   trial_reel_type?: string;
+
+  @ApiProperty({
+    description:
+      'Display name for the audio track on Instagram Reels. Only honored on Reels uploads, and only when the audio is original (Meta silently ignores it on licensed/fingerprinted tracks).',
+    nullable: true,
+    required: false,
+  })
+  audio_name?: string;
 
   @ApiProperty({
     description:
