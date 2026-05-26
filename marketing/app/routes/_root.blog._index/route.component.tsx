@@ -25,7 +25,14 @@ export default function BlogIndex() {
         </h1>
         <p className="text-xl text-muted-foreground max-w-3xl">
           Technical guides, integration tutorials, and insights for developers
-          building social media automation.
+          building social media automation on top of our{" "}
+          <Link
+            to="/social-media/posting"
+            className="text-primary hover:underline"
+          >
+            social media posting API
+          </Link>
+          .
         </p>
       </div>
 
