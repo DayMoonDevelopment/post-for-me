@@ -189,6 +189,16 @@ async function createCheckoutSessionUrl({
           team_name: teamData.name,
           created_by: currentUserData.id,
         },
+        // Stamp team/creator onto the subscription itself so the Stripe webhook
+        // can attribute the conversion immediately — without waiting for
+        // teams.stripe_customer_id to be linked (that link races this checkout's
+        // success redirect).
+        subscription_data: {
+          metadata: {
+            team_id: teamData.id,
+            created_by: currentUserData.id,
+          },
+        },
         success_url: stripeSuccessUrl,
         cancel_url: teamDashboardUrl,
       });
