@@ -155,12 +155,30 @@ export interface TwitterConfiguration {
   reply_settings?: string;
 }
 
+export interface YoutubeLocalization {
+  title?: string;
+  description?: string;
+}
+
 export interface YoutubeConfiguration {
   caption?: string;
+  // snippet fields
   title?: string;
+  description?: string;
+  tags?: string[];
+  category_id?: string;
+  default_language?: string;
+  localizations?: Record<string, YoutubeLocalization>;
+  // status fields
   privacy_status?: string;
+  embeddable?: boolean;
+  license?: string;
+  public_stats_viewable?: boolean;
+  publish_at?: string;
   made_for_kids?: boolean;
   contains_synthetic_media?: boolean;
+  // recordingDetails fields
+  recording_date?: string;
   media?: PostMedia[];
 }
 
