@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   BlueskyConfiguration,
   FacebookConfiguration,
+  GoogleMyBusinessConfiguration,
   InstagramConfiguration,
   LinkedinConfiguration,
   PinterestConfiguration,
@@ -71,7 +72,8 @@ export class PostClient {
       | FacebookConfiguration
       | LinkedinConfiguration
       | BlueskyConfiguration
-      | ThreadsConfiguration;
+      | ThreadsConfiguration
+      | GoogleMyBusinessConfiguration;
   }): Promise<PostResult> {
     //Implement at platform level
     console.log(postId, account, caption, media, platformConfig);

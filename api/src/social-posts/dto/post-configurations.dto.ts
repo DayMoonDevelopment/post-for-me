@@ -11,7 +11,8 @@ export type PlatformConfiguration =
   | LinkedinConfigurationDto
   | BlueskyConfigurationDto
   | ThreadsConfigurationDto
-  | TiktokBusinessConfigurationDto;
+  | TiktokBusinessConfigurationDto
+  | GoogleMyBusinessConfigurationDto;
 
 export class TwitterPollDto {
   @ApiProperty({
@@ -489,6 +490,155 @@ export class ThreadsConfigurationDto extends BaseConfigurationDto {
   placement?: string;
 }
 
+export class GoogleMyBusinessCallToActionDto {
+  @ApiProperty({
+    description: 'The type of call-to-action button on the post',
+    enum: ['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP', 'CALL'],
+    nullable: true,
+    required: false,
+  })
+  action_type?: 'BOOK' | 'ORDER' | 'SHOP' | 'LEARN_MORE' | 'SIGN_UP' | 'CALL';
+
+  @ApiProperty({
+    description:
+      'URL the user is directed to when clicking the call-to-action button. Leave unset for CALL action type.',
+    nullable: true,
+    required: false,
+  })
+  url?: string;
+}
+
+export class GoogleMyBusinessEventScheduleDto {
+  @ApiProperty({
+    description: 'Start date of the event (year, month, day)',
+    type: 'object',
+    nullable: true,
+    required: false,
+  })
+  start_date?: { year: number; month: number; day: number };
+
+  @ApiProperty({
+    description: 'Start time of the event (hours, minutes, seconds, nanos)',
+    type: 'object',
+    nullable: true,
+    required: false,
+  })
+  start_time?: {
+    hours: number;
+    minutes: number;
+    seconds: number;
+    nanos: number;
+  };
+
+  @ApiProperty({
+    description: 'End date of the event (year, month, day)',
+    type: 'object',
+    nullable: true,
+    required: false,
+  })
+  end_date?: { year: number; month: number; day: number };
+
+  @ApiProperty({
+    description: 'End time of the event (hours, minutes, seconds, nanos)',
+    type: 'object',
+    nullable: true,
+    required: false,
+  })
+  end_time?: {
+    hours: number;
+    minutes: number;
+    seconds: number;
+    nanos: number;
+  };
+}
+
+export class GoogleMyBusinessEventDto {
+  @ApiProperty({
+    description: 'Title of the event',
+    nullable: true,
+    required: false,
+  })
+  title?: string;
+
+  @ApiProperty({
+    description: 'Start and end date/time of the event',
+    type: GoogleMyBusinessEventScheduleDto,
+    nullable: true,
+    required: false,
+  })
+  schedule?: GoogleMyBusinessEventScheduleDto;
+}
+
+export class GoogleMyBusinessOfferDto {
+  @ApiProperty({
+    description: 'Coupon code usable in-store or online',
+    nullable: true,
+    required: false,
+  })
+  coupon_code?: string;
+
+  @ApiProperty({
+    description: 'URL where users can redeem the offer online',
+    nullable: true,
+    required: false,
+  })
+  redeem_online_url?: string;
+
+  @ApiProperty({
+    description: 'Terms and conditions for the offer',
+    nullable: true,
+    required: false,
+  })
+  terms_conditions?: string;
+}
+
+export class GoogleMyBusinessConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description:
+      'The topic type of the post. STANDARD for basic updates, EVENT for time-bound events, OFFER for promotions, ALERT for urgent announcements.',
+    enum: ['STANDARD', 'EVENT', 'OFFER', 'ALERT'],
+    nullable: true,
+    required: false,
+    default: 'STANDARD',
+  })
+  topic_type?: 'STANDARD' | 'EVENT' | 'OFFER' | 'ALERT';
+
+  @ApiProperty({
+    description:
+      'Call-to-action button to attach to the post. Not applicable for OFFER topic type.',
+    type: GoogleMyBusinessCallToActionDto,
+    nullable: true,
+    required: false,
+  })
+  call_to_action?: GoogleMyBusinessCallToActionDto;
+
+  @ApiProperty({
+    description:
+      'Event details. Required when topic_type is EVENT or OFFER. Defaults will be applied if omitted.',
+    type: GoogleMyBusinessEventDto,
+    nullable: true,
+    required: false,
+  })
+  event?: GoogleMyBusinessEventDto;
+
+  @ApiProperty({
+    description:
+      'Offer-specific details such as coupon codes and redemption links. Only used when topic_type is OFFER.',
+    type: GoogleMyBusinessOfferDto,
+    nullable: true,
+    required: false,
+  })
+  offer?: GoogleMyBusinessOfferDto;
+
+  @ApiProperty({
+    description: 'BCP-47 language code for the post (e.g. "en", "fr")',
+    nullable: true,
+    required: false,
+    default: 'en',
+  })
+  language_code?: string;
+}
+
 // DTO's
 export class PlatformConfigurationsDto {
   @ApiProperty({
@@ -570,6 +720,14 @@ export class PlatformConfigurationsDto {
     nullable: true,
   })
   tiktok_business?: TiktokBusinessConfigurationDto;
+
+  @ApiProperty({
+    description: 'Google My Business configuration',
+    type: GoogleMyBusinessConfigurationDto,
+    required: false,
+    nullable: true,
+  })
+  google_my_business?: GoogleMyBusinessConfigurationDto;
 }
 //
 
@@ -875,6 +1033,52 @@ export class AccountConfigurationDetailsDto {
     default: true,
   })
   set_caption_for_each_image?: boolean;
+
+  @ApiProperty({
+    description:
+      'Google My Business post topic type (STANDARD, EVENT, OFFER, or ALERT)',
+    enum: ['STANDARD', 'EVENT', 'OFFER', 'ALERT'],
+    nullable: true,
+    required: false,
+    default: 'STANDARD',
+  })
+  topic_type?: 'STANDARD' | 'EVENT' | 'OFFER' | 'ALERT';
+
+  @ApiProperty({
+    description:
+      'Google My Business call-to-action button. Not applicable for OFFER posts.',
+    type: GoogleMyBusinessCallToActionDto,
+    nullable: true,
+    required: false,
+  })
+  call_to_action?: GoogleMyBusinessCallToActionDto;
+
+  @ApiProperty({
+    description:
+      'Google My Business event details. Required when topic_type is EVENT or OFFER.',
+    type: GoogleMyBusinessEventDto,
+    nullable: true,
+    required: false,
+  })
+  gmb_event?: GoogleMyBusinessEventDto;
+
+  @ApiProperty({
+    description:
+      'Google My Business offer details (coupon code, redemption URL, terms). Only used when topic_type is OFFER.',
+    type: GoogleMyBusinessOfferDto,
+    nullable: true,
+    required: false,
+  })
+  gmb_offer?: GoogleMyBusinessOfferDto;
+
+  @ApiProperty({
+    description:
+      'BCP-47 language code for the Google My Business post (e.g. "en", "fr")',
+    nullable: true,
+    required: false,
+    default: 'en',
+  })
+  language_code?: string;
 }
 
 export class AccountConfigurationDto {

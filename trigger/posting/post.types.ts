@@ -207,6 +207,39 @@ export interface ThreadsConfiguration {
   media?: PostMedia[];
 }
 
+export interface GoogleMyBusinessCallToAction {
+  action_type?: 'BOOK' | 'ORDER' | 'SHOP' | 'LEARN_MORE' | 'SIGN_UP' | 'CALL';
+  url?: string;
+}
+
+export interface GoogleMyBusinessEventSchedule {
+  start_date?: { year: number; month: number; day: number };
+  start_time?: { hours: number; minutes: number; seconds: number; nanos: number };
+  end_date?: { year: number; month: number; day: number };
+  end_time?: { hours: number; minutes: number; seconds: number; nanos: number };
+}
+
+export interface GoogleMyBusinessEvent {
+  title?: string;
+  schedule?: GoogleMyBusinessEventSchedule;
+}
+
+export interface GoogleMyBusinessOffer {
+  coupon_code?: string;
+  redeem_online_url?: string;
+  terms_conditions?: string;
+}
+
+export interface GoogleMyBusinessConfiguration {
+  caption?: string;
+  media?: PostMedia[];
+  topic_type?: 'STANDARD' | 'EVENT' | 'OFFER' | 'ALERT';
+  call_to_action?: GoogleMyBusinessCallToAction;
+  event?: GoogleMyBusinessEvent;
+  offer?: GoogleMyBusinessOffer;
+  language_code?: string;
+}
+
 export interface TempMedia {
   key: string;
   bucket: string;
@@ -221,7 +254,8 @@ export type PlatformConfiguration =
   | FacebookConfiguration
   | LinkedinConfiguration
   | BlueskyConfiguration
-  | ThreadsConfiguration;
+  | ThreadsConfiguration
+  | GoogleMyBusinessConfiguration;
 
 export interface PlatformAppCredentials {
   app_id: string;
