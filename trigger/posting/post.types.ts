@@ -207,36 +207,36 @@ export interface ThreadsConfiguration {
   media?: PostMedia[];
 }
 
-export interface GoogleMyBusinessCallToAction {
+export interface GoogleBusinessProfileCallToAction {
   action_type?: 'BOOK' | 'ORDER' | 'SHOP' | 'LEARN_MORE' | 'SIGN_UP' | 'CALL';
   url?: string;
 }
 
-export interface GoogleMyBusinessEventSchedule {
+export interface GoogleBusinessProfileEventSchedule {
   start_date?: { year: number; month: number; day: number };
   start_time?: { hours: number; minutes: number; seconds: number; nanos: number };
   end_date?: { year: number; month: number; day: number };
   end_time?: { hours: number; minutes: number; seconds: number; nanos: number };
 }
 
-export interface GoogleMyBusinessEvent {
+export interface GoogleBusinessProfileEvent {
   title?: string;
-  schedule?: GoogleMyBusinessEventSchedule;
+  schedule?: GoogleBusinessProfileEventSchedule;
 }
 
-export interface GoogleMyBusinessOffer {
+export interface GoogleBusinessProfileOffer {
   coupon_code?: string;
   redeem_online_url?: string;
   terms_conditions?: string;
 }
 
-export interface GoogleMyBusinessConfiguration {
+export interface GoogleBusinessProfileConfiguration {
   caption?: string;
   media?: PostMedia[];
   topic_type?: 'STANDARD' | 'EVENT' | 'OFFER' | 'ALERT';
-  call_to_action?: GoogleMyBusinessCallToAction;
-  event?: GoogleMyBusinessEvent;
-  offer?: GoogleMyBusinessOffer;
+  call_to_action?: GoogleBusinessProfileCallToAction;
+  event?: GoogleBusinessProfileEvent;
+  offer?: GoogleBusinessProfileOffer;
   language_code?: string;
 }
 
@@ -255,7 +255,7 @@ export type PlatformConfiguration =
   | LinkedinConfiguration
   | BlueskyConfiguration
   | ThreadsConfiguration
-  | GoogleMyBusinessConfiguration;
+  | GoogleBusinessProfileConfiguration;
 
 export interface PlatformAppCredentials {
   app_id: string;

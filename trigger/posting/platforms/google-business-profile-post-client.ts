@@ -2,7 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@trigger.dev/sdk/v3";
 import { PostClient } from "../post-client";
 import {
-  GoogleMyBusinessConfiguration,
+  GoogleBusinessProfileConfiguration,
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -10,7 +10,7 @@ import {
   SocialAccount,
 } from "../post.types";
 
-export class GoogleMyBusinessPostClient extends PostClient {
+export class GoogleBusinessProfilePostClient extends PostClient {
   // ── platform constants ──────────────────────────────────────────────
   readonly #CHAR_LIMIT = 1500;
   readonly #MAX_IMAGES = 1; // GMB local posts support one media item
@@ -77,13 +77,13 @@ export class GoogleMyBusinessPostClient extends PostClient {
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
-    platformConfig: GoogleMyBusinessConfiguration;
+    platformConfig: GoogleBusinessProfileConfiguration;
   }): Promise<PostResult> {
     this.#requests = [];
     this.#responses = [];
 
     try {
-      logger.log("Starting Google My Business post", {
+      logger.log("Starting Google Business Profile post", {
         postId,
         accountId: account.id,
       });
@@ -166,7 +166,7 @@ export class GoogleMyBusinessPostClient extends PostClient {
       const providerPostId = data.name as string;
       const providerPostUrl = data.searchUrl as string | undefined;
 
-      logger.log("Google My Business post published", {
+      logger.log("Google Business Profile post published", {
         providerPostId,
         providerPostUrl,
       });
@@ -183,7 +183,7 @@ export class GoogleMyBusinessPostClient extends PostClient {
         },
       };
     } catch (error: any) {
-      console.error("Error posting to Google My Business:", error);
+      console.error("Error posting to Google Business Profile:", error);
 
       return {
         success: false,
@@ -202,7 +202,7 @@ export class GoogleMyBusinessPostClient extends PostClient {
   async #processMedia(
     media: PostMedia[],
   ): Promise<{ mediaFormat: string; sourceUrl: string }[]> {
-    logger.log("Attaching media to Google My Business post", {
+    logger.log("Attaching media to Google Business Profile post", {
       count: media.length,
     });
 
@@ -224,7 +224,7 @@ export class GoogleMyBusinessPostClient extends PostClient {
   }
 
   #buildEvent(
-    event?: GoogleMyBusinessConfiguration["event"],
+    event?: GoogleBusinessProfileConfiguration["event"],
   ): Record<string, any> {
     const now = new Date();
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -279,6 +279,6 @@ export class GoogleMyBusinessPostClient extends PostClient {
       return "Google Business Profile API quota exceeded. Please wait and try again.";
     }
 
-    return `Failed to post to Google My Business: ${apiMsg ?? "unknown error"}. Check the details for more information.`;
+    return `Failed to post to Google Business Profile: ${apiMsg ?? "unknown error"}. Check the details for more information.`;
   }
 }

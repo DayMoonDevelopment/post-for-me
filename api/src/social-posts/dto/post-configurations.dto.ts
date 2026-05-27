@@ -12,7 +12,7 @@ export type PlatformConfiguration =
   | BlueskyConfigurationDto
   | ThreadsConfigurationDto
   | TiktokBusinessConfigurationDto
-  | GoogleMyBusinessConfigurationDto;
+  | GoogleBusinessProfileConfigurationDto;
 
 export class TwitterPollDto {
   @ApiProperty({
@@ -490,7 +490,7 @@ export class ThreadsConfigurationDto extends BaseConfigurationDto {
   placement?: string;
 }
 
-export class GoogleMyBusinessCallToActionDto {
+export class GoogleBusinessProfileCallToActionDto {
   @ApiProperty({
     description: 'The type of call-to-action button on the post',
     enum: ['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP', 'CALL'],
@@ -508,7 +508,7 @@ export class GoogleMyBusinessCallToActionDto {
   url?: string;
 }
 
-export class GoogleMyBusinessEventScheduleDto {
+export class GoogleBusinessProfileEventScheduleDto {
   @ApiProperty({
     description: 'Start date of the event (year, month, day)',
     type: 'object',
@@ -552,7 +552,7 @@ export class GoogleMyBusinessEventScheduleDto {
   };
 }
 
-export class GoogleMyBusinessEventDto {
+export class GoogleBusinessProfileEventDto {
   @ApiProperty({
     description: 'Title of the event',
     nullable: true,
@@ -562,14 +562,14 @@ export class GoogleMyBusinessEventDto {
 
   @ApiProperty({
     description: 'Start and end date/time of the event',
-    type: GoogleMyBusinessEventScheduleDto,
+    type: GoogleBusinessProfileEventScheduleDto,
     nullable: true,
     required: false,
   })
-  schedule?: GoogleMyBusinessEventScheduleDto;
+  schedule?: GoogleBusinessProfileEventScheduleDto;
 }
 
-export class GoogleMyBusinessOfferDto {
+export class GoogleBusinessProfileOfferDto {
   @ApiProperty({
     description: 'Coupon code usable in-store or online',
     nullable: true,
@@ -592,7 +592,7 @@ export class GoogleMyBusinessOfferDto {
   terms_conditions?: string;
 }
 
-export class GoogleMyBusinessConfigurationDto extends BaseConfigurationDto {
+export class GoogleBusinessProfileConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
     description:
       'The topic type of the post. STANDARD for basic updates, EVENT for time-bound events, OFFER for promotions, ALERT for urgent announcements.',
@@ -606,29 +606,29 @@ export class GoogleMyBusinessConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
     description:
       'Call-to-action button to attach to the post. Not applicable for OFFER topic type.',
-    type: GoogleMyBusinessCallToActionDto,
+    type: GoogleBusinessProfileCallToActionDto,
     nullable: true,
     required: false,
   })
-  call_to_action?: GoogleMyBusinessCallToActionDto;
+  call_to_action?: GoogleBusinessProfileCallToActionDto;
 
   @ApiProperty({
     description:
       'Event details. Required when topic_type is EVENT or OFFER. Defaults will be applied if omitted.',
-    type: GoogleMyBusinessEventDto,
+    type: GoogleBusinessProfileEventDto,
     nullable: true,
     required: false,
   })
-  event?: GoogleMyBusinessEventDto;
+  event?: GoogleBusinessProfileEventDto;
 
   @ApiProperty({
     description:
       'Offer-specific details such as coupon codes and redemption links. Only used when topic_type is OFFER.',
-    type: GoogleMyBusinessOfferDto,
+    type: GoogleBusinessProfileOfferDto,
     nullable: true,
     required: false,
   })
-  offer?: GoogleMyBusinessOfferDto;
+  offer?: GoogleBusinessProfileOfferDto;
 
   @ApiProperty({
     description: 'BCP-47 language code for the post (e.g. "en", "fr")',
@@ -722,12 +722,12 @@ export class PlatformConfigurationsDto {
   tiktok_business?: TiktokBusinessConfigurationDto;
 
   @ApiProperty({
-    description: 'Google My Business configuration',
-    type: GoogleMyBusinessConfigurationDto,
+    description: 'Google Business Profile configuration',
+    type: GoogleBusinessProfileConfigurationDto,
     required: false,
     nullable: true,
   })
-  google_my_business?: GoogleMyBusinessConfigurationDto;
+  google_business_profile?: GoogleBusinessProfileConfigurationDto;
 }
 //
 
@@ -1036,7 +1036,7 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'Google My Business post topic type (STANDARD, EVENT, OFFER, or ALERT)',
+      'Google Business Profile post topic type (STANDARD, EVENT, OFFER, or ALERT)',
     enum: ['STANDARD', 'EVENT', 'OFFER', 'ALERT'],
     nullable: true,
     required: false,
@@ -1046,34 +1046,34 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'Google My Business call-to-action button. Not applicable for OFFER posts.',
-    type: GoogleMyBusinessCallToActionDto,
+      'Google Business Profile call-to-action button. Not applicable for OFFER posts.',
+    type: GoogleBusinessProfileCallToActionDto,
     nullable: true,
     required: false,
   })
-  call_to_action?: GoogleMyBusinessCallToActionDto;
+  call_to_action?: GoogleBusinessProfileCallToActionDto;
 
   @ApiProperty({
     description:
-      'Google My Business event details. Required when topic_type is EVENT or OFFER.',
-    type: GoogleMyBusinessEventDto,
+      'Google Business Profile event details. Required when topic_type is EVENT or OFFER.',
+    type: GoogleBusinessProfileEventDto,
     nullable: true,
     required: false,
   })
-  gmb_event?: GoogleMyBusinessEventDto;
+  gmb_event?: GoogleBusinessProfileEventDto;
 
   @ApiProperty({
     description:
-      'Google My Business offer details (coupon code, redemption URL, terms). Only used when topic_type is OFFER.',
-    type: GoogleMyBusinessOfferDto,
+      'Google Business Profile offer details (coupon code, redemption URL, terms). Only used when topic_type is OFFER.',
+    type: GoogleBusinessProfileOfferDto,
     nullable: true,
     required: false,
   })
-  gmb_offer?: GoogleMyBusinessOfferDto;
+  gmb_offer?: GoogleBusinessProfileOfferDto;
 
   @ApiProperty({
     description:
-      'BCP-47 language code for the Google My Business post (e.g. "en", "fr")',
+      'BCP-47 language code for the Google Business Profile post (e.g. "en", "fr")',
     nullable: true,
     required: false,
     default: 'en',
