@@ -35,7 +35,7 @@ export const action = withSupabase(async ({ request, supabaseServiceRole }) => {
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted":
-      await handleSubscriptionEvent(event.data.object, supabaseServiceRole);
+      await handleSubscriptionEvent(event, supabaseServiceRole);
       break;
     case "invoice.created":
       await handleInvoiceEvent(event.data.object, supabaseServiceRole);
