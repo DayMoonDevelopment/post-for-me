@@ -25,6 +25,7 @@
     "googleapis": "^172.0.0",
     "jsdom": "^26.0.0",
     "node-fetch": "^3.3.2",
+    "posthog-node": "^5.35.5",
     "sharp": "^0.34.0",
     "stripe": "^18.1.1",
     "tus-js-client": "^4.3.1",
