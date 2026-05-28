@@ -3,7 +3,7 @@ import {
   captureServerEvent,
   deterministicUuid,
   setTeamGroupProperties,
-} from "~/lib/.server/posthog";
+} from "~/tracking/.server/posthog";
 import { stripe } from "~/lib/.server/stripe";
 import { PRICING_TIERS } from "~/lib/.server/stripe.constants";
 
@@ -70,6 +70,10 @@ export async function trackSubscriptionLifecycle(
     plan_name: planInfo.planName,
     plan_post_limit: planInfo.postLimit,
     plan_price: planInfo.price,
+    // `price` is an alias of plan_price expected by the PostHog → Meta Ads
+    // destination (which reads `event.properties.price` as `custom_data.value`).
+    price: planInfo.price,
+    currency: (subscription.currency ?? "usd").toUpperCase(),
     is_legacy: planInfo.isLegacy,
   };
 
@@ -170,6 +174,45 @@ async function resolveTeam(
   return data ?? null;
 }
 
+/**
+ * Pull the ad-attribution + browser-context fields stamped onto the
+ * subscription metadata at checkout (`buildSubscriptionMetadata` in the
+ * billing loader) and shape them into PostHog event properties. The PostHog
+ * → Meta/Google Ads destinations consume these on the `customer_converted` /
+ * `subscription_reactivated` events for conversion matching.
+ *
+ * `$current_url` and `$raw_user_agent` use PostHog's reserved property names so
+ * the destinations' default mappings pick them up without configuration.
+ */
+function adAttributionProps(
+  metadata: Stripe.Metadata | null | undefined,
+): Record<string, unknown> {
+  if (!metadata) return {};
+  const props: Record<string, unknown> = {};
+
+  const keys = [
+    "gclid",
+    "fbclid",
+    // `_fbc` / `_fbp` from Meta Pixel; the Meta destination prefers `fbc` over
+    // raw `fbclid` and uses `fbp` for the browser-id user-data parameter.
+    "fbc",
+    "fbp",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+  ] as const;
+  for (const key of keys) {
+    if (metadata[key]) props[key] = metadata[key];
+  }
+
+  if (metadata.current_url) props.$current_url = metadata.current_url;
+  if (metadata.user_agent) props.$raw_user_agent = metadata.user_agent;
+
+  return props;
+}
+
 function productIdFromUnknown(product: unknown): string | null {
   if (typeof product === "string") {
     return product;
@@ -238,11 +281,17 @@ async function maybeTrackConversionOrReactivation({
     ? "subscription_reactivated"
     : "customer_converted";
 
+  // Enrich the conversion event with what the PostHog → Meta/Google Ads
+  // destinations need: ad click IDs, UTMs, the browser's URL + user-agent
+  // (captured at checkout-initiation, since this event fires server-side and
+  // has no browser context of its own).
+  const adProps = adAttributionProps(subscription.metadata);
+
   await captureServerEvent({
     distinctId,
     event,
     teamId,
-    properties: baseProps,
+    properties: { ...baseProps, ...adProps },
     dedupeKey: deterministicUuid(`${event}:${subscription.id}`),
     timestamp: eventTimestamp,
   });

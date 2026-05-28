@@ -1,6 +1,6 @@
 import { redirect } from "react-router";
 import { syncUserToLoops } from "~/lib/.server/loops";
-import { captureServerEvent, deterministicUuid } from "~/lib/.server/posthog";
+import { captureServerEvent, deterministicUuid } from "~/tracking/.server/posthog";
 import { withSupabase } from "~/lib/.server/supabase";
 
 // verifyOtp doesn't tell us whether the user was just created, so we treat a

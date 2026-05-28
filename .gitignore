@@ -178,3 +178,6 @@ dist
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Local-only ops/backfill scripts (never tracked)
+backfill/

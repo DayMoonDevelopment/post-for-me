@@ -3,7 +3,7 @@ import { Link, Outlet, useLoaderData, useParams } from "react-router";
 import { TriangleExclamationIcon } from "~/components/icons";
 
 import { OnboardingProvider } from "~/components/onboarding-provider";
-import { PostHogIdentifier } from "~/components/posthog-identifier";
+import { PostHogIdentifier } from "~/tracking/posthog-identifier";
 
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
 import { SidebarInset, SidebarProvider } from "~/ui/sidebar";
