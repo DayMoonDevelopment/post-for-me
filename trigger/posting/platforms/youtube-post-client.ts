@@ -323,14 +323,37 @@ export class YouTubePostClient extends PostClient {
           }
 
           const chunkBuf = Buffer.from(await fileRes.arrayBuffer());
+          const actualChunkLen = chunkBuf.length;
+          const isFinalChunk = endExclusive === fileSize;
 
-          const contentRange = `bytes ${nextStart}-${endInclusive}/${fileSize}`;
+          // Guard: intermediate chunks must be exactly the declared size.
+          // A short read here means the storage layer closed the connection early;
+          // throw so the outer retry loop can re-fetch from the correct offset.
+          if (!isFinalChunk && actualChunkLen !== chunkLen) {
+            throw new Error(
+              `Storage returned ${actualChunkLen} bytes but expected ${chunkLen} bytes for range ${range} (non-final chunk); video would be truncated`,
+            );
+          }
+
+          // For the final chunk the actual length may legitimately be <= chunkLen,
+          // but it must still be positive and must not exceed the declared size.
+          if (isFinalChunk && (actualChunkLen <= 0 || actualChunkLen > chunkLen)) {
+            throw new Error(
+              `Storage returned unexpected ${actualChunkLen} bytes for final chunk (expected 1–${chunkLen} bytes)`,
+            );
+          }
+
+          // Use the actual received length for both headers so what we declare
+          // to YouTube exactly matches what we send.
+          const actualEndInclusive = nextStart + actualChunkLen - 1;
+          const contentRange = `bytes ${nextStart}-${actualEndInclusive}/${fileSize}`;
+
           const res = await this.#fetchWithRetry(uploadUrl, {
             method: "PUT",
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": mimeType,
-              "Content-Length": String(chunkLen),
+              "Content-Length": String(actualChunkLen),
               "Content-Range": contentRange,
             },
             body: chunkBuf,
@@ -372,11 +395,21 @@ export class YouTubePostClient extends PostClient {
 
           if (res.ok) {
             const data = (await res.json()) as youtube_v3.Schema$Video;
+
+            // Verify YouTube acknowledged the full file before declaring success.
+            const bytesConfirmed = nextStart + actualChunkLen;
+            if (bytesConfirmed !== fileSize) {
+              throw new Error(
+                `YouTube upload completed but only ${bytesConfirmed} of ${fileSize} bytes were sent; video would be truncated`,
+              );
+            }
+
             this.#responses.push({
               resumableComplete: {
                 status: res.status,
                 contentRange,
                 videoId: data?.id,
+                bytesConfirmed,
               },
             });
             return data;
