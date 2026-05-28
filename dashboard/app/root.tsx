@@ -10,7 +10,8 @@ import {
 
 import { ToastManager } from "~/components/toast-manager";
 
-import { PostHogProvider } from "./providers/posthog-provider";
+import { Pixels } from "./tracking/pixels";
+import { PostHogProvider } from "./tracking/posthog-provider";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -50,6 +51,12 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  // Optional chaining because Layout also renders for error boundaries where
+  // the root loader may not have run successfully.
+  const data = useLoaderData<typeof loader>();
+  const googleAdsTagId = data?.googleAdsTagId;
+  const metaPixelId = data?.metaPixelId;
+
   return (
     <html lang="en">
       <head>
@@ -57,6 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <Pixels googleAdsTagId={googleAdsTagId} metaPixelId={metaPixelId} />
         <script
           type="text/javascript"
           dangerouslySetInnerHTML={{
@@ -78,6 +86,8 @@ export const loader = async () => {
   return {
     postHogApiKey: process.env.POST_HOG_API_KEY,
     postHogApiHost: process.env.POST_HOG_API_HOST,
+    googleAdsTagId: process.env.GOOGLE_ADS_TAG_ID,
+    metaPixelId: process.env.META_PIXEL_ID,
   };
 };
 

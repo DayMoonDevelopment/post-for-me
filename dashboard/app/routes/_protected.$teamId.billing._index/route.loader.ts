@@ -1,3 +1,7 @@
+import {
+  readAttributionFromRequest,
+  readMetaPixelCookiesFromRequest,
+} from "~/tracking/.server/attribution";
 import { stripe } from "~/lib/.server/stripe";
 import { withSupabase } from "~/lib/.server/supabase";
 import {
@@ -131,6 +135,7 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
     teamDashboardUrl,
     currentUserData: currentUser.data.user,
     stripeSuccessUrl,
+    request,
   });
 
   return {
@@ -151,14 +156,69 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
   };
 });
 
+const ATTRIBUTION_KEYS = [
+  "gclid",
+  "fbclid",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+] as const;
+
+/**
+ * Build the metadata we stamp onto the subscription itself (`subscription_data.metadata`)
+ * — read by the Stripe webhook so it can:
+ *   1. attribute the conversion to the team immediately (without waiting for
+ *      `teams.stripe_customer_id` to be linked — that link races this checkout's
+ *      success redirect),
+ *   2. enrich the `customer_converted` event with ad-attribution + browser
+ *      context for the PostHog → Meta/Google Ads destinations. The conversion
+ *      fires server-side from the webhook and has no browser context of its
+ *      own, so we capture it here at checkout-initiation.
+ */
+function buildSubscriptionMetadata({
+  teamData,
+  currentUserData,
+  request,
+}: {
+  teamData: { id: string };
+  currentUserData: { id: string };
+  request: Request;
+}): Stripe.MetadataParam {
+  const metadata: Stripe.MetadataParam = {
+    team_id: teamData.id,
+    created_by: currentUserData.id,
+    current_url: request.url,
+  };
+
+  const userAgent = request.headers.get("user-agent");
+  if (userAgent) metadata.user_agent = userAgent;
+
+  const attribution = readAttributionFromRequest(request);
+  if (attribution) {
+    for (const key of ATTRIBUTION_KEYS) {
+      const value = attribution[key];
+      if (value) metadata[key] = value;
+    }
+  }
+
+  // `_fbc` / `_fbp` from Meta Pixel — the Meta destination prefers these over
+  // the raw `fbclid` (richer match format and longer-lived browser id).
+  const metaCookies = readMetaPixelCookiesFromRequest(request);
+  if (metaCookies.fbc) metadata.fbc = metaCookies.fbc;
+  if (metaCookies.fbp) metadata.fbp = metaCookies.fbp;
+
+  return metadata;
+}
+
 async function createCheckoutSessionUrl({
   teamData,
   teamDashboardUrl,
   currentUserData,
   stripeSuccessUrl,
+  request,
 }: {
-  customerId?: string;
-  customerEmail?: string;
   teamDashboardUrl: string;
   stripeSuccessUrl: string;
   teamData: {
@@ -168,67 +228,53 @@ async function createCheckoutSessionUrl({
     name: string;
   };
   currentUserData: { id: string };
+  request: Request;
 }): Promise<string | null> {
-  if (teamData.stripe_customer_id) {
-    const defaultTier = PRICING_TIERS[0];
-    if (defaultTier) {
-      const product = await stripe.products.retrieve(defaultTier.productId);
-      const checkoutSession = await stripe.checkout.sessions.create({
-        client_reference_id: teamData.id,
-        customer: teamData.stripe_customer_id || undefined,
-        allow_promotion_codes: true,
-        mode: "subscription",
-        line_items: [
-          {
-            price: product.default_price as string,
-            quantity: 1,
-          },
-        ],
-        metadata: {
-          team_id: teamData.id,
-          team_name: teamData.name,
-          created_by: currentUserData.id,
-        },
-        // Stamp team/creator onto the subscription itself so the Stripe webhook
-        // can attribute the conversion immediately — without waiting for
-        // teams.stripe_customer_id to be linked (that link races this checkout's
-        // success redirect).
-        subscription_data: {
-          metadata: {
-            team_id: teamData.id,
-            created_by: currentUserData.id,
-          },
-        },
-        success_url: stripeSuccessUrl,
-        cancel_url: teamDashboardUrl,
-      });
-      return checkoutSession.url;
-    }
-  }
   const defaultTier = PRICING_TIERS[0];
-  if (defaultTier) {
-    const product = await stripe.products.retrieve(defaultTier.productId);
+  if (!defaultTier) return null;
+
+  const product = await stripe.products.retrieve(defaultTier.productId);
+  const subscriptionMetadata = buildSubscriptionMetadata({
+    teamData,
+    currentUserData,
+    request,
+  });
+
+  const sessionMetadata = {
+    team_id: teamData.id,
+    team_name: teamData.name,
+    created_by: currentUserData.id,
+  };
+
+  if (teamData.stripe_customer_id) {
     const checkoutSession = await stripe.checkout.sessions.create({
-      customer_email: teamData.billing_email || undefined,
+      client_reference_id: teamData.id,
+      customer: teamData.stripe_customer_id,
       allow_promotion_codes: true,
       mode: "subscription",
       line_items: [
-        {
-          price: product.default_price as string,
-          quantity: 1,
-        },
+        { price: product.default_price as string, quantity: 1 },
       ],
-      client_reference_id: teamData.id,
-      metadata: {
-        team_id: teamData.id,
-        team_name: teamData.name,
-        created_by: currentUserData.id,
-      },
+      metadata: sessionMetadata,
+      subscription_data: { metadata: subscriptionMetadata },
       success_url: stripeSuccessUrl,
       cancel_url: teamDashboardUrl,
     });
     return checkoutSession.url;
   }
 
-  return null;
+  const checkoutSession = await stripe.checkout.sessions.create({
+    customer_email: teamData.billing_email || undefined,
+    allow_promotion_codes: true,
+    mode: "subscription",
+    line_items: [
+      { price: product.default_price as string, quantity: 1 },
+    ],
+    client_reference_id: teamData.id,
+    metadata: sessionMetadata,
+    subscription_data: { metadata: subscriptionMetadata },
+    success_url: stripeSuccessUrl,
+    cancel_url: teamDashboardUrl,
+  });
+  return checkoutSession.url;
 }
