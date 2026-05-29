@@ -719,25 +719,32 @@ export class YouTubePostClient extends PostClient {
 
     try {
       const res = await fetch(medium.thumbnail_url);
-      if (!res.ok || !res.body) {
+      if (!res.ok) {
         const bodyText = await this.#safeReadText(res);
         throw new Error(
           `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
         );
       }
 
+      const imageBuffer = Buffer.from(await res.arrayBuffer());
+
+      const rawContentType = res.headers.get("content-type") ?? "image/jpeg";
+      const mimeType = rawContentType.split(";")[0].trim() || "image/jpeg";
+
       this.#requests.push({
         thumbnailUploadRequest: {
           videoId,
           thumbnail: medium.thumbnail_url,
+          mimeType,
+          sizeBytes: imageBuffer.length,
         },
       });
 
       const thumbnailResponse = await youtube.thumbnails.set({
         videoId: videoId,
         media: {
-          body: res.body as any,
-          mimeType: res.headers.get("content-type") || "image/jpeg",
+          body: imageBuffer,
+          mimeType,
         },
       });
 
@@ -745,6 +752,13 @@ export class YouTubePostClient extends PostClient {
       console.log("Thumbnail uploaded successfully for video:", videoId);
     } catch (error) {
       console.error("Error uploading thumbnail:", error);
+      this.#responses.push({
+        thumbnailError: {
+          videoId,
+          thumbnail: medium.thumbnail_url,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
       throw error;
     }
   }

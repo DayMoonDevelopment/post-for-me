@@ -12,11 +12,11 @@ Follow every step in order.
 
 ## 1. Files to touch
 
-| File | What changes |
-|---|---|
-| `trigger/posting/post.types.ts` | Add `<Platform>Configuration` interface and add it to the `PlatformConfiguration` union |
-| `trigger/posting/post-client.ts` | Add the new type to the `platformConfig` union in the base `post` signature |
-| `trigger/posting/platforms/<platform>-post-client.ts` | New file — the concrete implementation |
+| File                                                  | What changes                                                                                                                                                                 |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trigger/posting/post.types.ts`                       | Add `<Platform>Configuration` interface and add it to the `PlatformConfiguration` union                                                                                      |
+| `trigger/posting/post-client.ts`                      | Add the new type to the `platformConfig` union in the base `post` signature                                                                                                  |
+| `trigger/posting/platforms/<platform>-post-client.ts` | New file — the concrete implementation                                                                                                                                       |
 | `api/src/social-posts/dto/post-configurations.dto.ts` | Add `<Platform>ConfigurationDto` class, add it to `PlatformConfiguration` union and `PlatformConfigurationsDto`, and add every new field to `AccountConfigurationDetailsDto` |
 
 ---
@@ -31,7 +31,7 @@ export interface SnapchatConfiguration {
   caption?: string;
   media?: PostMedia[];
   // platform-specific options…
-  placement?: 'spotlight' | 'story';
+  placement?: "spotlight" | "story";
   allow_resharing?: boolean;
 }
 ```
@@ -379,15 +379,15 @@ which already provides `caption` and `media`.
 ```ts
 export class SnapchatConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
-    description: 'Snapchat post placement',
-    enum: ['spotlight', 'story'],
+    description: "Snapchat post placement",
+    enum: ["spotlight", "story"],
     nullable: true,
     required: false,
   })
-  placement?: 'spotlight' | 'story';
+  placement?: "spotlight" | "story";
 
   @ApiProperty({
-    description: 'Allow resharing of this snap',
+    description: "Allow resharing of this snap",
     nullable: true,
     required: false,
     default: true,
@@ -468,7 +468,7 @@ Work through this list before marking the task done:
 - [ ] New DTO added to `PlatformConfiguration` union in `post-configurations.dto.ts`
 - [ ] New DTO added to `PlatformConfigurationsDto`
 - [ ] All new fields added to `AccountConfigurationDetailsDto`
-- [ ] `bun run typecheck` passes in `trigger/`
+- [ ] `bun run typecheck` passes in `trigger/` and `api/`
 - [ ] `bun run lint` passes in `trigger/` and `api/`
 
 ---
@@ -478,11 +478,11 @@ Work through this list before marking the task done:
 These methods are available from `PostClient` and should be reused rather than
 re-implemented:
 
-| Method | Description |
-|---|---|
-| `getFile(medium)` | Downloads a `PostMedia` item and returns a `File` |
-| `getSignedUrlForFile(medium)` | Returns the public URL for a `PostMedia` item |
+| Method                           | Description                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| `getFile(medium)`                | Downloads a `PostMedia` item and returns a `File`                              |
+| `getSignedUrlForFile(medium)`    | Returns the public URL for a `PostMedia` item                                  |
 | `downloadToTempFile(url, opts?)` | Downloads a URL to a temp file on disk; returns `{ filePath, mimeType, size }` |
-| `unlinkQuiet(filePath)` | Deletes a temp file, suppressing any error |
+| `unlinkQuiet(filePath)`          | Deletes a temp file, suppressing any error                                     |
 
 Always call `unlinkQuiet` in a `finally` block after `downloadToTempFile`.
