@@ -181,3 +181,6 @@ dist
 
 # Local-only ops/backfill scripts (never tracked)
 backfill/
+
+
+.scripts/
