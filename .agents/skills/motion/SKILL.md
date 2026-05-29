@@ -67,6 +67,10 @@ const item = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } };
 const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
 const opacity = useTransform(scrollYProgress, [0, 1], [0, 1]);
 return <motion.div ref={ref} style={{ opacity }} />;
+
+// Reading progress bar — the one complete recipe Motion's docs ship verbatim.
+const { scrollYProgress } = useScroll();
+return <motion.div style={{ scaleX: scrollYProgress, originX: 0 }} />;  // fix it to the top, full width
 ```
 `useScroll` runs on the native `ScrollTimeline` where possible (hardware-accelerated). Pass motion values to `style`, never to `animate`.
 
