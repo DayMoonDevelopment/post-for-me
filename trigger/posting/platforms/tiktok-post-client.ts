@@ -15,7 +15,11 @@ import {
 export class TikTokPostClient extends PostClient {
   #tokenUrl = "https://open.tiktokapis.com/v2/oauth/token/";
   #processingStatuses = ["PROCESSING", "PROCESSING_DOWNLOAD"];
-  #processedStatuses = ["PUBLISH_COMPLETE", "PUBLISH_SUCCESS"];
+  #processedStatuses = [
+    "PUBLISH_COMPLETE",
+    "PUBLISH_SUCCESS",
+    "SEND_TO_USER_INBOX",
+  ];
   #maxItems = 32;
   #titleLength = 85;
   #clientKey: string;
@@ -135,10 +139,15 @@ export class TikTokPostClient extends PostClient {
       }
 
       if (platformConfig?.is_draft) {
+        const { status } = await this.#getPublishStatus({ publishId, account });
+
         return {
           success: true,
           post_id: postId,
           provider_connection_id: account.id,
+          error_message: this.#processingStatuses.includes(status)
+            ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
+            : undefined,
           details: {
             status: "Saved as draft",
             message:
@@ -153,7 +162,7 @@ export class TikTokPostClient extends PostClient {
         };
       }
 
-      const status = await this.#getPublishStatus({ publishId, account });
+      const { status } = await this.#getPublishStatus({ publishId, account });
 
       if (this.#processingStatuses.includes(status)) {
         return {
@@ -236,6 +245,7 @@ export class TikTokPostClient extends PostClient {
     account: SocialAccount;
   }) {
     let status = "PROCESSING";
+    let failReason;
     let statusResponse;
     let attempts = 0;
     const initialDelayMs = 5000;
@@ -269,6 +279,7 @@ export class TikTokPostClient extends PostClient {
       this.#responses.push({ statusResponse: statusResponse.data });
 
       status = statusResponse.data.data.status;
+      failReason = statusResponse.data.data.fail_reason;
       attempts++;
 
       if (this.#processingStatuses.includes(status) && attempts < maxAttempts) {
@@ -281,10 +292,21 @@ export class TikTokPostClient extends PostClient {
       !this.#processedStatuses.includes(status) &&
       !this.#processingStatuses.includes(status)
     ) {
-      throw new Error(`Upload failed with status: ${status}.`);
+      if (failReason) {
+        console.error("TikTok upload failed", {
+          status,
+          fail_reason: failReason,
+        });
+      }
+
+      throw new Error(
+        `Upload failed with status: ${status}.${
+          failReason ? ` Fail reason: ${failReason}` : ""
+        }`,
+      );
     }
 
-    return status;
+    return { status, failReason };
   }
 
   async #getPublishId({
