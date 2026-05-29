@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 import { ArrowUpDownIcon, MoreHorizontalIcon } from "lucide-react";
 
+import {
+  CalendarClock4Icon,
+  CheckmarkSmallIcon,
+  CircleCheckIcon,
+  CrossLargeIcon,
+  FileEditIcon,
+  LoadingCircleIcon,
+  TriangleExclamationIcon,
+} from "~/components/icons";
+
 import { Button } from "~/ui/button";
 import { Badge } from "~/ui/badge";
 import {
@@ -40,6 +50,20 @@ function badgeVariant(status: string) {
   }
 }
 
+const statusIcons: Partial<
+  Record<string, React.FC<{ className?: string }>>
+> = {
+  draft: FileEditIcon,
+  scheduled: CalendarClock4Icon,
+  processing: LoadingCircleIcon,
+  posting: LoadingCircleIcon,
+  processed: CircleCheckIcon,
+  posted: CircleCheckIcon,
+  failed: TriangleExclamationIcon,
+  error: TriangleExclamationIcon,
+  cancelled: CrossLargeIcon,
+};
+
 const providerColors = {
   facebook: "bg-blue-500",
   instagram: "bg-pink-500",
@@ -53,6 +77,34 @@ const providerColors = {
 } as const;
 
 export const columns: ColumnDef<PostWithConnections>[] = [
+  {
+    accessorKey: "status",
+    header: ({ column }) => {
+      return (
+        <div className="flex justify-center">
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Status
+            <ArrowUpDownIcon className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      );
+    },
+    cell: ({ row }) => {
+      const status = row.getValue("status") as string;
+      const Icon = statusIcons[status];
+      return (
+        <div className="flex justify-center">
+          <Badge variant={badgeVariant(status)} className="capitalize">
+            {Icon ? <Icon className="size-3.5" /> : null}
+            {status}
+          </Badge>
+        </div>
+      );
+    },
+  },
   {
     accessorKey: "id",
     header: ({ column }) => {
@@ -93,24 +145,6 @@ export const columns: ColumnDef<PostWithConnections>[] = [
     },
   },
   {
-    accessorKey: "status",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Status
-          <ArrowUpDownIcon className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
-    cell: ({ row }) => {
-      const status = row.getValue("status") as string;
-      return <Badge variant={badgeVariant(status)}>{status}</Badge>;
-    },
-  },
-  {
     id: "providers",
     header: "Providers",
     cell: ({ row }) => {
@@ -120,16 +154,27 @@ export const columns: ColumnDef<PostWithConnections>[] = [
 
       const uniqueProviders = [...new Set(providers)];
 
+      const providerStatus = post.provider_status;
+
       return (
         <div className="flex flex-wrap gap-1">
-          {uniqueProviders.map((provider) => (
-            <Badge
-              key={provider}
-              className={`${providerColors[provider as keyof typeof providerColors] || "bg-gray-500"} text-white text-xs`}
-            >
-              {provider}
-            </Badge>
-          ))}
+          {uniqueProviders.map((provider) => {
+            const status = providerStatus?.[provider];
+
+            return (
+              <Badge
+                key={provider}
+                className={`${providerColors[provider as keyof typeof providerColors] || "bg-gray-500"} text-white text-xs gap-1`}
+              >
+                {status === undefined ? null : status ? (
+                  <CheckmarkSmallIcon className="size-3" />
+                ) : (
+                  <TriangleExclamationIcon className="size-3" />
+                )}
+                {provider}
+              </Badge>
+            );
+          })}
           {uniqueProviders.length === 0 ? (
             <span className="text-sm text-muted-foreground">No providers</span>
           ) : null}

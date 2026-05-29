@@ -33,6 +33,12 @@ export interface PostMedia {
 export interface PostWithConnections extends Post {
   social_accounts: PostProviderConnection[];
   media: PostMedia[];
+  /**
+   * Per-platform result status derived from social_post_results.
+   * `true` = every account on that platform succeeded, `false` = at least one
+   * failed (failure is prioritized). Absent when the post has no results yet.
+   */
+  provider_status?: Record<string, boolean>;
 }
 
 export interface LoaderData {
