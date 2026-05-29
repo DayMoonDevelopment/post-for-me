@@ -21,6 +21,9 @@ export class YouTubePostClient extends PostClient {
   // Must be a multiple of 256KB per YouTube resumable upload guidance.
   static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
   static readonly MAX_RESUMABLE_UPLOAD_ATTEMPTS = 5;
+  static readonly MAX_PROCESSING_POLL_ATTEMPTS = 20;
+  static readonly PROCESSING_POLL_INITIAL_DELAY_MS = 5_000;
+  static readonly PROCESSING_POLL_MAX_DELAY_MS = 60_000;
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -174,12 +177,12 @@ export class YouTubePostClient extends PostClient {
 
       this.#responses.push({ postResponse: uploadedVideo });
 
-      const videoId = uploadedVideo?.id;
+      const videoId = uploadedVideo.id!;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       console.log("Video uploaded. ID:", videoId, "URL:", videoUrl);
 
       // Upload custom thumbnail if provided
-      if (videoId && medium.thumbnail_url) {
+      if (medium.thumbnail_url) {
         try {
           await this.#uploadThumbnail(youtube, videoId, medium);
         } catch (thumbnailError) {
@@ -188,19 +191,40 @@ export class YouTubePostClient extends PostClient {
         }
       }
 
+      const processingResult = await this.#pollProcessingDetails(
+        youtube,
+        videoId,
+      );
+
+      if (!processingResult.success) {
+        return {
+          success: false,
+          post_id: postId,
+          provider_connection_id: account.id,
+          provider_post_id: videoId,
+          provider_post_url: videoUrl,
+          error_message: processingResult.message,
+          details: {
+            requests: this.#requests,
+            responses: this.#responses,
+          },
+        };
+      }
+
       return {
         success: true,
         post_id: postId,
         provider_connection_id: account.id,
-        provider_post_id: videoId || undefined,
+        provider_post_id: videoId,
         provider_post_url: videoUrl,
         details: {
+          message: processingResult.message,
           requests: this.#requests,
           responses: this.#responses,
         },
       };
     } catch (error: any) {
-      console.error("Error in the uh postToYouTube:", error);
+      console.error("Error Posting to YouTube:", error);
       if (error.response) {
         console.error("YouTube API error response:", error.response.data);
       }
@@ -217,6 +241,87 @@ export class YouTubePostClient extends PostClient {
         },
       };
     }
+  }
+
+  async #pollProcessingDetails(
+    youtube: youtube_v3.Youtube,
+    videoId: string,
+  ): Promise<{ success: boolean; message?: string }> {
+    for (
+      let attempt = 1;
+      attempt <= YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS;
+      attempt += 1
+    ) {
+      const pollRequest = {
+        processingStatusPollRequest: { videoId, attempt },
+      };
+      this.#requests.push(pollRequest);
+      console.log(
+        `Polling YouTube processing status for video ${videoId} (attempt ${attempt}/${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS})`,
+      );
+
+      const response = await youtube.videos.list({
+        part: ["processingDetails", "status"],
+        id: [videoId],
+      });
+
+      const video = response.data.items?.[0];
+      const processingDetails = video?.processingDetails;
+      const processingStatus = processingDetails?.processingStatus;
+
+      this.#responses.push({
+        processingStatusPollResponse: {
+          attempt,
+          videoId,
+          processingStatus,
+          processingDetails,
+          videoStatus: video?.status,
+        },
+      });
+
+      console.log(
+        `YouTube processing status for video ${videoId}: ${processingStatus}`,
+      );
+
+      if (processingStatus === "succeeded") {
+        return { success: true };
+      }
+
+      if (processingStatus === "failed" || processingStatus === "terminated") {
+        const failureReason = processingDetails?.processingFailureReason;
+        console.error(
+          `YouTube video ${videoId} processing ${processingStatus}. processingFailureReason: ${failureReason}`,
+        );
+        return {
+          success: false,
+          message: `YouTube video processing ${processingStatus}${failureReason ? `: ${failureReason}` : ""}`,
+        };
+      }
+
+      // Still processing — wait with exponential backoff before next attempt
+      if (attempt < YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS) {
+        const waitMs = Math.min(
+          YouTubePostClient.PROCESSING_POLL_MAX_DELAY_MS,
+          YouTubePostClient.PROCESSING_POLL_INITIAL_DELAY_MS *
+            2 ** (attempt - 1),
+        );
+        console.log(
+          `Video ${videoId} still processing (status: ${processingStatus}); waiting ${waitMs}ms before next poll`,
+        );
+        this.#responses.push({
+          processingStatusPollWait: { attempt, processingStatus, waitMs },
+        });
+        await this.#sleep(waitMs);
+      }
+    }
+
+    console.warn(
+      `Video ${videoId} still processing after ${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS} polling attempts; returning success with notice`,
+    );
+    return {
+      success: true,
+      message: "Video is still processing, check YouTube for the status",
+    };
   }
 
   async #startResumableUploadSession({
@@ -323,14 +428,40 @@ export class YouTubePostClient extends PostClient {
           }
 
           const chunkBuf = Buffer.from(await fileRes.arrayBuffer());
+          const actualChunkLen = chunkBuf.length;
+          const isFinalChunk = endExclusive === fileSize;
 
-          const contentRange = `bytes ${nextStart}-${endInclusive}/${fileSize}`;
+          // Guard: intermediate chunks must be exactly the declared size.
+          // A short read here means the storage layer closed the connection early;
+          // throw so the outer retry loop can re-fetch from the correct offset.
+          if (!isFinalChunk && actualChunkLen !== chunkLen) {
+            throw new Error(
+              `Storage returned ${actualChunkLen} bytes but expected ${chunkLen} bytes for range ${range} (non-final chunk); video would be truncated`,
+            );
+          }
+
+          // For the final chunk the actual length may legitimately be <= chunkLen,
+          // but it must still be positive and must not exceed the declared size.
+          if (
+            isFinalChunk &&
+            (actualChunkLen <= 0 || actualChunkLen > chunkLen)
+          ) {
+            throw new Error(
+              `Storage returned unexpected ${actualChunkLen} bytes for final chunk (expected 1–${chunkLen} bytes)`,
+            );
+          }
+
+          // Use the actual received length for both headers so what we declare
+          // to YouTube exactly matches what we send.
+          const actualEndInclusive = nextStart + actualChunkLen - 1;
+          const contentRange = `bytes ${nextStart}-${actualEndInclusive}/${fileSize}`;
+
           const res = await this.#fetchWithRetry(uploadUrl, {
             method: "PUT",
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": mimeType,
-              "Content-Length": String(chunkLen),
+              "Content-Length": String(actualChunkLen),
               "Content-Range": contentRange,
             },
             body: chunkBuf,
@@ -372,11 +503,21 @@ export class YouTubePostClient extends PostClient {
 
           if (res.ok) {
             const data = (await res.json()) as youtube_v3.Schema$Video;
+
+            // Verify YouTube acknowledged the full file before declaring success.
+            const bytesConfirmed = nextStart + actualChunkLen;
+            if (bytesConfirmed !== fileSize) {
+              throw new Error(
+                `YouTube upload completed but only ${bytesConfirmed} of ${fileSize} bytes were sent; video would be truncated`,
+              );
+            }
+
             this.#responses.push({
               resumableComplete: {
                 status: res.status,
                 contentRange,
                 videoId: data?.id,
+                bytesConfirmed,
               },
             });
             return data;
