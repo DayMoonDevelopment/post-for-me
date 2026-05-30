@@ -508,48 +508,63 @@ export class GoogleBusinessProfileCallToActionDto {
   url?: string;
 }
 
+export class GoogleBusinessProfileDateDto {
+  @ApiProperty({ description: 'Year of the date' })
+  year: number;
+
+  @ApiProperty({ description: 'Month of the date, from 1 to 12' })
+  month: number;
+
+  @ApiProperty({ description: 'Day of the month, from 1 to 31' })
+  day: number;
+}
+
+export class GoogleBusinessProfileTimeDto {
+  @ApiProperty({ description: 'Hour of the day, from 0 to 23' })
+  hours: number;
+
+  @ApiProperty({ description: 'Minute of the hour, from 0 to 59' })
+  minutes: number;
+
+  @ApiProperty({ description: 'Second of the minute, from 0 to 59' })
+  seconds: number;
+
+  @ApiProperty({ description: 'Nanosecond fraction of the second' })
+  nanos: number;
+}
+
 export class GoogleBusinessProfileEventScheduleDto {
   @ApiProperty({
     description: 'Start date of the event (year, month, day)',
-    type: 'object',
+    type: GoogleBusinessProfileDateDto,
     nullable: true,
     required: false,
   })
-  start_date?: { year: number; month: number; day: number };
+  start_date?: GoogleBusinessProfileDateDto;
 
   @ApiProperty({
     description: 'Start time of the event (hours, minutes, seconds, nanos)',
-    type: 'object',
+    type: GoogleBusinessProfileTimeDto,
     nullable: true,
     required: false,
   })
-  start_time?: {
-    hours: number;
-    minutes: number;
-    seconds: number;
-    nanos: number;
-  };
+  start_time?: GoogleBusinessProfileTimeDto;
 
   @ApiProperty({
     description: 'End date of the event (year, month, day)',
-    type: 'object',
+    type: GoogleBusinessProfileDateDto,
     nullable: true,
     required: false,
   })
-  end_date?: { year: number; month: number; day: number };
+  end_date?: GoogleBusinessProfileDateDto;
 
   @ApiProperty({
     description: 'End time of the event (hours, minutes, seconds, nanos)',
-    type: 'object',
+    type: GoogleBusinessProfileTimeDto,
     nullable: true,
     required: false,
   })
-  end_time?: {
-    hours: number;
-    minutes: number;
-    seconds: number;
-    nanos: number;
-  };
+  end_time?: GoogleBusinessProfileTimeDto;
 }
 
 export class GoogleBusinessProfileEventDto {
