@@ -12,9 +12,8 @@ const builder = new XMLBuilder({
   ignoreAttributes: false,
 });
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const baseUrl = url.origin;
+export async function loader(_: Route.LoaderArgs) {
+  const baseUrl = SITEMAP_CONFIG.BASE_URL;
   const currentDate = new Date().toISOString();
 
   const sitemaps = [

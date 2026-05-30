@@ -2,6 +2,7 @@ import { logger, schedules, tasks } from "@trigger.dev/sdk";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { Database, Json } from "./supabase.types";
+import { captureServerEvent, deterministicUuid } from "./posthog";
 import { randomUUID } from "crypto";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -440,6 +441,82 @@ const scheduleUpgrade = async ({
   });
 };
 
+/**
+ * Emit `subscription_upgrade_scheduled` for the automated usage-based upgrade.
+ * Attributed to the team's owner (`created_by`) as the distinct_id and the
+ * `team` group — billing reports run against the team. `system_triggered: true`
+ * marks this as automation; events without that flag are implied human-driven.
+ */
+const trackUpgradeScheduled = async ({
+  teamId,
+  stripeCustomerId,
+  subscription,
+  fromProductId,
+  toTier,
+  previousScheduledProductId,
+  usage,
+  currentLimit,
+}: {
+  teamId: string;
+  stripeCustomerId: string;
+  subscription: Stripe.Subscription;
+  fromProductId: string | null;
+  toTier: (typeof PRICING_TIERS)[number];
+  previousScheduledProductId?: string | null;
+  usage: number;
+  currentLimit: number;
+}): Promise<void> => {
+  try {
+    const { data: team } = await supabaseClient
+      .from("teams")
+      .select("created_by")
+      .eq("id", teamId)
+      .maybeSingle();
+
+    const distinctId = team?.created_by;
+    if (!distinctId) {
+      // No owner to attribute to — skip rather than fabricate a person.
+      return;
+    }
+
+    const postLimitOf = (productId: string | null | undefined) =>
+      productId
+        ? PRICING_TIERS.find((tier) => tier.productId === productId)?.posts ??
+          null
+        : null;
+
+    const isEscalation = previousScheduledProductId != null;
+
+    await captureServerEvent({
+      distinctId,
+      event: "subscription_upgrade_scheduled",
+      teamId,
+      properties: {
+        team_id: teamId,
+        stripe_customer_id: stripeCustomerId,
+        subscription_id: subscription.id,
+        system_triggered: true,
+        is_escalation: isEscalation,
+        from_post_limit: postLimitOf(fromProductId),
+        to_post_limit: toTier.posts,
+        previous_scheduled_post_limit: isEscalation
+          ? postLimitOf(previousScheduledProductId)
+          : null,
+        usage_count: usage,
+        current_limit: currentLimit,
+      },
+      dedupeKey: deterministicUuid(
+        `subscription_upgrade_scheduled:${subscription.id}:${toTier.productId}`,
+      ),
+    });
+  } catch (error) {
+    logger.error("Failed to track subscription_upgrade_scheduled", {
+      error,
+      team_id: teamId,
+    });
+  }
+};
+
 export const processUsageLimits = schedules.task({
   cron: { pattern: "*/5 * * * *", environments: ["PRODUCTION"] },
   id: "process-usage-limits",
@@ -612,6 +689,16 @@ export const processUsageLimits = schedules.task({
               next_tier: nextTier.productId,
             });
 
+            await trackUpgradeScheduled({
+              teamId,
+              stripeCustomerId,
+              subscription,
+              fromProductId: planInfo.productId,
+              toTier: nextTier,
+              usage,
+              currentLimit,
+            });
+
             continue;
           }
 
@@ -671,6 +758,17 @@ export const processUsageLimits = schedules.task({
               subscription_id: subscription.id,
               previous_scheduled_tier: scheduledTier.productId,
               next_scheduled_tier: nextScheduledTier.productId,
+            });
+
+            await trackUpgradeScheduled({
+              teamId,
+              stripeCustomerId,
+              subscription,
+              fromProductId: planInfo.productId,
+              toTier: nextScheduledTier,
+              previousScheduledProductId: scheduledTier.productId,
+              usage,
+              currentLimit,
             });
 
             continue;

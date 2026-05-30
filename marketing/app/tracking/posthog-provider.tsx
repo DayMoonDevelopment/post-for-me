@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import posthog from "posthog-js";
 import { PostHogProvider as RootPostHogProvider } from "posthog-js/react";
+import { useEffect, useState } from "react";
 
 export function PostHogProvider({
   apiKey,
@@ -19,6 +19,10 @@ export function PostHogProvider({
         api_host: apiHost,
         defaults: "2025-05-24",
         person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
+        // Share the anonymous distinct_id across *.postforme.dev so a visitor's
+        // marketing-site activity stitches to their dashboard user on identify().
+        cross_subdomain_cookie: true,
+        persistence: "localStorage+cookie",
       });
     }
 
