@@ -21,6 +21,7 @@ import { getBlueskySocialProviderConnection } from "./providers/bluesky.social-a
 import { getThreadsSocialProviderConnection } from "./providers/threads.social-account";
 import { getTikTokBusinessSocialProviderConnection } from "./providers/tiktok-business.social-account";
 import { getInstagramWFacebookSocialProviderConnection } from "./providers/instagram-w-facebook.social-account";
+import { getGoogleBusinessProfileSocialProviderConnection } from "./providers/google-business-profile.social-account";
 
 import { tasks } from "@trigger.dev/sdk";
 
@@ -206,6 +207,8 @@ async function getSocialProviderConnections(
         return getTikTokBusinessSocialProviderConnection(info);
       case "instagram_w_facebook":
         return getInstagramWFacebookSocialProviderConnection(info);
+      case "google_business_profile":
+        return getGoogleBusinessProfileSocialProviderConnection(info);
       default:
         return [];
     }

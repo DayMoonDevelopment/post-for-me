@@ -31,6 +31,10 @@ const defaultLabels = {
   tiktok: { appId: "Client Key", appSecret: "Client Secret" },
   x: { appId: "Client ID", appSecret: "Client Secret" },
   youtube: { appId: "Google Client ID", appSecret: "Google Client Secret" },
+  google_business_profile: {
+    appId: "Google Client ID",
+    appSecret: "Google Client Secret",
+  },
   linkedin: { appId: "Client ID", appSecret: "Client Secret" },
   pinterest: { appId: "App ID", appSecret: "App Secret" },
   threads: { appId: "App ID", appSecret: "App Secret" },

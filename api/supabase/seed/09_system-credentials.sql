@@ -9,4 +9,5 @@ INSERT INTO public.system_social_provider_app_credentials(provider, app_id, app_
 ('bluesky', 'bs_app_852963741', 'bs_secret_741stu852vwx'),
 ('threads', 'th_app_963741852', 'th_secret_852yza963bcd'),
 ('tiktok_business', 'ttb_app_963741852', 'ttb_secret_852yza963bcd'),
+('google_business_profile', 'gbp_app_963741852', 'gbp_secret_852yza963bcd'),
 ('instagram_w_facebook','igfb_app_981729381', 'igfb_secret_070192831')

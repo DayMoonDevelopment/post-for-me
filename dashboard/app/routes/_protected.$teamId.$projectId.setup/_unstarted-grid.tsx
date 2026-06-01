@@ -20,6 +20,7 @@ const allPlatforms = [
   "threads",
   "tiktok",
   "tiktok_business",
+  "google_business_profile",
 ] as const;
 
 const providersComingSoon: string[] = [] as const;

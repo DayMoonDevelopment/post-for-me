@@ -362,6 +362,35 @@ export async function generateAuthUrl({
 
       break;
     }
+    case 'google_business_profile': {
+      const oauth2Client = new google.auth.OAuth2(
+        appId,
+        appSecret,
+        callbackUrl,
+      );
+      const scopes: string[] = [];
+
+      if (
+        providerData?.google_business_profile?.permission_overrides &&
+        providerData?.google_business_profile?.permission_overrides?.length > 0
+      ) {
+        scopes.push(
+          ...providerData.google_business_profile.permission_overrides,
+        );
+      } else {
+        scopes.push('https://www.googleapis.com/auth/business.manage');
+      }
+
+      authUrl = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: scopes,
+        include_granted_scopes: true,
+        prompt: 'consent',
+        state: authState,
+      });
+
+      break;
+    }
     case 'pinterest': {
       const scopes: string[] = [];
 

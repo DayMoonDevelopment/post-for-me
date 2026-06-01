@@ -27,6 +27,7 @@ export type Provider =
   | 'bluesky'
   | 'threads'
   | 'tiktok_business'
+  | 'google_business_profile'
   | 'instagram_w_facebook'
   | null
   | undefined;

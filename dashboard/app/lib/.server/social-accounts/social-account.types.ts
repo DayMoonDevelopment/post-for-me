@@ -33,4 +33,5 @@ export type Provider =
   | "pinterest"
   | "linkedin"
   | "bluesky"
-  | "threads";
+  | "threads"
+  | "google_business_profile";
