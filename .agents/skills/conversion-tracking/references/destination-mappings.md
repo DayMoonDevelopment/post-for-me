@@ -49,7 +49,8 @@ If you want a new event to reach Meta or Google for conversion measurement:
 
 ## Things that are intentionally not destinations
 
-- A separate destination for `user_signed_up` → Meta `CompleteRegistration` could be added later if the upper-funnel signal is wanted. No code change needed; just a new PostHog destination.
+- A separate destination for `user_signed_up` → Meta `CompleteRegistration` could be added later if the upper-funnel signal is wanted. No code change needed; just a new PostHog destination. (`user_signed_up` now carries `team_id`/`role`/`invited_by`, so a destination could even segment paid-team vs free-team registrations.)
+- The other **user-lifecycle** events (`team_created`, `project_created`/`_deleted`, `team_member_*`) are product/activation analytics, **not** ad-conversion signals — they're not wired to Meta/Google and shouldn't be without a deliberate decision (they have no `price`/`currency` and aren't conversions).
 - Browser pixel `fbq('track', 'Subscribe')` / `gtag('event', 'conversion')` — deliberately not fired to avoid dedup work. The PostHog destination is the single source for conversions.
 
 ## Reminders for maintaining destinations
