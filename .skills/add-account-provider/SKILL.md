@@ -1,6 +1,6 @@
 ---
 name: add-account-provider
-description: Use when adding support for connecting social accounts for a new provider in post-for-me. Covers api/src/social-provider-connections/helper/auth-url.helper.ts OAuth URL generation and temporary metadata, dashboard callback provider implementations under dashboard/app/lib/.server/social-accounts/providers/, social-account.ts registration, provider DTO data, callback metadata, and database enum/typegen updates. Trigger whenever the user asks to add OAuth/account connection support, connect accounts for a platform, implement provider callbacks, exchange auth codes for tokens, or save social_provider_connections for a new provider.
+description: Use when adding support for connecting social accounts for a new provider in post-for-me. Covers api/src/social-provider-connections/helper/auth-url.helper.ts OAuth URL generation and temporary metadata, dashboard callback provider implementations under dashboard/app/lib/.server/social-accounts/providers/, dashboard setup UI for quickstart/system and white-label projects, social-account.ts registration, provider DTO data, callback metadata, and database enum/typegen updates. Trigger whenever the user asks to add OAuth/account connection support, connect accounts for a platform, implement provider callbacks, exchange auth codes for tokens, save social_provider_connections, or expose a provider in project setup.
 ---
 
 # Adding Social Account Connection Support
@@ -29,6 +29,11 @@ Follow the workflow below in order. Keep changes minimal and mirror the closest 
 | `dashboard/app/lib/.server/social-accounts/providers/<provider>.social-account.ts` | Add the callback implementation that returns `SocialProviderConnection[]`. |
 | `dashboard/app/lib/.server/social-accounts/social-account.ts` | Import/register the provider implementation in `getSocialProviderConnections`. |
 | `dashboard/app/lib/.server/social-accounts/social-account.types.ts` | Add the provider to the `Provider` union when persisted rows use that provider value. |
+| `dashboard/app/routes/_protected.$teamId.$projectId.setup/_unstarted-grid.tsx` | Add the provider to the setup grid so both quickstart and white-label projects can enable it. |
+| `dashboard/app/routes/_protected.$teamId.$projectId.setup.$provider._index/route.component.tsx` | Add credential labels to the default setup modal when the default app ID/app secret form is enough. |
+| `dashboard/app/lib/utils.ts` | Add a human-readable label in `getProviderLabel` when the raw enum value is not user-friendly. |
+| `dashboard/app/components/brand-icon.tsx` | Add an icon mapping if the provider needs its own brand icon. |
+| `api/supabase/seed/09_system-credentials.sql` | Add placeholder system credentials when quickstart projects should be able to enable the provider locally. |
 | `dashboard/app/routes/callback.$projectId.$provider.account/route.loader.ts` | Adjust only if the callback needs non-standard key lookup or generic metadata handling. |
 | `dashboard/app/routes/callback.$provider.account/route.loader.ts` | Adjust only if system-credential callbacks need non-standard key lookup or generic metadata handling. |
 
@@ -289,6 +294,103 @@ If the auth provider and persisted provider differ, follow the Instagram with Fa
 4. Switch to the actual credential provider before credential lookup.
 5. Persist the normalized provider expected by `social_provider_connections`.
 
+## Dashboard Setup UI
+
+New providers must appear in project setup so users can enable the platform before connecting accounts.
+
+There are two setup paths:
+
+| Project type | UI path | Behavior |
+| --- | --- | --- |
+| Quickstart/system project | `dashboard/app/routes/_protected.$teamId.$projectId.setup.system.$provider._index/` | User clicks Enable/Disable. The action copies credentials from `system_social_provider_app_credentials` into `social_provider_app_credentials`. |
+| White-label project | `dashboard/app/routes/_protected.$teamId.$projectId.setup.$provider._index/` | User enters provider app credentials. The generic action upserts `app_id` and `app_secret`. |
+
+### Add The Provider To The Setup Grid
+
+Update `allPlatforms` in `dashboard/app/routes/_protected.$teamId.$projectId.setup/_unstarted-grid.tsx`:
+
+```ts
+const allPlatforms = [
+  "facebook",
+  "instagram",
+  // ...existing providers
+  "example",
+] as const;
+```
+
+This drives the setup tiles for both quickstart/system and white-label projects. Do not add the provider to `providersComingSoon` unless the UI should intentionally show a disabled Coming Soon button.
+
+The connected grid reads existing credentials from the loader, so adding the platform to `allPlatforms` plus saving credentials is usually enough for it to show as configured.
+
+### White-Label Credential Modal
+
+Use the default route when the provider only needs an app ID/client ID and app secret/client secret:
+
+| File | Purpose |
+| --- | --- |
+| `dashboard/app/routes/_protected.$teamId.$projectId.setup.$provider._index/route.loader.ts` | Loads the project's existing credential and exposes `redirectUrl`. |
+| `dashboard/app/routes/_protected.$teamId.$projectId.setup.$provider._index/route.component.tsx` | Shows redirect URL plus app credential inputs. |
+| `dashboard/app/routes/_protected.$teamId.$projectId.setup.$provider._index/route.action.ts` | Saves/deletes `social_provider_app_credentials`. |
+
+Add provider-specific credential labels to `defaultLabels` only when the generic labels are not accurate:
+
+```ts
+const defaultLabels = {
+  // existing labels
+  example: { appId: "Client ID", appSecret: "Client Secret" },
+} as const;
+```
+
+Do not create a provider-specific setup route just to change labels, guide text, or the normal app credential form.
+
+### Quickstart/System Enablement
+
+Quickstart projects use the system setup route. The generic system action fetches a row from `system_social_provider_app_credentials`; enabling fails if that row does not exist.
+
+For local seed data, add a placeholder row in `api/supabase/seed/09_system-credentials.sql` when quickstart should support the new provider:
+
+```sql
+('example', 'example_app_id', 'example_app_secret')
+```
+
+For real environments, make sure the system credential is configured out of band. Do not hard-code production secrets in code, migrations, or seed files.
+
+### Labels And Icons
+
+If the enum value is not already user-friendly, add a label in `dashboard/app/lib/utils.ts`:
+
+```ts
+example: "Example",
+```
+
+If there is a provider icon available, add it to `dashboard/app/components/brand-icon.tsx`. If no icon exists, the current fallback is `TriangleExclamationIcon`; prefer adding a real brand icon when exposing a production provider.
+
+For provider variants like `instagram_w_facebook` or `tiktok_business`, the setup grid often passes `provider.split("_")[0]` to `BrandIcon`; only add a new icon key when that fallback is wrong.
+
+### Provider-Specific Setup Overrides
+
+Only add a provider-specific route directory when the default setup modal cannot represent the provider's required settings.
+
+Valid reasons for an override include:
+
+- Extra setup artifacts, like TikTok verification files in `dashboard/app/routes/_protected.$teamId.$projectId.setup.tiktok/`.
+- Different redirect URL or callback URL display requirements, like `instagram_w_facebook` displaying the `instagram` callback URL.
+- No app credentials are required, like the current Bluesky setup explainer.
+- A provider is intentionally gated or coming soon, like the current TikTok Business modal.
+- Additional validated fields must be persisted somewhere beyond `social_provider_app_credentials.app_id` and `app_secret`.
+
+When creating an override, mirror the closest existing route folder and include only the pieces needed:
+
+| Override file | Add when |
+| --- | --- |
+| `route.tsx` | Always, to export the custom loader/action/component. |
+| `route.loader.ts` | The modal needs custom data, redirect URL, files, flags, or hard-coded normalized provider behavior. |
+| `route.action.ts` | Saving requires more than the generic `app_id`/`app_secret` upsert/delete. |
+| `route.component.tsx` | The UI needs additional fields, copyable values, explanatory content, or custom validation. |
+| Local components | The override has reusable subsections, like `_credentials-form.tsx` or `_verification-files.tsx`. |
+
+Do not duplicate the default route for a normal OAuth provider. The default route keeps future setup behavior consistent across providers.
+
 ## Callback Routes
 
 There are two dashboard callback loaders:
@@ -311,7 +413,14 @@ Only modify these routes if the new provider cannot send `state`, uses a differe
 
 ## Verification
 
-Run commands from the sibling that owns the code:
+Always run lint and typecheck after implementation changes. Run commands from the sibling that owns the changed code:
+
+| Changed area | Run from | Commands |
+| --- | --- | --- |
+| `api/src/social-provider-connections/helper/auth-url.helper.ts`, auth URL DTOs, API social-provider connection code, or API migrations/types | `api/` | `bun run typecheck` and `bun run lint` |
+| Dashboard callback logic, provider token/profile exchange code, setup UI, labels/icons, or generated dashboard DB types | `dashboard/` | `bun run typecheck` and `bun run lint` |
+
+If a change touches both API and dashboard, run both sets. Do not run these from the repo root.
 
 ```bash
 # from api/
@@ -336,4 +445,8 @@ If you added or changed migrations/types, run the schema/typegen commands descri
 - Provider returns one or more complete `SocialProviderConnection` objects.
 - `social-account.ts` imports and dispatches to the new provider.
 - `Provider` union and generated DB types are updated when the persisted enum value changed.
+- Setup grid includes the provider in `allPlatforms` so it appears for quickstart and white-label projects.
+- White-label setup uses the default credential modal unless additional provider-specific settings are required.
+- Quickstart setup has a matching `system_social_provider_app_credentials` row wherever system credentials should support the provider.
+- Provider labels and icons are added when the raw enum value or fallback icon would look wrong in the dashboard.
 - Typecheck and lint were run from `api/` and `dashboard/`, or skipped with a stated reason.
