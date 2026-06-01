@@ -48,15 +48,21 @@ export function deterministicUuid(key: string): string {
 }
 
 /**
- * Capture a server-side event. `teamId`, when provided, attaches the PostHog
- * `team` group so the event rolls up to the billing entity. Best-effort: any
- * failure is logged, never thrown, so analytics can't break a webhook.
+ * Capture a server-side event. `teamId` / `projectId`, when provided, attach the
+ * PostHog `team` / `project` groups so the event rolls up to the billing entity
+ * and (for project-scoped actions) the project the user was acting on. Best-effort:
+ * any failure is logged, never thrown, so analytics can't break a webhook.
  */
 export async function captureServerEvent(params: {
   distinctId: string;
   event: string;
   properties?: Record<string, unknown>;
   teamId?: string;
+  /**
+   * Attaches the PostHog `project` group. Set on project-scoped events so they
+   * roll up to the project a user is acting on behalf of (one project at a time).
+   */
+  projectId?: string;
   dedupeKey?: string;
   /**
    * When the event actually occurred. Pass the source system's timestamp (e.g.
@@ -70,12 +76,16 @@ export async function captureServerEvent(params: {
     return;
   }
 
+  const groups: Record<string, string> = {};
+  if (params.teamId) groups.team = params.teamId;
+  if (params.projectId) groups.project = params.projectId;
+
   try {
     posthog.capture({
       distinctId: params.distinctId,
       event: params.event,
       properties: params.properties,
-      groups: params.teamId ? { team: params.teamId } : undefined,
+      groups: Object.keys(groups).length > 0 ? groups : undefined,
       uuid: params.dedupeKey,
       timestamp: params.timestamp,
     });
@@ -108,5 +118,30 @@ export async function setTeamGroupProperties(
     await posthog.flush();
   } catch (error) {
     console.error("Failed to set PostHog team group properties:", error);
+  }
+}
+
+/**
+ * Set/refresh properties on a `project` group. `groupIdentify` merges (rather
+ * than replaces) properties, so partial updates are safe. Best-effort.
+ */
+export async function setProjectGroupProperties(
+  projectId: string,
+  properties: Record<string, unknown>,
+): Promise<void> {
+  const posthog = getClient();
+  if (!posthog) {
+    return;
+  }
+
+  try {
+    posthog.groupIdentify({
+      groupType: "project",
+      groupKey: projectId,
+      properties,
+    });
+    await posthog.flush();
+  } catch (error) {
+    console.error("Failed to set PostHog project group properties:", error);
   }
 }

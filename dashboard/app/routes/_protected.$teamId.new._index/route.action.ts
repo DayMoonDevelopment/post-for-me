@@ -2,6 +2,7 @@ import { redirect, data } from "react-router";
 
 import { withSupabase } from "~/lib/.server/supabase";
 import { currentUserIsInTeam } from "~/lib/.server/current-user-is-in-team.request";
+import { trackProjectCreated } from "~/tracking/.server/lifecycle-tracking";
 
 export const action = withSupabase(
   async ({ supabase, supabaseServiceRole, params, request }) => {
@@ -45,6 +46,20 @@ export const action = withSupabase(
         errors: { general: "Something went wrong creating the project." },
       });
     }
+
+    // Project creation is a strong activation signal. Fire-and-forget.
+    void trackProjectCreated({
+      supabase: supabaseServiceRole,
+      project: {
+        id: project.data.id,
+        name: project.data.name,
+        team_id: project.data.team_id,
+        created_at: project.data.created_at,
+      },
+      actorUserId: currentUser.id,
+    }).catch((err) => {
+      console.error("Failed to capture project_created:", err);
+    });
 
     return redirect(
       `/${teamId}/${project.data.id}?toast=Project created successfully&toast_type=success`

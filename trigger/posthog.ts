@@ -49,14 +49,17 @@ export function deterministicUuid(key: string): string {
 }
 
 /**
- * Capture a server-side event attributed to a `team` group. Best-effort: any
- * failure is logged, never thrown, so analytics can't break the cron.
+ * Capture a server-side event attributed to a `team` group (and optionally a
+ * `project` group). Best-effort: any failure is logged, never thrown, so
+ * analytics can't break the cron.
  */
 export async function captureServerEvent(params: {
   distinctId: string;
   event: string;
   properties?: Record<string, unknown>;
   teamId?: string;
+  /** Attaches the PostHog `project` group for project-scoped events. */
+  projectId?: string;
   dedupeKey?: string;
   /** When the event occurred; defaults to now. */
   timestamp?: Date;
@@ -66,12 +69,16 @@ export async function captureServerEvent(params: {
     return;
   }
 
+  const groups: Record<string, string> = {};
+  if (params.teamId) groups.team = params.teamId;
+  if (params.projectId) groups.project = params.projectId;
+
   try {
     posthog.capture({
       distinctId: params.distinctId,
       event: params.event,
       properties: params.properties,
-      groups: params.teamId ? { team: params.teamId } : undefined,
+      groups: Object.keys(groups).length > 0 ? groups : undefined,
       uuid: params.dedupeKey,
       timestamp: params.timestamp,
     });

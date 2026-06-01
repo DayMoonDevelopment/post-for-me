@@ -8,8 +8,13 @@ Authoritative list of currently tracked PostHog events. **Update this file in th
 |---|---|---|
 | `posthog.identify(user.id, …)` | `dashboard/app/tracking/posthog-identifier.tsx` | `email`, `created_at`, `first_name`, `last_name`, `gclid`, `fbclid`, `fbc`, `fbp`, `utm_*` |
 | `posthog.group("team", team.id, …)` | same | `name`, `stripe_customer_id`, `billing_email` |
+| `posthog.group("project", project.id, …)` | same (fires only on project-scoped routes) | `name`, `team_id` |
 
 PostHog SDK also auto-captures `$initial_referrer`, `$initial_utm_*`, `$initial_gclid`, `$initial_fbclid` as person properties on the first identified pageview.
+
+### Group types
+
+Two PostHog group types are defined: **`team`** (the billing entity, keyed by `teams.id`) and **`project`** (keyed by `projects.id`). A user acts on behalf of one project at a time; project-scoped events/pageviews attach both groups so they roll up to the team *and* the project. PostHog allows up to 5 group types — adding more (e.g. `social_account`) is possible but coordinate first.
 
 ## Lifecycle events
 
@@ -20,10 +25,89 @@ PostHog SDK also auto-captures `$initial_referrer`, `$initial_utm_*`, `$initial_
 | Fires | First-time signup (account `created_at` < 60s ago) |
 | Source | `dashboard/app/routes/_auth.sign-in.otp.verify._index/route.action.ts` |
 | distinct_id | `user.id` |
-| team group | The auto-created team where `teams.created_by = user.id` |
-| properties | `email` |
+| team group | **Invited user** (`user_metadata.source.type === "invite"`): the team they were invited to (`source.team`). **Organic**: the personal team auto-created at signup (`teams.created_by = user.id`). |
+| properties | `email`, `team_id`, `role` (`owner` organic / `member` invited), `invited_by` (invited only) |
 | timestamp | now |
 | dedupe | `user_signed_up:<user.id>` |
+
+`role` is **derived**, not stored — there is no `role` column on `team_users`. The team's `created_by` is the `owner`; everyone else is a `member`. See `roleForTeam()` in `tracking/.server/lifecycle-tracking.ts`. If a real roles system is ever added, replace the derivation with a column read everywhere it's used.
+
+## Team & project lifecycle events
+
+These are **user-lifecycle** events: they fire from in-app route actions (not the Stripe webhook), via `dashboard/app/tracking/.server/lifecycle-tracking.ts`. Each is wrapped fire-and-forget at the call site so a tracking failure can't break the action.
+
+### `team_created`
+
+| | |
+|---|---|
+| Fires | A team (billing unit) comes into existence — organic signup's auto-team, or explicit "create team" |
+| Source | OTP verify (`creation_context: "signup"`) + `routes/api.teams.new/route.action.ts` (`creation_context: "manual"`) |
+| distinct_id | `team.created_by` (the owner) |
+| team group | `team.id` |
+| properties | `team_id`, `created_by_user_id`, `creation_context`, `plan_name` (null at creation) |
+| dedupe | `team_created:<team.id>` |
+| Note | Live skips invited users' throwaway personal auto-teams; the backfill replays the whole table (dedupe keeps it idempotent). Also seeds `member_count`/`project_count` on the group. |
+
+### `project_created`
+
+| | |
+|---|---|
+| Fires | A project is created — explicit project creation, **and** the default project auto-created with a team (treated as user-driven onboarding) |
+| Source | `routes/_protected.$teamId.new._index/route.action.ts`, plus OTP verify + `api.teams.new` for the default project |
+| distinct_id | acting user (`created_by`) |
+| groups | `team` (`team_id`) **and** `project` (`project.id`) |
+| properties | `project_id`, `project_name`, `team_id` |
+| dedupe | `project_created:<project.id>` |
+| Note | Refreshes the team group's `project_count`; sets `project` group props (`name`, `team_id`). |
+
+### `project_deleted`
+
+| | |
+|---|---|
+| Fires | A project is hard-deleted (may signal disengagement) |
+| Source | `routes/_protected.$teamId.$projectId.delete._index/route.action.ts` |
+| distinct_id | acting user |
+| groups | `team` + `project` |
+| properties | `project_id`, `team_id` |
+| dedupe | `project_deleted:<project.id>` |
+| Note | Live-only — projects are hard-deleted, so there's no row to backfill. Refreshes `project_count`. |
+
+### `team_member_invited`
+
+| | |
+|---|---|
+| Fires | An invite is sent (per invitee) |
+| Source | `routes/_protected.$teamId.members.add._index/route.action.ts` |
+| distinct_id | invitee `user.id` (so it pairs with `team_member_joined`) |
+| team group | `team.id` |
+| properties | `team_id`, `role` (`member`), `inviter_user_id`, `invitee_email`, `is_new_user` |
+| dedupe | `team_member_invited:<team_id>:<invitee_user_id>` |
+
+### `team_member_joined`
+
+| | |
+|---|---|
+| Fires | A seat becomes active — an already-existing user is added (immediate) or an invited new user authenticates for the first time |
+| Source | members.add (existing users) + OTP verify (invited new users) |
+| distinct_id | the joining `user.id` |
+| team group | `team.id` |
+| properties | `team_id`, `role`, `invited_by` |
+| dedupe | `team_member_joined:<team_id>:<user_id>` |
+| Note | The team creator's own seat is **not** tracked here — it's covered by `team_created`. Refreshes `member_count`. |
+
+### `team_member_removed`
+
+| | |
+|---|---|
+| Fires | A member is removed (seat loss often precedes churn) |
+| Source | `routes/_protected.$teamId.members.remove._index/route.action.ts` |
+| distinct_id | the removed `user.id` |
+| team group | `team.id` |
+| properties | `team_id`, `role`, `removed_by_user_id`, `is_self_removal` |
+| dedupe | `team_member_removed:<team_id>:<user_id>` |
+| Note | Live-only (no historical record once the row is gone). Dedupe is `team:user`, so remove→re-invite→remove of the same user collapses to one event. Refreshes `member_count`. |
+
+## Subscription lifecycle events (Stripe webhook)
 
 ### `customer_converted`
 
@@ -107,6 +191,21 @@ PostHog SDK also auto-captures `$initial_referrer`, `$initial_utm_*`, `$initial_
 | `plan_price` | Dollar amount of the current plan |
 | `is_active` | `subscription_status` is `active` or `trialing` |
 | `cancel_at_period_end` | Whether the sub is set to cancel at period end |
+| `member_count` | Number of `team_users` rows for the team. Refreshed on team creation + member join/remove. |
+| `project_count` | Number of `projects` for the team. Refreshed on team creation + project create/delete. |
+| `created_at` | The team's real `teams.created_at`. Set so groups can be filtered by actual creation date — PostHog's own group "created" timestamp is just when the group was first registered (≈ backfill date for historical teams). |
+
+`member_count` / `project_count` are refreshed via `refreshTeamShape()` in `tracking/.server/lifecycle-tracking.ts`. `groupIdentify` **merges** properties, so refreshing the shape never clobbers the billing-state props the subscription tracker sets (and vice versa).
+
+## Project group properties
+
+| Property | Meaning |
+|---|---|
+| `name` | Project display name |
+| `team_id` | The team the project belongs to |
+| `created_at` | The project's real `projects.created_at` (server-side only) — same rationale as the team group's `created_at`. |
+
+Set browser-side (`posthog-identifier.tsx`) and server-side on `project_created` (`setProjectGroupProperties`).
 
 ## Person properties (set via identify, primarily for ad destinations)
 

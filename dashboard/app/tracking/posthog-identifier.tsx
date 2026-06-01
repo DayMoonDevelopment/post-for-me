@@ -8,6 +8,7 @@ import {
 } from "./attribution";
 
 import type { loader } from "~/routes/_protected.$teamId/route";
+import type { loader as projectLoader } from "~/routes/_protected.$teamId.$projectId/route.loader";
 
 /**
  * Identifies the authenticated user and registers the current `team` group with
@@ -20,9 +21,15 @@ import type { loader } from "~/routes/_protected.$teamId/route";
  */
 export function PostHogIdentifier() {
   const data = useRouteLoaderData<typeof loader>("routes/_protected.$teamId");
+  // Present only when the user is on a project-scoped route. Lets us register the
+  // `project` group so pageviews roll up to the project they're acting on.
+  const projectData = useRouteLoaderData<typeof projectLoader>(
+    "routes/_protected.$teamId.$projectId",
+  );
 
   const user = data?.user;
   const team = data?.team;
+  const project = projectData?.project;
 
   useEffect(() => {
     if (!user?.id) {
@@ -68,6 +75,17 @@ export function PostHogIdentifier() {
       billing_email: team.billing_email,
     });
   }, [team?.id, team?.name, team?.stripe_customer_id, team?.billing_email]);
+
+  useEffect(() => {
+    if (!project?.id) {
+      return;
+    }
+
+    posthog.group("project", project.id, {
+      name: project.name,
+      team_id: project.team_id,
+    });
+  }, [project?.id, project?.name, project?.team_id]);
 
   return null;
 }
