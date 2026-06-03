@@ -625,7 +625,23 @@ export const processUsageLimits = schedules.task({
           const buildUsageMetadata = (
             transactionalEmailId: string,
             suggestedTier: (typeof PRICING_TIERS)[number] | null,
+            notificationTemplate: "usage_limit_alert" | "usage_limit_upgrade",
           ): Json => ({
+            // Stamped for analytics: process-team-notification reads the
+            // semantic intent (`notification_category` + `notification_template`)
+            // and `tracking` to fire the generic `notification_sent` event once
+            // Loops confirms delivery. The channel + provider are added by the
+            // consumer. Kept out of `data.loops.data` so these analytics-only
+            // fields aren't forwarded to Loops as email variables.
+            notification_category: "transactional",
+            notification_template: notificationTemplate,
+            tracking: {
+              usage_count: usage,
+              current_limit: currentLimit,
+              plan_post_limit: planInfo.postLimit,
+              suggested_plan_post_limit: suggestedTier?.posts ?? null,
+              period_start: usageWindow.start_at,
+            },
             data: {
               loops: {
                 transactional_id: transactionalEmailId,
@@ -651,6 +667,7 @@ export const processUsageLimits = schedules.task({
               metadata: buildUsageMetadata(
                 LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
                 nextTier,
+                "usage_limit_alert",
               ),
               checkForDuplicates: true,
             });
@@ -679,6 +696,7 @@ export const processUsageLimits = schedules.task({
               metadata: buildUsageMetadata(
                 LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
                 nextTier,
+                "usage_limit_upgrade",
               ),
               checkForDuplicates: false,
             });
@@ -749,6 +767,7 @@ export const processUsageLimits = schedules.task({
               metadata: buildUsageMetadata(
                 LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
                 nextScheduledTier,
+                "usage_limit_upgrade",
               ),
               checkForDuplicates: false,
             });

@@ -164,6 +164,23 @@ These are **user-lifecycle** events: they fire from in-app route actions (not th
 | properties | `from_post_limit`, `to_post_limit`, `previous_scheduled_post_limit`, `usage_count`, `current_limit`, `is_escalation` |
 | dedupe | `subscription_upgrade_scheduled:<subscription.id>:<toTier.productId>` |
 
+## Notification events (Trigger.dev)
+
+### `notification_sent`
+
+| | |
+|---|---|
+| Fires | Any outbound notification is confirmed delivered on a channel (email status `sent` today) |
+| Source | `trigger/process-team-notification.ts` → `trackNotificationSent`, on the real delivery moment |
+| distinct_id | `teams.created_by` (the owner) |
+| team group | `team.id` |
+| Flag | `system_triggered: true` |
+| properties (generic) | `channel` (`email`), `notification_category` (`transactional`), `notification_type` (DB column, e.g. `usage_alert`), `notification_template` (`usage_limit_alert` / `usage_limit_upgrade`), `notification_id`, `usage_count`, `current_limit`, `plan_post_limit`, `suggested_plan_post_limit` |
+| properties (channel-namespaced) | **email**: `email_provider` (`loops`), `email_template_id`. Future channels get their own prefix (`sms_*`, `push_*`). |
+| timestamp | now (real-time send) |
+| dedupe | `notification_sent:<team_id>:<channel>:<notification_template>:<period_start>:<suggested_plan_post_limit>` |
+| Note | **One generic event for every outbound notification** — channel/category/type/template are properties, not distinct event names, so new emails *and* new channels (SMS/push) never proliferate events. Channel-specific details are namespaced by channel (`email_*`). The dispatcher (`process-team-notification.ts`) supplies `channel` + the namespaced props; the producer (`process-usage-limits.ts`) stamps `notification_category` + `notification_template` + a `tracking` block into `meta_data`. Only notifications with a `notification_template` emit this; untyped ones are skipped. Dedupe keys on channel + template + period + target tier, so a genuine escalation or a second channel still counts while a retried cron pass collapses. |
+
 ## `baseProps` shape (every subscription event)
 
 ```ts
