@@ -6,7 +6,11 @@ import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-re
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { SocialAccount, PlatformPostMetadata } from '../lib/dto/global.dto';
+import {
+  SocialAccount,
+  PlatformPost,
+  PlatformPostMetadata,
+} from '../lib/dto/global.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
 import { YouTubeService } from '../youtube/youtube.service';
@@ -20,6 +24,23 @@ import { TwitterService } from '../twitter/twitter.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { differenceInDays } from 'date-fns';
 import { PlatformPostDto } from './dto/platform-post.dto';
+
+type TikTokPostResultCandidateSocialPost = {
+  external_id: string | null;
+  caption: string | null;
+};
+
+type TikTokPostResultCandidate = {
+  id: string;
+  post_id: string;
+  provider_post_id: string | null;
+  provider_post_url: string | null;
+  created_at: string;
+  social_posts:
+    | TikTokPostResultCandidateSocialPost
+    | TikTokPostResultCandidateSocialPost[]
+    | null;
+};
 
 @Injectable()
 export class SocialAccountFeedsService {
@@ -280,16 +301,33 @@ export class SocialAccountFeedsService {
     const { data: socialPostResults } = socialPostResultsResponse;
 
     // Create a map of provider_post_id to social post result with post data
-    const postResultMap = new Map(
-      socialPostResults?.map((result) => [
-        result.provider_post_id,
-        {
-          social_post_result_id: result.id,
-          social_post_id: result.post_id,
-          external_post_id: result.social_posts?.external_id,
-        },
-      ]) || [],
+    const postResultMap = new Map<
+      string,
+      {
+        social_post_result_id: string;
+        social_post_id: string;
+        external_post_id: string | null | undefined;
+      }
+    >(
+      socialPostResults
+        ?.filter((result) => result.provider_post_id)
+        .map((result) => [
+          result.provider_post_id!,
+          {
+            social_post_result_id: result.id,
+            social_post_id: result.post_id,
+            external_post_id: result.social_posts?.external_id,
+          },
+        ]) || [],
     );
+
+    if (account.provider === 'tiktok') {
+      await this.reconcileTikTokProviderPostIds({
+        accountId,
+        posts: accountPostsResult.posts,
+        postResultMap,
+      });
+    }
 
     const result: PaginatedPlatformPostResponse = {
       data: accountPostsResult.posts.map((p): PlatformPostDto => {
@@ -325,6 +363,119 @@ export class SocialAccountFeedsService {
     };
 
     return result;
+  }
+
+  private async reconcileTikTokProviderPostIds({
+    accountId,
+    posts,
+    postResultMap,
+  }: {
+    accountId: string;
+    posts: PlatformPost[];
+    postResultMap: Map<
+      string,
+      {
+        social_post_result_id: string;
+        social_post_id: string;
+        external_post_id: string | null | undefined;
+      }
+    >;
+  }) {
+    const unmatchedPosts = posts.filter(
+      (post) => !postResultMap.has(post.id) && post.posted_at,
+    );
+
+    if (unmatchedPosts.length === 0) return;
+
+    const postTimes = unmatchedPosts
+      .map((post) => new Date(post.posted_at!).getTime())
+      .filter((time) => Number.isFinite(time));
+
+    if (postTimes.length === 0) return;
+
+    const bufferMs = 60 * 60 * 1000;
+    const minCreatedAt = new Date(Math.min(...postTimes) - bufferMs);
+    const maxCreatedAt = new Date(Math.max(...postTimes) + bufferMs);
+
+    const { data: candidateRows, error } =
+      await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .select(
+          `
+          id,
+          post_id,
+          provider_post_id,
+          provider_post_url,
+          created_at,
+          social_posts!inner(external_id, caption)
+        `,
+        )
+        .eq('provider_connection_id', accountId)
+        .eq('success', true)
+        .gte('created_at', minCreatedAt.toISOString())
+        .lte('created_at', maxCreatedAt.toISOString());
+
+    if (error) {
+      console.error('Unable to fetch TikTok post result candidates', error);
+      return;
+    }
+
+    const matchedResultIds = new Set<string>();
+    const candidates = (candidateRows ??
+      []) as unknown as TikTokPostResultCandidate[];
+
+    for (const post of unmatchedPosts) {
+      if (!post.posted_at) continue;
+
+      const postTime = new Date(post.posted_at).getTime();
+      const normalizedCaption = this.normalizeCaption(post.caption);
+
+      const candidate = candidates.find((result) => {
+        if (matchedResultIds.has(result.id)) return false;
+        if (result.provider_post_id === post.id) return false;
+
+        const createdAt = new Date(result.created_at).getTime();
+        if (Math.abs(createdAt - postTime) > bufferMs) return false;
+
+        const socialPost = Array.isArray(result.social_posts)
+          ? result.social_posts[0]
+          : result.social_posts;
+
+        return (
+          socialPost?.caption &&
+          this.normalizeCaption(socialPost.caption) === normalizedCaption
+        );
+      });
+
+      if (!candidate) continue;
+
+      const socialPost = Array.isArray(candidate.social_posts)
+        ? candidate.social_posts[0]
+        : candidate.social_posts;
+
+      matchedResultIds.add(candidate.id);
+      postResultMap.set(post.id, {
+        social_post_result_id: candidate.id,
+        social_post_id: candidate.post_id,
+        external_post_id: socialPost?.external_id,
+      });
+
+      const { error: updateError } = await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .update({
+          provider_post_id: post.id,
+          provider_post_url: post.url || candidate.provider_post_url,
+        })
+        .eq('id', candidate.id);
+
+      if (updateError) {
+        console.error('Unable to update TikTok provider post id', updateError);
+      }
+    }
+  }
+
+  private normalizeCaption(caption: string): string {
+    return caption.trim().toLowerCase();
   }
 
   async getPlatformService({

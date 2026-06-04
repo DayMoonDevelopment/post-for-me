@@ -35,6 +35,7 @@ Follow the repo's commit conventions (conventional-commit style, `type(scope): s
 ## 3. Identify the Linear issue
 
 Find the issue this PR resolves. Look, in order:
+
 1. The branch name (`caleb/pfm-576-...` → `PFM-576`).
 2. What the user told you in conversation.
 3. If neither, ask the user for the issue ID before opening the PR — the link/tag steps depend on it.
@@ -47,28 +48,33 @@ Use this body template. Every section earns its place — a reviewer should gras
 
 ```markdown
 ## Summary
+
 1–3 sentences: what this PR does and why it's needed. Lead with the user/business
 reason, not the implementation.
 
 ## Changes
+
 - The notable changes, as bullets. Group by area if the PR is large.
 - Call out anything a reviewer should pay special attention to.
 - Note new dependencies, env vars, or migrations explicitly.
 
 ## Testing
+
 How you verified this works — commands run, manual steps, what you observed.
 If something is untested or deferred, say so plainly.
 
 ## Notes
+
 (Optional) Known limitations, follow-ups, or decisions worth flagging.
 Screenshots/recordings go here for any UI change.
 
 Closes PFM-XXX
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+🤖 Generated with AI
 ```
 
 Guidance on the sections:
+
 - **Summary** — the "why" matters more than the "what". A reviewer skims this first.
 - **Changes** — bullets, not prose. Surface migrations / new env vars / new deps because they have deploy implications and are easy to miss in a diff.
 - **Testing** — be honest. "Typecheck + lint pass; drove the real Stripe checkout flow against a local team and confirmed `customer_converted` in PostHog" is far more useful than "tested locally". If tests failed or a step was skipped, report it.

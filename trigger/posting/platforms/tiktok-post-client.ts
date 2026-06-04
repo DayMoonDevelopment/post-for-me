@@ -14,7 +14,11 @@ import {
 
 export class TikTokPostClient extends PostClient {
   #tokenUrl = "https://open.tiktokapis.com/v2/oauth/token/";
-  #processingStatuses = ["PROCESSING", "PROCESSING_DOWNLOAD"];
+  #processingStatuses = [
+    "PROCESSING",
+    "PROCESSING_DOWNLOAD",
+    "PROCESSING_UPLOAD",
+  ];
   #processedStatuses = [
     "PUBLISH_COMPLETE",
     "PUBLISH_SUCCESS",
@@ -156,13 +160,18 @@ export class TikTokPostClient extends PostClient {
             requests: this.#requests,
             responses: this.#responses,
             username: creatorInfoResponse.data.data.creator_username,
+            publish_id: publishId,
           },
           provider_post_url: `https://www.tiktok.com/@${creatorInfoResponse.data.data.creator_username}`,
           provider_post_id: publishId,
         };
       }
 
-      const { status } = await this.#getPublishStatus({ publishId, account });
+      const { status, publicPostId } = await this.#getPublishStatus({
+        publishId,
+        account,
+        waitForPublicPostId: true,
+      });
 
       if (this.#processingStatuses.includes(status)) {
         return {
@@ -177,9 +186,10 @@ export class TikTokPostClient extends PostClient {
             requests: this.#requests,
             responses: this.#responses,
             username: creatorInfoResponse.data.data.creator_username,
+            publish_id: publishId,
           },
           provider_post_url: `https://www.tiktok.com/@${creatorInfoResponse.data.data.creator_username}`,
-          provider_post_id: publishId,
+          provider_post_id: publicPostId ?? publishId,
         };
       }
 
@@ -187,13 +197,14 @@ export class TikTokPostClient extends PostClient {
         success: true,
         post_id: postId,
         provider_connection_id: account.id,
-        provider_post_id: publishId,
+        provider_post_id: publicPostId ?? publishId,
         details: {
           status: "Published successfully",
           addedMedia: this.#addedMedia,
           requests: this.#requests,
           responses: this.#responses,
           username: creatorInfoResponse.data.data.creator_username,
+          publish_id: publishId,
         },
         provider_post_url: `https://www.tiktok.com/@${creatorInfoResponse.data.data.creator_username}`,
       };
@@ -240,19 +251,27 @@ export class TikTokPostClient extends PostClient {
   async #getPublishStatus({
     publishId,
     account,
+    waitForPublicPostId = false,
   }: {
     publishId: string;
     account: SocialAccount;
+    waitForPublicPostId?: boolean;
   }) {
     let status = "PROCESSING";
     let failReason;
-    let statusResponse;
+    let publicPostId: string | undefined;
     let attempts = 0;
+    let publicPostIdAttempts = 0;
     const initialDelayMs = 5000;
     const maxAttempts = 15;
+    const maxPublicPostIdAttempts = 3;
 
     while (
-      this.#processingStatuses.includes(status) &&
+      (this.#processingStatuses.includes(status) ||
+        (waitForPublicPostId &&
+          this.#processedStatuses.includes(status) &&
+          !publicPostId &&
+          publicPostIdAttempts < maxPublicPostIdAttempts)) &&
       attempts < maxAttempts
     ) {
       this.#requests.push({
@@ -263,7 +282,7 @@ export class TikTokPostClient extends PostClient {
           },
         },
       });
-      statusResponse = await axios.post(
+      const statusResponse = await axios.post<string>(
         "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
         {
           publish_id: publishId,
@@ -273,17 +292,39 @@ export class TikTokPostClient extends PostClient {
             Authorization: `Bearer ${account.access_token}`,
             "Content-Type": "application/json; charset=UTF-8",
           },
+          transformResponse: [(data) => data],
         },
       );
 
-      this.#responses.push({ statusResponse: statusResponse.data });
+      const parsedStatusResponse = this.#parsePublishStatusResponse(
+        statusResponse.data,
+      );
 
-      status = statusResponse.data.data.status;
-      failReason = statusResponse.data.data.fail_reason;
+      this.#responses.push({ statusResponse: parsedStatusResponse.data });
+
+      status = parsedStatusResponse.data.data.status;
+      failReason = parsedStatusResponse.data.data.fail_reason;
+      publicPostId = parsedStatusResponse.publicPostId || publicPostId;
       attempts++;
 
-      if (this.#processingStatuses.includes(status) && attempts < maxAttempts) {
-        const delay = initialDelayMs * Math.pow(1.5, attempts - 1);
+      const waitingForPublicPostId =
+        waitForPublicPostId &&
+        this.#processedStatuses.includes(status) &&
+        !publicPostId;
+
+      if (waitingForPublicPostId) {
+        publicPostIdAttempts++;
+      }
+
+      if (
+        (this.#processingStatuses.includes(status) ||
+          (waitingForPublicPostId &&
+            publicPostIdAttempts < maxPublicPostIdAttempts)) &&
+        attempts < maxAttempts
+      ) {
+        const delay = waitingForPublicPostId
+          ? initialDelayMs
+          : initialDelayMs * Math.pow(1.5, attempts - 1);
         await wait.for({ seconds: delay / 1000 });
       }
     }
@@ -306,7 +347,35 @@ export class TikTokPostClient extends PostClient {
       );
     }
 
-    return { status, failReason };
+    return { status, failReason, publicPostId };
+  }
+
+  #parsePublishStatusResponse(responseText: string) {
+    const publicPostIds = this.#extractPublicPostIds(responseText);
+    const data = JSON.parse(responseText);
+
+    return {
+      data,
+      publicPostId: publicPostIds[0],
+    };
+  }
+
+  #extractPublicPostIds(responseText: string): string[] {
+    const idsArrayMatch = responseText.match(
+      /"publicaly_available_post_id"\s*:\s*\[([^\]]*)\]/,
+    );
+
+    if (!idsArrayMatch) return [];
+
+    const ids: string[] = [];
+    const itemPattern = /"([^"\\]*(?:\\.[^"\\]*)*)"|(-?\d+)/g;
+    let itemMatch: RegExpExecArray | null;
+
+    while ((itemMatch = itemPattern.exec(idsArrayMatch[1])) !== null) {
+      ids.push(itemMatch[1] ?? itemMatch[2]);
+    }
+
+    return ids;
   }
 
   async #getPublishId({
