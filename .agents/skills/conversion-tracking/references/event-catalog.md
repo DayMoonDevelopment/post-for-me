@@ -172,10 +172,11 @@ These are **user-lifecycle** events: they fire from in-app route actions (not th
 |---|---|
 | Fires | Any outbound notification is confirmed delivered on a channel (email status `sent` today) |
 | Source | `trigger/process-team-notification.ts` → `trackNotificationSent`, on the real delivery moment |
-| distinct_id | `teams.created_by` (the owner) |
-| team group | `team.id` |
+| distinct_id | The **actual recipient**, resolved from the address sent to: the matching `users.id` if the email belongs to a user (so it merges with their browser-identified profile), else the email itself (external billing contact). **Not** the team owner. |
+| team group | `team.id` (always attached — team reporting is group-aggregated regardless of recipient) |
+| person props | `$set: { email }` — links the recipient (esp. an email-keyed, non-user contact) |
 | Flag | `system_triggered: true` |
-| properties (generic) | `channel` (`email`), `notification_category` (`transactional`), `notification_type` (DB column, e.g. `usage_alert`), `notification_template` (`usage_limit_alert` / `usage_limit_upgrade`), `notification_id`, `usage_count`, `current_limit`, `plan_post_limit`, `suggested_plan_post_limit` |
+| properties (generic) | `channel` (`email`), `recipient_is_user` (whether the address mapped to a user), `notification_category` (`transactional`), `notification_type` (DB column, e.g. `usage_alert`), `notification_template` (`usage_limit_alert` / `usage_limit_upgrade`), `notification_id`, `usage_count`, `current_limit`, `plan_post_limit`, `suggested_plan_post_limit` |
 | properties (channel-namespaced) | **email**: `email_provider` (`loops`), `email_template_id`. Future channels get their own prefix (`sms_*`, `push_*`). |
 | timestamp | now (real-time send) |
 | dedupe | `notification_sent:<team_id>:<channel>:<notification_template>:<period_start>:<suggested_plan_post_limit>` |

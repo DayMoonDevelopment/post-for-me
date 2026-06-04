@@ -239,10 +239,16 @@ async function sendEmailNotification(
  * `notification_type`, and `notification_template` are top-level properties,
  * while channel-specific details are namespaced by channel (`email_*` here) —
  * so adding SMS/push later means a new `channel` value and a `sms_*`/`push_*`
- * namespace, never a new event. Attributed to the team owner (`created_by`) as
- * distinct_id and the `team` group, matching the billing reporting unit.
- * `system_triggered: true` marks automation. Best-effort: never throws into the
- * delivery path.
+ * namespace, never a new event. `system_triggered: true` marks automation.
+ * Best-effort: never throws into the delivery path.
+ *
+ * Identity: the person is the **actual recipient**, resolved from the address we
+ * sent to. When that email belongs to a real user we attribute to their auth id
+ * so the event merges with their existing person profile (browser identify);
+ * otherwise we fall back to the email itself so an external billing contact is
+ * still captured rather than dropped or misattributed to the team owner. Either
+ * way the `team` group is attached — team-level reporting is group-aggregated
+ * regardless of which person received the message.
  *
  * Dedupe is team + channel + template + billing period + suggested tier, so a
  * retried cron pass collapses while a genuine escalation to a higher tier (or a
@@ -251,10 +257,13 @@ async function sendEmailNotification(
 async function trackNotificationSent({
   notification,
   channel,
+  recipientEmail,
   channelProperties,
 }: {
   notification: TeamNotification;
   channel: string;
+  /** The address the notification was actually delivered to. */
+  recipientEmail: string;
   /** Channel-namespaced details, e.g. `email_provider`, `email_template_id`. */
   channelProperties?: Record<string, unknown>;
 }): Promise<void> {
@@ -268,17 +277,14 @@ async function trackNotificationSent({
       return;
     }
 
-    const { data: team } = await supabaseClient
-      .from("teams")
-      .select("created_by")
-      .eq("id", notification.team_id)
+    const { data: recipientUser } = await supabaseClient
+      .from("users")
+      .select("id")
+      .eq("email", recipientEmail)
+      .limit(1)
       .maybeSingle();
 
-    const distinctId = team?.created_by;
-    if (!distinctId) {
-      // No owner to attribute to — skip rather than fabricate a person.
-      return;
-    }
+    const distinctId = recipientUser?.id ?? recipientEmail;
 
     const tracking = metadata.tracking ?? {};
     const periodStart = tracking.period_start ?? notification.created_at;
@@ -288,8 +294,12 @@ async function trackNotificationSent({
       event: "notification_sent",
       teamId: notification.team_id,
       properties: {
+        // Link the person to their email so an email-keyed recipient (no user
+        // row) is still identifiable, and a resolved user keeps it in sync.
+        $set: { email: recipientEmail },
         team_id: notification.team_id,
         channel,
+        recipient_is_user: Boolean(recipientUser),
         notification_id: notification.id,
         notification_type: notification.notification_type,
         notification_category: metadata.notification_category ?? null,
@@ -341,16 +351,18 @@ export const processTeamNotification = task({
             const result = await sendEmailNotification(payload);
             deliveryResults.push(result);
 
-            if (result.status === "sent") {
+            if (result.status === "sent" && result.email) {
               // Fire at the honest delivery moment, not when the email was
               // queued — so the event reflects a real send, not just an attempt.
-              // Channel + provider come from here (the dispatcher); the semantic
-              // intent comes from the notification metadata.
+              // Channel, provider, and the resolved recipient come from here (the
+              // dispatcher); the semantic intent comes from the notification
+              // metadata.
               const metadata =
                 (payload.meta_data as TeamNotificationMetadata) || {};
               await trackNotificationSent({
                 notification: payload,
                 channel: "email",
+                recipientEmail: result.email,
                 channelProperties: {
                   email_provider: "loops",
                   email_template_id:
