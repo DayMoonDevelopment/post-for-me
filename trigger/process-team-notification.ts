@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 
+import { captureServerEvent, deterministicUuid } from "./posthog";
 import { Database, Json } from "./supabase.types";
 
 type TeamNotification =
@@ -12,6 +13,19 @@ type LoopsMetadata = {
 };
 
 type TeamNotificationMetadata = {
+  // Stamped by the producing task (e.g. process-usage-limits) so the generic
+  // `notification_sent` analytics event can be fired on delivery without
+  // reverse-mapping the Loops template id. The channel + provider are added by
+  // this consumer. Absent for untracked notifications.
+  notification_category?: string;
+  notification_template?: string;
+  tracking?: {
+    usage_count?: number;
+    current_limit?: number;
+    plan_post_limit?: number | null;
+    suggested_plan_post_limit?: number | null;
+    period_start?: string;
+  };
   data?: {
     loops?: LoopsMetadata;
   };
@@ -219,6 +233,97 @@ async function sendEmailNotification(
   }
 }
 
+/**
+ * Fire `notification_sent` once a channel confirms delivery. One generic event
+ * spans every outbound notification: `channel`, `notification_category`,
+ * `notification_type`, and `notification_template` are top-level properties,
+ * while channel-specific details are namespaced by channel (`email_*` here) —
+ * so adding SMS/push later means a new `channel` value and a `sms_*`/`push_*`
+ * namespace, never a new event. `system_triggered: true` marks automation.
+ * Best-effort: never throws into the delivery path.
+ *
+ * Identity: the person is the **actual recipient**, resolved from the address we
+ * sent to. When that email belongs to a real user we attribute to their auth id
+ * so the event merges with their existing person profile (browser identify);
+ * otherwise we fall back to the email itself so an external billing contact is
+ * still captured rather than dropped or misattributed to the team owner. Either
+ * way the `team` group is attached — team-level reporting is group-aggregated
+ * regardless of which person received the message.
+ *
+ * Dedupe is team + channel + template + billing period + suggested tier, so a
+ * retried cron pass collapses while a genuine escalation to a higher tier (or a
+ * second channel) still counts.
+ */
+async function trackNotificationSent({
+  notification,
+  channel,
+  recipientEmail,
+  channelProperties,
+}: {
+  notification: TeamNotification;
+  channel: string;
+  /** The address the notification was actually delivered to. */
+  recipientEmail: string;
+  /** Channel-namespaced details, e.g. `email_provider`, `email_template_id`. */
+  channelProperties?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    const metadata = (notification.meta_data as TeamNotificationMetadata) || {};
+    const template = metadata.notification_template;
+
+    if (!template) {
+      // Only typed notifications (usage emails today) emit this event; skip
+      // anything untyped rather than firing an unattributable event.
+      return;
+    }
+
+    const { data: recipientUser } = await supabaseClient
+      .from("users")
+      .select("id")
+      .eq("email", recipientEmail)
+      .limit(1)
+      .maybeSingle();
+
+    const distinctId = recipientUser?.id ?? recipientEmail;
+
+    const tracking = metadata.tracking ?? {};
+    const periodStart = tracking.period_start ?? notification.created_at;
+
+    await captureServerEvent({
+      distinctId,
+      event: "notification_sent",
+      teamId: notification.team_id,
+      properties: {
+        // Link the person to their email so an email-keyed recipient (no user
+        // row) is still identifiable, and a resolved user keeps it in sync.
+        $set: { email: recipientEmail },
+        team_id: notification.team_id,
+        channel,
+        recipient_is_user: Boolean(recipientUser),
+        notification_id: notification.id,
+        notification_type: notification.notification_type,
+        notification_category: metadata.notification_category ?? null,
+        notification_template: template,
+        system_triggered: true,
+        usage_count: tracking.usage_count ?? null,
+        current_limit: tracking.current_limit ?? null,
+        plan_post_limit: tracking.plan_post_limit ?? null,
+        suggested_plan_post_limit: tracking.suggested_plan_post_limit ?? null,
+        ...channelProperties,
+      },
+      dedupeKey: deterministicUuid(
+        `notification_sent:${notification.team_id}:${channel}:${template}:${periodStart}:${tracking.suggested_plan_post_limit ?? ""}`,
+      ),
+    });
+  } catch (error) {
+    logger.error("Failed to track notification_sent", {
+      notificationId: notification.id,
+      teamId: notification.team_id,
+      error,
+    });
+  }
+}
+
 export const processTeamNotification = task({
   id: "process-team-notification",
   maxDuration: 300,
@@ -245,6 +350,26 @@ export const processTeamNotification = task({
           case "email": {
             const result = await sendEmailNotification(payload);
             deliveryResults.push(result);
+
+            if (result.status === "sent" && result.email) {
+              // Fire at the honest delivery moment, not when the email was
+              // queued — so the event reflects a real send, not just an attempt.
+              // Channel, provider, and the resolved recipient come from here (the
+              // dispatcher); the semantic intent comes from the notification
+              // metadata.
+              const metadata =
+                (payload.meta_data as TeamNotificationMetadata) || {};
+              await trackNotificationSent({
+                notification: payload,
+                channel: "email",
+                recipientEmail: result.email,
+                channelProperties: {
+                  email_provider: "loops",
+                  email_template_id:
+                    metadata.data?.loops?.transactional_id ?? null,
+                },
+              });
+            }
 
             logger.info("Completed delivery type", {
               notificationId: payload.id,
