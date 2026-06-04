@@ -25,6 +25,23 @@ import { BlueskyService } from '../bluesky/bluesky.service';
 import { differenceInDays } from 'date-fns';
 import { PlatformPostDto } from './dto/platform-post.dto';
 
+type TikTokPostResultCandidateSocialPost = {
+  external_id: string | null;
+  caption: string | null;
+};
+
+type TikTokPostResultCandidate = {
+  id: string;
+  post_id: string;
+  provider_post_id: string | null;
+  provider_post_url: string | null;
+  created_at: string;
+  social_posts:
+    | TikTokPostResultCandidateSocialPost
+    | TikTokPostResultCandidateSocialPost[]
+    | null;
+};
+
 @Injectable()
 export class SocialAccountFeedsService {
   platformsToAlwaysRefresh = ['youtube', 'bluesky'];
@@ -380,10 +397,11 @@ export class SocialAccountFeedsService {
     const minCreatedAt = new Date(Math.min(...postTimes) - bufferMs);
     const maxCreatedAt = new Date(Math.max(...postTimes) + bufferMs);
 
-    const { data: candidates, error } = await this.supabaseService.supabaseClient
-      .from('social_post_results')
-      .select(
-        `
+    const { data: candidateRows, error } =
+      await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .select(
+          `
           id,
           post_id,
           provider_post_id,
@@ -391,11 +409,11 @@ export class SocialAccountFeedsService {
           created_at,
           social_posts!inner(external_id, caption)
         `,
-      )
-      .eq('provider_connection_id', accountId)
-      .eq('success', true)
-      .gte('created_at', minCreatedAt.toISOString())
-      .lte('created_at', maxCreatedAt.toISOString());
+        )
+        .eq('provider_connection_id', accountId)
+        .eq('success', true)
+        .gte('created_at', minCreatedAt.toISOString())
+        .lte('created_at', maxCreatedAt.toISOString());
 
     if (error) {
       console.error('Unable to fetch TikTok post result candidates', error);
@@ -403,6 +421,8 @@ export class SocialAccountFeedsService {
     }
 
     const matchedResultIds = new Set<string>();
+    const candidates = (candidateRows ??
+      []) as unknown as TikTokPostResultCandidate[];
 
     for (const post of unmatchedPosts) {
       if (!post.posted_at) continue;
@@ -410,7 +430,7 @@ export class SocialAccountFeedsService {
       const postTime = new Date(post.posted_at).getTime();
       const normalizedCaption = this.normalizeCaption(post.caption);
 
-      const candidate = candidates?.find((result) => {
+      const candidate = candidates.find((result) => {
         if (matchedResultIds.has(result.id)) return false;
         if (result.provider_post_id === post.id) return false;
 
