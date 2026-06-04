@@ -228,24 +228,20 @@ export class InstagramPostClient extends PostClient {
             throw error;
           }
 
-          if (error.response?.status === 400) {
-            console.log(
-              `Bad Request With Error: ${error.response?.data?.error?.message}`,
-            );
-            console.log("Waiting 5 secs");
-            const waited = await this.#waitWithTaskBudget({
-              delayMs: 5000,
-              operation: "retrying Instagram media publish",
-            });
+          console.log(
+            `Status: ${error.response?.status} Error: ${error.response?.data?.error?.message}`,
+          );
+          console.log("Waiting 5 secs");
+          const waited = await this.#waitWithTaskBudget({
+            delayMs: 5000,
+            operation: "retrying Instagram media publish",
+          });
 
-            if (!waited) {
-              break;
-            }
-
-            continue;
+          if (!waited) {
+            break;
           }
 
-          throw error;
+          continue;
         } finally {
           publishAttempts++;
         }

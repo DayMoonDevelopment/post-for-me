@@ -429,25 +429,12 @@ export class YouTubePostClient extends PostClient {
 
           const chunkBuf = Buffer.from(await fileRes.arrayBuffer());
           const actualChunkLen = chunkBuf.length;
-          const isFinalChunk = endExclusive === fileSize;
 
-          // Guard: intermediate chunks must be exactly the declared size.
-          // A short read here means the storage layer closed the connection early;
-          // throw so the outer retry loop can re-fetch from the correct offset.
-          if (!isFinalChunk && actualChunkLen !== chunkLen) {
+          // Every ranged read must match the declared range. A short read would
+          // make YouTube treat the request as a non-final undersized chunk.
+          if (actualChunkLen !== chunkLen) {
             throw new Error(
-              `Storage returned ${actualChunkLen} bytes but expected ${chunkLen} bytes for range ${range} (non-final chunk); video would be truncated`,
-            );
-          }
-
-          // For the final chunk the actual length may legitimately be <= chunkLen,
-          // but it must still be positive and must not exceed the declared size.
-          if (
-            isFinalChunk &&
-            (actualChunkLen <= 0 || actualChunkLen > chunkLen)
-          ) {
-            throw new Error(
-              `Storage returned unexpected ${actualChunkLen} bytes for final chunk (expected 1–${chunkLen} bytes)`,
+              `Storage returned ${actualChunkLen} bytes but expected ${chunkLen} bytes for range ${range}; video would be truncated`,
             );
           }
 
