@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 
@@ -6,20 +7,22 @@ import { useForm as useFormFetcher } from "~/hooks/use-form";
 import { Button } from "~/ui/button";
 import { Input } from "~/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "~/ui/form";
-import { useEffect } from "react";
 
 interface AccountFormData {
   firstName: string;
   lastName: string;
+  newEmail: string;
 }
 
 export function AccountForm() {
   const { fetcher, isSubmitting, data } = useFormFetcher({ withToast: true });
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
 
   const form = useForm<AccountFormData>({
     defaultValues: {
       firstName: "",
       lastName: "",
+      newEmail: "",
     },
   });
 
@@ -31,10 +34,20 @@ export function AccountForm() {
       return;
     }
 
+    const newEmail = formData.newEmail.trim();
+
+    if (isChangingEmail && !newEmail) {
+      toast.error("Missing Information", {
+        description: "Please enter a new email address.",
+      });
+      return;
+    }
+
     fetcher.submit(
       {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
+        ...(isChangingEmail ? { newEmail } : {}),
       },
       {
         method: "POST",
@@ -52,7 +65,10 @@ export function AccountForm() {
       form.reset({
         firstName: data.user.firstName || "",
         lastName: data.user.lastName || "",
+        newEmail: "",
       });
+
+      setIsChangingEmail(false);
     }
   }, [data]);
 
@@ -64,14 +80,47 @@ export function AccountForm() {
       >
         <FormItem>
           <FormLabel htmlFor="email">Email</FormLabel>
-          <Input
-            id="email"
-            type="email"
-            value={`${data?.user?.email}`}
-            readOnly
-            className="bg-muted"
-          />
+          <div className="flex gap-2">
+            <Input
+              id="email"
+              type="email"
+              value={data?.user?.email || ""}
+              readOnly
+              className="bg-muted"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => {
+                setIsChangingEmail((value) => !value);
+                form.setValue("newEmail", "");
+              }}
+            >
+              {isChangingEmail ? "Cancel" : "Change"}
+            </Button>
+          </div>
         </FormItem>
+
+        {isChangingEmail ? (
+          <FormField
+            control={form.control}
+            name="newEmail"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>New Email</FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    placeholder="Enter your new email"
+                    disabled={isSubmitting}
+                    {...field}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        ) : null}
 
         <FormField
           control={form.control}
