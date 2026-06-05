@@ -53,6 +53,7 @@
     "loops": "^5.0.1",
     "lucide-react": "^0.522.0",
     "posthog-js": "^1.255.1",
+    "posthog-node": "^5.35.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.57.0",

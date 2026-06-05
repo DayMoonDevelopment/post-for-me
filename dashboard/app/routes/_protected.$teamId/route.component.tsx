@@ -3,6 +3,7 @@ import { Link, Outlet, useLoaderData, useParams } from "react-router";
 import { TriangleExclamationIcon } from "~/components/icons";
 
 import { OnboardingProvider } from "~/components/onboarding-provider";
+import { PostHogIdentifier } from "~/tracking/posthog-identifier";
 
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
 import { SidebarInset, SidebarProvider } from "~/ui/sidebar";
@@ -19,6 +20,7 @@ export function Component() {
 
   return (
     <OnboardingProvider>
+      <PostHogIdentifier />
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>

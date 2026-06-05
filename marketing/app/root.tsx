@@ -9,7 +9,9 @@ import {
 } from "react-router";
 
 import "./app.css";
-import { PostHogProvider } from "./providers/posthog-provider";
+import { AttributionCapture } from "./tracking/attribution-capture";
+import { Pixels } from "./tracking/pixels";
+import { PostHogProvider } from "./tracking/posthog-provider";
 
 import type { Route } from "./+types/root";
 
@@ -51,6 +53,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const data = useLoaderData<typeof loader>();
 
   const crispWebsiteId = data?.crispWebsiteId;
+  const googleAdsTagId = data?.googleAdsTagId;
+  const metaPixelId = data?.metaPixelId;
 
   return (
     <html lang="en">
@@ -59,6 +63,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <Pixels googleAdsTagId={googleAdsTagId} metaPixelId={metaPixelId} />
         {crispWebsiteId ? (
           <script
             type="text/javascript"
@@ -82,6 +87,8 @@ export const loader = async () => {
     postHogApiKey: process.env.POST_HOG_API_KEY,
     postHogApiHost: process.env.POST_HOG_API_HOST,
     crispWebsiteId: process.env.CRISP_WEBSITE_ID,
+    googleAdsTagId: process.env.GOOGLE_ADS_TAG_ID,
+    metaPixelId: process.env.META_PIXEL_ID,
   };
 };
 
@@ -90,6 +97,7 @@ export default function App() {
 
   return (
     <PostHogProvider apiKey={postHogApiKey} apiHost={postHogApiHost}>
+      <AttributionCapture />
       <Outlet />
     </PostHogProvider>
   );

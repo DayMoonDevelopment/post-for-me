@@ -300,16 +300,77 @@ export class TwitterConfigurationDto extends BaseConfigurationDto {
   reply_settings?: string;
 }
 
+export class YoutubeLocalizationDto {
+  @ApiProperty({
+    description: 'Localized title for the video',
+    required: false,
+    nullable: true,
+  })
+  title?: string;
+
+  @ApiProperty({
+    description: 'Localized description for the video',
+    required: false,
+    nullable: true,
+  })
+  description?: string;
+}
+
 export class YoutubeConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
-    description: 'Overrides the `title` from the post',
+    description: 'Overrides the `title` from the post (maps to snippet.title)',
     nullable: true,
     required: false,
   })
   title?: string;
 
   @ApiProperty({
-    description: 'Sets the privacy status of the video, will default to public',
+    description:
+      'Description for the YouTube video (maps to snippet.description). Falls back to the post caption when not provided.',
+    nullable: true,
+    required: false,
+  })
+  description?: string;
+
+  @ApiProperty({
+    description: 'YouTube video tags (maps to snippet.tags)',
+    type: Array,
+    items: { type: 'string' },
+    nullable: true,
+    required: false,
+  })
+  tags?: string[];
+
+  @ApiProperty({
+    description:
+      'YouTube video category id (maps to snippet.categoryId; see YouTube Data API videoCategories.list)',
+    nullable: true,
+    required: false,
+  })
+  category_id?: string;
+
+  @ApiProperty({
+    description:
+      'Default language of the video (BCP-47 language tag, e.g. "en"). Maps to snippet.defaultLanguage.',
+    nullable: true,
+    required: false,
+  })
+  default_language?: string;
+
+  @ApiProperty({
+    description:
+      'Per-language localizations for the video title and description. Keys are BCP-47 language tags (e.g. "fr", "es"). Maps to localizations on the YouTube Data API videos resource.',
+    type: 'object',
+    additionalProperties: {
+      $ref: '#/components/schemas/YoutubeLocalizationDto',
+    },
+    nullable: true,
+  })
+  localizations?: Record<string, YoutubeLocalizationDto>;
+
+  @ApiProperty({
+    description:
+      'Sets the privacy status of the video (maps to status.privacyStatus), will default to public',
     nullable: true,
     required: false,
     enum: ['public', 'private', 'unlisted'],
@@ -319,12 +380,64 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
   @ApiProperty({
     description:
-      'If true will notify YouTube the video is intended for kids, defaults to false',
+      'If true the video can be embedded on other websites (maps to status.embeddable). Defaults to true.',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  embeddable?: boolean;
+
+  @ApiProperty({
+    description:
+      'The video\'s license (maps to status.license). "youtube" is the standard YouTube license; "creativeCommon" is Creative Commons.',
+    nullable: true,
+    required: false,
+    enum: ['youtube', 'creativeCommon'],
+    default: 'youtube',
+  })
+  license?: string;
+
+  @ApiProperty({
+    description:
+      'If true, the extended video statistics are publicly viewable (maps to status.publicStatsViewable). Defaults to true.',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  public_stats_viewable?: boolean;
+
+  @ApiProperty({
+    description:
+      'ISO 8601 datetime at which the video should be published. Only honoured when privacy_status is "private" (maps to status.publishAt).',
+    nullable: true,
+    required: false,
+  })
+  publish_at?: string;
+
+  @ApiProperty({
+    description:
+      'If true will notify YouTube the video is intended for kids (maps to status.selfDeclaredMadeForKids), defaults to false',
     nullable: true,
     required: false,
     default: false,
   })
   made_for_kids?: boolean;
+
+  @ApiProperty({
+    description:
+      'If true, marks the video as containing altered or synthetic content per YouTube\'s disclosure policy (maps to status.containsSyntheticMedia). YouTube adds a "How this content was made" label to the description automatically.',
+    nullable: true,
+    required: false,
+  })
+  contains_synthetic_media?: boolean;
+
+  @ApiProperty({
+    description:
+      'ISO 8601 date (YYYY-MM-DD) or datetime when the video was recorded (maps to recordingDetails.recordingDate).',
+    nullable: true,
+    required: false,
+  })
+  recording_date?: string;
 }
 
 export class FacebookConfigurationDto extends BaseConfigurationDto {
@@ -527,6 +640,94 @@ export class AccountConfigurationDetailsDto {
     default: false,
   })
   made_for_kids?: boolean;
+
+  @ApiProperty({
+    description:
+      'If true, marks the YouTube video as containing altered or synthetic content per YouTube\'s disclosure policy. Sets status.containsSyntheticMedia on the videos.insert call; YouTube adds a "How this content was made" label to the description automatically.',
+    nullable: true,
+    required: false,
+  })
+  contains_synthetic_media?: boolean;
+
+  @ApiProperty({
+    description: 'YouTube video tags',
+    type: Array,
+    items: { type: 'string' },
+    nullable: true,
+    required: false,
+  })
+  tags?: string[];
+
+  @ApiProperty({
+    description:
+      'YouTube video category id (maps to snippet.categoryId; see YouTube Data API videoCategories.list)',
+    nullable: true,
+    required: false,
+  })
+  category_id?: string;
+
+  @ApiProperty({
+    description:
+      'Default language of the video (BCP-47 language tag, e.g. "en"). Maps to snippet.defaultLanguage.',
+    nullable: true,
+    required: false,
+  })
+  default_language?: string;
+
+  @ApiProperty({
+    description:
+      'Per-language localizations for the video title and description. Keys are BCP-47 language tags (e.g. "fr", "es"). Maps to localizations on the YouTube Data API videos resource.',
+    type: 'object',
+    additionalProperties: {
+      $ref: '#/components/schemas/YoutubeLocalizationDto',
+    },
+    nullable: true,
+  })
+  localizations?: Record<string, YoutubeLocalizationDto>;
+
+  @ApiProperty({
+    description:
+      'If true the video can be embedded on other websites (maps to status.embeddable). Defaults to true.',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  embeddable?: boolean;
+
+  @ApiProperty({
+    description:
+      'The video\'s license (maps to status.license). "youtube" is the standard YouTube license; "creativeCommon" is Creative Commons.',
+    nullable: true,
+    required: false,
+    enum: ['youtube', 'creativeCommon'],
+    default: 'youtube',
+  })
+  license?: string;
+
+  @ApiProperty({
+    description:
+      'If true, the extended video statistics are publicly viewable (maps to status.publicStatsViewable). Defaults to true.',
+    nullable: true,
+    required: false,
+    default: true,
+  })
+  public_stats_viewable?: boolean;
+
+  @ApiProperty({
+    description:
+      'ISO 8601 datetime at which the video should be published. Only honoured when privacy_status is "private" (maps to status.publishAt).',
+    nullable: true,
+    required: false,
+  })
+  publish_at?: string;
+
+  @ApiProperty({
+    description:
+      'ISO 8601 date (YYYY-MM-DD) or datetime when the video was recorded (maps to recordingDetails.recordingDate).',
+    nullable: true,
+    required: false,
+  })
+  recording_date?: string;
 
   @ApiProperty({
     description: 'Allow comments on TikTok',
