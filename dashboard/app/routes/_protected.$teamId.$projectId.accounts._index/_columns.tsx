@@ -162,6 +162,7 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
       const params = useParams();
 
       const isSubmitting = fetcher.state === "submitting";
+      const isConnected = connection.status === "connected";
 
       const handleDisconnectConnection = () => {
         navigate("disconnect", {
@@ -211,9 +212,11 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
             >
               View Account Feed
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleDisconnectConnection}>
-              <span className="text-red-600">Disconnect Account</span>
-            </DropdownMenuItem>
+            {isConnected ? (
+              <DropdownMenuItem onClick={handleDisconnectConnection}>
+                <span className="text-red-600">Disconnect Account</span>
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={handleDeleteConnection}>
               <span className="text-red-600">Delete Account</span>
             </DropdownMenuItem>
