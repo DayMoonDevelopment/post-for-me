@@ -8,6 +8,7 @@ import {
   Post,
   Body,
   Patch,
+  Delete,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -41,6 +42,7 @@ import { CreateSocialAccountDto } from './dto/create-social-account.dto';
 import { tasks } from '@trigger.dev/sdk';
 import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
 import { SupabaseService } from '../supabase/supabase.service';
+import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
@@ -369,6 +371,65 @@ export class SocialAccountsController {
       };
     } catch (error) {
       console.error(`Error disconnecting social account ${id}:`, error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        {
+          cause: error,
+        },
+      );
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Delete a social account',
+    description:
+      'Permanently deletes a social account. This will remove historical data, so post history for this account will be lost. To preserve historical data, use the Disconnect endpoint instead.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Social account deleted successfully.',
+    type: DeleteEntityResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Social account not found.' })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error when deleting the social account.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Social Account ID',
+    type: String,
+    required: true,
+  })
+  @Delete(':id')
+  async deleteSocialAccount(
+    @Param('id') id: string,
+    @User() user: RequestUser,
+  ): Promise<DeleteEntityResponseDto> {
+    try {
+      const account = await this.socialAccountsService.getSocialAccountById({
+        id,
+        projectId: user.projectId,
+      });
+
+      if (!account) {
+        throw new HttpException(
+          'Social account not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      return this.socialAccountsService.deleteSocialAccount({
+        id,
+        projectId: user.projectId,
+      });
+    } catch (error) {
+      console.error(`Error deleting social account ${id}:`, error);
       if (error instanceof HttpException) {
         throw error;
       }
