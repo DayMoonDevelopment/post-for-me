@@ -18,7 +18,13 @@ export function PostHogProvider({
       posthog.init(apiKey, {
         api_host: apiHost,
         defaults: "2025-05-24",
-        person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
+        // 'always' so anonymous visitors get a person profile and PostHog latches
+        // first-touch attribution ($initial_gclid/$initial_utm_*/$gclid etc.) at
+        // landing. Combined with cross_subdomain_cookie below, that attribution
+        // merges onto the user at identify() — which is what the Google/Meta Ads
+        // destinations read. 'identified_only' skips person props on anonymous
+        // events, so the click ID never latches and conversions go unattributed.
+        person_profiles: "always",
         // Share the anonymous distinct_id across *.postforme.dev so a visitor's
         // marketing-site activity stitches to their dashboard user on identify().
         cross_subdomain_cookie: true,
