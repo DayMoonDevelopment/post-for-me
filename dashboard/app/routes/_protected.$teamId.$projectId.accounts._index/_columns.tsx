@@ -175,6 +175,18 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
         });
       };
 
+      const handleDeleteConnection = () => {
+        navigate("delete", {
+          state: {
+            connection: {
+              id: connection.id,
+              provider: connection.provider,
+              social_provider_user_name: connection.social_provider_user_name,
+            },
+          },
+        });
+      };
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -201,6 +213,9 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleDisconnectConnection}>
               <span className="text-red-600">Disconnect Account</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleDeleteConnection}>
+              <span className="text-red-600">Delete Account</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
