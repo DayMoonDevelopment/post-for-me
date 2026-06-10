@@ -482,7 +482,7 @@ export class LinkedinConfigurationDto extends BaseConfigurationDto {
     nullable: true,
     required: false,
   })
-  reshare_ugc_post_id?: string;
+  reshare_post_id?: string;
 }
 
 export class BlueskyConfigurationDto extends BaseConfigurationDto {}
@@ -890,7 +890,7 @@ export class AccountConfigurationDetailsDto {
     nullable: true,
     required: false,
   })
-  reshare_ugc_post_id?: string;
+  reshare_post_id?: string;
 }
 
 export class AccountConfigurationDto {

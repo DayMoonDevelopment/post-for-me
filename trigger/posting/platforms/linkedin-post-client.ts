@@ -1,8 +1,3 @@
- 
- 
- 
- 
- 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
 import {
@@ -101,9 +96,9 @@ export class LinkedInPostClient extends PostClient {
         },
       };
 
-      if (platformConfig?.reshare_ugc_post_id) {
+      if (platformConfig?.reshare_post_id) {
         postBody.responseContext = {
-          parent: this.#toUgcPostUrn(platformConfig.reshare_ugc_post_id),
+          parent: this.#toUgcPostUrn(platformConfig.reshare_post_id),
         };
         postBody.specificContent["com.linkedin.ugc.ShareContent"] = {
           ...postBody.specificContent["com.linkedin.ugc.ShareContent"],
@@ -119,8 +114,9 @@ export class LinkedInPostClient extends PostClient {
           account,
         });
 
-        postBody.specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory =
-          mediaCategory;
+        postBody.specificContent[
+          "com.linkedin.ugc.ShareContent"
+        ].shareMediaCategory = mediaCategory;
 
         if (uploadedMedia.length > 0) {
           postBody.specificContent["com.linkedin.ugc.ShareContent"].media =
