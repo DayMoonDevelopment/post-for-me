@@ -1,7 +1,7 @@
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { wait } from "@trigger.dev/sdk";
+import { logger, wait } from "@trigger.dev/sdk";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -371,6 +371,12 @@ export class YouTubePostClient extends PostClient {
     const part = encodeURIComponent(videoRequest.part.join(","));
     const url = `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=${part}`;
 
+    logger.info("Starting YouTube resumable upload session", {
+      fileSize,
+      mimeType,
+      part: videoRequest.part,
+    });
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -395,6 +401,12 @@ export class YouTubePostClient extends PostClient {
         status: res.status,
         location,
       },
+    });
+
+    logger.info("Started YouTube resumable upload session", {
+      status: res.status,
+      fileSize,
+      mimeType,
     });
 
     return location;
@@ -424,6 +436,14 @@ export class YouTubePostClient extends PostClient {
       try {
         await fs.unlink(tempPath).catch(() => undefined);
 
+        logger.info("Downloading YouTube media to temp file", {
+          attempt,
+          maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
+          expectedFileSize,
+          mediaId,
+          tempPath,
+        });
+
         const res = await fetch(fileUrl);
         if (!res.ok) {
           const bodyText = await this.#safeReadText(res);
@@ -442,10 +462,25 @@ export class YouTubePostClient extends PostClient {
 
         const stat = await fs.stat(tempPath);
         if (stat.size !== expectedFileSize) {
+          logger.warn("Staged YouTube media size mismatch", {
+            attempt,
+            expectedFileSize,
+            actualFileSize: stat.size,
+            mediaId,
+            tempPath,
+          });
           throw new Error(
             `Staged YouTube media size mismatch: wrote ${stat.size} bytes but expected ${expectedFileSize}`,
           );
         }
+
+        logger.info("Downloaded YouTube media to temp file", {
+          attempt,
+          size: stat.size,
+          expectedFileSize,
+          mediaId,
+          tempPath,
+        });
 
         this.#responses.push({
           mediaStagedForYoutube: {
@@ -476,6 +511,14 @@ export class YouTubePostClient extends PostClient {
             waitMs,
           },
         });
+        logger.warn("Retrying YouTube media temp-file download", {
+          attempt,
+          maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
+          expectedFileSize,
+          mediaId,
+          error: String(err),
+          waitMs,
+        });
         await this.#sleep(waitMs);
       }
     }
@@ -505,6 +548,13 @@ export class YouTubePostClient extends PostClient {
       );
     }
 
+    logger.info("Uploading staged media to YouTube", {
+      fileSize,
+      stagedFileSize: stagedStat.size,
+      chunkSizeBytes,
+      filePath,
+    });
+
     let nextStart = 0;
     let lastErr: unknown;
     const fileHandle = await fs.open(filePath, "r");
@@ -522,6 +572,14 @@ export class YouTubePostClient extends PostClient {
             const endExclusive = Math.min(nextStart + chunkSizeBytes, fileSize);
             const endInclusive = endExclusive - 1;
             const chunkLen = endExclusive - nextStart;
+            logger.info("Uploading YouTube resumable chunk", {
+              attempt,
+              nextStart,
+              endInclusive,
+              chunkLen,
+              fileSize,
+            });
+
             const chunkBuf = Buffer.allocUnsafe(chunkLen);
             const { bytesRead } = await fileHandle.read(
               chunkBuf,
@@ -580,6 +638,15 @@ export class YouTubePostClient extends PostClient {
                 },
               });
 
+              logger.info("Uploaded YouTube resumable chunk", {
+                attempt,
+                status: res.status,
+                contentRange,
+                receivedRange: range || null,
+                nextStart,
+                fileSize,
+              });
+
               continue;
             }
 
@@ -601,6 +668,14 @@ export class YouTubePostClient extends PostClient {
                   videoId: data?.id,
                   bytesConfirmed,
                 },
+              });
+              logger.info("Completed YouTube resumable upload", {
+                attempt,
+                status: res.status,
+                contentRange,
+                videoId: data?.id,
+                bytesConfirmed,
+                fileSize,
               });
               return data;
             }
@@ -644,6 +719,14 @@ export class YouTubePostClient extends PostClient {
               error: String(err),
               waitMs,
             },
+          });
+          logger.warn("Retrying YouTube resumable upload", {
+            attempt,
+            maxAttempts: YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS,
+            nextStart,
+            resumeFrom,
+            error: String(err),
+            waitMs,
           });
           await this.#sleep(waitMs);
         }
