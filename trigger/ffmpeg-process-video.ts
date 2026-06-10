@@ -99,6 +99,17 @@ const getProcessedFileKey = (key: string): string => {
   return dirname === "." ? processedBasename : `${dirname}/${processedBasename}`;
 };
 
+type ProcessPostVideoMedium = {
+  id: string;
+  provider?: string | null;
+  provider_connection_id?: string | null;
+  url: string;
+  thumbnail_url: string;
+  thumbnail_timestamp_ms?: number | null;
+  type: string;
+  skip_processing?: boolean | null;
+};
+
 export const ffmpegProcessVideo = task({
   id: "ffmpeg-process-video",
   maxDuration: 800,
@@ -110,15 +121,11 @@ export const ffmpegProcessVideo = task({
   },
   machine: "medium-2x",
   run: async ({
-    medium: { id, url },
+    medium,
   }: {
-    medium: { id: string; url: string };
-  }): Promise<{
-    id: string;
-    url: string;
-    key: string;
-    processed: boolean;
-  }> => {
+    medium: ProcessPostVideoMedium;
+  }): Promise<ProcessPostVideoMedium> => {
+    const { url } = medium;
     logger.info("Starting video processing", { url });
     const tempDir = os.tmpdir();
     const bucket = "post-media";
@@ -272,7 +279,7 @@ export const ffmpegProcessVideo = task({
         hasValidAudio
       ) {
         logger.info("video already meets requirements, skipping processing");
-        return { id, url, key, processed: false };
+        return medium;
       }
 
       if (needsProcessingForBitrate) {
@@ -420,7 +427,7 @@ export const ffmpegProcessVideo = task({
         bucket,
         processed: true,
       });
-      return { id, url: processedUrl, key: processedKey, processed: true };
+      return { ...medium, url: processedUrl };
     } catch (e) {
       logger.error("Error processing video", { error: e });
       throw e;
