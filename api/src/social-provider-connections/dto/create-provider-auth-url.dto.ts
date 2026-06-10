@@ -91,6 +91,17 @@ export class YouTubeProviderData {
   permission_overrides?: string[];
 }
 
+export class GoogleBusinessProfileProviderData {
+  @ApiProperty({
+    description:
+      'Override the default permissions/scopes requested during OAuth. Default scopes: https://www.googleapis.com/auth/business.manage',
+    required: false,
+    type: [String],
+    isArray: true,
+  })
+  permission_overrides?: string[];
+}
+
 export class PinterestProviderData {
   @ApiProperty({
     description:
@@ -162,6 +173,14 @@ export class AuthUrlProviderData {
     type: YouTubeProviderData,
   })
   youtube?: YouTubeProviderData;
+
+  @ApiProperty({
+    description:
+      'Additional data for connecting Google Business Profile accounts',
+    required: false,
+    type: GoogleBusinessProfileProviderData,
+  })
+  google_business_profile?: GoogleBusinessProfileProviderData;
 
   @ApiProperty({
     description: 'Additional data for connecting Pinterest accounts',

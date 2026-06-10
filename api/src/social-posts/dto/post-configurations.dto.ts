@@ -11,7 +11,8 @@ export type PlatformConfiguration =
   | LinkedinConfigurationDto
   | BlueskyConfigurationDto
   | ThreadsConfigurationDto
-  | TiktokBusinessConfigurationDto;
+  | TiktokBusinessConfigurationDto
+  | GoogleBusinessProfileConfigurationDto;
 
 export class TwitterPollDto {
   @ApiProperty({
@@ -489,6 +490,170 @@ export class ThreadsConfigurationDto extends BaseConfigurationDto {
   placement?: string;
 }
 
+export class GoogleBusinessProfileCallToActionDto {
+  @ApiProperty({
+    description: 'The type of call-to-action button on the post',
+    enum: ['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP', 'CALL'],
+    nullable: true,
+    required: false,
+  })
+  action_type?: 'BOOK' | 'ORDER' | 'SHOP' | 'LEARN_MORE' | 'SIGN_UP' | 'CALL';
+
+  @ApiProperty({
+    description:
+      'URL the user is directed to when clicking the call-to-action button. Leave unset for CALL action type.',
+    nullable: true,
+    required: false,
+  })
+  url?: string;
+}
+
+export class GoogleBusinessProfileDateDto {
+  @ApiProperty({ description: 'Year of the date' })
+  year: number;
+
+  @ApiProperty({ description: 'Month of the date, from 1 to 12' })
+  month: number;
+
+  @ApiProperty({ description: 'Day of the month, from 1 to 31' })
+  day: number;
+}
+
+export class GoogleBusinessProfileTimeDto {
+  @ApiProperty({ description: 'Hour of the day, from 0 to 23' })
+  hours: number;
+
+  @ApiProperty({ description: 'Minute of the hour, from 0 to 59' })
+  minutes: number;
+
+  @ApiProperty({ description: 'Second of the minute, from 0 to 59' })
+  seconds: number;
+
+  @ApiProperty({ description: 'Nanosecond fraction of the second' })
+  nanos: number;
+}
+
+export class GoogleBusinessProfileEventScheduleDto {
+  @ApiProperty({
+    description: 'Start date of the event (year, month, day)',
+    type: GoogleBusinessProfileDateDto,
+    nullable: true,
+    required: false,
+  })
+  start_date?: GoogleBusinessProfileDateDto;
+
+  @ApiProperty({
+    description: 'Start time of the event (hours, minutes, seconds, nanos)',
+    type: GoogleBusinessProfileTimeDto,
+    nullable: true,
+    required: false,
+  })
+  start_time?: GoogleBusinessProfileTimeDto;
+
+  @ApiProperty({
+    description: 'End date of the event (year, month, day)',
+    type: GoogleBusinessProfileDateDto,
+    nullable: true,
+    required: false,
+  })
+  end_date?: GoogleBusinessProfileDateDto;
+
+  @ApiProperty({
+    description: 'End time of the event (hours, minutes, seconds, nanos)',
+    type: GoogleBusinessProfileTimeDto,
+    nullable: true,
+    required: false,
+  })
+  end_time?: GoogleBusinessProfileTimeDto;
+}
+
+export class GoogleBusinessProfileEventDto {
+  @ApiProperty({
+    description: 'Title of the event',
+    nullable: true,
+    required: false,
+  })
+  title?: string;
+
+  @ApiProperty({
+    description: 'Start and end date/time of the event',
+    type: GoogleBusinessProfileEventScheduleDto,
+    nullable: true,
+    required: false,
+  })
+  schedule?: GoogleBusinessProfileEventScheduleDto;
+}
+
+export class GoogleBusinessProfileOfferDto {
+  @ApiProperty({
+    description: 'Coupon code usable in-store or online',
+    nullable: true,
+    required: false,
+  })
+  coupon_code?: string;
+
+  @ApiProperty({
+    description: 'URL where users can redeem the offer online',
+    nullable: true,
+    required: false,
+  })
+  redeem_online_url?: string;
+
+  @ApiProperty({
+    description: 'Terms and conditions for the offer',
+    nullable: true,
+    required: false,
+  })
+  terms_conditions?: string;
+}
+
+export class GoogleBusinessProfileConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description:
+      'The topic type of the post. STANDARD for basic updates, EVENT for time-bound events, OFFER for promotions, ALERT for urgent announcements.',
+    enum: ['STANDARD', 'EVENT', 'OFFER', 'ALERT'],
+    nullable: true,
+    required: false,
+    default: 'STANDARD',
+  })
+  topic_type?: 'STANDARD' | 'EVENT' | 'OFFER' | 'ALERT';
+
+  @ApiProperty({
+    description:
+      'Call-to-action button to attach to the post. Not applicable for OFFER topic type.',
+    type: GoogleBusinessProfileCallToActionDto,
+    nullable: true,
+    required: false,
+  })
+  call_to_action?: GoogleBusinessProfileCallToActionDto;
+
+  @ApiProperty({
+    description:
+      'Event details. Required when topic_type is EVENT or OFFER. Defaults will be applied if omitted.',
+    type: GoogleBusinessProfileEventDto,
+    nullable: true,
+    required: false,
+  })
+  event?: GoogleBusinessProfileEventDto;
+
+  @ApiProperty({
+    description:
+      'Offer-specific details such as coupon codes and redemption links. Only used when topic_type is OFFER.',
+    type: GoogleBusinessProfileOfferDto,
+    nullable: true,
+    required: false,
+  })
+  offer?: GoogleBusinessProfileOfferDto;
+
+  @ApiProperty({
+    description: 'BCP-47 language code for the post (e.g. "en", "fr")',
+    nullable: true,
+    required: false,
+    default: 'en',
+  })
+  language_code?: string;
+}
+
 // DTO's
 export class PlatformConfigurationsDto {
   @ApiProperty({
@@ -570,6 +735,14 @@ export class PlatformConfigurationsDto {
     nullable: true,
   })
   tiktok_business?: TiktokBusinessConfigurationDto;
+
+  @ApiProperty({
+    description: 'Google Business Profile configuration',
+    type: GoogleBusinessProfileConfigurationDto,
+    required: false,
+    nullable: true,
+  })
+  google_business_profile?: GoogleBusinessProfileConfigurationDto;
 }
 //
 
@@ -875,6 +1048,52 @@ export class AccountConfigurationDetailsDto {
     default: true,
   })
   set_caption_for_each_image?: boolean;
+
+  @ApiProperty({
+    description:
+      'Google Business Profile post topic type (STANDARD, EVENT, OFFER, or ALERT)',
+    enum: ['STANDARD', 'EVENT', 'OFFER', 'ALERT'],
+    nullable: true,
+    required: false,
+    default: 'STANDARD',
+  })
+  topic_type?: 'STANDARD' | 'EVENT' | 'OFFER' | 'ALERT';
+
+  @ApiProperty({
+    description:
+      'Google Business Profile call-to-action button. Not applicable for OFFER posts.',
+    type: GoogleBusinessProfileCallToActionDto,
+    nullable: true,
+    required: false,
+  })
+  call_to_action?: GoogleBusinessProfileCallToActionDto;
+
+  @ApiProperty({
+    description:
+      'Google Business Profile event details. Required when topic_type is EVENT or OFFER.',
+    type: GoogleBusinessProfileEventDto,
+    nullable: true,
+    required: false,
+  })
+  gmb_event?: GoogleBusinessProfileEventDto;
+
+  @ApiProperty({
+    description:
+      'Google Business Profile offer details (coupon code, redemption URL, terms). Only used when topic_type is OFFER.',
+    type: GoogleBusinessProfileOfferDto,
+    nullable: true,
+    required: false,
+  })
+  gmb_offer?: GoogleBusinessProfileOfferDto;
+
+  @ApiProperty({
+    description:
+      'BCP-47 language code for the Google Business Profile post (e.g. "en", "fr")',
+    nullable: true,
+    required: false,
+    default: 'en',
+  })
+  language_code?: string;
 }
 
 export class AccountConfigurationDto {

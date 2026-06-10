@@ -6,6 +6,7 @@ import {
   PinterestIcon,
   LinkedInIcon,
   BlueskyIcon,
+  GoogleIcon,
   ThreadsIcon,
 } from "~/components/icons";
 
@@ -29,6 +30,7 @@ const icons: Record<string, React.FC<{ className?: string }>> = {
   bluesky: BlueskyIcon,
   threads: ThreadsIcon,
   tiktok_business: TikTokIcon,
+  google_business_profile: GoogleIcon,
 };
 
 export function ProviderIcon({ provider, className }: ProviderIconProps) {
