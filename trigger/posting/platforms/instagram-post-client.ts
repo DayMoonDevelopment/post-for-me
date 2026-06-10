@@ -844,22 +844,8 @@ export class InstagramPostClient extends PostClient {
         }
 
         const permalink = mediaResponse.data.permalink as string | undefined;
-        const actualMediaType = mediaResponse.data.media_type as
-          | string
-          | undefined;
-
         if (!permalink) {
           throw new Error("Permalink missing from media response");
-        }
-
-        if (actualMediaType === "VIDEO" || actualMediaType === "REELS") {
-          // Extract the shortcode from the permalink
-          const shortcode = permalink.split("/").filter(Boolean).pop();
-          if (!shortcode) {
-            throw new Error("Unable to derive Instagram reel shortcode");
-          }
-
-          return `https://www.instagram.com/reel/${shortcode}/`;
         }
 
         return permalink;

@@ -194,6 +194,7 @@ export interface FacebookConfiguration {
 export interface LinkedinConfiguration {
   caption?: string;
   media?: PostMedia[];
+  reshare_post_id?: string;
 }
 
 export interface BlueskyConfiguration {
