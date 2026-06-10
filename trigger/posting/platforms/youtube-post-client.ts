@@ -2,6 +2,12 @@ import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import { createWriteStream } from "node:fs";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -20,8 +26,10 @@ export class YouTubePostClient extends PostClient {
 
   // Must be a multiple of 256KB per YouTube resumable upload guidance.
   static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
+  static readonly MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
   static readonly MAX_RESUMABLE_UPLOAD_ATTEMPTS = 5;
   static readonly MAX_PROCESSING_POLL_ATTEMPTS = 20;
+  static readonly MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS = 1_000;
   static readonly PROCESSING_POLL_INITIAL_DELAY_MS = 5_000;
   static readonly PROCESSING_POLL_MAX_DELAY_MS = 60_000;
 
@@ -53,7 +61,16 @@ export class YouTubePostClient extends PostClient {
 
     const { credentials } = await this.#oauth2Client.refreshAccessToken();
 
-    this.#responses.push({ refreshResponse: credentials });
+    this.#responses.push({
+      refreshResponse: {
+        scope: credentials.scope,
+        token_type: credentials.token_type,
+        expiry_date: credentials.expiry_date,
+        access_token: credentials.access_token ? "[redacted]" : undefined,
+        refresh_token: credentials.refresh_token ? "[redacted]" : undefined,
+        id_token: credentials.id_token ? "[redacted]" : undefined,
+      },
+    });
     return {
       access_token: credentials.access_token,
       refresh_token: credentials.refresh_token || account.refresh_token,
@@ -74,6 +91,8 @@ export class YouTubePostClient extends PostClient {
     media: PostMedia[];
     platformConfig?: YoutubeConfiguration;
   }): Promise<PostResult> {
+    let stagedFilePath: string | null = null;
+
     try {
       const medium = media[0];
       if (medium.type !== "video") {
@@ -161,6 +180,13 @@ export class YouTubePostClient extends PostClient {
         },
       });
 
+      const stagedMedia = await this.#downloadRemoteFileToTemp({
+        fileUrl: medium.url,
+        expectedFileSize: fileSize,
+        mediaId: medium.id,
+      });
+      stagedFilePath = stagedMedia.path;
+
       const uploadUrl = await this.#startResumableUploadSession({
         videoRequest,
         fileSize,
@@ -169,7 +195,7 @@ export class YouTubePostClient extends PostClient {
 
       const uploadedVideo = await this.#uploadResumableChunks({
         uploadUrl,
-        fileUrl: medium.url,
+        filePath: stagedMedia.path,
         fileSize,
         mimeType,
         chunkSizeBytes: YouTubePostClient.DEFAULT_CHUNK_SIZE_BYTES,
@@ -240,6 +266,10 @@ export class YouTubePostClient extends PostClient {
           responses: this.#responses,
         },
       };
+    } finally {
+      if (stagedFilePath) {
+        await fs.unlink(stagedFilePath).catch(() => undefined);
+      }
     }
   }
 
@@ -370,188 +400,256 @@ export class YouTubePostClient extends PostClient {
     return location;
   }
 
-  async #uploadResumableChunks({
-    uploadUrl,
+  async #downloadRemoteFileToTemp({
     fileUrl,
-    fileSize,
-    mimeType,
-    chunkSizeBytes,
+    expectedFileSize,
+    mediaId,
   }: {
-    uploadUrl: string;
     fileUrl: string;
-    fileSize: number;
-    mimeType: string;
-    chunkSizeBytes: number;
-  }): Promise<youtube_v3.Schema$Video> {
-    let nextStart = 0;
+    expectedFileSize: number;
+    mediaId: string;
+  }): Promise<{ path: string; size: number }> {
+    const safeMediaId = mediaId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const tempPath = path.join(
+      os.tmpdir(),
+      `youtube_${safeMediaId}_${Date.now()}.mp4`,
+    );
     let lastErr: unknown;
 
     for (
       let attempt = 1;
-      attempt <= YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS;
+      attempt <= YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS;
       attempt += 1
     ) {
-      const accessToken = await this.#getAccessToken();
-
       try {
-        while (nextStart < fileSize) {
-          const endExclusive = Math.min(nextStart + chunkSizeBytes, fileSize);
-          const endInclusive = endExclusive - 1;
-          const chunkLen = endExclusive - nextStart;
+        await fs.unlink(tempPath).catch(() => undefined);
 
-          // Fetch only the next chunk (Range request) into memory.
-          const range = `bytes=${nextStart}-${endInclusive}`;
-          const fileRes = await fetch(fileUrl, {
-            headers: {
-              Range: range,
-            },
-          });
-
-          if (!fileRes.ok) {
-            const bodyText = await this.#safeReadText(fileRes);
-            throw new Error(
-              `Failed to read video chunk from storage: ${fileRes.status} ${fileRes.statusText}. ${bodyText}`,
-            );
-          }
-
-          // If the upstream ignores Range requests, it may return the whole file (200).
-          // Bail out rather than accidentally buffering the entire video.
-          if (fileRes.status === 200 && chunkLen < fileSize) {
-            const upstreamLen = Number(
-              fileRes.headers.get("content-length") || "",
-            );
-            if (!Number.isFinite(upstreamLen) || upstreamLen > chunkLen) {
-              throw new Error(
-                "Upstream did not honor Range requests; refusing to buffer entire video",
-              );
-            }
-          }
-
-          const chunkBuf = Buffer.from(await fileRes.arrayBuffer());
-          const actualChunkLen = chunkBuf.length;
-
-          // Every ranged read must match the declared range. A short read would
-          // make YouTube treat the request as a non-final undersized chunk.
-          if (actualChunkLen !== chunkLen) {
-            throw new Error(
-              `Storage returned ${actualChunkLen} bytes but expected ${chunkLen} bytes for range ${range}; video would be truncated`,
-            );
-          }
-
-          // Use the actual received length for both headers so what we declare
-          // to YouTube exactly matches what we send.
-          const actualEndInclusive = nextStart + actualChunkLen - 1;
-          const contentRange = `bytes ${nextStart}-${actualEndInclusive}/${fileSize}`;
-
-          const res = await this.#fetchWithRetry(uploadUrl, {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": mimeType,
-              "Content-Length": String(actualChunkLen),
-              "Content-Range": contentRange,
-            },
-            body: chunkBuf,
-          });
-
-          if (res.status === 308) {
-            // Resume Incomplete; server returns last received byte in Range header.
-            const range = res.headers.get("range") || res.headers.get("Range");
-            let lastByte = this.#parseLastByteFromRange(range);
-
-            // Some intermediaries strip Range headers; ask the upload URL for its state.
-            if (lastByte == null) {
-              lastByte = await this.#queryResumableUploadLastByte({
-                uploadUrl,
-                accessToken,
-                fileSize,
-              });
-            }
-
-            if (lastByte == null) {
-              throw new Error(
-                "YouTube resumable upload returned 308 without a Range header; cannot determine server progress",
-              );
-            }
-
-            nextStart = lastByte + 1;
-
-            this.#responses.push({
-              resumableChunk: {
-                status: res.status,
-                contentRange,
-                receivedRange: range || null,
-                nextStart,
-              },
-            });
-
-            continue;
-          }
-
-          if (res.ok) {
-            const data = (await res.json()) as youtube_v3.Schema$Video;
-
-            // Verify YouTube acknowledged the full file before declaring success.
-            const bytesConfirmed = nextStart + actualChunkLen;
-            if (bytesConfirmed !== fileSize) {
-              throw new Error(
-                `YouTube upload completed but only ${bytesConfirmed} of ${fileSize} bytes were sent; video would be truncated`,
-              );
-            }
-
-            this.#responses.push({
-              resumableComplete: {
-                status: res.status,
-                contentRange,
-                videoId: data?.id,
-                bytesConfirmed,
-              },
-            });
-            return data;
-          }
-
+        const res = await fetch(fileUrl);
+        if (!res.ok) {
           const bodyText = await this.#safeReadText(res);
           throw new Error(
-            `YouTube resumable upload failed: ${res.status} ${res.statusText}. ${bodyText}`,
+            `Failed to download YouTube media for staging: ${res.status} ${res.statusText}. ${bodyText}`,
+          );
+        }
+        if (!res.body) {
+          throw new Error("No response body available while staging YouTube media");
+        }
+
+        await pipeline(
+          Readable.fromWeb(res.body as any),
+          createWriteStream(tempPath),
+        );
+
+        const stat = await fs.stat(tempPath);
+        if (stat.size !== expectedFileSize) {
+          throw new Error(
+            `Staged YouTube media size mismatch: wrote ${stat.size} bytes but expected ${expectedFileSize}`,
           );
         }
 
-        throw new Error(
-          "YouTube resumable upload ended unexpectedly without a final response",
-        );
+        this.#responses.push({
+          mediaStagedForYoutube: {
+            attempt,
+            size: stat.size,
+            expectedFileSize,
+          },
+        });
+        return { path: tempPath, size: stat.size };
       } catch (err) {
         lastErr = err;
-        if (attempt === YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS) {
+        await fs.unlink(tempPath).catch(() => undefined);
+
+        if (attempt === YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS) {
           break;
         }
 
-        let resumeFrom: number | null = null;
-        try {
-          resumeFrom = await this.#queryResumableUploadLastByte({
-            uploadUrl,
-            accessToken,
-            fileSize,
-          });
-          if (resumeFrom != null) {
-            nextStart = resumeFrom + 1;
-          }
-        } catch {
-          // Keep current nextStart when status check fails.
-        }
-
-        const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
+        const waitMs = Math.min(
+          30_000,
+          YouTubePostClient.MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS *
+            2 ** (attempt - 1),
+        );
         this.#responses.push({
-          resumableChunkRetry: {
+          mediaStageRetry: {
             attempt,
-            maxAttempts: YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS,
-            nextStart,
-            resumeFrom,
+            maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
             error: String(err),
             waitMs,
           },
         });
         await this.#sleep(waitMs);
       }
+    }
+
+    throw new Error(
+      `Failed to stage YouTube media after ${YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS} attempts: ${String(lastErr)}`,
+    );
+  }
+
+  async #uploadResumableChunks({
+    uploadUrl,
+    filePath,
+    fileSize,
+    mimeType,
+    chunkSizeBytes,
+  }: {
+    uploadUrl: string;
+    filePath: string;
+    fileSize: number;
+    mimeType: string;
+    chunkSizeBytes: number;
+  }): Promise<youtube_v3.Schema$Video> {
+    const stagedStat = await fs.stat(filePath);
+    if (stagedStat.size !== fileSize) {
+      throw new Error(
+        `Staged YouTube media size changed before upload: ${stagedStat.size} bytes on disk, expected ${fileSize}`,
+      );
+    }
+
+    let nextStart = 0;
+    let lastErr: unknown;
+    const fileHandle = await fs.open(filePath, "r");
+
+    try {
+      for (
+        let attempt = 1;
+        attempt <= YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS;
+        attempt += 1
+      ) {
+        const accessToken = await this.#getAccessToken();
+
+        try {
+          while (nextStart < fileSize) {
+            const endExclusive = Math.min(nextStart + chunkSizeBytes, fileSize);
+            const endInclusive = endExclusive - 1;
+            const chunkLen = endExclusive - nextStart;
+            const chunkBuf = Buffer.allocUnsafe(chunkLen);
+            const { bytesRead } = await fileHandle.read(
+              chunkBuf,
+              0,
+              chunkLen,
+              nextStart,
+            );
+
+            if (bytesRead !== chunkLen) {
+              throw new Error(
+                `Staged media read returned ${bytesRead} bytes but expected ${chunkLen} bytes for bytes=${nextStart}-${endInclusive}; video would be truncated`,
+              );
+            }
+
+            const contentRange = `bytes ${nextStart}-${endInclusive}/${fileSize}`;
+
+            const res = await this.#fetchWithRetry(uploadUrl, {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": mimeType,
+                "Content-Length": String(bytesRead),
+                "Content-Range": contentRange,
+              },
+              body: chunkBuf,
+            });
+
+            if (res.status === 308) {
+              // Resume Incomplete; server returns last received byte in Range header.
+              const range = res.headers.get("range") || res.headers.get("Range");
+              let lastByte = this.#parseLastByteFromRange(range);
+
+              // Some intermediaries strip Range headers; ask the upload URL for its state.
+              if (lastByte == null) {
+                lastByte = await this.#queryResumableUploadLastByte({
+                  uploadUrl,
+                  accessToken,
+                  fileSize,
+                });
+              }
+
+              if (lastByte == null) {
+                throw new Error(
+                  "YouTube resumable upload returned 308 without a Range header; cannot determine server progress",
+                );
+              }
+
+              nextStart = lastByte + 1;
+
+              this.#responses.push({
+                resumableChunk: {
+                  status: res.status,
+                  contentRange,
+                  receivedRange: range || null,
+                  nextStart,
+                },
+              });
+
+              continue;
+            }
+
+            if (res.ok) {
+              const data = (await res.json()) as youtube_v3.Schema$Video;
+
+              // Verify YouTube acknowledged the full file before declaring success.
+              const bytesConfirmed = nextStart + bytesRead;
+              if (bytesConfirmed !== fileSize) {
+                throw new Error(
+                  `YouTube upload completed but only ${bytesConfirmed} of ${fileSize} bytes were sent; video would be truncated`,
+                );
+              }
+
+              this.#responses.push({
+                resumableComplete: {
+                  status: res.status,
+                  contentRange,
+                  videoId: data?.id,
+                  bytesConfirmed,
+                },
+              });
+              return data;
+            }
+
+            const bodyText = await this.#safeReadText(res);
+            throw new Error(
+              `YouTube resumable upload failed: ${res.status} ${res.statusText}. ${bodyText}`,
+            );
+          }
+
+          throw new Error(
+            "YouTube resumable upload ended unexpectedly without a final response",
+          );
+        } catch (err) {
+          lastErr = err;
+          if (attempt === YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS) {
+            break;
+          }
+
+          let resumeFrom: number | null = null;
+          try {
+            resumeFrom = await this.#queryResumableUploadLastByte({
+              uploadUrl,
+              accessToken,
+              fileSize,
+            });
+            if (resumeFrom != null) {
+              nextStart = resumeFrom + 1;
+            }
+          } catch {
+            // Keep current nextStart when status check fails.
+          }
+
+          const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
+          this.#responses.push({
+            resumableChunkRetry: {
+              attempt,
+              maxAttempts: YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS,
+              nextStart,
+              resumeFrom,
+              error: String(err),
+              waitMs,
+            },
+          });
+          await this.#sleep(waitMs);
+        }
+      }
+    } finally {
+      await fileHandle.close().catch(() => undefined);
     }
 
     throw new Error(
