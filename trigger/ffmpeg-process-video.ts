@@ -91,6 +91,14 @@ const getFileKeyFromPublicUrl = (
   return match ? match[1] : null;
 };
 
+const getProcessedFileKey = (key: string): string => {
+  const dirname = path.dirname(key);
+  const basename = path.basename(key);
+  const processedBasename = `processed_${Date.now()}_${basename}`;
+
+  return dirname === "." ? processedBasename : `${dirname}/${processedBasename}`;
+};
+
 export const ffmpegProcessVideo = task({
   id: "ffmpeg-process-video",
   maxDuration: 800,
@@ -101,7 +109,16 @@ export const ffmpegProcessVideo = task({
     },
   },
   machine: "medium-2x",
-  run: async ({ medium: { url } }: { medium: { url: string } }) => {
+  run: async ({
+    medium: { id, url },
+  }: {
+    medium: { id: string; url: string };
+  }): Promise<{
+    id: string;
+    url: string;
+    key: string;
+    processed: boolean;
+  }> => {
     logger.info("Starting video processing", { url });
     const tempDir = os.tmpdir();
     const bucket = "post-media";
@@ -255,7 +272,7 @@ export const ffmpegProcessVideo = task({
         hasValidAudio
       ) {
         logger.info("video already meets requirements, skipping processing");
-        return;
+        return { id, url, key, processed: false };
       }
 
       if (needsProcessingForBitrate) {
@@ -384,15 +401,26 @@ export const ffmpegProcessVideo = task({
 
       fileProcessed = true;
 
-      logger.info("Uploading processed video to storage");
-      await uploadFile({ bucketName: bucket, key, filePath: outputPath });
+      const processedKey = getProcessedFileKey(key);
+      const processedUrl = url.replace(key, processedKey);
+
+      logger.info("Uploading processed video to storage", {
+        key,
+        processedKey,
+      });
+      await uploadFile({
+        bucketName: bucket,
+        key: processedKey,
+        filePath: outputPath,
+      });
 
       logger.info("Video processing completed successfully", {
-        key: key,
+        key: processedKey,
+        originalKey: key,
         bucket,
         processed: true,
       });
-      return;
+      return { id, url: processedUrl, key: processedKey, processed: true };
     } catch (e) {
       logger.error("Error processing video", { error: e });
       throw e;

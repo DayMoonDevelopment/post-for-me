@@ -274,15 +274,19 @@ export const processPost = task({
 
         logger.info("Localizing Media Complete", { localizedMedia });
 
-        postMedia.push(
-          ...localizedMedia.runs
-            .filter((run) => run.ok)
-            .map((run) => run.output),
-        );
+        const succesfulMedia = localizedMedia.runs
+          .filter((run) => run.ok)
+          .map((run) => run.output);
 
+        const postImages = succesfulMedia.filter(
+          (medium) => medium.type !== "video",
+        );
         const postVideos = postMedia.filter(
           (medium) => medium.type === "video",
         );
+
+        postMedia.push(...postImages);
+        postMedia.push(...postVideos.filter((m) => m.skip_processing));
 
         const videosToProcess = postVideos.filter((m) => !m.skip_processing);
 
@@ -298,6 +302,16 @@ export const processPost = task({
           );
 
           logger.info("Processing Videos Complete", { processVideosResult });
+
+          postMedia.push(
+            ...processVideosResult.runs
+              .filter((run) => run.ok)
+              .map((run) => run.output),
+          );
+
+          logger.info("Updated post media with processed video URLs", {
+            postMedia,
+          });
         }
 
         if (postMedia.length == 0) {
