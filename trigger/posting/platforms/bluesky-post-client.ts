@@ -1,8 +1,3 @@
- 
- 
- 
- 
- 
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";

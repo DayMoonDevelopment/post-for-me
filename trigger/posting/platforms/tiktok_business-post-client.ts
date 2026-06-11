@@ -1,10 +1,5 @@
- 
- 
- 
- 
- 
 import { SupabaseClient } from "@supabase/supabase-js";
-import { logger, wait } from "@trigger.dev/sdk";
+import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -20,14 +15,28 @@ import {
 export class TikTokBusinessPostClient extends PostClient {
   #tokenUrl =
     "https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/refresh_token/";
-  #processingStatuses = ["PROCESSING", "PROCESSING_DOWNLOAD"];
-  #processedStatuses = ["PUBLISH_COMPLETE", "PUBLISH_SUCCESS"];
+  #processingStatuses = [
+    "PROCESSING",
+    "PROCESSING_DOWNLOAD",
+    "PROCESSING_UPLOAD",
+  ];
+  #processedStatuses = [
+    "PUBLISH_COMPLETE",
+    "PUBLISH_SUCCESS",
+    "SEND_TO_USER_INBOX",
+  ];
   #maxItems = 32;
   #titleLength = 85;
   #clientKey: string;
   #clientSecret: string;
   #localSupabaseClient;
   #maxFileSize = 20 * 1024 * 1024;
+  #allowedAspectRatios = [
+    { ratio: 9 / 16, width: 1080, height: 1920 },
+    { ratio: 3 / 4, width: 1080, height: 1440 },
+    { ratio: 1, width: 1080, height: 1080 },
+    { ratio: 16 / 9, width: 1920, height: 1080 },
+  ];
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
@@ -76,10 +85,15 @@ export class TikTokBusinessPostClient extends PostClient {
 
     const { access_token, refresh_token, expires_in } = refreshData.data;
 
+    const newExpirationDate = new Date(Date.now() + expires_in * 1000);
+
+    // Set expiration so it refreshes two days early.
+    newExpirationDate.setDate(newExpirationDate.getDate() - 2);
+
     return {
       access_token,
       refresh_token,
-      expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
+      expires_at: newExpirationDate.toISOString(),
     };
   }
 
@@ -131,22 +145,53 @@ export class TikTokBusinessPostClient extends PostClient {
         });
       }
 
-      const status = await this.#getPublishStatus({ publishId, account });
+      if (platformConfig?.is_draft) {
+        const { status } = await this.#getPublishStatus({ publishId, account });
 
-      if (this.#processingStatuses.includes(status)) {
         return {
           success: true,
           post_id: postId,
           provider_connection_id: account.id,
+          error_message: this.#processingStatuses.includes(status)
+            ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
+            : undefined,
           details: {
-            status: "Processing",
-            message: "Still Proccessing, not published yet",
+            status: "Saved as draft",
+            message:
+              "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
             addedMedia: this.#addedMedia,
             requests: this.#requests,
             responses: this.#responses,
             username: creatorInfoResponse.data.data.username,
+            publish_id: publishId,
           },
           provider_post_url: `https://www.tiktok.com/@${creatorInfoResponse.data.data.username}`,
+          provider_post_id: publishId,
+        };
+      }
+
+      const { status, publicPostId } = await this.#getPublishStatus({
+        publishId,
+        account,
+        waitForPublicPostId: true,
+      });
+
+      if (this.#processingStatuses.includes(status)) {
+        return {
+          success: false,
+          post_id: postId,
+          provider_connection_id: account.id,
+          details: {
+            status: "Processing",
+            message: "Still Proccessing, check TikTok account to confirm status",
+            addedMedia: this.#addedMedia,
+            requests: this.#requests,
+            responses: this.#responses,
+            username: creatorInfoResponse.data.data.username,
+            publish_id: publishId,
+          },
+          provider_post_url: `https://www.tiktok.com/@${creatorInfoResponse.data.data.username}`,
+          provider_post_id: publicPostId ?? publishId,
         };
       }
 
@@ -154,13 +199,14 @@ export class TikTokBusinessPostClient extends PostClient {
         success: true,
         post_id: postId,
         provider_connection_id: account.id,
-        provider_post_id: publishId,
+        provider_post_id: publicPostId ?? publishId,
         details: {
           status: "Published successfully",
           addedMedia: this.#addedMedia,
           requests: this.#requests,
           responses: this.#responses,
           username: creatorInfoResponse.data.data.username,
+          publish_id: publishId,
         },
         provider_post_url: `https://www.tiktok.com/@${creatorInfoResponse.data.data.username}`,
       };
@@ -207,20 +253,29 @@ export class TikTokBusinessPostClient extends PostClient {
   async #getPublishStatus({
     publishId,
     account,
+    waitForPublicPostId = false,
   }: {
     publishId: string;
     account: SocialAccount;
+    waitForPublicPostId?: boolean;
   }) {
     let status = "PROCESSING";
-    let statusResponse;
+    let failReason;
+    let publicPostId: string | undefined;
     let attempts = 0;
+    let publicPostIdAttempts = 0;
     const initialDelayMs = 5000;
     const maxAttempts = 15;
+    const maxPublicPostIdAttempts = 3;
 
     const statusUrl =
       "https://business-api.tiktok.com/open_api/v1.3/business/publish/status/";
     while (
-      this.#processingStatuses.includes(status) &&
+      (this.#processingStatuses.includes(status) ||
+        (waitForPublicPostId &&
+          this.#processedStatuses.includes(status) &&
+          !publicPostId &&
+          publicPostIdAttempts < maxPublicPostIdAttempts)) &&
       attempts < maxAttempts
     ) {
       this.#requests.push({
@@ -231,25 +286,43 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         },
       });
-      statusResponse = await axios.get(
+      const statusResponse = await axios.get<string>(
         `${statusUrl}?business_id=${account.social_provider_user_id}&publish_id=${publishId}`,
         {
           headers: {
             "Access-Token": `${account.access_token}`,
           },
+          transformResponse: [(data) => data],
         },
       );
 
-      this.#responses.push({ statusResponse: statusResponse.data });
-      logger.info("TikTok Business publish status response", {
-        statusResponse: statusResponse.data,
-      });
+      const parsedStatusResponse = JSON.parse(statusResponse.data);
 
-      status = statusResponse.data.data.status;
+      this.#responses.push({ statusResponse: parsedStatusResponse });
+
+      status = parsedStatusResponse.data.status;
+      failReason = parsedStatusResponse.data.reason;
+      publicPostId = parsedStatusResponse.data.post_ids?.[0] || publicPostId;
       attempts++;
 
-      if (this.#processingStatuses.includes(status) && attempts < maxAttempts) {
-        const delay = initialDelayMs * Math.pow(1.5, attempts - 1);
+      const waitingForPublicPostId =
+        waitForPublicPostId &&
+        this.#processedStatuses.includes(status) &&
+        !publicPostId;
+
+      if (waitingForPublicPostId) {
+        publicPostIdAttempts++;
+      }
+
+      if (
+        (this.#processingStatuses.includes(status) ||
+          (waitingForPublicPostId &&
+            publicPostIdAttempts < maxPublicPostIdAttempts)) &&
+        attempts < maxAttempts
+      ) {
+        const delay = waitingForPublicPostId
+          ? initialDelayMs
+          : initialDelayMs * Math.pow(1.5, attempts - 1);
         await wait.for({ seconds: delay / 1000 });
       }
     }
@@ -258,10 +331,21 @@ export class TikTokBusinessPostClient extends PostClient {
       !this.#processedStatuses.includes(status) &&
       !this.#processingStatuses.includes(status)
     ) {
-      throw new Error(`Upload failed with status: ${status}.`);
+      if (failReason) {
+        console.error("TikTok Business upload failed", {
+          status,
+          fail_reason: failReason,
+        });
+      }
+
+      throw new Error(
+        `Upload failed with status: ${status}.${
+          failReason ? ` Fail reason: ${failReason}` : ""
+        }`,
+      );
     }
 
-    return status;
+    return { status, failReason, publicPostId };
   }
 
   async #getPublishId({
@@ -385,7 +469,7 @@ export class TikTokBusinessPostClient extends PostClient {
         photo_images: photoUrls,
         photo_cover_index: 0,
         post_info: {
-          title: (title || caption).slice(0, this.#titleLength),
+          title: (title ?? "").slice(0, this.#titleLength),
           caption,
           is_draft: platformData?.is_draft ? true : undefined,
           privacy_level:
@@ -396,7 +480,10 @@ export class TikTokBusinessPostClient extends PostClient {
             platformData.allow_comment === undefined
               ? false
               : !platformData.allow_comment,
-          auto_add_music: true,
+          auto_add_music:
+            platformData.auto_add_music === undefined
+              ? true
+              : platformData.auto_add_music,
           is_branded_content:
             platformData.disclose_branded_content === undefined
               ? false
@@ -442,24 +529,37 @@ export class TikTokBusinessPostClient extends PostClient {
 
     const imageBuffer = Buffer.from(response.data);
 
-    // Step 2: Get image metadata and downscale so the short side is <= 1080
-    const { width, height } = await sharp(imageBuffer).metadata();
-    let safeWidth = width;
-    let safeHeight = height;
+    // Get image metadata and choose nearest TikTok-allowed ratio.
+    const metadata = await sharp(imageBuffer).metadata();
+    const width = metadata.width || 0;
+    const height = metadata.height || 0;
 
-    if (safeWidth && safeHeight) {
-      const shortSide = Math.min(safeWidth, safeHeight);
-      if (shortSide > 1080) {
-        const scale = 1080 / shortSide;
-        safeWidth = Math.round(safeWidth * scale);
-        safeHeight = Math.round(safeHeight * scale);
-      }
+    if (!width || !height) {
+      throw new Error("Unable to read image dimensions for TikTok upload");
     }
 
-    // Step 4: Process image with Sharp (resize & compress)
+    const orientation = metadata.orientation || 1;
+    const isExifRotated = [5, 6, 7, 8].includes(orientation);
+    const displayedWidth = isExifRotated ? height : width;
+    const displayedHeight = isExifRotated ? width : height;
+
+    const aspectRatio = displayedWidth / displayedHeight;
+    const targetRatio = this.#allowedAspectRatios.reduce((closest, current) =>
+      Math.abs(current.ratio - aspectRatio) <
+      Math.abs(closest.ratio - aspectRatio)
+        ? current
+        : closest,
+    );
+
+    // Process image with Sharp (normalize orientation, crop, resize and compress).
     let processedImage = await sharp(imageBuffer)
       .rotate()
-      .resize({ width: safeWidth, height: safeHeight, fit: "inside" })
+      .resize({
+        width: targetRatio.width,
+        height: targetRatio.height,
+        fit: "cover",
+        position: "center",
+      })
       .jpeg({ quality: 100 })
       .toBuffer();
 
@@ -500,10 +600,9 @@ export class TikTokBusinessPostClient extends PostClient {
       bucket: this.#bucket,
     });
 
-    const { data: processedImageUpload } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .getPublicUrl(processedKey);
+    const { data: processedImageUpload } = this.#localSupabaseClient.storage
+      .from(this.#bucket)
+      .getPublicUrl(processedKey);
 
     return processedImageUpload!.publicUrl;
   }
