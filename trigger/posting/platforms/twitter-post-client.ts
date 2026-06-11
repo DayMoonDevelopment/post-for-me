@@ -1,8 +1,3 @@
- 
- 
- 
- 
- 
 import { PostClient } from "../post-client";
 import {
   SendTweetV2Params,
@@ -32,7 +27,7 @@ export class TwitterPostClient extends PostClient {
 
   constructor(
     supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials
+    appCredentials: PlatformAppCredentials,
   ) {
     super(supabaseClient, appCredentials);
 
@@ -41,7 +36,7 @@ export class TwitterPostClient extends PostClient {
   }
 
   async refreshAccessToken(
-    account: SocialAccount
+    account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     //No Need to refresh tokens for Twitter
     const SIX_MONTHS_IN_MS = 180 * 24 * 60 * 60 * 1000;
@@ -81,7 +76,7 @@ export class TwitterPostClient extends PostClient {
         0,
         account.social_provider_metadata?.has_platform_premium
           ? this.#PREMIUM_CHARACTER_LIMIT
-          : this.#CHARACTER_LIMIT
+          : this.#CHARACTER_LIMIT,
       );
 
       const postPayload: SendTweetV2Params = {
@@ -142,12 +137,12 @@ export class TwitterPostClient extends PostClient {
     } catch (error) {
       console.error(
         `Error posting to Twitter for account ${account.id} :`,
-        error
+        error,
       );
       if (error.data && error.data.errors) {
         console.error(
           "Twitter API errors:",
-          JSON.stringify(error.data.errors, null, 2)
+          JSON.stringify(error.data.errors, null, 2),
         );
       }
       return {
@@ -256,7 +251,7 @@ export class TwitterPostClient extends PostClient {
         }
 
         console.log(
-          `Media processing status: ${mediaInfo.processing_info?.state}`
+          `Media processing status: ${mediaInfo.processing_info?.state}`,
         );
         await wait.for({ seconds: 2 });
         attempts++;
