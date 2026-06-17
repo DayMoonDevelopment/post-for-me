@@ -1,4 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -20,12 +21,83 @@ import { mapWithConcurrency } from '../lib/async.utils';
 
 const FACEBOOK_METRICS_POST_CONCURRENCY = 3;
 const FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY = 2;
+const DEFAULT_FACEBOOK_API_VERSION = 'v25.0';
+
+type FacebookInsightsInterval = { since: string; until: string };
 
 @Injectable({ scope: Scope.REQUEST })
 export class FacebookService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private get graphApiBaseUrl(): string {
+    const facebookApiVersion =
+      this.configService.get<string>('FACEBOOK_API_VERSION') ||
+      DEFAULT_FACEBOOK_API_VERSION;
+
+    return `https://graph.facebook.com/${facebookApiVersion}`;
+  }
+
+  private logFacebookInsightsError(error: unknown, groupName?: string): void {
+    if (error instanceof AxiosError) {
+      console.error('Error fetching Facebook post insights', {
+        groupName,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        message: error.message,
+        response: error.response ? (error.response.data as unknown) : undefined,
+      });
+    } else if (error instanceof Error) {
+      console.error('Error fetching Facebook post insights', {
+        groupName,
+        message: error.message,
+      });
+    } else {
+      console.error('Error fetching Facebook post insights', { groupName });
+    }
+  }
+
+  private async fetchPostInsightsForMetrics({
+    postId,
+    accessToken,
+    intervals,
+    metricsList,
+    groupName,
+  }: {
+    postId: string;
+    accessToken: string;
+    intervals: FacebookInsightsInterval[];
+    metricsList: string[];
+    groupName: string;
+  }): Promise<FacebookInsight[]> {
+    try {
+      const responses = await mapWithConcurrency(
+        intervals,
+        async (interval) =>
+          axios.get(`${this.graphApiBaseUrl}/${postId}/insights`, {
+            params: {
+              metric: metricsList.join(','),
+              access_token: accessToken,
+              since: interval.since,
+              until: interval.until,
+            },
+          }),
+        FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY,
+      );
+
+      return responses.flatMap((response) => {
+        const insightsData = response.data as FacebookInsightsResponse;
+        return insightsData.data || [];
+      });
+    } catch (error) {
+      this.logFacebookInsightsError(error, groupName);
+      return [];
+    }
+  }
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
@@ -52,7 +124,7 @@ export class FacebookService implements SocialPlatformService {
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
     try {
       const response = await axios.get(
-        'https://graph.facebook.com/v20.0/oauth/access_token',
+        `${this.graphApiBaseUrl}/oauth/access_token`,
         {
           params: {
             grant_type: 'fb_exchange_token',
@@ -99,16 +171,13 @@ export class FacebookService implements SocialPlatformService {
         const posts = await mapWithConcurrency(
           platformIds,
           async (id) => {
-            const response = await axios.get(
-              `https://graph.facebook.com/v20.0/${id}`,
-              {
-                params: {
-                  fields:
-                    'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
-                  access_token: account.access_token,
-                },
+            const response = await axios.get(`${this.graphApiBaseUrl}/${id}`, {
+              params: {
+                fields:
+                  'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
+                access_token: account.access_token,
               },
-            );
+            });
 
             const post = response.data as FacebookPost;
             return this.mapFacebookPostToPlatformPost(
@@ -129,7 +198,7 @@ export class FacebookService implements SocialPlatformService {
 
       // Fetch posts from feed
       const response = await axios.get(
-        `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
+        `${this.graphApiBaseUrl}/${account.social_provider_user_id}/feed`,
         {
           params: {
             fields:
@@ -188,9 +257,14 @@ export class FacebookService implements SocialPlatformService {
       // Calculate 90-day intervals from post creation to now
       const publishedDate = new Date(createdTime);
       const now = new Date();
-      const intervals: Array<{ since: string; until: string }> = [];
+      const earliestInsightsDate = new Date(now);
+      earliestInsightsDate.setFullYear(earliestInsightsDate.getFullYear() - 2);
+      const intervals: FacebookInsightsInterval[] = [];
 
-      let currentStart = publishedDate;
+      let currentStart =
+        publishedDate > earliestInsightsDate
+          ? publishedDate
+          : earliestInsightsDate;
       while (currentStart < now) {
         const currentEnd = new Date(currentStart);
         currentEnd.setDate(currentEnd.getDate() + 90);
@@ -206,9 +280,10 @@ export class FacebookService implements SocialPlatformService {
         currentStart = currentEnd;
       }
 
-      // Fetch insights for each 90-day interval
-      const metricsList = [
-        'post_impressions_unique',
+      // Fetch insights for each 90-day interval. Groups are isolated so a
+      // video-only metric failure does not drop all post metrics.
+      const postMetricsList = [
+        'post_total_media_view_unique',
         'post_media_view',
         'post_reactions_like_total',
         'post_reactions_love_total',
@@ -217,11 +292,14 @@ export class FacebookService implements SocialPlatformService {
         'post_reactions_sorry_total',
         'post_reactions_anger_total',
         'post_reactions_by_type_total',
-        'post_impressions_viral_unique',
-        'post_impressions_paid_unique',
-        'post_impressions_fan_unique',
-        'post_impressions_organic_unique',
-        'post_impressions_nonviral_unique',
+      ];
+
+      const activityMetricsList = [
+        'post_activity_by_action_type',
+        'post_activity_by_action_type_unique',
+      ];
+
+      const videoMetricsList = [
         'post_video_avg_time_watched',
         'post_video_complete_views_organic',
         'post_video_complete_views_organic_unique',
@@ -230,12 +308,9 @@ export class FacebookService implements SocialPlatformService {
         'post_video_retention_graph_clicked_to_play',
         'post_video_retention_graph_autoplayed',
         'post_video_views_organic',
-        'post_video_views_organic_unique',
         'post_video_views_paid',
-        'post_video_views_paid_unique',
         'post_video_length',
         'post_video_views',
-        'post_video_views_unique',
         'post_video_views_autoplayed',
         'post_video_views_clicked_to_play',
         'post_video_views_15s',
@@ -249,30 +324,33 @@ export class FacebookService implements SocialPlatformService {
         'post_video_view_time_by_distribution_type',
         'post_video_view_time_by_country_id',
         'post_video_social_actions_count_unique',
-        'post_activity_by_action_type',
-        'post_activity_by_action_type_unique',
       ];
 
-      const allInsightsResponses = await mapWithConcurrency(
-        intervals,
-        async (interval) =>
-          axios.get(`https://graph.facebook.com/v20.0/${postId}/insights`, {
-            params: {
-              metric: metricsList.join(','),
-              access_token: accessToken,
-              since: interval.since,
-              until: interval.until,
-            },
-          }),
-        FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY,
-      );
+      const insightsGroups = await Promise.all([
+        this.fetchPostInsightsForMetrics({
+          postId,
+          accessToken,
+          intervals,
+          metricsList: postMetricsList,
+          groupName: 'post',
+        }),
+        this.fetchPostInsightsForMetrics({
+          postId,
+          accessToken,
+          intervals,
+          metricsList: activityMetricsList,
+          groupName: 'activity',
+        }),
+        this.fetchPostInsightsForMetrics({
+          postId,
+          accessToken,
+          intervals,
+          metricsList: videoMetricsList,
+          groupName: 'video',
+        }),
+      ]);
 
-      // Aggregate insights from all intervals
-      const allInsights: FacebookInsight[] = [];
-      for (const response of allInsightsResponses) {
-        const insightsData = response.data as FacebookInsightsResponse;
-        allInsights.push(...(insightsData.data || []));
-      }
+      const allInsights = insightsGroups.flat();
 
       // Group insights by metric name and aggregate values
       const insightsByMetric = new Map<string, FacebookInsight[]>();
@@ -315,23 +393,8 @@ export class FacebookService implements SocialPlatformService {
 
         switch (metricName) {
           // Reach and Impressions
-          case 'post_impressions_unique':
+          case 'post_total_media_view_unique':
             metrics.reach = typeof value === 'number' ? value : 0;
-            break;
-          case 'post_impressions_viral_unique':
-            metrics.viral_reach = typeof value === 'number' ? value : 0;
-            break;
-          case 'post_impressions_paid_unique':
-            metrics.paid_reach = typeof value === 'number' ? value : 0;
-            break;
-          case 'post_impressions_fan_unique':
-            metrics.fan_reach = typeof value === 'number' ? value : 0;
-            break;
-          case 'post_impressions_organic_unique':
-            metrics.organic_reach = typeof value === 'number' ? value : 0;
-            break;
-          case 'post_impressions_nonviral_unique':
-            metrics.nonviral_reach = typeof value === 'number' ? value : 0;
             break;
 
           // Media Views
@@ -373,22 +436,11 @@ export class FacebookService implements SocialPlatformService {
           case 'post_video_views':
             metrics.video_views = typeof value === 'number' ? value : 0;
             break;
-          case 'post_video_views_unique':
-            metrics.video_views_unique = typeof value === 'number' ? value : 0;
-            break;
           case 'post_video_views_organic':
             metrics.video_views_organic = typeof value === 'number' ? value : 0;
             break;
-          case 'post_video_views_organic_unique':
-            metrics.video_views_organic_unique =
-              typeof value === 'number' ? value : 0;
-            break;
           case 'post_video_views_paid':
             metrics.video_views_paid = typeof value === 'number' ? value : 0;
-            break;
-          case 'post_video_views_paid_unique':
-            metrics.video_views_paid_unique =
-              typeof value === 'number' ? value : 0;
             break;
           case 'post_video_views_autoplayed':
             metrics.video_views_autoplayed =
@@ -541,19 +593,7 @@ export class FacebookService implements SocialPlatformService {
 
       return metrics;
     } catch (error) {
-      if (error instanceof AxiosError) {
-        console.error('Error fetching Facebook post insights', {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          message: error.message,
-        });
-      } else if (error instanceof Error) {
-        console.error('Error fetching Facebook post insights', {
-          message: error.message,
-        });
-      } else {
-        console.error('Error fetching Facebook post insights');
-      }
+      this.logFacebookInsightsError(error);
 
       // Return empty metrics object on error
       return {};

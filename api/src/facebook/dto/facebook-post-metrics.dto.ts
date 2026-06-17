@@ -27,43 +27,12 @@ export class FacebookActivityByActionTypeDto {
 }
 
 export class FacebookPostMetricsDto {
-  // Reach and Impressions
+  // Media Viewers
   @ApiProperty({
-    description: 'Total number of unique people who saw the post',
+    description: 'Total number of unique people who viewed the post media',
     required: false,
   })
   reach?: number;
-
-  @ApiProperty({
-    description:
-      'Number of people who saw the post in News Feed via viral reach',
-    required: false,
-  })
-  viral_reach?: number;
-
-  @ApiProperty({
-    description: 'Number of people who saw the post via paid distribution',
-    required: false,
-  })
-  paid_reach?: number;
-
-  @ApiProperty({
-    description: 'Number of fans who saw the post',
-    required: false,
-  })
-  fan_reach?: number;
-
-  @ApiProperty({
-    description: 'Number of people who saw the post via organic distribution',
-    required: false,
-  })
-  organic_reach?: number;
-
-  @ApiProperty({
-    description: 'Number of people who saw the post via non-viral distribution',
-    required: false,
-  })
-  nonviral_reach?: number;
 
   // Media Views
   @ApiProperty({
@@ -129,12 +98,6 @@ export class FacebookPostMetricsDto {
   video_views?: number;
 
   @ApiProperty({
-    description: 'Number of unique people who viewed the video for 3+ seconds',
-    required: false,
-  })
-  video_views_unique?: number;
-
-  @ApiProperty({
     description: 'Number of times video was viewed for 3+ seconds organically',
     required: false,
   })
@@ -142,24 +105,10 @@ export class FacebookPostMetricsDto {
 
   @ApiProperty({
     description:
-      'Number of unique people who viewed the video for 3+ seconds organically',
-    required: false,
-  })
-  video_views_organic_unique?: number;
-
-  @ApiProperty({
-    description:
       'Number of times video was viewed for 3+ seconds via paid distribution',
     required: false,
   })
   video_views_paid?: number;
-
-  @ApiProperty({
-    description:
-      'Number of unique people who viewed the video for 3+ seconds via paid distribution',
-    required: false,
-  })
-  video_views_paid_unique?: number;
 
   @ApiProperty({
     description: 'Number of times video was autoplayed for 3+ seconds',
