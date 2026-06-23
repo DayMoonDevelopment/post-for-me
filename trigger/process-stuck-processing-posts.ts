@@ -20,8 +20,8 @@ const BATCH_SIZE = 50;
 const DEFAULT_BATCH_COMPLETION_THRESHOLD = 0.9;
 const DEFAULT_POLL_INTERVAL_SECONDS = 10;
 const FETCH_PAGE_SIZE = 1_000;
-const POST_AT_START = "2026-06-22T20:13:10.884059Z";
-const POST_AT_END = "2026-06-23T00:06:53.501211Z";
+const POST_AT_START = "2026-06-23 07:44:05.877+00";
+const POST_AT_END = "2026-06-23 11:53:47.873591+00";
 
 type Payload = {
   batchCompletionThreshold?: number;
@@ -52,7 +52,9 @@ const getBatchRunStatus = async (
   runIds: string[],
   expectedRunCount: number,
 ): Promise<BatchRunStatus> => {
-  const batchRuns = await Promise.all(runIds.map((runId) => runs.retrieve(runId)));
+  const batchRuns = await Promise.all(
+    runIds.map((runId) => runs.retrieve(runId)),
+  );
 
   const completed = batchRuns.filter((run) =>
     TERMINAL_RUN_STATUSES.has(run.status),
@@ -139,7 +141,13 @@ export const processStuckProcessingPosts = task({
 
     if (total === 0) {
       logger.info("No stuck processing posts found");
-      return { total: 0, processed: 0, successful: 0, failed: 0, stillRunning: 0 };
+      return {
+        total: 0,
+        processed: 0,
+        successful: 0,
+        failed: 0,
+        stillRunning: 0,
+      };
     }
 
     logger.info("Found stuck processing posts", { total });
@@ -226,7 +234,10 @@ export const processStuckProcessingPosts = task({
 
       while (batchStatus.completed < requiredCompleted) {
         const currentBatch = await triggerBatch.retrieve(batchHandle.batchId);
-        batchStatus = await getBatchRunStatus(currentBatch.runs, postBatch.length);
+        batchStatus = await getBatchRunStatus(
+          currentBatch.runs,
+          postBatch.length,
+        );
 
         logger.info("Stuck processing posts batch progress", {
           batchNumber,
@@ -273,6 +284,12 @@ export const processStuckProcessingPosts = task({
       stillRunning,
     });
 
-    return { total: posts.length, processed: posts.length, successful, failed, stillRunning };
+    return {
+      total: posts.length,
+      processed: posts.length,
+      successful,
+      failed,
+      stillRunning,
+    };
   },
 });
