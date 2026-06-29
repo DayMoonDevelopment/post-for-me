@@ -13,7 +13,7 @@ import {
 } from '../lib/dto/global.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
-import { YouTubeService } from '../youtube/youtube.service';
+import { YouTubeError, YouTubeService } from '../youtube/youtube.service';
 import { TikTokService } from '../tiktok/tiktok.service';
 import { InstagramService } from '../instagram/instagram.service';
 import { FacebookService } from '../facebook/facebook.service';
@@ -226,21 +226,40 @@ export class SocialAccountFeedsService {
         new Date(),
       ) <= 7
     ) {
-      const updatedAccount =
-        await platformService.refreshAccessToken(socialAccount);
+      try {
+        const updatedAccount =
+          await platformService.refreshAccessToken(socialAccount);
 
-      if (updatedAccount) {
-        await this.supabaseService.supabaseClient
-          .from('social_provider_connections')
-          .update({
-            access_token: updatedAccount.access_token,
-            refresh_token: updatedAccount.refresh_token,
-            access_token_expires_at:
-              updatedAccount.access_token_expires_at?.toISOString(),
-            refresh_token_expires_at:
-              updatedAccount.refresh_token_expires_at?.toISOString(),
-          })
-          .eq('id', account.id);
+        if (updatedAccount) {
+          await this.supabaseService.supabaseClient
+            .from('social_provider_connections')
+            .update({
+              access_token: updatedAccount.access_token,
+              refresh_token: updatedAccount.refresh_token,
+              access_token_expires_at:
+                updatedAccount.access_token_expires_at?.toISOString(),
+              refresh_token_expires_at:
+                updatedAccount.refresh_token_expires_at?.toISOString(),
+            })
+            .eq('id', account.id);
+        }
+      } catch (error) {
+        if (
+          account.provider === 'youtube' &&
+          error instanceof YouTubeError &&
+          !error.metadata.authFailure &&
+          error.metadata.retryable
+        ) {
+          console.warn('Proceeding with existing YouTube access token', {
+            provider: error.metadata.provider,
+            operation: error.metadata.operation,
+            code: error.metadata.code,
+            status: error.metadata.status,
+            message: error.message,
+          });
+        } else {
+          throw error;
+        }
       }
     }
 
