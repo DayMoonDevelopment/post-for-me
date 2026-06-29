@@ -11,6 +11,43 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { mapWithConcurrency } from '../lib/async.utils';
 
 const YOUTUBE_METRICS_CONCURRENCY = 3;
+const ACCESS_TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
+
+const TRANSIENT_NETWORK_ERROR_CODES = new Set([
+  'ECONNABORTED',
+  'ECONNRESET',
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'ERR_STREAM_PREMATURE_CLOSE',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+interface YouTubeErrorMetadata {
+  provider: 'youtube';
+  operation: 'refreshAccessToken' | 'getAccountPosts';
+  code?: string;
+  status?: number;
+  retryable: boolean;
+  authFailure: boolean;
+}
+
+export class YouTubeError extends Error {
+  readonly metadata: YouTubeErrorMetadata;
+  readonly cause?: unknown;
+
+  constructor(
+    message: string,
+    metadata: YouTubeErrorMetadata,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'YouTubeError';
+    this.metadata = metadata;
+    this.cause = cause;
+  }
+}
 
 interface YouTubeVideo {
   id: string;
@@ -72,6 +109,110 @@ export class YouTubeService implements SocialPlatformService {
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
+  private getErrorCode(error: unknown): string | undefined {
+    if (!error || typeof error !== 'object') {
+      return undefined;
+    }
+
+    if ('code' in error && typeof error.code === 'string') {
+      return error.code;
+    }
+
+    return undefined;
+  }
+
+  private getErrorStatus(error: unknown): number | undefined {
+    if (!error || typeof error !== 'object') {
+      return undefined;
+    }
+
+    if (
+      'response' in error &&
+      error.response &&
+      typeof error.response === 'object' &&
+      'status' in error.response &&
+      typeof error.response.status === 'number'
+    ) {
+      return error.response.status;
+    }
+
+    return undefined;
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return String(error);
+  }
+
+  private isAuthFailure(error: unknown): boolean {
+    const status = this.getErrorStatus(error);
+
+    if (status === 400 || status === 401 || status === 403) {
+      return true;
+    }
+
+    const message = this.getErrorMessage(error).toLowerCase();
+
+    return (
+      message.includes('invalid_grant') ||
+      message.includes('invalid_client') ||
+      message.includes('unauthorized_client') ||
+      message.includes('invalid token')
+    );
+  }
+
+  private isRetryableError(error: unknown): boolean {
+    const status = this.getErrorStatus(error);
+    const code = this.getErrorCode(error);
+
+    if (code && TRANSIENT_NETWORK_ERROR_CODES.has(code)) {
+      return true;
+    }
+
+    if (status === undefined) {
+      return false;
+    }
+
+    return status === 408 || status === 429 || (status >= 500 && status <= 599);
+  }
+
+  private hasUsableAccessToken(account: SocialAccount): boolean {
+    if (!account.access_token) {
+      return false;
+    }
+
+    if (!account.access_token_expires_at) {
+      return true;
+    }
+
+    return (
+      new Date(account.access_token_expires_at).getTime() - Date.now() >
+      ACCESS_TOKEN_EXPIRY_SKEW_MS
+    );
+  }
+
+  private toYouTubeError(
+    message: string,
+    operation: YouTubeErrorMetadata['operation'],
+    error: unknown,
+    authFailureOverride?: boolean,
+    retryableOverride?: boolean,
+  ): YouTubeError {
+    const metadata: YouTubeErrorMetadata = {
+      provider: 'youtube',
+      operation,
+      code: this.getErrorCode(error),
+      status: this.getErrorStatus(error),
+      authFailure: authFailureOverride ?? this.isAuthFailure(error),
+      retryable: retryableOverride ?? this.isRetryableError(error),
+    };
+
+    return new YouTubeError(message, metadata, error);
+  }
+
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
       await this.supabaseService.supabaseServiceRole
@@ -115,26 +256,82 @@ export class YouTubeService implements SocialPlatformService {
         : undefined,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const { credentials } = await this.oauth2Client.refreshAccessToken();
+    if (!account.refresh_token) {
+      if (this.hasUsableAccessToken(account)) {
+        return account;
+      }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (!credentials.access_token) {
-      throw new Error('Failed to refresh access token');
+      throw this.toYouTubeError(
+        'Missing YouTube refresh token and access token is expired.',
+        'refreshAccessToken',
+        new Error('missing_refresh_token'),
+        true,
+        false,
+      );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    account.access_token = credentials.access_token;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    account.refresh_token = credentials.refresh_token || account.refresh_token;
+    try {
+      const refreshResponse =
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+        (await this.oauth2Client.refreshAccessToken()) as {
+          credentials: {
+            access_token?: string;
+            refresh_token?: string;
+            expiry_date?: number;
+          };
+        };
+      const { credentials } = refreshResponse;
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (credentials.expiry_date) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
-      account.access_token_expires_at = new Date(credentials.expiry_date);
+      if (!credentials.access_token) {
+        throw this.toYouTubeError(
+          'YouTube token refresh succeeded without access token.',
+          'refreshAccessToken',
+          new Error('missing_access_token'),
+          true,
+          false,
+        );
+      }
+
+      account.access_token = credentials.access_token;
+      account.refresh_token =
+        credentials.refresh_token || account.refresh_token;
+
+      if (credentials.expiry_date) {
+        account.access_token_expires_at = new Date(credentials.expiry_date);
+      }
+
+      return account;
+    } catch (error) {
+      if (error instanceof YouTubeError) {
+        throw error;
+      }
+
+      const wrappedError = this.toYouTubeError(
+        `Failed to refresh YouTube access token: ${this.getErrorMessage(error)}`,
+        'refreshAccessToken',
+        error,
+      );
+
+      if (
+        wrappedError.metadata.retryable &&
+        this.hasUsableAccessToken(account)
+      ) {
+        console.warn(
+          'Using existing YouTube access token after retryable refresh failure',
+          {
+            provider: wrappedError.metadata.provider,
+            operation: wrappedError.metadata.operation,
+            code: wrappedError.metadata.code,
+            status: wrappedError.metadata.status,
+            message: wrappedError.message,
+          },
+        );
+
+        return account;
+      }
+
+      throw wrappedError;
     }
-
-    return account;
   }
 
   /**
@@ -395,16 +592,23 @@ export class YouTubeService implements SocialPlatformService {
         cursor: nextPageToken,
       };
     } catch (error) {
+      if (error instanceof YouTubeError) {
+        throw error;
+      }
+
       if (error instanceof Error) {
         console.error('Error fetching YouTube posts', {
           message: error.message,
+          code: this.getErrorCode(error),
+          status: this.getErrorStatus(error),
         });
       } else {
-        console.error('Error fetching YouTube posts');
+        console.error('Error fetching YouTube posts', {
+          error: this.getErrorMessage(error),
+        });
       }
-      throw new Error(
-        `Failed to fetch YouTube posts: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+
+      throw error;
     }
   }
 }
