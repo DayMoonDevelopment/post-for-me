@@ -1,35 +1,15 @@
 <div
   style="
     font-family:
-      -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto,
-      Helvetica, Arial, sans-serif;
+      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+      sans-serif;
     padding: 20px;
     max-width: 600px;
     margin: 0 auto;
     color: #444444;
   "
 >
-  <h1 style="color: #333333; margin-bottom: 24px">Confirm Sign Up Email</h1>
+  <h1 style="color: #333333; margin-bottom: 24px">OTP Code</h1>
 
-  <div style="margin: 32px 0">
-    <a
-      href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email"
-      style="
-        background-color: #89a1d1;
-        border-radius: 4px;
-        color: white;
-        padding: 12px 24px;
-        text-decoration: none;
-        display: inline-block;
-        font-weight: 500;
-      "
-    >
-      Sign In
-    </a>
-    <p style="font-size: 12px; font-style: italic; margin-top: 8px">
-      <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email"
-        >{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email</a
-      >
-    </p>
-  </div>
+  <div style="margin: 32px 0">{{ .Token}}</div>
 </div>
