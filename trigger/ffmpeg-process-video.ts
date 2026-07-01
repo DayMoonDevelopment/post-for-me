@@ -5,7 +5,9 @@ import os from "os";
 import path from "path";
 import fetch from "node-fetch";
 import { createReadStream } from "fs";
-import { Upload } from "tus-js-client";
+import { createStorageProvider } from "./lib/storage";
+
+const storageProvider = createStorageProvider();
 
 // Constants
 const DEFAULT_FRAME_RATE = 24;
@@ -19,58 +21,6 @@ const ASPECT_RATIOS = {
   CLASSIC: { ratio: 4 / 3, maxWidth: 1440, maxHeight: 1080 },
 };
 
-async function uploadFile({
-  bucketName,
-  key,
-  filePath,
-}: {
-  bucketName: string;
-  key: string;
-  filePath: string;
-}) {
-  return new Promise<void>((resolve, reject) => {
-    const stream = createReadStream(filePath);
-
-    const upload = new Upload(stream, {
-      endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: {
-        authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        "x-upsert": "true",
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true, // Important if you want to allow re-uploading the same file https://github.com/tus/tus-js-client/blob/main/docs/api.md#removefingerprintonsuccess
-      metadata: {
-        bucketName: bucketName,
-        objectName: key,
-        contentType: "video/mp4",
-        cacheControl: "3600",
-      },
-      chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
-      onError: function (error) {
-        logger.error("Failed uploading video", { error });
-        reject(error);
-      },
-      onSuccess: function () {
-        logger.info("Video uploaded succesfully", { bucketName, key });
-        resolve();
-      },
-    });
-
-    // Check if there are any previous uploads to continue.
-    return upload.findPreviousUploads().then(function (previousUploads) {
-      // Found previous uploads so we select the first one.
-      if (previousUploads.length) {
-        upload.resumeFromPreviousUpload(previousUploads[0]);
-      }
-
-      // Start the upload
-      logger.info("Starting video upload", { bucketName, key });
-      upload.start();
-    });
-  });
-}
-
 // Optimized aspect ratio detection
 const detectAspectRatio = (width: number, height: number) => {
   const ratio = width / height;
@@ -80,15 +30,6 @@ const detectAspectRatio = (width: number, height: number) => {
       (ar) => Math.abs(ratio - ar.ratio) <= tolerance
     ) || ASPECT_RATIOS.LANDSCAPE
   ); // Default to landscape if no match
-};
-
-const getFileKeyFromPublicUrl = (
-  publicUrl: string,
-  bucket: string
-): string | null => {
-  const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-  const match = publicUrl.match(pattern);
-  return match ? match[1] : null;
 };
 
 const getProcessedFileKey = (key: string): string => {
@@ -129,7 +70,7 @@ export const ffmpegProcessVideo = task({
     logger.info("Starting video processing", { url });
     const tempDir = os.tmpdir();
     const bucket = "post-media";
-    const key = getFileKeyFromPublicUrl(url, bucket);
+    const key = storageProvider.getFileKeyFromUrl(url, bucket);
 
     if (!key) {
       logger.error("Unable to get key from url", { url });
@@ -409,25 +350,23 @@ export const ffmpegProcessVideo = task({
       fileProcessed = true;
 
       const processedKey = getProcessedFileKey(key);
-      const processedUrl = url.replace(key, processedKey);
 
-      logger.info("Uploading processed video to storage", {
+      logger.info("Uploading processed video to R2", {
         key,
         processedKey,
       });
-      await uploadFile({
-        bucketName: bucket,
+      await storageProvider.upload({
         key: processedKey,
-        filePath: outputPath,
+        body: createReadStream(outputPath),
+        contentType: "video/mp4",
       });
 
       logger.info("Video processing completed successfully", {
         key: processedKey,
         originalKey: key,
-        bucket,
         processed: true,
       });
-      return { ...medium, url: processedUrl };
+      return { ...medium, url: storageProvider.getPublicUrl(processedKey) };
     } catch (e) {
       logger.error("Error processing video", { error: e });
       throw e;

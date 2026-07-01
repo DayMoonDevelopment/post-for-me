@@ -1,4 +1,3 @@
- 
 import { randomUUID } from "crypto";
 import { createWriteStream } from "fs";
 import * as fsp from "fs/promises";
@@ -7,6 +6,7 @@ import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createStorageProvider, type StorageProvider } from "../lib/storage";
 import type {
   BlueskyConfiguration,
   FacebookConfiguration,
@@ -25,10 +25,15 @@ import type {
 } from "./post.types";
 
 export class PostClient {
+  protected readonly storageProvider: StorageProvider;
+
   constructor(
     _supabaseClient: SupabaseClient,
     _appCredentials: PlatformAppCredentials,
-  ) {}
+    storageProvider: StorageProvider = createStorageProvider(),
+  ) {
+    this.storageProvider = storageProvider;
+  }
 
   //##ABSTRACT METHODS##
   async refreshAccessToken(

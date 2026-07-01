@@ -16,6 +16,8 @@ import { Alert, AlertTitle } from "~/ui/alert";
 
 interface UploadResponse {
   upload_url: string;
+  upload_method?: "PUT" | "POST";
+  upload_fields?: Record<string, string>;
   media_url: string;
   error?: string;
 }
@@ -75,6 +77,8 @@ export function VideoUpload({ onUploadComplete }: VideoUploadProps) {
         // Start the actual file upload
         uploadFileToUrl(
           fetcher.data.upload_url,
+          fetcher.data.upload_method ?? "PUT",
+          fetcher.data.upload_fields ?? {},
           selectedFile,
           fetcher.data.media_url
         );
@@ -87,6 +91,8 @@ export function VideoUpload({ onUploadComplete }: VideoUploadProps) {
 
   const uploadFileToUrl = async (
     uploadUrl: string,
+    uploadMethod: "PUT" | "POST",
+    uploadFields: Record<string, string>,
     file: File,
     fileUrl: string
   ) => {
@@ -120,9 +126,20 @@ export function VideoUpload({ onUploadComplete }: VideoUploadProps) {
         setUploadError("Network error during upload");
       });
 
-      xhr.open("PUT", uploadUrl);
-      xhr.setRequestHeader("Content-Type", file.type);
-      xhr.send(file);
+      if (uploadMethod === "POST") {
+        // Presigned POST (R2): fields must come before the file
+        const formData = new FormData();
+        for (const [key, value] of Object.entries(uploadFields)) {
+          formData.append(key, value);
+        }
+        formData.append("file", file);
+        xhr.open("POST", uploadUrl);
+        xhr.send(formData);
+      } else {
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.send(file);
+      }
     } catch (error) {
       setUploadState("error");
       setUploadError(

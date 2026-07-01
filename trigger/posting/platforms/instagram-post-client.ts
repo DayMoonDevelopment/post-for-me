@@ -25,7 +25,6 @@ export class InstagramPostClient extends PostClient {
   #maxRetryDelayMs = 60000;
   #maxTaskDurationMs = 60 * 60 * 1000;
   #postStartedAtMs: number | null = null;
-  #localSupabaseClient;
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
@@ -49,7 +48,6 @@ export class InstagramPostClient extends PostClient {
   ) {
     super(supabaseClient, appCredentials);
 
-    this.#localSupabaseClient = supabaseClient;
     this.#appCredentials = appCredentials;
   }
 
@@ -970,37 +968,20 @@ export class InstagramPostClient extends PostClient {
     }
 
     const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
+      this.storageProvider.getFileKeyFromUrl(signedUrl, this.#bucket) ||
+      "fileupload";
     const processedKey = `${key.split(".")[0]}_instagram`;
 
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
-    }
-
-    this.#addedMedia.push({
+    const publicUrl = await this.storageProvider.upload({
       key: processedKey,
-      bucket: this.#bucket,
+      body: processedImage,
+      contentType: "image/jpeg",
     });
 
-    const { data: processedImageUpload } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .getPublicUrl(processedKey);
+    this.#addedMedia.push({ key: processedKey });
 
     return {
-      signedUrl: processedImageUpload?.publicUrl,
+      signedUrl: publicUrl,
       width: targetWidth,
       height: targetHeight,
     };
@@ -1132,9 +1113,4 @@ export class InstagramPostClient extends PostClient {
     return cleanedCaption;
   }
 
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
-  }
 }

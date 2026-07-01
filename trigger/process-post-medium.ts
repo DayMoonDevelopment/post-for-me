@@ -1,19 +1,13 @@
-import { Database } from "./supabase.types";
-import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 import fetch from "node-fetch";
 import * as fs from "fs";
 import os from "os";
 import path from "path";
 import { pipeline } from "stream/promises";
-import { Upload } from "tus-js-client";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
+import { createStorageProvider } from "./lib/storage";
 
-// Single Supabase client instance
-const supabaseClient = createClient<Database>(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+const storageProvider = createStorageProvider();
 
 // Helper function to determine media type
 const getMediaType = (
@@ -243,10 +237,10 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
 
   const normalizedContentType = normalizeContentType(contentType);
   const fileExtension = getFileExtension(normalizedContentType);
-  const fileName = `${prefix}_${uuidv4()}${fileExtension}`;
+  const fileName = `${prefix}_${randomUUID()}${fileExtension}`;
   const mediaType = getMediaType(normalizedContentType, fileExtension);
 
-  logger.info(`Streaming upload to Supabase: ${fileName}`, {
+  logger.info(`Streaming upload to R2: ${fileName}`, {
     contentType,
     mediaType,
     contentLength: response.headers.get("content-length")
@@ -254,77 +248,25 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
       : "unknown",
   });
 
-  const bucketName = "post-media";
-
   // Stream download into a temp file so we never hold the whole file in memory.
   const tmpPath = path.join(os.tmpdir(), fileName);
   await pipeline(response.body as any, fs.createWriteStream(tmpPath));
-  const stat = await fs.promises.stat(tmpPath);
-  const uploadSize = stat.size;
+  const { size } = await fs.promises.stat(tmpPath);
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      const upload = new Upload(fs.createReadStream(tmpPath) as any, {
-        endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
-        retryDelays: [0, 3000, 5000, 10000, 20000],
-        uploadSize,
-        headers: {
-          authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-          "x-upsert": "true",
-        },
-        uploadDataDuringCreation: true,
-        removeFingerprintOnSuccess: true, // Important if you want to allow re-uploading the same file https://github.com/tus/tus-js-client/blob/main/docs/api.md#removefingerprintonsuccess
-        metadata: {
-          bucketName: "post-media",
-          objectName: fileName,
-          contentType: normalizedContentType,
-          cacheControl: "3600",
-        },
-        chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
-        onError: function (error) {
-          logger.error("Failed uploading File", { error });
-          reject(error);
-        },
-        onSuccess: function () {
-          logger.info("File uploaded succesfully", { bucketName, fileName });
-          resolve();
-        },
-      });
-
-      // Check if there are any previous uploads to continue.
-      return upload
-        .findPreviousUploads()
-        .catch(() => [])
-        .then(function (previousUploads) {
-          // Found previous uploads so we select the first one.
-          if (previousUploads.length) {
-            upload.resumeFromPreviousUpload(previousUploads[0]);
-          }
-
-          // Start the upload
-          logger.info("Starting video upload", {
-            bucketName,
-            fileName,
-            uploadSize,
-          });
-          upload.start();
-        });
+    const publicUrl = await storageProvider.upload({
+      key: fileName,
+      body: fs.createReadStream(tmpPath),
+      contentType: normalizedContentType,
+      size,
     });
+
+    logger.info(`File streamed and uploaded successfully: ${fileName}`);
+
+    return { publicUrl, mediaType };
   } finally {
     await fs.promises.unlink(tmpPath).catch(() => undefined);
   }
-
-  logger.info(`File streamed and uploaded successfully: ${fileName}`);
-
-  // Get public URL
-  const { data: publicUrlData } = supabaseClient.storage
-    .from("post-media")
-    .getPublicUrl(fileName);
-
-  return {
-    publicUrl: publicUrlData.publicUrl,
-    mediaType,
-  };
 };
 
 export const processPostMedium = task({

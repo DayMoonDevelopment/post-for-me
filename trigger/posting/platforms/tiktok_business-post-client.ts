@@ -29,7 +29,6 @@ export class TikTokBusinessPostClient extends PostClient {
   #titleLength = 85;
   #clientKey: string;
   #clientSecret: string;
-  #localSupabaseClient;
   #maxFileSize = 20 * 1024 * 1024;
   #allowedAspectRatios = [
     { ratio: 9 / 16, width: 1080, height: 1920 },
@@ -50,8 +49,6 @@ export class TikTokBusinessPostClient extends PostClient {
 
     this.#clientKey = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
-
-    this.#localSupabaseClient = supabaseClient;
   }
 
   async refreshAccessToken(
@@ -576,40 +573,18 @@ export class TikTokBusinessPostClient extends PostClient {
     }
 
     const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
+      this.storageProvider.getFileKeyFromUrl(signedUrl, this.#bucket) ||
+      "fileupload";
     const processedKey = `${key.split(".")[0]}_tiktok`;
 
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
-    }
-
-    this.#addedMedia.push({
+    const publicUrl = await this.storageProvider.upload({
       key: processedKey,
-      bucket: this.#bucket,
+      body: processedImage,
+      contentType: "image/jpeg",
     });
 
-    const { data: processedImageUpload } = this.#localSupabaseClient.storage
-      .from(this.#bucket)
-      .getPublicUrl(processedKey);
+    this.#addedMedia.push({ key: processedKey });
 
-    return processedImageUpload!.publicUrl;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
+    return publicUrl;
   }
 }
