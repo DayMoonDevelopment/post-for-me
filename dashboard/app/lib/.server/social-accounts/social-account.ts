@@ -93,7 +93,6 @@ export async function addSocialAccountConnections({
         provider,
         providerUsername: connection.social_provider_user_name,
         providerId: connection.social_provider_user_id,
-        supabaseServiceRole,
       }),
       social_provider_metadata: connection.social_provider_metadata,
       external_id: externalId,
