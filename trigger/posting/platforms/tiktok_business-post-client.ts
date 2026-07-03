@@ -1,4 +1,5 @@
 import type { IStorageProvider } from "../../storage/storage.provider";
+import { MEDIA_BUCKET } from "../../constants";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -40,7 +41,7 @@ export class TikTokBusinessPostClient extends PostClient {
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
-  #bucket: string = "post-media";
+  #bucket: string = MEDIA_BUCKET;
   #maxRequestRetries = 3;
   #requestRetryInitialDelayMs = 2000;
   #maxRequestRetryDelayMs = 15000;
@@ -824,11 +825,16 @@ export class TikTokBusinessPostClient extends PostClient {
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
     const processedKey = `${key.split(".")[0]}_tiktok`;
 
-    await this.#storageProvider.upload(this.#bucket, processedKey, processedImage, {
-      contentType: "image/jpeg",
-      cacheControl: "public, max-age=31536000",
-      upsert: true,
-    });
+    await this.#storageProvider.upload(
+      this.#bucket,
+      processedKey,
+      processedImage,
+      {
+        contentType: "image/jpeg",
+        cacheControl: "public, max-age=31536000",
+        upsert: true,
+      },
+    );
 
     this.#addedMedia.push({
       key: processedKey,

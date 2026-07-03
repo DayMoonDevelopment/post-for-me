@@ -2,6 +2,7 @@ import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, schedules, wait } from "@trigger.dev/sdk";
 import { createStorageProvider } from "./storage/storage.provider";
+import { MEDIA_BUCKET } from "./constants";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -28,7 +29,7 @@ export const supabaseMediaCleanup = schedules.task({
     const allOldFiles: Awaited<ReturnType<typeof storageProvider.list>> = [];
 
     try {
-      for await (const file of storageProvider.listAll("post-media")) {
+      for await (const file of storageProvider.listAll(MEDIA_BUCKET)) {
         if (
           file.createdAt != null &&
           new Date(file.createdAt) < oneDayAgo &&
@@ -101,7 +102,7 @@ export const supabaseMediaCleanup = schedules.task({
       const batch = filesToDelete.slice(i, i + batchSize);
 
       try {
-        await storageProvider.remove("post-media", batch.map((file) => file.name));
+        await storageProvider.remove(MEDIA_BUCKET, batch.map((file) => file.name));
         logger.info(`Successfully deleted batch ${i / batchSize + 1}`, {
           filesDeleted: batch.length,
         });
