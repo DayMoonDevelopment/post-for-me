@@ -25,44 +25,21 @@ export const supabaseMediaCleanup = schedules.task({
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-    const allOldFiles: any[] = [];
-    let offset = 0;
-    const limit = 1000; // Process in larger batches
+    const allOldFiles: Awaited<ReturnType<typeof storageProvider.list>> = [];
 
-    // Fetch all old files from storage
-    for (;;) {
-      let files: Awaited<ReturnType<typeof storageProvider.list>>;
-      try {
-        files = await storageProvider.list("post-media", undefined, {
-          limit,
-          offset,
-          sortBy: { column: "created_at", order: "asc" },
-        });
-      } catch (error) {
-        logger.error("Error fetching files", { error });
-        return;
-      }
-
-      if (!files?.length) break;
-
-      // Filter files older than 1 day
-      const oldFiles = files.filter(
-        (file) =>
+    try {
+      for await (const file of storageProvider.listAll("post-media")) {
+        if (
           file.createdAt != null &&
           new Date(file.createdAt) < oneDayAgo &&
-          file.metadata?.["mimetype"] !== "text/plain",
-      );
-
-      if (oldFiles.length === 0) {
-        //No files older than a day exiting loop
-        break;
+          file.metadata?.["mimetype"] !== "text/plain"
+        ) {
+          allOldFiles.push(file);
+        }
       }
-
-      allOldFiles.push(...oldFiles);
-      offset += limit;
-
-      // If we got less than the limit, we've reached the end
-      if (files.length < limit) break;
+    } catch (error) {
+      logger.error("Error fetching files", { error });
+      return;
     }
 
     if (allOldFiles.length === 0) {

@@ -1,3 +1,5 @@
+export const STORAGE_PROVIDER = 'STORAGE_PROVIDER' as const;
+
 export interface StorageFile {
   name: string;
   createdAt?: string;
@@ -40,4 +42,5 @@ export interface IStorageProvider {
   ): Promise<StorageFile[]>;
   getPublicUrl(bucket: string, key: string): string;
   createSignedUploadUrl(bucket: string, key: string): Promise<string>;
+  listAll(bucket: string, prefix?: string): AsyncGenerator<StorageFile>;
 }
