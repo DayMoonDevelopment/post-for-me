@@ -1,46 +1,39 @@
-import type { Database } from "~/lib/.server/database.types";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { data } from "react-router";
 import { createStorageProvider } from "~/lib/.server/storage/storage.provider";
 
 import { withSupabase } from "~/lib/.server/supabase";
 
 // POST handler for file uploads
-export const action = withSupabase(
-  async ({ params, request, supabaseServiceRole }) => {
-    const method = request.method;
-    const { teamId, projectId } = params;
+export const action = withSupabase(async ({ params, request }) => {
+  const method = request.method;
+  const { teamId, projectId } = params;
 
-    if (!teamId || !projectId) {
-      return data({
-        success: false,
-        toast_msg: "Team ID and Project ID are required",
-      });
-    }
-
-    switch (method) {
-      case "POST":
-        return data(
-          await postAction(request, supabaseServiceRole, { teamId, projectId })
-        );
-      case "DELETE":
-        return data(await deleteAction(request, supabaseServiceRole));
-      default:
-        throw new Error(`Method ${method} not supported`);
-    }
+  if (!teamId || !projectId) {
+    return data({
+      success: false,
+      toast_msg: "Team ID and Project ID are required",
+    });
   }
-);
+
+  switch (method) {
+    case "POST":
+      return data(await postAction(request, { teamId, projectId }));
+    case "DELETE":
+      return data(await deleteAction(request));
+    default:
+      throw new Error(`Method ${method} not supported`);
+  }
+});
 
 async function postAction(
   request: Request,
-  supabaseServiceRole: SupabaseClient<Database>,
   {
     teamId,
     projectId,
   }: {
     teamId: string;
     projectId: string;
-  }
+  },
 ): Promise<{ success: boolean; fileName?: string }> {
   const formData = await request.formData();
   const files = formData.getAll("tiktok_verification_files") as File[];
@@ -76,10 +69,7 @@ async function postAction(
   };
 }
 
-async function deleteAction(
-  request: Request,
-  supabaseServiceRole: SupabaseClient<Database>
-): Promise<{ success: boolean }> {
+async function deleteAction(request: Request): Promise<{ success: boolean }> {
   const formData = await request.formData();
   const fileName = formData.get("fileName") as string;
 
