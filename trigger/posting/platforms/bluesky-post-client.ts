@@ -3,7 +3,7 @@ import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
 import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -30,10 +30,10 @@ export class BlueskyPostClient extends PostClient {
   #responses: any[] = [];
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
     this.#agent = new AtpAgent({
       service: "https://bsky.social",
     });

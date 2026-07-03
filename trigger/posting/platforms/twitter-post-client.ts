@@ -7,7 +7,7 @@ import {
 } from "twitter-api-v2";
 import sharp from "sharp";
 import { readFile } from "fs/promises";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 import { wait } from "@trigger.dev/sdk";
 import {
   PlatformAppCredentials,
@@ -29,10 +29,10 @@ export class TwitterPostClient extends PostClient {
   #uploadChunkSize = 5 * 1024 * 1024;
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
 
     this.#appKey = appCredentials.app_id;
     this.#appSecret = appCredentials.app_secret;
@@ -89,12 +89,12 @@ export class TwitterPostClient extends PostClient {
 
       const twitterClient = isOAuth2
         ? new TwitterApi(account.access_token)
-        : (new TwitterApi({
+        : new TwitterApi({
             appKey: this.#appKey,
             appSecret: this.#appSecret,
             accessToken: account.access_token,
             accessSecret: account.refresh_token,
-          } as TwitterApiTokens));
+          } as TwitterApiTokens);
 
       const mediaIds = await this.#processMedia({
         twitterClient,
@@ -359,9 +359,7 @@ export class TwitterPostClient extends PostClient {
   }
 
   #toUploadMimeType(mimeType: string): EUploadMimeType {
-    if (
-      !Object.values(EUploadMimeType).includes(mimeType as EUploadMimeType)
-    ) {
+    if (!Object.values(EUploadMimeType).includes(mimeType as EUploadMimeType)) {
       throw new Error(`Unsupported media type for X: ${mimeType}`);
     }
 

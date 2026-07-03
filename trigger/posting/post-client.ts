@@ -6,7 +6,7 @@ import os from "os";
 import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../storage/storage.provider";
 import type {
   BlueskyConfiguration,
   FacebookConfiguration,
@@ -26,7 +26,7 @@ import type {
 
 export class PostClient {
   constructor(
-    _supabaseClient: SupabaseClient,
+    _storageProvider: IStorageProvider,
     _appCredentials: PlatformAppCredentials,
   ) {}
 

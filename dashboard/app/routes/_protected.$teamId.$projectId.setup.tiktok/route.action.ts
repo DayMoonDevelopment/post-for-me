@@ -4,6 +4,7 @@ import { withSupabase } from "~/lib/.server/supabase";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "~/lib/.server/database.types";
+import { createStorageProvider } from "~/lib/.server/storage/supabase-storage.provider";
 
 type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 
@@ -98,16 +99,15 @@ async function processTikTokSettings(
   supabaseServiceRole: SupabaseClient<Database>
 ): Promise<{ success: boolean }> {
   const files = formData.getAll("verification_files") as File[];
+  const storageProvider = createStorageProvider(supabaseServiceRole);
 
   for (const file of files) {
-    const { error } = await supabaseServiceRole.storage
-      .from("post-media")
-      .upload(file.name, file, {
+    try {
+      await storageProvider.upload("post-media", file.name, file, {
         cacheControl: "3600",
         upsert: true,
       });
-
-    if (error) {
+    } catch (error) {
       console.error("File upload error:", error);
       return { success: false };
     }

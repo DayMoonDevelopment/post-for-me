@@ -1,11 +1,14 @@
 import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, schedules, wait } from "@trigger.dev/sdk";
+import { createStorageProvider } from "./storage/supabase-storage.provider";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
+
+const storageProvider = createStorageProvider();
 
 const storageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/post-media`;
 
@@ -28,15 +31,14 @@ export const supabaseMediaCleanup = schedules.task({
 
     // Fetch all old files from storage
     for (;;) {
-      const { data: files, error } = await supabaseClient.storage
-        .from("post-media")
-        .list(undefined, {
+      let files: Awaited<ReturnType<typeof storageProvider.list>>;
+      try {
+        files = await storageProvider.list("post-media", undefined, {
           limit,
           offset,
           sortBy: { column: "created_at", order: "asc" },
         });
-
-      if (error) {
+      } catch (error) {
         logger.error("Error fetching files", { error });
         return;
       }
@@ -46,9 +48,9 @@ export const supabaseMediaCleanup = schedules.task({
       // Filter files older than 1 day
       const oldFiles = files.filter(
         (file) =>
-          file.created_at !== null &&
-          new Date(file.created_at) < oneDayAgo &&
-          file.metadata?.mimetype !== "text/plain",
+          file.createdAt != null &&
+          new Date(file.createdAt) < oneDayAgo &&
+          file.metadata?.["mimetype"] !== "text/plain",
       );
 
       if (oldFiles.length === 0) {
@@ -121,21 +123,18 @@ export const supabaseMediaCleanup = schedules.task({
     for (let i = 0; i < filesToDelete.length; i += batchSize) {
       const batch = filesToDelete.slice(i, i + batchSize);
 
-      const { error: deleteError } = await supabaseClient.storage
-        .from("post-media")
-        .remove(batch.map((file) => file.name));
-
-      if (deleteError) {
+      try {
+        await storageProvider.remove("post-media", batch.map((file) => file.name));
+        logger.info(`Successfully deleted batch ${i / batchSize + 1}`, {
+          filesDeleted: batch.length,
+        });
+        deletedCount += batch.length;
+      } catch (deleteError) {
         logger.error(`Error deleting batch ${i / batchSize + 1}`, {
           error: deleteError,
           batch,
         });
         errorCount += batch.length;
-      } else {
-        logger.info(`Successfully deleted batch ${i / batchSize + 1}`, {
-          filesDeleted: batch.length,
-        });
-        deletedCount += batch.length;
       }
 
       // Add a small delay between batches to be nice to the API
