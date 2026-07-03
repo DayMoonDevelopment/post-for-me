@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { MEDIA_BUCKET } from "./constants";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
@@ -33,7 +34,7 @@ export const ffmpegCompressVideo = task({
     url: string;
     maxSizeBytes: number;
   }): Promise<string> => {
-    const bucket = "post-media";
+    const bucket = MEDIA_BUCKET;
 
     const key = getFileKeyFromPublicUrl(url, bucket);
 

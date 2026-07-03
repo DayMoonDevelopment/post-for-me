@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk";
+import { MEDIA_BUCKET } from "./constants";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
@@ -77,7 +78,7 @@ export const ffmpegProcessVideo = task({
     const { url } = medium;
     logger.info("Starting video processing", { url });
     const tempDir = os.tmpdir();
-    const bucket = "post-media";
+    const bucket = MEDIA_BUCKET;
     const key = getFileKeyFromPublicUrl(url, bucket);
 
     if (!key) {

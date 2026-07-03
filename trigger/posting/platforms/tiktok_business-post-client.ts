@@ -1,4 +1,5 @@
 import type { IStorageProvider } from "../../storage/storage.provider";
+import { MEDIA_BUCKET } from "../../constants";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -40,7 +41,7 @@ export class TikTokBusinessPostClient extends PostClient {
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
-  #bucket: string = "post-media";
+  #bucket: string = MEDIA_BUCKET;
 
   constructor(
     storageProvider: IStorageProvider,

@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk";
+import { MEDIA_BUCKET } from "./constants";
 import fetch from "node-fetch";
 import * as fs from "fs";
 import os from "os";
@@ -248,7 +249,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
       : "unknown",
   });
 
-  const bucketName = "post-media";
+  const bucketName = MEDIA_BUCKET;
 
   // Stream download into a temp file so we never hold the whole file in memory.
   const tmpPath = path.join(os.tmpdir(), fileName);
