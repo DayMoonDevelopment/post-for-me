@@ -1,4 +1,5 @@
 import { withSupabase } from "~/lib/.server/supabase";
+import { createStorageProvider } from "~/lib/.server/storage/supabase-storage.provider";
 
 export const loader = withSupabase(async ({ params, supabaseServiceRole }) => {
   let { filename } = params;
@@ -11,11 +12,12 @@ export const loader = withSupabase(async ({ params, supabaseServiceRole }) => {
     filename = filename + ".txt";
   }
 
-  const { data } = await supabaseServiceRole.storage
-    .from("post-media")
-    .download(filename);
+  const storageProvider = createStorageProvider(supabaseServiceRole);
 
-  if (!data) {
+  let data: Blob;
+  try {
+    data = await storageProvider.download("post-media", filename);
+  } catch {
     return new Response("File Not Found", { status: 404 });
   }
 

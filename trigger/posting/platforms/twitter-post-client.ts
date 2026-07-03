@@ -5,7 +5,7 @@ import {
   TwitterApiTokens,
 } from "twitter-api-v2";
 import sharp from "sharp";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 import { wait } from "@trigger.dev/sdk";
 import {
   PlatformAppCredentials,
@@ -26,10 +26,10 @@ export class TwitterPostClient extends PostClient {
   #maxFileSize = 5 * 1024 * 1024;
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
 
     this.#appKey = appCredentials.app_id;
     this.#appSecret = appCredentials.app_secret;

@@ -1,6 +1,6 @@
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 import { logger, wait } from "@trigger.dev/sdk";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
@@ -34,10 +34,10 @@ export class YouTubePostClient extends PostClient {
   static readonly PROCESSING_POLL_MAX_DELAY_MS = 60_000;
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
 
     this.#googleClientId = appCredentials.app_id;
     this.#googleClientSecret = appCredentials.app_secret;

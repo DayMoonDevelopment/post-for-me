@@ -4,8 +4,9 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import fetch from "node-fetch";
-import { createReadStream } from "fs";
-import { Upload } from "tus-js-client";
+import { createStorageProvider } from "./storage/supabase-storage.provider";
+
+const storageProvider = createStorageProvider();
 
 // Constants
 const DEFAULT_FRAME_RATE = 24;
@@ -18,58 +19,6 @@ const ASPECT_RATIOS = {
   SQUARE: { ratio: 1, maxWidth: 1080, maxHeight: 1080 },
   CLASSIC: { ratio: 4 / 3, maxWidth: 1440, maxHeight: 1080 },
 };
-
-async function uploadFile({
-  bucketName,
-  key,
-  filePath,
-}: {
-  bucketName: string;
-  key: string;
-  filePath: string;
-}) {
-  return new Promise<void>((resolve, reject) => {
-    const stream = createReadStream(filePath);
-
-    const upload = new Upload(stream, {
-      endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: {
-        authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        "x-upsert": "true",
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true, // Important if you want to allow re-uploading the same file https://github.com/tus/tus-js-client/blob/main/docs/api.md#removefingerprintonsuccess
-      metadata: {
-        bucketName: bucketName,
-        objectName: key,
-        contentType: "video/mp4",
-        cacheControl: "3600",
-      },
-      chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
-      onError: function (error) {
-        logger.error("Failed uploading video", { error });
-        reject(error);
-      },
-      onSuccess: function () {
-        logger.info("Video uploaded succesfully", { bucketName, key });
-        resolve();
-      },
-    });
-
-    // Check if there are any previous uploads to continue.
-    return upload.findPreviousUploads().then(function (previousUploads) {
-      // Found previous uploads so we select the first one.
-      if (previousUploads.length) {
-        upload.resumeFromPreviousUpload(previousUploads[0]);
-      }
-
-      // Start the upload
-      logger.info("Starting video upload", { bucketName, key });
-      upload.start();
-    });
-  });
-}
 
 // Optimized aspect ratio detection
 const detectAspectRatio = (width: number, height: number) => {
@@ -409,17 +358,12 @@ export const ffmpegProcessVideo = task({
       fileProcessed = true;
 
       const processedKey = getProcessedFileKey(key);
-      const processedUrl = url.replace(key, processedKey);
 
       logger.info("Uploading processed video to storage", {
         key,
         processedKey,
       });
-      await uploadFile({
-        bucketName: bucket,
-        key: processedKey,
-        filePath: outputPath,
-      });
+      await storageProvider.uploadFromFilePath(bucket, processedKey, outputPath, "video/mp4");
 
       logger.info("Video processing completed successfully", {
         key: processedKey,
@@ -427,7 +371,7 @@ export const ffmpegProcessVideo = task({
         bucket,
         processed: true,
       });
-      return { ...medium, url: processedUrl };
+      return { ...medium, url: storageProvider.getPublicUrl(bucket, processedKey) };
     } catch (e) {
       logger.error("Error processing video", { error: e });
       throw e;

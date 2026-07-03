@@ -23,6 +23,7 @@ import { getTikTokBusinessSocialProviderConnection } from "./providers/tiktok-bu
 import { getInstagramWFacebookSocialProviderConnection } from "./providers/instagram-w-facebook.social-account";
 
 import { tasks } from "@trigger.dev/sdk";
+import { createStorageProvider } from "~/lib/.server/storage/supabase-storage.provider";
 
 export async function addSocialAccountConnections({
   projectId,
@@ -243,24 +244,20 @@ async function getPublicProfilePhotoUrl({
     const fileName = `${(providerUsername || providerId).replace(" ", "")}_profile.jpg`;
     const filePath = `projects/${projectId}/${provider}/${fileName}`;
 
-    // Upload to Supabase storage
-    const { error: uploadError } = await supabaseServiceRole.storage
-      .from(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME)
-      .upload(filePath, imageBlob, {
+    const storageProvider = createStorageProvider(supabaseServiceRole);
+
+    // Upload to storage
+    try {
+      await storageProvider.upload(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME, filePath, imageBlob, {
         contentType: "image/jpeg",
         upsert: true,
       });
-
-    if (uploadError) {
+    } catch (uploadError) {
       console.error("Profile image upload error:", uploadError);
       return profilePhotoUrl;
     }
-    // Get public URL
-    const { data: publicUrlData } = supabaseServiceRole.storage
-      .from(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME)
-      .getPublicUrl(filePath);
 
-    return publicUrlData.publicUrl;
+    return storageProvider.getPublicUrl(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME, filePath);
   } catch (uploadError) {
     console.error("Profile image processing error:", uploadError);
   }

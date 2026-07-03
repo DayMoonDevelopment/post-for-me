@@ -10,17 +10,17 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 
 export class PinterestPostClient extends PostClient {
   #requests: any[] = [];
   #responses: any[] = [];
   #appCredentials: PlatformAppCredentials;
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
     this.#appCredentials = appCredentials;
   }
 

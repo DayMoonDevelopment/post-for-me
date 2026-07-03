@@ -1,6 +1,7 @@
 import type { Database } from "~/lib/.server/database.types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { data } from "react-router";
+import { createStorageProvider } from "~/lib/.server/storage/supabase-storage.provider";
 
 import { withSupabase } from "~/lib/.server/supabase";
 
@@ -48,11 +49,12 @@ async function postAction(
     return { success: false };
   }
 
+  const storageProvider = createStorageProvider(supabaseServiceRole);
+
   // Upload files one by one to handle individual errors
   for (const file of files) {
-    const { error } = await supabaseServiceRole.storage
-      .from("post-media")
-      .upload(`${file.name}`, file, {
+    try {
+      await storageProvider.upload("post-media", `${file.name}`, file, {
         cacheControl: "3600",
         upsert: true,
         metadata: {
@@ -60,8 +62,7 @@ async function postAction(
           project_id: projectId,
         },
       });
-
-    if (error) {
+    } catch (error) {
       console.error("Upload error:", error);
       return {
         success: false,
@@ -84,11 +85,10 @@ async function deleteAction(
 
   // Handle single file deletion
   if (fileName) {
-    const { error } = await supabaseServiceRole.storage
-      .from("post-media")
-      .remove([`${fileName}`]);
-
-    if (error) {
+    const storageProvider = createStorageProvider(supabaseServiceRole);
+    try {
+      await storageProvider.remove("post-media", [`${fileName}`]);
+    } catch (error) {
       console.error("Delete error:", error);
       return {
         success: false,
