@@ -4,10 +4,17 @@ import {
   GetObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  ListPartsCommand,
+  CompleteMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { Upload } from "@aws-sdk/lib-storage";
+import { createHash } from "crypto";
 import { createReadStream } from "fs";
+import { readFile, stat, unlink, writeFile } from "fs/promises";
+import os from "os";
+import path from "path";
 import type {
   IStorageProvider,
   StorageFile,
@@ -43,24 +50,79 @@ class R2StorageProvider implements IStorageProvider {
     );
   }
 
+  private stateFilePath(bucket: string, key: string): string {
+    const fingerprint = createHash("sha256").update(`${bucket}:${key}`).digest("hex");
+    return path.join(os.tmpdir(), `r2-upload-${fingerprint}.json`);
+  }
+
   async uploadFromFilePath(
     bucket: string,
     key: string,
     filePath: string,
     contentType: string,
   ): Promise<void> {
-    const upload = new Upload({
-      client: this.client,
-      params: {
+    const PART_SIZE = 6 * 1024 * 1024;
+    const stateFile = this.stateFilePath(bucket, key);
+
+    let uploadId: string;
+    let completedParts: { PartNumber: number; ETag: string }[] = [];
+
+    try {
+      const raw = await readFile(stateFile, "utf8");
+      const state = JSON.parse(raw) as { uploadId: string };
+      const listed = await this.client.send(
+        new ListPartsCommand({ Bucket: bucket, Key: key, UploadId: state.uploadId }),
+      );
+      uploadId = state.uploadId;
+      completedParts = (listed.Parts ?? []).map((p) => ({
+        PartNumber: p.PartNumber!,
+        ETag: p.ETag!,
+      }));
+    } catch {
+      // No valid previous upload — start fresh
+      const created = await this.client.send(
+        new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+      );
+      uploadId = created.UploadId!;
+      await writeFile(stateFile, JSON.stringify({ uploadId }), "utf8");
+    }
+
+    const { size: fileSize } = await stat(filePath);
+    const totalParts = Math.ceil(fileSize / PART_SIZE);
+    const uploadedPartNumbers = new Set(completedParts.map((p) => p.PartNumber));
+
+    for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+      if (uploadedPartNumbers.has(partNumber)) continue;
+
+      const start = (partNumber - 1) * PART_SIZE;
+      const end = Math.min(start + PART_SIZE, fileSize);
+
+      const response = await this.client.send(
+        new UploadPartCommand({
+          Bucket: bucket,
+          Key: key,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+          Body: createReadStream(filePath, { start, end: end - 1 }),
+          ContentLength: end - start,
+        }),
+      );
+
+      completedParts.push({ PartNumber: partNumber, ETag: response.ETag! });
+    }
+
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
         Bucket: bucket,
         Key: key,
-        Body: createReadStream(filePath),
-        ContentType: contentType,
-      },
-      partSize: 6 * 1024 * 1024,
-      leavePartsOnError: false,
-    });
-    await upload.done();
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: completedParts.sort((a, b) => a.PartNumber - b.PartNumber),
+        },
+      }),
+    );
+
+    await unlink(stateFile).catch(() => {});
   }
 
   async download(bucket: string, key: string): Promise<Blob> {
