@@ -26,6 +26,7 @@ export interface IStorageProvider {
   list(bucket: string, prefix?: string, options?: StorageListOptions): Promise<StorageFile[]>;
   getPublicUrl(bucket: string, key: string): string;
   createSignedUploadUrl(bucket: string, key: string): Promise<string>;
+  listAll(bucket: string, prefix?: string): AsyncGenerator<StorageFile>;
 }
 
 export { createStorageProvider } from "./supabase-storage.provider";

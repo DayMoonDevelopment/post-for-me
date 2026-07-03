@@ -121,6 +121,17 @@ export class SupabaseStorageProvider implements IStorageProvider {
     if (!data) throw new Error("Signed URL not found");
     return data.signedUrl;
   }
+
+  async *listAll(bucket: string, prefix?: string): AsyncGenerator<StorageFile> {
+    let offset = 0;
+    const limit = 1000;
+    while (true) {
+      const files = await this.list(bucket, prefix, { limit, offset });
+      for (const file of files) yield file;
+      if (files.length < limit) break;
+      offset += limit;
+    }
+  }
 }
 
 export function createStorageProvider(): IStorageProvider {

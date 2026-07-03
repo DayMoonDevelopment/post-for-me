@@ -1,14 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, createHash } from 'crypto';
 
-import { SupabaseStorageProvider } from '../storage/supabase-storage.provider';
+import {
+  IStorageProvider,
+  STORAGE_PROVIDER,
+} from '../storage/storage.provider';
 import { CreateUploadUrlResponseDto } from './dto/create-upload-url-response.dto';
 
 @Injectable()
 export class MediaService {
   constructor(
-    private readonly storageProvider: SupabaseStorageProvider,
+    @Inject(STORAGE_PROVIDER)
+    private readonly storageProvider: IStorageProvider,
     private readonly configService: ConfigService,
   ) {}
 
