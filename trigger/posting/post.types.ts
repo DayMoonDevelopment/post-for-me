@@ -129,6 +129,14 @@ export interface InstagramConfiguration {
   location?: string;
   trial_reel_type?: string;
   audio_name?: string;
+  audio_configuration?: InstagramAudioConfiguration;
+}
+
+export interface InstagramAudioConfiguration {
+  audio_id: string;
+  audio_volume?: number;
+  video_volume?: number;
+  should_loop_audio?: boolean;
 }
 
 export interface TiktokConfiguration {

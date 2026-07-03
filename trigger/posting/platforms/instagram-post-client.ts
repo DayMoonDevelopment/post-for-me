@@ -4,6 +4,7 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  InstagramAudioConfiguration,
   InstagramConfiguration,
   PlatformAppCredentials,
   PostMedia,
@@ -27,6 +28,7 @@ export class InstagramPostClient extends PostClient {
   #postStartedAtMs: number | null = null;
   #localSupabaseClient;
   #addedMedia: any[] = [];
+  #warnings: string[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
   #bucket: string = "post-media";
@@ -266,9 +268,14 @@ export class InstagramPostClient extends PostClient {
         provider_post_id: platformId,
         details: {
           warning:
-            media.length > this.#maxItems
-              ? `Only first ${this.#maxItems} items were posted`
-              : null,
+            [
+              media.length > this.#maxItems
+                ? `Only first ${this.#maxItems} items were posted`
+                : null,
+              ...this.#warnings,
+            ]
+              .filter(Boolean)
+              .join("; ") || null,
           addedMedia: this.#addedMedia,
           requests: this.#requests,
           responses: this.#responses,
@@ -361,6 +368,7 @@ export class InstagramPostClient extends PostClient {
       location_id?: string;
       user_tags?: any[];
       audio_name?: string;
+      audio_configuration?: InstagramAudioConfiguration;
       trial_params?: {
         graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
       };
@@ -400,7 +408,25 @@ export class InstagramPostClient extends PostClient {
             createMediaParams.share_to_feed = platformConfig?.share_to_feed;
           }
 
-          if (platformConfig?.audio_name) {
+          // audio_configuration attaches a catalog track by audio_id. Only
+          // supported on the Instagram API with Facebook Login; ignored with
+          // a warning for direct Instagram Login accounts. Supersedes
+          // audio_name when attached.
+          if (platformConfig?.audio_configuration?.audio_id) {
+            if (this.getApiBaseUrl(account).includes("graph.facebook.com")) {
+              createMediaParams.audio_configuration =
+                platformConfig.audio_configuration;
+            } else {
+              this.#warnings.push(
+                "audio_configuration was ignored: attaching audio by id requires an Instagram account connected with Facebook Login",
+              );
+            }
+          }
+
+          if (
+            !createMediaParams.audio_configuration &&
+            platformConfig?.audio_name
+          ) {
             createMediaParams.audio_name = platformConfig.audio_name;
           }
         }
