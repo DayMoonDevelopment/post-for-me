@@ -42,3 +42,4 @@ export interface IStorageProvider {
   createSignedUploadUrl(bucket: string, key: string): Promise<string>;
 }
 
+export { createStorageProvider } from "./supabase-storage.provider";

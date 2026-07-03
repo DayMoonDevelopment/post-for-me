@@ -1,7 +1,7 @@
 import { withSupabase } from "~/lib/.server/supabase";
-import { createStorageProvider } from "~/lib/.server/storage/supabase-storage.provider";
+import { createStorageProvider } from "~/lib/.server/storage/storage.provider";
 
-export const loader = withSupabase(async ({ params, supabaseServiceRole }) => {
+export const loader = withSupabase(async ({ params }) => {
   let { filename } = params;
 
   if (!filename) {
@@ -12,7 +12,7 @@ export const loader = withSupabase(async ({ params, supabaseServiceRole }) => {
     filename = filename + ".txt";
   }
 
-  const storageProvider = createStorageProvider(supabaseServiceRole);
+  const storageProvider = createStorageProvider();
 
   let data: Blob;
   try {

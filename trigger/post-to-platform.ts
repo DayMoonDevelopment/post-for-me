@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { IStorageProvider } from "./storage/storage.provider";
-import { createStorageProvider } from "./storage/supabase-storage.provider";
+import { createStorageProvider, type IStorageProvider } from "./storage/storage.provider";
 import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
