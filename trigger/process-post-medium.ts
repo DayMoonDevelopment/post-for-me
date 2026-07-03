@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 import { pipeline } from "stream/promises";
 import { v4 as uuidv4 } from "uuid";
-import { createStorageProvider } from "./storage/supabase-storage.provider";
+import { createStorageProvider } from "./storage/storage.provider";
 
 const storageProvider = createStorageProvider();
 

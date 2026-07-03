@@ -4,7 +4,7 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import fetch from "node-fetch";
-import { createStorageProvider } from "./storage/supabase-storage.provider";
+import { createStorageProvider } from "./storage/storage.provider";
 
 const storageProvider = createStorageProvider();
 

@@ -23,7 +23,7 @@ import { getTikTokBusinessSocialProviderConnection } from "./providers/tiktok-bu
 import { getInstagramWFacebookSocialProviderConnection } from "./providers/instagram-w-facebook.social-account";
 
 import { tasks } from "@trigger.dev/sdk";
-import { createStorageProvider } from "~/lib/.server/storage/supabase-storage.provider";
+import { createStorageProvider } from "~/lib/.server/storage/storage.provider";
 
 export async function addSocialAccountConnections({
   projectId,
@@ -244,7 +244,7 @@ async function getPublicProfilePhotoUrl({
     const fileName = `${(providerUsername || providerId).replace(" ", "")}_profile.jpg`;
     const filePath = `projects/${projectId}/${provider}/${fileName}`;
 
-    const storageProvider = createStorageProvider(supabaseServiceRole);
+    const storageProvider = createStorageProvider();
 
     // Upload to storage
     try {
