@@ -221,7 +221,6 @@ async function getPublicProfilePhotoUrl({
   projectId,
   providerUsername,
   providerId,
-  supabaseServiceRole,
   provider,
 }: {
   profilePhotoUrl: string | undefined | null;
@@ -229,7 +228,6 @@ async function getPublicProfilePhotoUrl({
   provider: string;
   providerUsername: string | undefined | null;
   providerId: string;
-  supabaseServiceRole: SupabaseClient<Database>;
 }): Promise<string> {
   if (!profilePhotoUrl) {
     return "";
@@ -248,16 +246,24 @@ async function getPublicProfilePhotoUrl({
 
     // Upload to storage
     try {
-      await storageProvider.upload(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME, filePath, imageBlob, {
-        contentType: "image/jpeg",
-        upsert: true,
-      });
+      await storageProvider.upload(
+        SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME,
+        filePath,
+        imageBlob,
+        {
+          contentType: "image/jpeg",
+          upsert: true,
+        },
+      );
     } catch (uploadError) {
       console.error("Profile image upload error:", uploadError);
       return profilePhotoUrl;
     }
 
-    return storageProvider.getPublicUrl(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME, filePath);
+    return storageProvider.getPublicUrl(
+      SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME,
+      filePath,
+    );
   } catch (uploadError) {
     console.error("Profile image processing error:", uploadError);
   }
