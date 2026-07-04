@@ -5,9 +5,7 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import fetch from "node-fetch";
-import { createStorageProvider } from "./storage/storage.provider";
-
-const storageProvider = createStorageProvider();
+import { getStorageProvider } from "./storage/storage.provider";
 
 // Constants
 const DEFAULT_FRAME_RATE = 24;
@@ -72,11 +70,14 @@ export const ffmpegProcessVideo = task({
   machine: "medium-2x",
   run: async ({
     medium,
+    teamId,
   }: {
     medium: ProcessPostVideoMedium;
+    teamId?: string;
   }): Promise<ProcessPostVideoMedium> => {
     const { url } = medium;
     logger.info("Starting video processing", { url });
+    const storageProvider = await getStorageProvider(teamId ?? "");
     const tempDir = os.tmpdir();
     const bucket = MEDIA_BUCKET;
     const key = getFileKeyFromPublicUrl(url, bucket);

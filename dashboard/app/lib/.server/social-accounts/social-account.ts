@@ -23,10 +23,11 @@ import { getTikTokBusinessSocialProviderConnection } from "./providers/tiktok-bu
 import { getInstagramWFacebookSocialProviderConnection } from "./providers/instagram-w-facebook.social-account";
 
 import { tasks } from "@trigger.dev/sdk";
-import { createStorageProvider } from "~/lib/.server/storage/storage.provider";
+import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
 
 export async function addSocialAccountConnections({
   projectId,
+  teamId,
   provider,
   request,
   supabaseServiceRole,
@@ -37,6 +38,7 @@ export async function addSocialAccountConnections({
 }: {
   supabaseServiceRole: SupabaseClient<Database>;
   projectId: string;
+  teamId: string;
   provider: string;
   request: Request;
   isSystem: boolean;
@@ -90,6 +92,7 @@ export async function addSocialAccountConnections({
       social_provider_profile_photo_url: await getPublicProfilePhotoUrl({
         profilePhotoUrl: connection.social_provider_photo_url,
         projectId,
+        teamId,
         provider,
         providerUsername: connection.social_provider_user_name,
         providerId: connection.social_provider_user_id,
@@ -218,12 +221,14 @@ async function getSocialProviderConnections(
 async function getPublicProfilePhotoUrl({
   profilePhotoUrl,
   projectId,
+  teamId,
   providerUsername,
   providerId,
   provider,
 }: {
   profilePhotoUrl: string | undefined | null;
   projectId: string;
+  teamId: string;
   provider: string;
   providerUsername: string | undefined | null;
   providerId: string;
@@ -241,7 +246,7 @@ async function getPublicProfilePhotoUrl({
     const fileName = `${(providerUsername || providerId).replace(" ", "")}_profile.jpg`;
     const filePath = `projects/${projectId}/${provider}/${fileName}`;
 
-    const storageProvider = createStorageProvider();
+    const storageProvider = await getStorageProvider(teamId);
 
     // Upload to storage
     try {

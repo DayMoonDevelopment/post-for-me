@@ -1,5 +1,5 @@
 import { data } from "react-router";
-import { createStorageProvider } from "~/lib/.server/storage/storage.provider";
+import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
 
 import { withSupabase } from "~/lib/.server/supabase";
 
@@ -19,7 +19,7 @@ export const action = withSupabase(async ({ params, request }) => {
     case "POST":
       return data(await postAction(request, { teamId, projectId }));
     case "DELETE":
-      return data(await deleteAction(request));
+      return data(await deleteAction(request, { teamId }));
     default:
       throw new Error(`Method ${method} not supported`);
   }
@@ -42,7 +42,7 @@ async function postAction(
     return { success: false };
   }
 
-  const storageProvider = createStorageProvider();
+  const storageProvider = await getStorageProvider(teamId);
 
   // Upload files one by one to handle individual errors
   for (const file of files) {
@@ -69,13 +69,16 @@ async function postAction(
   };
 }
 
-async function deleteAction(request: Request): Promise<{ success: boolean }> {
+async function deleteAction(
+  request: Request,
+  { teamId }: { teamId: string },
+): Promise<{ success: boolean }> {
   const formData = await request.formData();
   const fileName = formData.get("fileName") as string;
 
   // Handle single file deletion
   if (fileName) {
-    const storageProvider = createStorageProvider();
+    const storageProvider = await getStorageProvider(teamId);
     try {
       await storageProvider.remove("post-media", [`${fileName}`]);
     } catch (error) {

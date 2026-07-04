@@ -4,9 +4,7 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import { createStorageProvider } from "./storage/storage.provider";
-
-const storageProvider = createStorageProvider();
+import { getStorageProvider } from "./storage/storage.provider";
 
 const getFileKeyFromPublicUrl = (
   publicUrl: string,
@@ -30,10 +28,13 @@ export const ffmpegCompressVideo = task({
   run: async ({
     url,
     maxSizeBytes,
+    teamId,
   }: {
     url: string;
     maxSizeBytes: number;
+    teamId?: string;
   }): Promise<string> => {
+    const storageProvider = await getStorageProvider(teamId ?? "");
     const bucket = MEDIA_BUCKET;
 
     const key = getFileKeyFromPublicUrl(url, bucket);

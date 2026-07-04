@@ -257,6 +257,7 @@ export const processPost = task({
           "process-post-medium",
           post.social_post_media.map((medium) => ({
             payload: {
+              teamId: project.team_id,
               medium: {
                 id: medium.id,
                 provider: medium.provider,
@@ -294,6 +295,7 @@ export const processPost = task({
             "ffmpeg-process-video",
             videosToProcess.map((video) => ({
               payload: {
+                teamId: project.team_id,
                 medium: video,
               },
             })),

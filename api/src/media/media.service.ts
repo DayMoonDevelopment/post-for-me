@@ -1,24 +1,20 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, createHash } from 'crypto';
 
-import {
-  IStorageProvider,
-  STORAGE_PROVIDER,
-} from '../storage/storage.provider';
+import { getStorageProvider } from '../storage/storage.factory';
 import { CreateUploadUrlResponseDto } from './dto/create-upload-url-response.dto';
 
 @Injectable()
 export class MediaService {
-  constructor(
-    @Inject(STORAGE_PROVIDER)
-    private readonly storageProvider: IStorageProvider,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
   async createUploadUrl(
     projectId: string,
+    teamId: string,
   ): Promise<CreateUploadUrlResponseDto> {
+    const storageProvider = await getStorageProvider(teamId);
+
     const baseStorageUrl =
       this.configService.get<string>('BASE_STORAGE_URL') ||
       'https://data.postforme.dev/storage/v1/object/public/post-media';
@@ -32,10 +28,7 @@ export class MediaService {
     const key = `${projectId}/${hash}`;
     const bucket = 'post-media';
 
-    const signedUrl = await this.storageProvider.createSignedUploadUrl(
-      bucket,
-      key,
-    );
+    const signedUrl = await storageProvider.createSignedUploadUrl(bucket, key);
 
     return {
       upload_url: signedUrl,

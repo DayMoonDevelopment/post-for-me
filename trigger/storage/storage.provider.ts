@@ -43,4 +43,15 @@ export interface IStorageProvider {
   listAll(bucket: string, prefix?: string): AsyncGenerator<StorageFile>;
 }
 
-export { createStorageProvider } from "./supabase-storage.provider";
+import { createStorageProvider as createSupabaseProvider } from "./supabase-storage.provider";
+import { createStorageProvider as createR2Provider } from "./r2-storage.provider";
+import { isR2StorageEnabled } from "../posthog";
+
+const _supabase = createSupabaseProvider();
+const _r2 = createR2Provider();
+
+export async function getStorageProvider(
+  teamId: string,
+): Promise<IStorageProvider> {
+  return (await isR2StorageEnabled(teamId)) ? _r2 : _supabase;
+}

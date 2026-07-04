@@ -1,6 +1,7 @@
 import { logger, schedules } from "@trigger.dev/sdk";
 import { createClient } from "@supabase/supabase-js";
-import { createStorageProvider, type IStorageProvider } from "./storage/storage.provider";
+import { createStorageProvider } from "./storage/supabase-storage.provider";
+import type { IStorageProvider } from "./storage/storage.provider";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";

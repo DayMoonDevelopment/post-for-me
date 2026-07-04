@@ -33,7 +33,10 @@ export class MediaController {
     @User() user: RequestUser,
   ): Promise<CreateUploadUrlResponseDto> {
     try {
-      return await this.mediaService.createUploadUrl(user.projectId);
+      return await this.mediaService.createUploadUrl(
+        user.projectId,
+        user.teamId,
+      );
     } catch (e) {
       console.error('/media/create-upload-url', e);
       throw new HttpException(
