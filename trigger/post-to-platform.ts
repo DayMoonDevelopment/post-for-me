@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { createStorageProvider, type IStorageProvider } from "./storage/storage.provider";
+import { getStorageProvider, type IStorageProvider } from "./storage/storage.provider";
 import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
@@ -30,8 +30,6 @@ const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
-
-const storageProvider = createStorageProvider();
 
 const createPostClient = ({
   storageProvider,
@@ -165,6 +163,7 @@ export const postToPlatform = task({
       logger.info("Starting post processing", { ...payload });
 
       logger.info("Creating Post Client");
+      const storageProvider = await getStorageProvider(teamId);
       const postClient = createPostClient({
         storageProvider,
         platformName: platform,

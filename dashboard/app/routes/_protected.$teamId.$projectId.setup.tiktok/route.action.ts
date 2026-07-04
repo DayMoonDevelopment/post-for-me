@@ -3,12 +3,12 @@ import { data } from "react-router";
 import { withSupabase } from "~/lib/.server/supabase";
 
 import type { Database } from "~/lib/.server/database.types";
-import { createStorageProvider } from "~/lib/.server/storage/storage.provider";
+import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
 
 type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 
 export const action = withSupabase(async ({ request, supabase, params }) => {
-  const { projectId } = params;
+  const { projectId, teamId } = params;
   const provider = "tiktok"; // Hardcode since this is the TikTok-specific route
 
   if (!projectId) {
@@ -49,7 +49,7 @@ export const action = withSupabase(async ({ request, supabase, params }) => {
   }
 
   try {
-    const { success } = await processTikTokSettings(formData);
+    const { success } = await processTikTokSettings(formData, teamId ?? "");
 
     if (!success) {
       return data({
@@ -90,9 +90,10 @@ export const action = withSupabase(async ({ request, supabase, params }) => {
 
 async function processTikTokSettings(
   formData: FormData,
+  teamId: string,
 ): Promise<{ success: boolean }> {
   const files = formData.getAll("verification_files") as File[];
-  const storageProvider = createStorageProvider();
+  const storageProvider = await getStorageProvider(teamId);
 
   for (const file of files) {
     try {

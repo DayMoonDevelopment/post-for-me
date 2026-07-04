@@ -1,7 +1,7 @@
 import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, schedules, wait } from "@trigger.dev/sdk";
-import { createStorageProvider } from "./storage/storage.provider";
+import { createStorageProvider } from "./storage/supabase-storage.provider";
 import { MEDIA_BUCKET } from "./constants";
 
 const supabaseClient = createClient<Database>(

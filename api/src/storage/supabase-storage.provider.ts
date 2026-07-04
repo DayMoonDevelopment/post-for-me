@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '../../supabase';
 import type {
   IStorageProvider,
   StorageFile,
@@ -7,9 +7,8 @@ import type {
   StorageUploadOptions,
 } from './storage.provider';
 
-@Injectable()
 export class SupabaseStorageProvider implements IStorageProvider {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(private readonly client: SupabaseClient<Database>) {}
 
   async upload(
     bucket: string,
@@ -17,7 +16,7 @@ export class SupabaseStorageProvider implements IStorageProvider {
     data: Buffer | Blob | File,
     options?: StorageUploadOptions,
   ): Promise<void> {
-    const { error } = await this.supabaseService.supabaseClient.storage
+    const { error } = await this.client.storage
       .from(bucket)
       .upload(key, data, options);
     if (error) throw error;
@@ -37,7 +36,7 @@ export class SupabaseStorageProvider implements IStorageProvider {
   }
 
   async download(bucket: string, key: string): Promise<Blob> {
-    const { data, error } = await this.supabaseService.supabaseClient.storage
+    const { data, error } = await this.client.storage
       .from(bucket)
       .download(key);
     if (error) throw error;
@@ -46,9 +45,7 @@ export class SupabaseStorageProvider implements IStorageProvider {
   }
 
   async remove(bucket: string, keys: string[]): Promise<void> {
-    const { error } = await this.supabaseService.supabaseClient.storage
-      .from(bucket)
-      .remove(keys);
+    const { error } = await this.client.storage.from(bucket).remove(keys);
     if (error) throw error;
   }
 
@@ -57,7 +54,7 @@ export class SupabaseStorageProvider implements IStorageProvider {
     prefix?: string,
     options?: StorageListOptions,
   ): Promise<StorageFile[]> {
-    const { data, error } = await this.supabaseService.supabaseClient.storage
+    const { data, error } = await this.client.storage
       .from(bucket)
       .list(prefix, options);
     if (error) throw error;
@@ -70,14 +67,12 @@ export class SupabaseStorageProvider implements IStorageProvider {
   }
 
   getPublicUrl(bucket: string, key: string): string {
-    const { data } = this.supabaseService.supabaseClient.storage
-      .from(bucket)
-      .getPublicUrl(key);
+    const { data } = this.client.storage.from(bucket).getPublicUrl(key);
     return data.publicUrl;
   }
 
   async createSignedUploadUrl(bucket: string, key: string): Promise<string> {
-    const { data, error } = await this.supabaseService.supabaseClient.storage
+    const { data, error } = await this.client.storage
       .from(bucket)
       .createSignedUploadUrl(key);
     if (error) throw error;

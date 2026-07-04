@@ -1,5 +1,3 @@
-export const STORAGE_PROVIDER = 'STORAGE_PROVIDER' as const;
-
 export interface StorageFile {
   name: string;
   createdAt?: string;

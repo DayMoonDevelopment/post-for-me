@@ -7,9 +7,7 @@ import path from "path";
 import { pipeline } from "stream/promises";
 import { v4 as uuidv4 } from "uuid";
 import type { UserTag } from "./posting/post.types";
-import { createStorageProvider } from "./storage/storage.provider";
-
-const storageProvider = createStorageProvider();
+import { getStorageProvider } from "./storage/storage.provider";
 
 // Helper function to determine media type
 const getMediaType = (
@@ -161,7 +159,11 @@ const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => {
 };
 
 // Helper function to stream download and upload file
-const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
+const streamDownloadAndUpload = async (
+  storageProvider: import("./storage/storage.provider").IStorageProvider,
+  fileUrl: string,
+  prefix: string,
+) => {
   logger.info(`Streaming download from: ${fileUrl}`);
 
   // First, try a HEAD request to check content type without downloading
@@ -296,6 +298,7 @@ export const processPostMedium = task({
       tags,
       skip_processing,
     },
+    teamId,
   }: {
     medium: {
       id: string;
@@ -307,6 +310,7 @@ export const processPostMedium = task({
       tags?: UserTag[] | null;
       skip_processing?: boolean | null;
     };
+    teamId?: string;
   }): Promise<{
     provider?: string | null;
     id: string;
@@ -319,6 +323,7 @@ export const processPostMedium = task({
     skip_processing?: boolean | null;
   }> => {
     logger.info("Starting media processing", { url, thumbnail_url });
+    const storageProvider = await getStorageProvider(teamId ?? "");
 
     try {
       // Stream download and upload main media file
@@ -329,13 +334,18 @@ export const processPostMedium = task({
       let thumbnailResult: { publicUrl: string } | null = null;
 
       if (url) {
-        mediaResult = await streamDownloadAndUpload(url, "media");
+        mediaResult = await streamDownloadAndUpload(
+          storageProvider,
+          url,
+          "media",
+        );
       }
 
       // Stream download and upload thumbnail if provided
       if (thumbnail_url) {
         try {
           thumbnailResult = await streamDownloadAndUpload(
+            storageProvider,
             thumbnail_url,
             "thumbnail",
           );
