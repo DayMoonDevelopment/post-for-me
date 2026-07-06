@@ -8,6 +8,7 @@ import path from "path";
 import { pipeline } from "stream/promises";
 import { Upload } from "tus-js-client";
 import { v4 as uuidv4 } from "uuid";
+import type { UserTag } from "./posting/post.types";
 
 // Single Supabase client instance
 const supabaseClient = createClient<Database>(
@@ -345,6 +346,7 @@ export const processPostMedium = task({
       provider,
       provider_connection_id,
       thumbnail_timestamp_ms,
+      tags,
       skip_processing,
     },
   }: {
@@ -355,6 +357,7 @@ export const processPostMedium = task({
       url: string;
       thumbnail_url?: string | null;
       thumbnail_timestamp_ms?: number | null;
+      tags?: UserTag[] | null;
       skip_processing?: boolean | null;
     };
   }): Promise<{
@@ -365,6 +368,7 @@ export const processPostMedium = task({
     thumbnail_url: string;
     thumbnail_timestamp_ms?: number | null;
     type: string;
+    tags?: UserTag[] | null;
     skip_processing?: boolean | null;
   }> => {
     logger.info("Starting media processing", { url, thumbnail_url });
@@ -405,6 +409,7 @@ export const processPostMedium = task({
         provider: provider,
         provider_connection_id: provider_connection_id,
         thumbnail_timestamp_ms: thumbnail_timestamp_ms,
+        tags,
         skip_processing: skip_processing,
       };
 
