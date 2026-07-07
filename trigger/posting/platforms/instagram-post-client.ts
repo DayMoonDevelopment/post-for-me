@@ -332,6 +332,7 @@ export class InstagramPostClient extends PostClient {
         medium,
         options: {
           placement: platformConfig?.placement,
+          is_feed: true,
         },
       });
       signedUrl = transformedImage.signedUrl!;
@@ -342,7 +343,7 @@ export class InstagramPostClient extends PostClient {
           medium: { id: medium.id, url: medium.thumbnail_url, type: "image" },
           options: {
             placement: platformConfig?.placement,
-            share_to_feed: platformConfig?.share_to_feed,
+            is_feed: platformConfig?.share_to_feed ?? false,
           },
         });
         thumbnailUrl = transformedThumbnail.signedUrl;
@@ -902,7 +903,7 @@ export class InstagramPostClient extends PostClient {
         height: number | null | undefined;
       };
       placement?: string;
-      share_to_feed?: boolean;
+      is_feed?: boolean;
     };
   }): Promise<{
     signedUrl: string | undefined;
@@ -932,7 +933,7 @@ export class InstagramPostClient extends PostClient {
     const minAspectRatio =
       options?.placement === "stories"
         ? this.#storiesMinAspectRatio
-        : !options?.share_to_feed
+        : !options?.is_feed
           ? this.#reelsMinAspectRatio
           : this.#minAspectRatio;
 
