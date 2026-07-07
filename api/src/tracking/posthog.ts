@@ -1,18 +1,18 @@
 import { PostHog } from 'posthog-node';
 
-const POST_HOG_API_KEY = process.env?.POST_HOG_API_KEY;
-const POST_HOG_API_HOST = process.env?.POST_HOG_API_HOST;
-
 let client: PostHog | null = null;
 
 function getClient(): PostHog | null {
-  if (!POST_HOG_API_KEY || !POST_HOG_API_HOST) {
+  const apiKey = process.env?.POST_HOG_API_KEY;
+  const apiHost = process.env?.POST_HOG_API_HOST;
+
+  if (!apiKey || !apiHost) {
     return null;
   }
 
   if (!client) {
-    client = new PostHog(POST_HOG_API_KEY, {
-      host: POST_HOG_API_HOST,
+    client = new PostHog(apiKey, {
+      host: apiHost,
       // Short-lived request handlers — flush immediately rather than relying on
       // the background batcher, which may never fire before the handler returns.
       flushAt: 1,

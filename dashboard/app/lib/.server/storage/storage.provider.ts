@@ -33,11 +33,19 @@ import { createStorageProvider as createSupabaseProvider } from "./supabase-stor
 import { createStorageProvider as createR2Provider } from "./r2-storage.provider";
 import { isR2StorageEnabled } from "~/tracking/.server/posthog";
 
-const _supabase = createSupabaseProvider();
-const _r2 = createR2Provider();
+let _supabase: IStorageProvider | undefined;
+let _r2: IStorageProvider | undefined;
+
+function getSupabase(): IStorageProvider {
+  return (_supabase ??= createSupabaseProvider());
+}
+
+function getR2(): IStorageProvider {
+  return (_r2 ??= createR2Provider());
+}
 
 export async function getStorageProvider(
   teamId: string,
 ): Promise<IStorageProvider> {
-  return (await isR2StorageEnabled(teamId)) ? _r2 : _supabase;
+  return (await isR2StorageEnabled(teamId)) ? getR2() : getSupabase();
 }
