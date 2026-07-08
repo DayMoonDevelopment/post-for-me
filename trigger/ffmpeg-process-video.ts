@@ -6,6 +6,7 @@ import os from "os";
 import path from "path";
 import fetch from "node-fetch";
 import { getStorageProvider } from "./storage/storage.provider";
+import type { UserTag } from "./posting/post.types";
 
 // Constants
 const DEFAULT_FRAME_RATE = 24;
@@ -25,14 +26,14 @@ const detectAspectRatio = (width: number, height: number) => {
   const tolerance = 0.1;
   return (
     Object.values(ASPECT_RATIOS).find(
-      (ar) => Math.abs(ratio - ar.ratio) <= tolerance
+      (ar) => Math.abs(ratio - ar.ratio) <= tolerance,
     ) || ASPECT_RATIOS.LANDSCAPE
   ); // Default to landscape if no match
 };
 
 const getFileKeyFromPublicUrl = (
   publicUrl: string,
-  bucket: string
+  bucket: string,
 ): string | null => {
   const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
   const match = publicUrl.match(pattern);
@@ -44,7 +45,9 @@ const getProcessedFileKey = (key: string): string => {
   const basename = path.basename(key);
   const processedBasename = `processed_${Date.now()}_${basename}`;
 
-  return dirname === "." ? processedBasename : `${dirname}/${processedBasename}`;
+  return dirname === "."
+    ? processedBasename
+    : `${dirname}/${processedBasename}`;
 };
 
 type ProcessPostVideoMedium = {
@@ -55,6 +58,7 @@ type ProcessPostVideoMedium = {
   thumbnail_url: string;
   thumbnail_timestamp_ms?: number | null;
   type: string;
+  tags?: UserTag[] | null;
   skip_processing?: boolean | null;
 };
 
@@ -111,10 +115,10 @@ export const ffmpegProcessVideo = task({
       });
 
       const videoStream = metadata.streams.find(
-        (s: any) => s.codec_type === "video"
+        (s: any) => s.codec_type === "video",
       );
       const audioStream = metadata.streams.find(
-        (s: any) => s.codec_type === "audio"
+        (s: any) => s.codec_type === "audio",
       );
 
       if (!videoStream) {
@@ -127,7 +131,7 @@ export const ffmpegProcessVideo = task({
         videoStream.rotation ||
         videoStream.tags?.rotate ||
         videoStream.side_data_list?.find(
-          (data: any) => data.side_data_type === "Display Matrix"
+          (data: any) => data.side_data_type === "Display Matrix",
         )?.rotation;
 
       // If video is rotated 90° or 270°, swap dimensions
@@ -195,7 +199,7 @@ export const ffmpegProcessVideo = task({
 
       if (hasAudio && !hasValid128kAudio) {
         logger.info(
-          `Audio bitrate must be 128kbps for Threads (got ${Math.round(audioBitrate / 1000)}kbps) - will reprocess`
+          `Audio bitrate must be 128kbps for Threads (got ${Math.round(audioBitrate / 1000)}kbps) - will reprocess`,
         );
       }
 
@@ -250,7 +254,7 @@ export const ffmpegProcessVideo = task({
       const scaleRatio = Math.min(
         aspectRatio.maxWidth / width,
         aspectRatio.maxHeight / height,
-        1 // Prevent upscaling
+        1, // Prevent upscaling
       );
 
       const targetWidth =
@@ -269,7 +273,7 @@ export const ffmpegProcessVideo = task({
         const targetSizeMB = 280;
         const targetSizeBytes = targetSizeMB * 1024 * 1024;
         const targetBitrate = Math.floor(
-          (targetSizeBytes * 8) / durationSeconds
+          (targetSizeBytes * 8) / durationSeconds,
         );
         const targetBitrateMbps = Math.min(targetBitrate / 1000000, 15); // Cap at 15Mbps max
 
@@ -280,7 +284,7 @@ export const ffmpegProcessVideo = task({
             targetSizeMB,
             targetBitrateMbps,
             durationSeconds,
-          }
+          },
         );
 
         videoEncodingOptions = [
@@ -292,14 +296,14 @@ export const ffmpegProcessVideo = task({
         // Original input bitrate > 25Mbps
         logger.info(
           "Input bitrate > 25Mbps (needsProcessingForBitrate=true), using target bitrate (-b:v 24M) for processing.",
-          { inputBitrate: metadata.format.bit_rate }
+          { inputBitrate: metadata.format.bit_rate },
         );
         videoEncodingOptions = ["-b:v 24M", "-maxrate 25M", "-bufsize 50M"];
       } else {
         // Input bitrate <= 25Mbps OR unknown. Use CRF. This path is also taken if processing for non-bitrate reasons (e.g. container change, other MP4 validation failures)
         logger.info(
           "Input bitrate <= 25Mbps or unknown (needsProcessingForBitrate=false), using CRF for processing.",
-          { inputBitrate: metadata.format.bit_rate }
+          { inputBitrate: metadata.format.bit_rate },
         );
         videoEncodingOptions = ["-crf 23", "-maxrate 25M", "-bufsize 50M"];
       }
@@ -365,7 +369,12 @@ export const ffmpegProcessVideo = task({
         key,
         processedKey,
       });
-      await storageProvider.uploadFromFilePath(bucket, processedKey, outputPath, "video/mp4");
+      await storageProvider.uploadFromFilePath(
+        bucket,
+        processedKey,
+        outputPath,
+        "video/mp4",
+      );
 
       logger.info("Video processing completed successfully", {
         key: processedKey,
@@ -373,7 +382,10 @@ export const ffmpegProcessVideo = task({
         bucket,
         processed: true,
       });
-      return { ...medium, url: storageProvider.getPublicUrl(bucket, processedKey) };
+      return {
+        ...medium,
+        url: storageProvider.getPublicUrl(bucket, processedKey),
+      };
     } catch (e) {
       logger.error("Error processing video", { error: e });
       throw e;
@@ -389,9 +401,9 @@ export const ffmpegProcessVideo = task({
             fs
               .unlink(outputPath)
               .catch((e) =>
-                logger.error("Output cleanup failed", { error: e })
+                logger.error("Output cleanup failed", { error: e }),
               ),
-        ].filter(Boolean)
+        ].filter(Boolean),
       );
     }
   },

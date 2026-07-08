@@ -6,6 +6,7 @@ import type {
   PlatformConfiguration,
   Post,
   PostResult,
+  UserTag,
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
 
@@ -248,6 +249,7 @@ export const processPost = task({
         thumbnail_url: string;
         thumbnail_timestamp_ms?: number | null;
         type: string;
+        tags?: UserTag[] | null;
         skip_processing?: boolean | null;
       }[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
@@ -265,6 +267,7 @@ export const processPost = task({
                 url: medium.url,
                 thumbnail_url: medium.thumbnail_url,
                 thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
+                tags: medium.tags,
                 skip_processing: medium.skip_processing,
               },
             },

@@ -6,6 +6,7 @@ import os from "os";
 import path from "path";
 import { pipeline } from "stream/promises";
 import { v4 as uuidv4 } from "uuid";
+import type { UserTag } from "./posting/post.types";
 import { getStorageProvider } from "./storage/storage.provider";
 
 // Helper function to determine media type
@@ -258,7 +259,12 @@ const streamDownloadAndUpload = async (
   await pipeline(response.body as any, fs.createWriteStream(tmpPath));
 
   try {
-    await storageProvider.uploadFromFilePath(bucketName, fileName, tmpPath, normalizedContentType);
+    await storageProvider.uploadFromFilePath(
+      bucketName,
+      fileName,
+      tmpPath,
+      normalizedContentType,
+    );
   } finally {
     await fs.promises.unlink(tmpPath).catch(() => undefined);
   }
@@ -289,6 +295,7 @@ export const processPostMedium = task({
       provider,
       provider_connection_id,
       thumbnail_timestamp_ms,
+      tags,
       skip_processing,
     },
     teamId,
@@ -300,6 +307,7 @@ export const processPostMedium = task({
       url: string;
       thumbnail_url?: string | null;
       thumbnail_timestamp_ms?: number | null;
+      tags?: UserTag[] | null;
       skip_processing?: boolean | null;
     };
     teamId?: string;
@@ -311,6 +319,7 @@ export const processPostMedium = task({
     thumbnail_url: string;
     thumbnail_timestamp_ms?: number | null;
     type: string;
+    tags?: UserTag[] | null;
     skip_processing?: boolean | null;
   }> => {
     logger.info("Starting media processing", { url, thumbnail_url });
@@ -325,7 +334,11 @@ export const processPostMedium = task({
       let thumbnailResult: { publicUrl: string } | null = null;
 
       if (url) {
-        mediaResult = await streamDownloadAndUpload(storageProvider, url, "media");
+        mediaResult = await streamDownloadAndUpload(
+          storageProvider,
+          url,
+          "media",
+        );
       }
 
       // Stream download and upload thumbnail if provided
@@ -353,6 +366,7 @@ export const processPostMedium = task({
         provider: provider,
         provider_connection_id: provider_connection_id,
         thumbnail_timestamp_ms: thumbnail_timestamp_ms,
+        tags,
         skip_processing: skip_processing,
       };
 
