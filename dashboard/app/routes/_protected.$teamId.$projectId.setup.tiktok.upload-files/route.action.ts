@@ -1,5 +1,6 @@
 import { data } from "react-router";
 import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
+import { MEDIA_BUCKET } from "~/lib/.server/media.constants";
 
 import { withSupabase } from "~/lib/.server/supabase";
 
@@ -47,7 +48,7 @@ async function postAction(
   // Upload files one by one to handle individual errors
   for (const file of files) {
     try {
-      await storageProvider.upload("post-media", `${file.name}`, file, {
+      await storageProvider.upload(MEDIA_BUCKET, `${file.name}`, file, {
         cacheControl: "3600",
         upsert: true,
         metadata: {
@@ -80,7 +81,7 @@ async function deleteAction(
   if (fileName) {
     const storageProvider = await getStorageProvider(teamId);
     try {
-      await storageProvider.remove("post-media", [`${fileName}`]);
+      await storageProvider.remove(MEDIA_BUCKET, [`${fileName}`]);
     } catch (error) {
       console.error("Delete error:", error);
       return {

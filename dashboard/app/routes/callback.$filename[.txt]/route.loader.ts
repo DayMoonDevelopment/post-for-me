@@ -1,6 +1,7 @@
 import { withSupabase } from "~/lib/.server/supabase";
 import { createStorageProvider as createSupabaseProvider } from "~/lib/.server/storage/supabase-storage.provider";
 import { createStorageProvider as createR2Provider } from "~/lib/.server/storage/r2-storage.provider";
+import { MEDIA_BUCKET } from "~/lib/.server/media.constants";
 
 // TikTok verification files have no team context in the URL, so we try
 // Supabase first (existing teams), then R2 (teams migrated via the flag).
@@ -30,12 +31,12 @@ export const loader = withSupabase(async ({ params }) => {
 
   let data: Blob | undefined;
   try {
-    data = await getSupabase().download("post-media", filename);
+    data = await getSupabase().download(MEDIA_BUCKET, filename);
   } catch {
     // File not on Supabase — try R2 (team may have migrated).
     // getR2() may throw if R2 env vars are absent; that's caught here too.
     try {
-      data = await getR2().download("post-media", filename);
+      data = await getR2().download(MEDIA_BUCKET, filename);
     } catch {
       return new Response("File Not Found", { status: 404 });
     }

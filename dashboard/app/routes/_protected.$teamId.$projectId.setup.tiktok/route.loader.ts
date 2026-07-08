@@ -3,6 +3,7 @@ import { data } from "react-router";
 import { withSupabase } from "~/lib/.server/supabase";
 
 import type { Database } from "~/lib/.server/database.types";
+import { MEDIA_BUCKET } from "~/lib/.server/media.constants";
 
 type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 
@@ -47,7 +48,7 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     setupGuideUrl: `https://www.postforme.dev/resources/getting-started-with-the-tiktok-api`,
     redirectUrl: `https://app.postforme.dev/callback/${projectId}/tiktok/account`,
     callbackUrl: `https://app.postforme.dev/callback/`,
-    dataUrl: `https://data.postforme.dev/storage/v1/object/public/post-media/`,
+    dataUrl: `https://data.postforme.dev/storage/v1/object/public/${MEDIA_BUCKET}/`,
     verificationFiles: verificationFiles.data || [],
   });
 });

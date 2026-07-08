@@ -4,6 +4,7 @@ import { withSupabase } from "~/lib/.server/supabase";
 
 import type { Database } from "~/lib/.server/database.types";
 import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
+import { MEDIA_BUCKET } from "~/lib/.server/media.constants";
 
 type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 
@@ -97,7 +98,7 @@ async function processTikTokSettings(
 
   for (const file of files) {
     try {
-      await storageProvider.upload("post-media", file.name, file, {
+      await storageProvider.upload(MEDIA_BUCKET, file.name, file, {
         cacheControl: "3600",
         upsert: true,
       });
