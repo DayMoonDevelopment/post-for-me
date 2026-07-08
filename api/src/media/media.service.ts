@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomBytes, createHash } from 'crypto';
 
 import { getStorageProvider } from '../storage/storage.factory';
+import { getMediaBucket } from '../constants/media.constants';
 import { CreateUploadUrlResponseDto } from './dto/create-upload-url-response.dto';
 
 @Injectable()
@@ -26,7 +27,7 @@ export class MediaService {
       .slice(0, 24);
 
     const key = `${projectId}/${hash}`;
-    const bucket = 'post-media';
+    const bucket = getMediaBucket(this.configService);
 
     const signedUrl = await storageProvider.createSignedUploadUrl(bucket, key);
 
