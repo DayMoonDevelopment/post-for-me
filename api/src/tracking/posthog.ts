@@ -32,7 +32,9 @@ export async function isR2StorageEnabled(teamId: string): Promise<boolean> {
   const posthog = getClient();
   if (!posthog || !teamId) return false;
   try {
-    const result = await posthog.isFeatureEnabled('r2-storage', teamId);
+    const result = await posthog.isFeatureEnabled('r2-storage', teamId, {
+      groups: { team: teamId },
+    });
     return result ?? false;
   } catch {
     return false;
