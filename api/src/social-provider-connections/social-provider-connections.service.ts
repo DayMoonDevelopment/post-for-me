@@ -258,14 +258,20 @@ export class SocialAccountsService {
     id: string;
     projectId: string;
   }): Promise<DeleteEntityResponseDto> {
-    const { error } = await this.supabaseService.supabaseClient
+    const { data, error } = await this.supabaseService.supabaseClient
       .from('social_provider_connections')
       .delete()
       .eq('id', id)
-      .eq('project_id', projectId);
+      .eq('project_id', projectId)
+      .select('id')
+      .maybeSingle();
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    if (!data) {
+      throw new Error('Social account not found');
     }
 
     return { success: true };

@@ -1,8 +1,3 @@
- 
- 
- 
- 
-
 import { PostClient } from "../post-client";
 import axios, { AxiosResponse } from "axios";
 import { SupabaseClient } from "@supabase/supabase-js";

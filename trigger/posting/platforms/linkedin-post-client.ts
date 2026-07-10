@@ -1,11 +1,7 @@
- 
- 
- 
- 
- 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
 import {
+  LinkedinConfiguration,
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -71,24 +67,19 @@ export class LinkedInPostClient extends PostClient {
     account,
     caption,
     media,
+    platformConfig,
   }: {
     postId: string;
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
+    platformConfig?: LinkedinConfiguration;
   }): Promise<PostResult> {
     try {
       const authorUrn =
         account.social_provider_metadata?.connection_type === "page"
           ? `urn:li:company:${account.social_provider_user_id}`
           : `urn:li:person:${account.social_provider_user_id}`;
-
-      const { uploadedMedia, mediaCategory } = await this.#processMedia({
-        caption,
-        media,
-        authorUrn,
-        account,
-      });
 
       const postBody: Record<string, any> = {
         author: authorUrn,
@@ -98,7 +89,6 @@ export class LinkedInPostClient extends PostClient {
             shareCommentary: {
               text: caption,
             },
-            shareMediaCategory: mediaCategory,
           },
         },
         visibility: {
@@ -106,9 +96,32 @@ export class LinkedInPostClient extends PostClient {
         },
       };
 
-      if (uploadedMedia.length > 0) {
-        postBody.specificContent["com.linkedin.ugc.ShareContent"].media =
-          uploadedMedia;
+      if (platformConfig?.reshare_post_id) {
+        postBody.responseContext = {
+          parent: this.#toUgcPostUrn(platformConfig.reshare_post_id),
+        };
+        postBody.specificContent["com.linkedin.ugc.ShareContent"] = {
+          ...postBody.specificContent["com.linkedin.ugc.ShareContent"],
+          shareMediaCategory: "NONE",
+          media: [],
+          shareCategorization: {},
+        };
+      } else {
+        const { uploadedMedia, mediaCategory } = await this.#processMedia({
+          caption,
+          media,
+          authorUrn,
+          account,
+        });
+
+        postBody.specificContent[
+          "com.linkedin.ugc.ShareContent"
+        ].shareMediaCategory = mediaCategory;
+
+        if (uploadedMedia.length > 0) {
+          postBody.specificContent["com.linkedin.ugc.ShareContent"].media =
+            uploadedMedia;
+        }
       }
 
       this.#requests.push({ postRequest: postBody });
@@ -117,6 +130,7 @@ export class LinkedInPostClient extends PostClient {
         headers: {
           Authorization: `Bearer ${account.access_token}`,
           "Content-Type": "application/json",
+          "X-Restli-Protocol-Version": "2.0.0",
         },
         body: JSON.stringify(postBody),
       });
@@ -127,15 +141,20 @@ export class LinkedInPostClient extends PostClient {
         );
       }
 
-      const result = await response.json();
+      const responseText = await response.text();
+      const result = responseText ? JSON.parse(responseText) : {};
+      const providerPostId =
+        result.id || response.headers.get("x-restli-id") || undefined;
 
       this.#responses.push({ postResponse: result });
       return {
         success: true,
         provider_connection_id: account.id,
         post_id: postId,
-        provider_post_id: result.id,
-        provider_post_url: `https://www.linkedin.com/feed/update/${result.id}`,
+        provider_post_id: providerPostId,
+        provider_post_url: providerPostId
+          ? `https://www.linkedin.com/feed/update/${providerPostId}`
+          : undefined,
         details: {
           requests: this.#requests,
           responses: this.#responses,
@@ -172,6 +191,12 @@ export class LinkedInPostClient extends PostClient {
     }
 
     return url;
+  }
+
+  #toUgcPostUrn(ugcPostId: string) {
+    return ugcPostId.startsWith("urn:")
+      ? ugcPostId
+      : `urn:li:ugcPost:${ugcPostId}`;
   }
 
   async #createMedia({

@@ -1,8 +1,3 @@
- 
- 
- 
- 
- 
 import { PostClient } from "../post-client";
 import axios from "axios";
 import FormData from "form-data";

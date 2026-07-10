@@ -475,7 +475,15 @@ export class FacebookConfigurationDto extends BaseConfigurationDto {
   set_caption_for_each_image?: boolean;
 }
 
-export class LinkedinConfigurationDto extends BaseConfigurationDto {}
+export class LinkedinConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description:
+      'LinkedIn UGC post id to reshare. The caption is used as the reshare commentary.',
+    nullable: true,
+    required: false,
+  })
+  reshare_post_id?: string;
+}
 
 export class BlueskyConfigurationDto extends BaseConfigurationDto {}
 
@@ -875,6 +883,14 @@ export class AccountConfigurationDetailsDto {
     default: true,
   })
   set_caption_for_each_image?: boolean;
+
+  @ApiProperty({
+    description:
+      'LinkedIn UGC post id to reshare. The caption is used as the reshare commentary.',
+    nullable: true,
+    required: false,
+  })
+  reshare_post_id?: string;
 }
 
 export class AccountConfigurationDto {

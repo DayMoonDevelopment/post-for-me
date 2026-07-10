@@ -18,6 +18,7 @@ export class InstagramPostClient extends PostClient {
   #minAspectRatio = 4 / 5;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
+  #reelsMinAspectRatio = 9 / 16;
   #mediaRetryAttempts = 30;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
@@ -331,6 +332,7 @@ export class InstagramPostClient extends PostClient {
         medium,
         options: {
           placement: platformConfig?.placement,
+          is_feed: true,
         },
       });
       signedUrl = transformedImage.signedUrl!;
@@ -341,6 +343,7 @@ export class InstagramPostClient extends PostClient {
           medium: { id: medium.id, url: medium.thumbnail_url, type: "image" },
           options: {
             placement: platformConfig?.placement,
+            is_feed: platformConfig?.share_to_feed ?? false,
           },
         });
         thumbnailUrl = transformedThumbnail.signedUrl;
@@ -844,22 +847,8 @@ export class InstagramPostClient extends PostClient {
         }
 
         const permalink = mediaResponse.data.permalink as string | undefined;
-        const actualMediaType = mediaResponse.data.media_type as
-          | string
-          | undefined;
-
         if (!permalink) {
           throw new Error("Permalink missing from media response");
-        }
-
-        if (actualMediaType === "VIDEO" || actualMediaType === "REELS") {
-          // Extract the shortcode from the permalink
-          const shortcode = permalink.split("/").filter(Boolean).pop();
-          if (!shortcode) {
-            throw new Error("Unable to derive Instagram reel shortcode");
-          }
-
-          return `https://www.instagram.com/reel/${shortcode}/`;
         }
 
         return permalink;
@@ -914,6 +903,7 @@ export class InstagramPostClient extends PostClient {
         height: number | null | undefined;
       };
       placement?: string;
+      is_feed?: boolean;
     };
   }): Promise<{
     signedUrl: string | undefined;
@@ -943,7 +933,9 @@ export class InstagramPostClient extends PostClient {
     const minAspectRatio =
       options?.placement === "stories"
         ? this.#storiesMinAspectRatio
-        : this.#minAspectRatio;
+        : !options?.is_feed
+          ? this.#reelsMinAspectRatio
+          : this.#minAspectRatio;
 
     if (options?.firstImage?.width && options?.firstImage?.height) {
       const firstImageRatio =

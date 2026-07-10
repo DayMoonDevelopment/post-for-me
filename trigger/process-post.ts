@@ -6,6 +6,7 @@ import type {
   PlatformConfiguration,
   Post,
   PostResult,
+  UserTag,
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
 
@@ -207,8 +208,6 @@ export const processPost = task({
         throw new Error("API Key is invalid");
       }
 
-      const isYouTubeOnly = accounts.every((a) => a.provider == "youtube");
-
       logger.info("Getting Stripe Customer Id");
       const { data: project, error: projectError } = await supabaseClient
         .from("projects")
@@ -250,6 +249,7 @@ export const processPost = task({
         thumbnail_url: string;
         thumbnail_timestamp_ms?: number | null;
         type: string;
+        tags?: UserTag[] | null;
         skip_processing?: boolean | null;
       }[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
@@ -266,6 +266,7 @@ export const processPost = task({
                 url: medium.url,
                 thumbnail_url: medium.thumbnail_url,
                 thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
+                tags: medium.tags,
                 skip_processing: medium.skip_processing,
               },
             },
@@ -274,19 +275,23 @@ export const processPost = task({
 
         logger.info("Localizing Media Complete", { localizedMedia });
 
-        postMedia.push(
-          ...localizedMedia.runs
-            .filter((run) => run.ok)
-            .map((run) => run.output),
-        );
+        const succesfulMedia = localizedMedia.runs
+          .filter((run) => run.ok)
+          .map((run) => run.output);
 
-        const postVideos = postMedia.filter(
+        const postImages = succesfulMedia.filter(
+          (medium) => medium.type !== "video",
+        );
+        const postVideos = succesfulMedia.filter(
           (medium) => medium.type === "video",
         );
 
+        postMedia.push(...postImages);
+        postMedia.push(...postVideos.filter((m) => m.skip_processing));
+
         const videosToProcess = postVideos.filter((m) => !m.skip_processing);
 
-        if (!isYouTubeOnly && videosToProcess.length > 0) {
+        if (videosToProcess.length > 0) {
           logger.info("Processing Videos");
           const processVideosResult = await tasks.batchTriggerAndWait(
             "ffmpeg-process-video",
@@ -298,6 +303,16 @@ export const processPost = task({
           );
 
           logger.info("Processing Videos Complete", { processVideosResult });
+
+          postMedia.push(
+            ...processVideosResult.runs
+              .filter((run) => run.ok)
+              .map((run) => run.output),
+          );
+
+          logger.info("Updated post media with processed video URLs", {
+            postMedia,
+          });
         }
 
         if (postMedia.length == 0) {

@@ -1,8 +1,3 @@
- 
- 
- 
- 
- 
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
@@ -27,6 +22,10 @@ export class BlueskyPostClient extends PostClient {
   #maxImages = 4;
   #maxFileSize = 976.56 * 1024;
   #maxVideoFileSize = 100_000_000;
+  #videoStatusMaxAttempts = 30;
+  #videoStatusInitialDelayMs = 5000;
+  #videoStatusRetryBackoffMultiplier = 1.5;
+  #maxRetryDelayMs = 60000;
   #requests: any[] = [];
   #responses: any[] = [];
 
@@ -313,38 +312,88 @@ export class BlueskyPostClient extends PostClient {
     }
 
     let blob: BlobRef | undefined = jobStatus.blob;
-    let jobFinished: boolean = false;
+    let lastJobStatus: AppBskyVideoDefs.JobStatus = jobStatus;
     const videoAgent = new AtpAgent({ service: "https://video.bsky.app" });
 
-    while (!jobFinished) {
+    for (
+      let attempt = 1;
+      !blob && attempt <= this.#videoStatusMaxAttempts;
+      attempt++
+    ) {
+      console.log(
+        `Checking Bluesky video status, attempt ${attempt}/${this.#videoStatusMaxAttempts}`,
+      );
+
+      this.#requests.push({
+        videoStatusRequest: {
+          jobId: jobStatus.jobId,
+          attempt,
+        },
+      });
+
       const { data: status } = await videoAgent.app.bsky.video.getJobStatus({
         jobId: jobStatus.jobId,
       });
+
+      lastJobStatus = status.jobStatus;
+
+      this.#responses.push({
+        videoStatusResponse: status.jobStatus,
+        attempt,
+      });
+
       console.log(
-        "Status:",
+        "Bluesky video status:",
         status.jobStatus.state,
         status.jobStatus.progress || "",
+        status.jobStatus.error || "",
+        status.jobStatus.message || "",
       );
+
       if (status.jobStatus.blob) {
         blob = status.jobStatus.blob;
-        jobFinished = true;
+        break;
       }
 
-      if (
-        jobStatus.state?.trim() == "JOB_STATE_COMPLETED" ||
-        jobStatus.state?.trim() == "JOB_STATE_FAILED"
-      ) {
-        jobFinished = true;
+      if (status.jobStatus.state?.trim() === "JOB_STATE_FAILED") {
+        const errorMessage = this.#getJobStatusErrorMessage(status.jobStatus);
+
+        logger.error("Bluesky video processing job failed", {
+          jobId: jobStatus.jobId,
+          error: status.jobStatus.error,
+          message: status.jobStatus.message,
+          jobStatus: status.jobStatus,
+        });
+
+        throw new Error(`Failed to process video: ${errorMessage}`);
       }
 
-      if (!jobFinished) {
-        // wait a second
-        await wait.for({ seconds: 1 });
+      if (status.jobStatus.state?.trim() === "JOB_STATE_COMPLETED") {
+        break;
+      }
+
+      if (attempt < this.#videoStatusMaxAttempts) {
+        const delay = this.#getRetryDelayMs(attempt);
+        console.log(
+          `Bluesky video not ready. Waiting ${delay / 1000} seconds before retrying...`,
+        );
+        await wait.for({ seconds: delay / 1000 });
       }
     }
 
     if (!blob) {
-      throw new Error("Failed to process video");
+      const errorMessage = this.#getJobStatusErrorMessage(lastJobStatus);
+
+      logger.error("Bluesky video processing max attempts reached", {
+        jobId: jobStatus.jobId,
+        error: lastJobStatus.error,
+        message: lastJobStatus.message,
+        jobStatus: lastJobStatus,
+      });
+
+      throw new Error(
+        `Max attempts reached. Failed to process video: ${errorMessage}. Last status: ${JSON.stringify(lastJobStatus)}`,
+      );
     }
 
     return {
@@ -354,6 +403,24 @@ export class BlueskyPostClient extends PostClient {
         height,
       },
     };
+  }
+
+  #getRetryDelayMs(attempt: number): number {
+    return Math.min(
+      this.#videoStatusInitialDelayMs *
+        Math.pow(this.#videoStatusRetryBackoffMultiplier, attempt - 1),
+      this.#maxRetryDelayMs,
+    );
+  }
+
+  #getJobStatusErrorMessage(jobStatus: AppBskyVideoDefs.JobStatus): string {
+    const details = [jobStatus.error, jobStatus.message].filter(Boolean);
+
+    if (details.length > 0) {
+      return details.join(": ");
+    }
+
+    return JSON.stringify(jobStatus);
   }
 
   async #processImages({
