@@ -32,6 +32,7 @@ function getR2(): R2StorageProvider {
 
 export async function getStorageProvider(
   teamId: string,
+  projectId?: string,
 ): Promise<IStorageProvider> {
-  return (await isR2StorageEnabled(teamId)) ? getR2() : getSupabase();
+  return (await isR2StorageEnabled(teamId, projectId)) ? getR2() : getSupabase();
 }

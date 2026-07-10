@@ -163,7 +163,7 @@ export const postToPlatform = task({
       logger.info("Starting post processing", { ...payload });
 
       logger.info("Creating Post Client");
-      const storageProvider = await getStorageProvider(teamId);
+      const storageProvider = await getStorageProvider(teamId, projectId);
       const postClient = createPostClient({
         storageProvider,
         platformName: platform,
