@@ -40,6 +40,8 @@
     "@sentry/nestjs": "^10.53.1",
     "@supabase/supabase-js": "^2.49.4",
     "@trigger.dev/sdk": "4.0.0-v4-beta.27",
+    "@tus/s3-store": "^2.0.4",
+    "@tus/server": "^2.4.1",
     "@unkey/api": "^2.2.0",
     "axios": "^1.8.4",
     "class-transformer": "^0.5.1",

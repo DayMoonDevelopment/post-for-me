@@ -34,6 +34,7 @@ export class MediaService {
     return {
       upload_url: signedUrl,
       media_url: `${baseStorageUrl}/${key}`,
+      key,
     };
   }
 }
