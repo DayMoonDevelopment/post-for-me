@@ -13,4 +13,11 @@ export class CreateUploadUrlResponseDto {
     type: String,
   })
   media_url: string;
+
+  @ApiProperty({
+    description:
+      'The storage object key for this upload. Pass this back via the `key` Upload-Metadata entry when starting a resumable upload against POST /v1/media/tus.',
+    type: String,
+  })
+  key: string;
 }
