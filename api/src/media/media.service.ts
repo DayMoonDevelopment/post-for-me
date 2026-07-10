@@ -14,7 +14,7 @@ export class MediaService {
     projectId: string,
     teamId: string,
   ): Promise<CreateUploadUrlResponseDto> {
-    const storageProvider = await getStorageProvider(teamId);
+    const storageProvider = await getStorageProvider(teamId, projectId);
 
     const baseStorageUrl =
       this.configService.get<string>('BASE_STORAGE_URL') ||

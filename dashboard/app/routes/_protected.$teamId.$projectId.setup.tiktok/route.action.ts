@@ -50,7 +50,11 @@ export const action = withSupabase(async ({ request, supabase, params }) => {
   }
 
   try {
-    const { success } = await processTikTokSettings(formData, teamId ?? "");
+    const { success } = await processTikTokSettings(
+      formData,
+      teamId ?? "",
+      projectId,
+    );
 
     if (!success) {
       return data({
@@ -92,9 +96,10 @@ export const action = withSupabase(async ({ request, supabase, params }) => {
 async function processTikTokSettings(
   formData: FormData,
   teamId: string,
+  projectId: string,
 ): Promise<{ success: boolean }> {
   const files = formData.getAll("verification_files") as File[];
-  const storageProvider = await getStorageProvider(teamId);
+  const storageProvider = await getStorageProvider(teamId, projectId);
 
   for (const file of files) {
     try {

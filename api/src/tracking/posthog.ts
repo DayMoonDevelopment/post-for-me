@@ -24,16 +24,22 @@ function getClient(): PostHog | null {
 }
 
 /**
- * Evaluate the `r2-storage` PostHog feature flag for a team group. Returns
- * `false` when PostHog is unconfigured or the flag evaluation fails — the
- * Supabase provider is always the safe fallback.
+ * Evaluate the `r2-storage` PostHog feature flag for a team (and, when known,
+ * project) group. Returns `false` when PostHog is unconfigured or the flag
+ * evaluation fails — the Supabase provider is always the safe fallback.
  */
-export async function isR2StorageEnabled(teamId: string): Promise<boolean> {
+export async function isR2StorageEnabled(
+  teamId: string,
+  projectId?: string,
+): Promise<boolean> {
   const posthog = getClient();
   if (!posthog || !teamId) return false;
   try {
     const result = await posthog.isFeatureEnabled('r2-storage', teamId, {
-      groups: { team: teamId },
+      groups: {
+        team: teamId,
+        ...(projectId && { project: projectId }),
+      },
     });
     return result ?? false;
   } catch {

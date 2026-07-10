@@ -246,7 +246,7 @@ async function getPublicProfilePhotoUrl({
     const fileName = `${(providerUsername || providerId).replace(" ", "")}_profile.jpg`;
     const filePath = `projects/${projectId}/${provider}/${fileName}`;
 
-    const storageProvider = await getStorageProvider(teamId);
+    const storageProvider = await getStorageProvider(teamId, projectId);
 
     // Upload to storage
     try {

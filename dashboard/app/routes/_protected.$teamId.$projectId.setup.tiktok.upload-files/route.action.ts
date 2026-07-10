@@ -43,7 +43,7 @@ async function postAction(
     return { success: false };
   }
 
-  const storageProvider = await getStorageProvider(teamId);
+  const storageProvider = await getStorageProvider(teamId, projectId);
 
   // Upload files one by one to handle individual errors
   for (const file of files) {
