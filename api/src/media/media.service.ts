@@ -16,10 +16,6 @@ export class MediaService {
   ): Promise<CreateUploadUrlResponseDto> {
     const storageProvider = await getStorageProvider(teamId, projectId);
 
-    const baseStorageUrl =
-      this.configService.get<string>('BASE_STORAGE_URL') ||
-      'https://data.postforme.dev/storage/v1/object/public/post-media';
-
     const randomString = randomBytes(8).toString('hex');
     const hash = createHash('sha256')
       .update(projectId + Date.now().toString() + randomString)
@@ -33,7 +29,8 @@ export class MediaService {
 
     return {
       upload_url: signedUrl,
-      media_url: `${baseStorageUrl}/${key}`,
+      media_url: storageProvider.getPublicUrl(bucket, key),
+      key,
     };
   }
 }

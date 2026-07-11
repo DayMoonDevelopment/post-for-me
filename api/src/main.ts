@@ -8,6 +8,7 @@ import { apiReference } from '@scalar/nestjs-api-reference';
 import { AppModule } from './app.module';
 
 import { MediaModule } from './media/media.module';
+import { MediaTusModule } from './media/tus/media-tus.module';
 import { SocialPostsModule } from './social-posts/social-posts.module';
 import { SocialPostResultsModule } from './social-post-results/social-post-results.module';
 import { SocialAccountsModule } from './social-provider-connections/social-provider-connections.module';
@@ -64,6 +65,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config, {
     include: [
       MediaModule,
+      MediaTusModule,
       SocialPostsModule,
       SocialPostResultsModule,
       SocialAccountsModule,
