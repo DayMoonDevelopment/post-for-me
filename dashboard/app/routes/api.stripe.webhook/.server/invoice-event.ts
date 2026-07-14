@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Stripe } from "stripe";
 import type { Database } from "~/lib/.server/database.types";
-import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request";
-import { customerHasActiveSubscriptions } from "~/lib/.server/customer-has-active-subscriptions.request";
+import { stripe } from "~/lib/.server/stripe";
+import { handleSubscriptionHealthChange } from "~/lib/.server/handle-subscription-health-change.request";
 
 export async function handleInvoiceEvent(
   invoice: Stripe.Invoice,
@@ -10,12 +10,22 @@ export async function handleInvoiceEvent(
 ) {
   const customerId = invoice.customer as string;
 
-  const isSubscriptionActive = await customerHasActiveSubscriptions(customerId);
+  // Fetch the actual latest subscription status (not just an active/inactive
+  // boolean) so handleSubscriptionHealthChange can tell a payment failure
+  // (grace period) apart from an explicit cancellation (immediate revoke) —
+  // same distinction subscription-event.ts gets for free from its event
+  // payload.
+  const subscriptions = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "all",
+    limit: 1,
+  });
+  const latestStatus = subscriptions.data[0]?.status ?? null;
 
-  await updateAPIKeyAccess(
+  await handleSubscriptionHealthChange(
     {
       stripeCustomerId: customerId,
-      enabled: isSubscriptionActive,
+      latestStatus,
     },
     supabaseServiceRole
   );

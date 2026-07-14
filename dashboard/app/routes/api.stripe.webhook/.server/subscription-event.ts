@@ -1,4 +1,4 @@
-import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request";
+import { handleSubscriptionHealthChange } from "~/lib/.server/handle-subscription-health-change.request";
 
 import { trackSubscriptionLifecycle } from "./subscription-lifecycle-tracking";
 
@@ -15,14 +15,15 @@ export async function handleSubscriptionEvent(
 ) {
   const subscription = event.data.object;
   const customerId = subscription.customer as string;
-  const isSubscriptionActive =
-    subscription.status === "active" || subscription.status === "trialing";
 
-  // Toggle API key access based on subscription status.
-  await updateAPIKeyAccess(
+  // Toggle API key access based on subscription status. Payment-failure-shaped
+  // statuses (past_due, unpaid, ...) get a grace period instead of an
+  // immediate revoke; explicit cancellation (status "canceled" from a
+  // customer.subscription.deleted event) still revokes right away.
+  await handleSubscriptionHealthChange(
     {
       stripeCustomerId: customerId,
-      enabled: isSubscriptionActive,
+      latestStatus: subscription.status,
     },
     supabaseServiceRole,
   );
