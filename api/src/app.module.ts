@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { ConfigModule } from '@nestjs/config';
 import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
@@ -19,6 +19,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 import { PrivateModule } from './private/private.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
+import { NormalizePlatformInterceptor } from './lib/interceptors/normalize-platform.interceptor';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
   controllers: [],
   providers: [
     { provide: APP_FILTER, useClass: SentryGlobalFilter },
+    { provide: APP_INTERCEPTOR, useClass: NormalizePlatformInterceptor },
     AuthGuard,
     VerifyKeyGuard,
   ],
