@@ -45,13 +45,9 @@ export class SocialPostsService {
   async validatePost({
     post,
     projectId,
-    teamId,
-    isSystem,
   }: {
     post: CreateSocialPostDto;
     projectId: string;
-    teamId: string;
-    isSystem: boolean;
   }): Promise<PostValidation> {
     if (!post) {
       return {
@@ -156,22 +152,6 @@ export class SocialPostsService {
               );
             }
           }
-        }
-      }
-    }
-
-    if (isSystem && errors.length === 0) {
-      for (const socialAccountProvider of providers) {
-        const hasMetLimit = await this.socialPostMetersService.hasMetLimit({
-          teamId,
-          provider: socialAccountProvider,
-          scheduledDate: post.scheduled_at || new Date(),
-        });
-
-        if (hasMetLimit) {
-          errors.push(
-            `You have reached the post limit for ${socialAccountProvider}, please try again for a different date/time`,
-          );
         }
       }
     }
