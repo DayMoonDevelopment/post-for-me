@@ -1,5 +1,7 @@
 import { logger, schedules } from "@trigger.dev/sdk";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import { createStorageProvider } from "./storage/supabase-storage.provider";
+import type { IStorageProvider } from "./storage/storage.provider";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -20,36 +22,38 @@ const supabaseClient = createClient<Database>(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+const storageProvider = createStorageProvider();
+
 const createPostClient = ({
-  supabaseClient,
+  storageProvider,
   platformName,
   appCredentials,
 }: {
-  supabaseClient: SupabaseClient;
+  storageProvider: IStorageProvider;
   platformName: string;
   appCredentials: PlatformAppCredentials;
 }): PostClient => {
   switch (platformName) {
     case "x":
-      return new TwitterPostClient(supabaseClient, appCredentials);
+      return new TwitterPostClient(storageProvider, appCredentials);
     case "instagram":
-      return new InstagramPostClient(supabaseClient, appCredentials);
+      return new InstagramPostClient(storageProvider, appCredentials);
     case "facebook":
-      return new FacebookPostClient(supabaseClient, appCredentials);
+      return new FacebookPostClient(storageProvider, appCredentials);
     case "linkedin":
-      return new LinkedInPostClient(supabaseClient, appCredentials);
+      return new LinkedInPostClient(storageProvider, appCredentials);
     case "tiktok":
-      return new TikTokPostClient(supabaseClient, appCredentials);
+      return new TikTokPostClient(storageProvider, appCredentials);
     case "bluesky":
-      return new BlueskyPostClient(supabaseClient, appCredentials);
+      return new BlueskyPostClient(storageProvider, appCredentials);
     case "threads":
-      return new ThreadsPostClient(supabaseClient, appCredentials);
+      return new ThreadsPostClient(storageProvider, appCredentials);
     case "pinterest":
-      return new PinterestPostClient(supabaseClient, appCredentials);
+      return new PinterestPostClient(storageProvider, appCredentials);
     case "youtube":
-      return new YouTubePostClient(supabaseClient, appCredentials);
+      return new YouTubePostClient(storageProvider, appCredentials);
     case "tiktok_business":
-      return new TikTokBusinessPostClient(supabaseClient, appCredentials);
+      return new TikTokBusinessPostClient(storageProvider, appCredentials);
     default:
       throw Error("Invalid Platform");
   }
@@ -146,7 +150,7 @@ const refreshAccountsByProviderAndProject = async ({
 
   try {
     const postClient = createPostClient({
-      supabaseClient,
+      storageProvider,
       platformName: provider,
       appCredentials,
     });

@@ -23,9 +23,11 @@ import { getTikTokBusinessSocialProviderConnection } from "./providers/tiktok-bu
 import { getInstagramWFacebookSocialProviderConnection } from "./providers/instagram-w-facebook.social-account";
 
 import { tasks } from "@trigger.dev/sdk";
+import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
 
 export async function addSocialAccountConnections({
   projectId,
+  teamId,
   provider,
   request,
   supabaseServiceRole,
@@ -36,6 +38,7 @@ export async function addSocialAccountConnections({
 }: {
   supabaseServiceRole: SupabaseClient<Database>;
   projectId: string;
+  teamId: string;
   provider: string;
   request: Request;
   isSystem: boolean;
@@ -89,10 +92,10 @@ export async function addSocialAccountConnections({
       social_provider_profile_photo_url: await getPublicProfilePhotoUrl({
         profilePhotoUrl: connection.social_provider_photo_url,
         projectId,
+        teamId,
         provider,
         providerUsername: connection.social_provider_user_name,
         providerId: connection.social_provider_user_id,
-        supabaseServiceRole,
       }),
       social_provider_metadata: connection.social_provider_metadata,
       external_id: externalId,
@@ -218,17 +221,17 @@ async function getSocialProviderConnections(
 async function getPublicProfilePhotoUrl({
   profilePhotoUrl,
   projectId,
+  teamId,
   providerUsername,
   providerId,
-  supabaseServiceRole,
   provider,
 }: {
   profilePhotoUrl: string | undefined | null;
   projectId: string;
+  teamId: string;
   provider: string;
   providerUsername: string | undefined | null;
   providerId: string;
-  supabaseServiceRole: SupabaseClient<Database>;
 }): Promise<string> {
   if (!profilePhotoUrl) {
     return "";
@@ -243,24 +246,28 @@ async function getPublicProfilePhotoUrl({
     const fileName = `${(providerUsername || providerId).replace(" ", "")}_profile.jpg`;
     const filePath = `projects/${projectId}/${provider}/${fileName}`;
 
-    // Upload to Supabase storage
-    const { error: uploadError } = await supabaseServiceRole.storage
-      .from(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME)
-      .upload(filePath, imageBlob, {
-        contentType: "image/jpeg",
-        upsert: true,
-      });
+    const storageProvider = await getStorageProvider(teamId, projectId);
 
-    if (uploadError) {
+    // Upload to storage
+    try {
+      await storageProvider.upload(
+        SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME,
+        filePath,
+        imageBlob,
+        {
+          contentType: "image/jpeg",
+          upsert: true,
+        },
+      );
+    } catch (uploadError) {
       console.error("Profile image upload error:", uploadError);
       return profilePhotoUrl;
     }
-    // Get public URL
-    const { data: publicUrlData } = supabaseServiceRole.storage
-      .from(SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME)
-      .getPublicUrl(filePath);
 
-    return publicUrlData.publicUrl;
+    return storageProvider.getPublicUrl(
+      SOCIAL_ACCOUNT_PHOTO_BUCKET_NAME,
+      filePath,
+    );
   } catch (uploadError) {
     console.error("Profile image processing error:", uploadError);
   }

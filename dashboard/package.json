@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@atproto/api": "^0.18.3",
+    "@aws-sdk/client-s3": "^3.1079.0",
+    "@aws-sdk/s3-request-presigner": "^3.1079.0",
     "@hookform/resolvers": "^5.1.1",
     "@icons-pack/react-simple-icons": "^13.1.0",
     "@radix-ui/react-avatar": "^1.1.10",

@@ -1,45 +1,40 @@
-import type { Database } from "~/lib/.server/database.types";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { data } from "react-router";
+import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
+import { MEDIA_BUCKET } from "~/lib/.server/media.constants";
 
 import { withSupabase } from "~/lib/.server/supabase";
 
 // POST handler for file uploads
-export const action = withSupabase(
-  async ({ params, request, supabaseServiceRole }) => {
-    const method = request.method;
-    const { teamId, projectId } = params;
+export const action = withSupabase(async ({ params, request }) => {
+  const method = request.method;
+  const { teamId, projectId } = params;
 
-    if (!teamId || !projectId) {
-      return data({
-        success: false,
-        toast_msg: "Team ID and Project ID are required",
-      });
-    }
-
-    switch (method) {
-      case "POST":
-        return data(
-          await postAction(request, supabaseServiceRole, { teamId, projectId })
-        );
-      case "DELETE":
-        return data(await deleteAction(request, supabaseServiceRole));
-      default:
-        throw new Error(`Method ${method} not supported`);
-    }
+  if (!teamId || !projectId) {
+    return data({
+      success: false,
+      toast_msg: "Team ID and Project ID are required",
+    });
   }
-);
+
+  switch (method) {
+    case "POST":
+      return data(await postAction(request, { teamId, projectId }));
+    case "DELETE":
+      return data(await deleteAction(request, { teamId }));
+    default:
+      throw new Error(`Method ${method} not supported`);
+  }
+});
 
 async function postAction(
   request: Request,
-  supabaseServiceRole: SupabaseClient<Database>,
   {
     teamId,
     projectId,
   }: {
     teamId: string;
     projectId: string;
-  }
+  },
 ): Promise<{ success: boolean; fileName?: string }> {
   const formData = await request.formData();
   const files = formData.getAll("tiktok_verification_files") as File[];
@@ -48,11 +43,12 @@ async function postAction(
     return { success: false };
   }
 
+  const storageProvider = await getStorageProvider(teamId, projectId);
+
   // Upload files one by one to handle individual errors
   for (const file of files) {
-    const { error } = await supabaseServiceRole.storage
-      .from("post-media")
-      .upload(`${file.name}`, file, {
+    try {
+      await storageProvider.upload(MEDIA_BUCKET, `${file.name}`, file, {
         cacheControl: "3600",
         upsert: true,
         metadata: {
@@ -60,8 +56,7 @@ async function postAction(
           project_id: projectId,
         },
       });
-
-    if (error) {
+    } catch (error) {
       console.error("Upload error:", error);
       return {
         success: false,
@@ -77,18 +72,17 @@ async function postAction(
 
 async function deleteAction(
   request: Request,
-  supabaseServiceRole: SupabaseClient<Database>
+  { teamId }: { teamId: string },
 ): Promise<{ success: boolean }> {
   const formData = await request.formData();
   const fileName = formData.get("fileName") as string;
 
   // Handle single file deletion
   if (fileName) {
-    const { error } = await supabaseServiceRole.storage
-      .from("post-media")
-      .remove([`${fileName}`]);
-
-    if (error) {
+    const storageProvider = await getStorageProvider(teamId);
+    try {
+      await storageProvider.remove(MEDIA_BUCKET, [`${fileName}`]);
+    } catch (error) {
       console.error("Delete error:", error);
       return {
         success: false,

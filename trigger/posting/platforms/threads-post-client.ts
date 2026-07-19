@@ -1,6 +1,6 @@
 import { PostClient } from "../post-client";
 import axios, { AxiosResponse } from "axios";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 import { wait } from "@trigger.dev/sdk";
 import {
   SocialAccount,
@@ -35,10 +35,10 @@ export class ThreadsPostClient extends PostClient {
   #responses: any[] = [];
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
   }
 
   async refreshAccessToken(

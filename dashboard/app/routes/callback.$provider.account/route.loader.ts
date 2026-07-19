@@ -119,6 +119,7 @@ export const loader = withSupabase(async function ({
   try {
     const accountConnections = await addSocialAccountConnections({
       projectId,
+      teamId: project.team_id,
       provider,
       request,
       supabaseServiceRole,

@@ -1,7 +1,7 @@
 import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, schedules, wait } from "@trigger.dev/sdk";
-import { createStorageProvider } from "./storage/supabase-storage.provider";
+import { createStorageProvider } from "./storage/r2-storage.provider";
 import { MEDIA_BUCKET } from "./constants";
 
 const supabaseClient = createClient<Database>(
@@ -9,18 +9,22 @@ const supabaseClient = createClient<Database>(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-const storageProvider = createStorageProvider();
-
-const storageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/post-media`;
-
-export const supabaseMediaCleanup = schedules.task({
+export const cloudflareMediaCleanup = schedules.task({
   cron: { pattern: "0 */1 * * *", environments: ["PRODUCTION"] },
-  id: "supbase-media-cleanup",
+  id: "cloudflare-media-cleanup",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
   machine: "small-1x",
   run: async (payload) => {
-    logger.info("Starting Media Cleanup", payload);
+    if (!process.env.R2_ENDPOINT || !process.env.R2_ACCESS_KEY_ID) {
+      logger.info("R2 not configured, skipping Cloudflare Media Cleanup");
+      return;
+    }
+
+    const storageProvider = createStorageProvider();
+    const storageUrl = process.env.R2_PUBLIC_URL!;
+
+    logger.info("Starting Cloudflare Media Cleanup", payload);
 
     // Get all files older than 1 day from storage
     const oneDayAgo = new Date();
@@ -33,7 +37,7 @@ export const supabaseMediaCleanup = schedules.task({
         if (
           file.createdAt != null &&
           new Date(file.createdAt) < oneDayAgo &&
-          file.metadata?.["mimetype"] !== "text/plain"
+          !file.name.endsWith(".txt")
         ) {
           allOldFiles.push(file);
         }
