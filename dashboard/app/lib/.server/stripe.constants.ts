@@ -6,6 +6,16 @@ export const STRIPE_CREDS_ADDON_PRODUCT_ID =
 export const STRIPE_METER_EVENT_ID = process.env?.STRIPE_METER_EVENT_ID || "";
 export const STRIPE_CANCELLED_STATUSES = ["canceled", "unpaid"];
 
+// Days a team keeps API access after its subscription leaves active/trialing
+// (e.g. a failed payment) before access is actually revoked. Explicit
+// cancellation bypasses this and revokes immediately — see
+// handle-subscription-health-change.request.ts. trigger/process-payment-grace-period.ts
+// reads the same env var independently (siblings can't share code in this repo).
+export const PAYMENT_GRACE_PERIOD_DAYS = parseInt(
+  process.env?.PAYMENT_GRACE_PERIOD_DAYS || "2",
+  10,
+);
+
 // New pricing model product IDs
 export const STRIPE_PRICING_TIER_1K_PRODUCT_ID =
   process.env?.STRIPE_PRICING_TIER_1K_PRODUCT_ID || "";

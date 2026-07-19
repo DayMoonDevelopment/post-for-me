@@ -780,6 +780,7 @@ export type Database = {
           created_by: string | null
           id: string
           name: string
+          payment_failed_at: string | null
           stripe_customer_id: string | null
           updated_at: string | null
           updated_by: string | null
@@ -790,6 +791,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name: string
+          payment_failed_at?: string | null
           stripe_customer_id?: string | null
           updated_at?: string | null
           updated_by?: string | null
@@ -800,6 +802,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name?: string
+          payment_failed_at?: string | null
           stripe_customer_id?: string | null
           updated_at?: string | null
           updated_by?: string | null
