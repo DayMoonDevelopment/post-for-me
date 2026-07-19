@@ -1,0 +1,22 @@
+{
+  "name": "@post-for-me/e2e-sdk-node",
+  "version": "0.0.1",
+  "description": "Node SDK (post-for-me npm client) tests for the Post for Me product surface.",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "post-for-me": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
