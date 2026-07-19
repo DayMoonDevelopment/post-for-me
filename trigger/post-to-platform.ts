@@ -1,5 +1,12 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
+import {
+  idempotencyKeys,
+  logger,
+  queue,
+  task,
+  tags,
+  tasks,
+} from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -131,6 +138,11 @@ const handleTokenRefresh = async ({
     success: true,
   };
 };
+
+export const youtubePerAccountQueue = queue({
+  name: "youtube-post-to-platform",
+  concurrencyLimit: 1,
+});
 
 export const postToPlatform = task({
   id: "post-to-platform",

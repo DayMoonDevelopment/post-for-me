@@ -11,6 +11,7 @@ import type {
 import { Unkey } from "@unkey/api";
 
 import { Database, Json } from "./supabase.types";
+import { youtubePerAccountQueue } from "./post-to-platform";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -498,7 +499,17 @@ export const processPost = task({
         logger.info("Posting To Accounts", { bulkPostData });
         const batchPostResult = await tasks.batchTriggerAndWait(
           "post-to-platform",
-          bulkPostData.map((data) => ({ payload: data })),
+          bulkPostData.map((data) => ({
+            payload: data,
+            ...(data.platform === "youtube"
+              ? {
+                  options: {
+                    queue: youtubePerAccountQueue.name,
+                    concurrencyKey: data.account.id,
+                  },
+                }
+              : {}),
+          })),
         );
 
         logger.info("Posting To Accounts Complete", { batchPostResult });
@@ -520,6 +531,12 @@ export const processPost = task({
           const storyPostResult = await tasks.triggerAndWait(
             "post-to-platform",
             storyPostData,
+            storyPostData.platform === "youtube"
+              ? {
+                  queue: youtubePerAccountQueue.name,
+                  concurrencyKey: storyPostData.account.id,
+                }
+              : undefined,
           );
 
           logger.info("Posting Story Media Complete", {
