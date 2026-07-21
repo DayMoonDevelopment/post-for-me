@@ -24,6 +24,7 @@ export class TwitterPostClient extends PostClient {
   #requests: any[] = [];
   #responses: any[] = [];
   #maxFileSize = 5 * 1024 * 1024;
+  #localSupabaseClient;
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -33,6 +34,7 @@ export class TwitterPostClient extends PostClient {
 
     this.#appKey = appCredentials.app_id;
     this.#appSecret = appCredentials.app_secret;
+    this.#localSupabaseClient = supabaseClient;
   }
 
   async refreshAccessToken(
@@ -72,11 +74,11 @@ export class TwitterPostClient extends PostClient {
 
       const mediaIds = await this.#processMedia({ twitterClient, media });
 
+      const isPremium = await this.#getIsPremium({ twitterClient, account });
+
       const allowedCaption = caption.slice(
         0,
-        account.social_provider_metadata?.has_platform_premium
-          ? this.#PREMIUM_CHARACTER_LIMIT
-          : this.#CHARACTER_LIMIT,
+        isPremium ? this.#PREMIUM_CHARACTER_LIMIT : this.#CHARACTER_LIMIT,
       );
 
       const postPayload: SendTweetV2Params = {
@@ -156,6 +158,48 @@ export class TwitterPostClient extends PostClient {
           responses: this.#responses,
         },
       };
+    }
+  }
+
+  async #getIsPremium({
+    twitterClient,
+    account,
+  }: {
+    twitterClient: TwitterApi;
+    account: SocialAccount;
+  }): Promise<boolean> {
+    const storedIsPremium = Boolean(
+      account.social_provider_metadata?.has_platform_premium,
+    );
+
+    try {
+      const { data: user } = await twitterClient.v2.me({
+        "user.fields": "verified_type",
+      });
+
+      const isPremium = user.verified_type
+        ? user.verified_type !== "none"
+        : false;
+
+      if (isPremium !== storedIsPremium) {
+        await this.#localSupabaseClient
+          .from("social_provider_connections")
+          .update({
+            social_provider_metadata: {
+              ...account.social_provider_metadata,
+              has_platform_premium: isPremium,
+            },
+          })
+          .eq("id", account.id);
+      }
+
+      return isPremium;
+    } catch (error) {
+      console.error(
+        `Error checking premium status for Twitter account ${account.id}, falling back to stored value:`,
+        error,
+      );
+      return storedIsPremium;
     }
   }
 
