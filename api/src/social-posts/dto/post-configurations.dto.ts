@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsOptional } from 'class-validator';
 import { SocialPostMediaDto } from './post-media.dto';
+
+export enum TiktokPrivacyStatus {
+  PUBLIC = 'public',
+  PRIVATE = 'private',
+  FOLLOWERS = 'followers',
+  FRIENDS = 'friends',
+}
 
 export type PlatformConfiguration =
   | PinterestConfigurationDto
@@ -138,11 +146,15 @@ export class TiktokConfigurationDto extends BaseConfigurationDto {
   title?: string;
 
   @ApiProperty({
-    description: 'Sets the privacy status for TikTok (private, public)',
+    description:
+      'Sets the privacy status for TikTok (public, private, followers, friends)',
+    enum: TiktokPrivacyStatus,
     nullable: true,
     required: false,
-    default: 'public',
+    default: TiktokPrivacyStatus.PUBLIC,
   })
+  @IsEnum(TiktokPrivacyStatus)
+  @IsOptional()
   privacy_status?: string;
 
   @ApiProperty({
@@ -220,11 +232,15 @@ export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
   title?: string;
 
   @ApiProperty({
-    description: 'Sets the privacy status for TikTok (private, public)',
+    description:
+      'Sets the privacy status for TikTok (public, private, followers, friends)',
+    enum: TiktokPrivacyStatus,
     nullable: true,
     required: false,
-    default: 'public',
+    default: TiktokPrivacyStatus.PUBLIC,
   })
+  @IsEnum(TiktokPrivacyStatus)
+  @IsOptional()
   privacy_status?: string;
 
   @ApiProperty({
@@ -632,10 +648,10 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'Sets the privacy status for TikTok (private, public), or YouTube (private, public, unlisted)',
+      'Sets the privacy status for TikTok (public, private, followers, friends), or YouTube (private, public, unlisted)',
     nullable: true,
     required: false,
-    enum: ['public', 'private', 'unlisted'],
+    enum: ['public', 'private', 'unlisted', 'followers', 'friends'],
     default: 'public',
   })
   privacy_status?: string;

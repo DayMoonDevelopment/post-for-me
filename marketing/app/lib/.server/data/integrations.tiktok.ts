@@ -73,7 +73,8 @@ export const tiktok: IntegrationData = {
     {
       name: "Privacy status",
       field: "privacy_status",
-      description: "Set videos to public or private visibility.",
+      description:
+        "Set videos to public, private, followers-only, or friends-only visibility.",
     },
     {
       name: "Comment control",
