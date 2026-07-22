@@ -346,6 +346,7 @@ export const processPostMedium = task({
       provider,
       provider_connection_id,
       thumbnail_timestamp_ms,
+      alt_text,
       tags,
       skip_processing,
     },
@@ -357,6 +358,7 @@ export const processPostMedium = task({
       url: string;
       thumbnail_url?: string | null;
       thumbnail_timestamp_ms?: number | null;
+      alt_text?: string | null;
       tags?: UserTag[] | null;
       skip_processing?: boolean | null;
     };
@@ -368,6 +370,7 @@ export const processPostMedium = task({
     thumbnail_url: string;
     thumbnail_timestamp_ms?: number | null;
     type: string;
+    alt_text?: string | null;
     tags?: UserTag[] | null;
     skip_processing?: boolean | null;
   }> => {
@@ -409,6 +412,7 @@ export const processPostMedium = task({
         provider: provider,
         provider_connection_id: provider_connection_id,
         thumbnail_timestamp_ms: thumbnail_timestamp_ms,
+        alt_text,
         tags,
         skip_processing: skip_processing,
       };

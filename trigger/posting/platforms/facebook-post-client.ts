@@ -310,6 +310,7 @@ export class FacebookPostClient extends PostClient {
       access_token: string;
       tags?: any[];
       place?: string;
+      alt_text_custom?: string;
     } = {
       url: fileUrl,
       published: true,
@@ -329,6 +330,10 @@ export class FacebookPostClient extends PostClient {
 
     if (platformConfig?.location) {
       payload.place = platformConfig.location;
+    }
+
+    if (medium.alt_text) {
+      payload.alt_text_custom = medium.alt_text;
     }
 
     this.#requests.push({
@@ -380,6 +385,7 @@ export class FacebookPostClient extends PostClient {
         published: boolean;
         access_token: string;
         tags?: any[];
+        alt_text_custom?: string;
       } = {
         url: fileUrl,
         published: false,
@@ -388,6 +394,10 @@ export class FacebookPostClient extends PostClient {
 
       if (setCaptionForEachImage) {
         payload.message = caption;
+      }
+
+      if (medium.alt_text) {
+        payload.alt_text_custom = medium.alt_text;
       }
 
       if (medium.tags && medium.tags.length > 0) {

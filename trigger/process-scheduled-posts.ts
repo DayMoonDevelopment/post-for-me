@@ -40,6 +40,7 @@ export const processScheduledPosts = schedules.task({
               thumbnail_timestamp_ms,
               provider,
               provider_connection_id,
+              alt_text,
               tags,
               skip_processing
             ),

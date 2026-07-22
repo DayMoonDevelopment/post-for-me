@@ -485,7 +485,7 @@ export class BlueskyPostClient extends PostClient {
       });
 
       images.push({
-        alt: caption || "Image",
+        alt: medium.alt_text || caption || "Image",
         image: uploadResult.data.blob,
         aspectRatio: {
           width,

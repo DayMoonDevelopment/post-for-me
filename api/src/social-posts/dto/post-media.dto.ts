@@ -58,6 +58,14 @@ export class SocialPostMediaDto {
   thumbnail_timestamp_ms: number | null | undefined;
 
   @ApiProperty({
+    description:
+      'Alt text describing the media, passed to platforms that support it',
+    nullable: true,
+    required: false,
+  })
+  alt_text?: string | null;
+
+  @ApiProperty({
     description: 'List of tags to attach to the media',
     nullable: true,
     required: false,

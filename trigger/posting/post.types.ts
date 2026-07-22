@@ -59,6 +59,7 @@ export interface Post {
     thumbnail_timestamp_ms: number | null;
     provider: Provider | null;
     provider_connection_id: string | null;
+    alt_text: string | null;
     tags: UserTag[] | null;
     skip_processing: boolean | null;
   }[];
@@ -99,6 +100,7 @@ export interface PostMedia {
   thumbnail_url?: string | null;
   thumbnail_timestamp_ms?: number | null;
   type: string;
+  alt_text?: string | null;
   tags?: UserTag[] | null;
   skip_processing?: boolean | null;
 }
