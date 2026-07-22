@@ -61,7 +61,7 @@ const postingCapabilities = [
     icon: IconCalendar1,
     title: "Scheduled posting",
     description:
-      "Set a future publish time and Post for Me delivers the post on schedule. Timezone normalization and platform scheduling rules are handled for you.",
+      "Set a future scheduled_at timestamp (UTC, ISO 8601) and Post for Me delivers the post on schedule. Platform scheduling rules are handled for you.",
   },
   {
     icon: IconDraft,
@@ -140,7 +140,7 @@ const faqs = [
   {
     question: "Can I schedule posts for future publishing?",
     answer:
-      'Yes. Include a <code>publish_at</code> timestamp in your API call and Post for Me publishes at the specified time. Timezone normalization and platform-specific scheduling rules are handled for you.',
+      'Yes. Include a <code>scheduled_at</code> timestamp (UTC, ISO 8601) in your API call and Post for Me publishes at the specified time. Platform-specific scheduling rules are handled for you.',
   },
   {
     question: "Can I customize posts per platform?",

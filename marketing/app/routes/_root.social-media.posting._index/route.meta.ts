@@ -76,7 +76,7 @@ export const meta: Route.MetaFunction = () => {
         featureList: [
           "Post to 9 platforms through one social media posting API",
           "Captions, images, video, and thumbnails",
-          "Scheduled posting with timezone handling",
+          "Scheduled posting with UTC (ISO 8601) timestamps",
           "Draft mode with TikTok app review",
           "Multi-account posting in a single call",
           "Per-platform customization (YouTube titles, Instagram reels, Pinterest boards, X polls, LinkedIn pages)",
@@ -144,7 +144,7 @@ export const meta: Route.MetaFunction = () => {
             name: "Can I schedule posts for future publishing?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Include a publish_at timestamp in your API call and Post for Me publishes at the specified time, with timezone normalization and platform-specific scheduling rules handled for you.",
+              text: "Yes. Include a scheduled_at timestamp (UTC, ISO 8601) in your API call and Post for Me publishes at the specified time, with platform-specific scheduling rules handled for you.",
             },
           },
           {
