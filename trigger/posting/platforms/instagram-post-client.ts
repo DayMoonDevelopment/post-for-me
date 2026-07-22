@@ -19,6 +19,7 @@ export class InstagramPostClient extends PostClient {
   #minAspectRatio = 4 / 5;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
+  #reelsMinAspectRatio = 9 / 16;
   #mediaRetryAttempts = 30;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
@@ -338,6 +339,7 @@ export class InstagramPostClient extends PostClient {
         medium,
         options: {
           placement: platformConfig?.placement,
+          is_feed: true,
         },
       });
       signedUrl = transformedImage.signedUrl!;
@@ -348,6 +350,7 @@ export class InstagramPostClient extends PostClient {
           medium: { id: medium.id, url: medium.thumbnail_url, type: "image" },
           options: {
             placement: platformConfig?.placement,
+            is_feed: platformConfig?.share_to_feed ?? false,
           },
         });
         thumbnailUrl = transformedThumbnail.signedUrl;
@@ -926,6 +929,7 @@ export class InstagramPostClient extends PostClient {
         height: number | null | undefined;
       };
       placement?: string;
+      is_feed?: boolean;
     };
   }): Promise<{
     signedUrl: string | undefined;
@@ -955,7 +959,9 @@ export class InstagramPostClient extends PostClient {
     const minAspectRatio =
       options?.placement === "stories"
         ? this.#storiesMinAspectRatio
-        : this.#minAspectRatio;
+        : !options?.is_feed
+          ? this.#reelsMinAspectRatio
+          : this.#minAspectRatio;
 
     if (options?.firstImage?.width && options?.firstImage?.height) {
       const firstImageRatio =

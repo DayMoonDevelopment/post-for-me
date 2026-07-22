@@ -59,6 +59,7 @@ export interface Post {
     thumbnail_timestamp_ms: number | null;
     provider: Provider | null;
     provider_connection_id: string | null;
+    tags: UserTag[] | null;
     skip_processing: boolean | null;
   }[];
   social_post_configurations: {
