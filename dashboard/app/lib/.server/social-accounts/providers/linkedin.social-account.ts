@@ -162,28 +162,47 @@ async function getPageAccounts(
   refreshTokenExpiresAt: Date | undefined
 ): Promise<SocialProviderConnection[]> {
   const accounts: SocialProviderConnection[] = [];
-  const pageResponse = await fetch(
-    "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED",
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-    }
+  const roles = ["ADMINISTRATOR", "CONTENT_ADMINISTRATOR"];
+
+  const responses = await Promise.all(
+    roles.map(async (role) => {
+      const pageResponse = await fetch(
+        `https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=${role}&state=APPROVED`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "X-Restli-Protocol-Version": "2.0.0",
+          },
+        }
+      );
+
+      if (!pageResponse.ok) {
+        return [];
+      }
+
+      const data = await pageResponse.json();
+
+      return data.elements ?? [];
+    })
   );
 
-  if (!pageResponse.ok) {
-    return accounts;
-  }
+  const elements: { organizationalTarget: string }[] = [
+    ...new Map(
+      responses
+        .flat()
+        .map((element: { organizationalTarget: string }) => [
+          element.organizationalTarget,
+          element,
+        ])
+    ).values(),
+  ];
 
-  const data = await pageResponse.json();
-
-  if (!data.elements) {
+  if (elements.length === 0) {
     return accounts;
   }
 
   await Promise.all(
-    data.elements.map(async (element: { organizationalTarget: string }) => {
+    elements.map(async (element: { organizationalTarget: string }) => {
       try {
         const orgId = element.organizationalTarget.split(":").pop();
 
