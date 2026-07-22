@@ -36,7 +36,7 @@ export async function getLinkedInSocialProviderConnection({
 
   const accessToken = tokenData.access_token;
   const accessTokenExpiresAt: Date = new Date(
-    Date.now() + (tokenData.expires_in - 86400) * 1000
+    Date.now() + (tokenData.expires_in - 86400) * 1000,
   );
   const refreshToken = tokenData.refresh_token;
   const refreshTokenExpiresAt: Date | undefined =
@@ -62,7 +62,7 @@ export async function getLinkedInSocialProviderConnection({
     accessToken,
     refreshToken,
     accessTokenExpiresAt,
-    refreshTokenExpiresAt
+    refreshTokenExpiresAt,
   );
 
   accounts.push(...pageAccounts);
@@ -71,7 +71,7 @@ export async function getLinkedInSocialProviderConnection({
 }
 
 async function getProfileData(
-  accessToken: string
+  accessToken: string,
 ): Promise<{ name: string; pictureUrl: string; id: string }> {
   const userResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: {
@@ -103,7 +103,7 @@ async function getProfileData(
         Authorization: `Bearer ${accessToken}`,
         "X-Restli-Protocol-Version": "2.0.0",
       },
-    }
+    },
   );
 
   const pictureData = await pictureResponse.json();
@@ -119,7 +119,7 @@ async function getProfileData(
           };
         }) =>
           element.data?.["com.linkedin.digitalmedia.mediaartifact.StillImage"]
-            ?.storageSize?.width
+            ?.storageSize?.width,
       )
       ?.sort(
         (
@@ -136,7 +136,7 @@ async function getProfileData(
                 storageSize?: { width: number };
               };
             };
-          }
+          },
         ) => {
           const widthA =
             a.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
@@ -145,7 +145,7 @@ async function getProfileData(
             b.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
               ?.storageSize?.width || 0;
           return widthB - widthA;
-        }
+        },
       )?.[0]?.identifiers?.[0]?.identifier || null;
 
   return {
@@ -159,7 +159,7 @@ async function getPageAccounts(
   accessToken: string,
   refreshToken: string,
   accessTokenExpiresAt: Date,
-  refreshTokenExpiresAt: Date | undefined
+  refreshTokenExpiresAt: Date | undefined,
 ): Promise<SocialProviderConnection[]> {
   const accounts: SocialProviderConnection[] = [];
   const aclElements: { organizationalTarget: string }[] = [];
@@ -170,13 +170,10 @@ async function getPageAccounts(
   while (hasMorePages) {
     try {
       const pageUrl = new URL(
-        "https://api.linkedin.com/v2/organizationalEntityAcls"
+        "https://api.linkedin.com/v2/organizationalEntityAcls",
       );
       pageUrl.searchParams.set("q", "roleAssignee");
-      pageUrl.searchParams.set(
-        "role",
-        "List(ADMINISTRATOR,CONTENT_ADMINISTRATOR)"
-      );
+      pageUrl.searchParams.set("role", "ADMINISTRATOR");
       pageUrl.searchParams.set("state", "APPROVED");
       pageUrl.searchParams.set("start", String(start));
       pageUrl.searchParams.set("count", String(pageSize));
@@ -231,8 +228,8 @@ async function getPageAccounts(
     new Set(
       aclElements
         .map((element) => element.organizationalTarget.split(":").pop())
-        .filter((orgId): orgId is string => Boolean(orgId))
-    )
+        .filter((orgId): orgId is string => Boolean(orgId)),
+    ),
   );
 
   await Promise.all(
@@ -245,7 +242,7 @@ async function getPageAccounts(
               Authorization: `Bearer ${accessToken}`,
               "X-Restli-Protocol-Version": "2.0.0",
             },
-          }
+          },
         );
 
         const orgData = await orgResponse.json();
@@ -258,7 +255,7 @@ async function getPageAccounts(
               Authorization: `Bearer ${accessToken}`,
               "X-Restli-Protocol-Version": "2.0.0",
             },
-          }
+          },
         );
 
         const pictureData = await pictureResponse.json();
@@ -276,7 +273,7 @@ async function getPageAccounts(
               }) =>
                 element.data?.[
                   "com.linkedin.digitalmedia.mediaartifact.StillImage"
-                ]?.storageSize?.width
+                ]?.storageSize?.width,
             )
             ?.sort(
               (
@@ -293,7 +290,7 @@ async function getPageAccounts(
                       storageSize?: { width: number };
                     };
                   };
-                }
+                },
               ) => {
                 const widthA =
                   a.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
@@ -302,7 +299,7 @@ async function getPageAccounts(
                   b.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
                     ?.storageSize?.width || 0;
                 return widthB - widthA;
-              }
+              },
             )?.[0]?.identifiers?.[0]?.identifier || null;
 
         accounts.push({
@@ -318,7 +315,7 @@ async function getPageAccounts(
       } catch (error) {
         console.error("Error fetching organization:", error);
       }
-    })
+    }),
   );
 
   return accounts;
