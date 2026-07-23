@@ -16,6 +16,7 @@ import type {
   InstagramAccountMetadata,
   InstagramInsightsResponse,
   InstagramInsight,
+  InstagramAudioSearchResponse,
 } from './instagram.types';
 import { mapWithConcurrency } from '../lib/async.utils';
 
@@ -39,6 +40,30 @@ export class InstagramService implements SocialPlatformService {
       return 'https://graph.instagram.com/v23.0';
     }
     return 'https://graph.facebook.com/v23.0';
+  }
+
+  async searchAudio({
+    account,
+    audioType,
+    searchQuery,
+  }: {
+    account: SocialAccount;
+    audioType: 'music' | 'original_sound';
+    searchQuery?: string;
+  }): Promise<InstagramAudioSearchResponse> {
+    const response = await axios.get<InstagramAudioSearchResponse>(
+      `${this.getApiBaseUrl(account)}/ig_audio`,
+      {
+        params: {
+          audio_type: audioType,
+          user_id: account.social_provider_user_id,
+          ...(searchQuery ? { search_query: searchQuery } : {}),
+          access_token: account.access_token,
+        },
+      },
+    );
+
+    return response.data;
   }
 
   async initService(projectId: string): Promise<void> {

@@ -116,3 +116,28 @@ export interface FacebookRefreshTokenResponse {
 export interface InstagramAccountMetadata {
   connection_type?: 'instagram' | 'facebook';
 }
+
+/**
+ * Instagram audio asset from the Audio API
+ */
+export interface InstagramAudioAsset {
+  audio_id: string;
+  title?: string;
+  display_artist?: string;
+  duration_in_ms?: number;
+  audio_type?: string;
+  download_url?: string | null;
+  cover_artwork_thumbnail_uri?: string | null;
+  ig_username?: string;
+  profile_picture_url?: string;
+  is_ads_eligible?: boolean | null;
+  on_platform_audio_preview_link?: string | null;
+}
+
+/**
+ * Instagram audio search response
+ */
+export interface InstagramAudioSearchResponse {
+  audio: InstagramAudioAsset[];
+  paging?: Paging;
+}

@@ -77,6 +77,39 @@ export class PinterestConfigurationDto extends BaseConfigurationDto {
   link?: string;
 }
 
+export class InstagramAudioConfigurationDto {
+  @ApiProperty({
+    description:
+      "Id of the audio asset to attach to the reel, obtained from Meta's Instagram Audio API search or metadata endpoints.",
+    required: true,
+  })
+  audio_id: string;
+
+  @ApiProperty({
+    description:
+      'Volume of the attached audio, from 0 (muted) to 100 (full volume). Defaults to 100.',
+    nullable: true,
+    required: false,
+  })
+  audio_volume?: number;
+
+  @ApiProperty({
+    description:
+      "Volume of the video's original audio, from 0 (muted) to 100 (full volume). Defaults to 100.",
+    nullable: true,
+    required: false,
+  })
+  video_volume?: number;
+
+  @ApiProperty({
+    description:
+      'If true, loop the attached audio when it is shorter than the video. Informally documented by Meta and may be ignored.',
+    nullable: true,
+    required: false,
+  })
+  should_loop_audio?: boolean;
+}
+
 export class InstagramConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
     description: 'Instagram post placement',
@@ -127,6 +160,15 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   audio_name?: string;
+
+  @ApiProperty({
+    description:
+      'Attach an existing audio asset (music or original sound) to a Reel by audio id. Only honored on Reels uploads for accounts connected via Facebook Login (not supported on direct Instagram Login connections). Takes precedence over audio_name when both are set.',
+    type: InstagramAudioConfigurationDto,
+    nullable: true,
+    required: false,
+  })
+  audio_configuration?: InstagramAudioConfigurationDto;
 }
 
 export class TiktokConfigurationDto extends BaseConfigurationDto {
@@ -874,6 +916,15 @@ export class AccountConfigurationDetailsDto {
     required: false,
   })
   audio_name?: string;
+
+  @ApiProperty({
+    description:
+      'Attach an existing audio asset (music or original sound) to an Instagram Reel by audio id. Only honored on Reels uploads for accounts connected via Facebook Login (not supported on direct Instagram Login connections). Takes precedence over audio_name when both are set.',
+    type: InstagramAudioConfigurationDto,
+    nullable: true,
+    required: false,
+  })
+  audio_configuration?: InstagramAudioConfigurationDto;
 
   @ApiProperty({
     description:
