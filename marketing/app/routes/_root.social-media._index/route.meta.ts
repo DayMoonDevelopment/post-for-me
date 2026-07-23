@@ -101,7 +101,7 @@ export const meta: Route.MetaFunction = () => {
             name: "Can I schedule social media posts through the API?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. You can schedule posts for future publishing across any supported platform. Set a publish time in your API call and Post for Me handles the rest, including timezone normalization and platform-specific scheduling constraints.",
+              text: "Yes. You can schedule posts for future publishing across any supported platform. Set a scheduled_at timestamp (UTC, ISO 8601) in your API call and Post for Me handles the rest, including platform-specific scheduling constraints.",
             },
           },
           {
