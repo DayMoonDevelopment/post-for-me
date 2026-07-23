@@ -1,5 +1,6 @@
 import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request";
 
+import { syncTeamUsageLimit } from "./sync-team-usage-limit";
 import { trackSubscriptionLifecycle } from "./subscription-lifecycle-tracking";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -26,6 +27,13 @@ export async function handleSubscriptionEvent(
     },
     supabaseServiceRole,
   );
+
+  // Sync the team's current usage-window limit so a mid-cycle upgrade/
+  // downgrade takes effect immediately, not on the next window rollover.
+  // Primary side effect: allowed to throw -> 500 -> Stripe retries.
+  if (isSubscriptionActive) {
+    await syncTeamUsageLimit(subscription, supabaseServiceRole);
+  }
 
   // Lifecycle analytics. Best-effort: never let a tracking failure break the
   // Unkey side effect above or the webhook response.
