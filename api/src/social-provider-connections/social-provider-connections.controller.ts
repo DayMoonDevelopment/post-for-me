@@ -424,10 +424,23 @@ export class SocialAccountsController {
         );
       }
 
-      return this.socialAccountsService.deleteSocialAccount({
-        id,
-        projectId: user.projectId,
-      });
+      const { deletedPosts, ...deleteResponse } =
+        await this.socialAccountsService.deleteSocialAccount({
+          id,
+          projectId: user.projectId,
+        });
+
+      await Promise.all(
+        deletedPosts.map((post) =>
+          tasks.trigger(PROCESS_WEBHOOK_TASK, {
+            projectId: user.projectId,
+            eventType: 'social.post.deleted',
+            eventData: post,
+          }),
+        ),
+      );
+
+      return deleteResponse;
     } catch (error) {
       console.error(`Error deleting social account ${id}:`, error);
       if (error instanceof HttpException) {

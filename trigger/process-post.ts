@@ -6,6 +6,7 @@ import type {
   PlatformConfiguration,
   Post,
   PostResult,
+  SocialAccount,
   UserTag,
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
@@ -152,16 +153,32 @@ export const processPost = task({
 
     await tags.add([`${post.id}`, `${post.project_id}`]);
 
-    logger.info("Getting post accounts");
-    const accounts = post.social_post_provider_connections?.map(
-      ({ social_provider_connections: connection }) => ({
-        ...connection,
-      }),
-    );
-
     const errorResults: PostResult[] = [];
 
     try {
+      logger.info("Getting post accounts");
+      // Re-fetch live rather than trusting payload.post, which is a snapshot
+      // taken by process-scheduled-posts before this task was queued/run —
+      // an account deleted in that window would otherwise be posted to using
+      // stale, already-deleted connection data.
+      const { data: liveConnections, error: liveConnectionsError } =
+        await supabaseClient
+          .from("social_post_provider_connections")
+          .select("social_provider_connections (*)")
+          .eq("post_id", post.id);
+
+      if (liveConnectionsError) {
+        logger.error("Failed to fetch live post accounts", {
+          error: liveConnectionsError,
+        });
+        throw new Error(liveConnectionsError.message);
+      }
+
+      const accounts = liveConnections?.map(
+        ({ social_provider_connections: connection }) =>
+          ({ ...connection }) as unknown as SocialAccount,
+      );
+
       if (!accounts || accounts.length === 0) {
         logger.error("No accounts found for post", { post });
         return [];
