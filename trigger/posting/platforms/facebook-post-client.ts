@@ -242,6 +242,46 @@ export class FacebookPostClient extends PostClient {
     }
   }
 
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }) {
+    try {
+      const response = await axios.delete(
+        `https://graph.facebook.com/v20.0/${providerPostId}`,
+        {
+          params: { access_token: account.access_token },
+        },
+      );
+
+      if (response.data.error) {
+        throw new Error(response.data.error.message as string);
+      }
+
+      return {
+        success: !!response.data.success,
+        provider_connection_id: account.id,
+        details: { response: response.data },
+      };
+    } catch (error) {
+      console.error(
+        `Error deleting Facebook post ${providerPostId} for account ${account.id} :`,
+        error.response?.data || error,
+      );
+      return {
+        success: false,
+        provider_connection_id: account.id,
+        error_message: `Failed to delete Facebook post: ${
+          error.response?.data?.error?.message || error.message
+        }`,
+        details: { error },
+      };
+    }
+  }
+
   async #createTextPost({
     account,
     caption,

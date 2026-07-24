@@ -11,6 +11,9 @@ export enum PostStatus {
   SCHEDULED = 'scheduled',
   PROCESSING = 'processing',
   PROCESSED = 'processed',
+  DELETING = 'deleting',
+  DELETED = 'deleted',
+  DELETE_FAILED = 'delete_failed',
 }
 
 export class SocialPostDto {
