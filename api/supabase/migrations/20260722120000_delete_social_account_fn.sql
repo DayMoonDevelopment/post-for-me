@@ -4,10 +4,13 @@
 -- - Scheduled/draft posts whose ONLY account is this connection are deleted
 --   outright (their child rows cascade via existing FKs), rather than being
 --   left referencing zero accounts.
--- - Media/configuration rows scoped to this connection on posts that still
---   have other accounts are explicitly removed, rather than relying on
---   ON DELETE SET NULL, which would otherwise silently reclassify them as
---   applying to the whole post.
+-- - Media/configuration rows scoped to this connection on *scheduled/draft*
+--   posts that still have other accounts are explicitly removed, rather than
+--   relying on ON DELETE SET NULL, which would otherwise silently reclassify
+--   them as applying to the whole post.
+-- - Media/configuration rows on posts in any other status (e.g. already
+--   published) are left alone so the existing ON DELETE SET NULL FK
+--   preserves them as historical record, instead of deleting the row.
 CREATE OR REPLACE FUNCTION delete_social_account(p_id text, p_project_id text)
     RETURNS TABLE(
         id text,
@@ -62,16 +65,20 @@ deleted_posts AS (
     RETURNING sp.id, sp.external_id, sp.caption, sp.status, sp.post_at, sp.project_id, sp.created_at, sp.updated_at
 ),
 cleared_media AS (
-    DELETE FROM social_post_media spm
-    WHERE spm.provider_connection_id = p_id
+    DELETE FROM social_post_media spm USING social_posts sp
+    WHERE spm.post_id = sp.id
+        AND spm.provider_connection_id = p_id
+        AND sp.status IN ('scheduled', 'draft')
         AND spm.post_id NOT IN (
             SELECT
                 id
             FROM orphaned_posts)
 ),
 cleared_configurations AS (
-    DELETE FROM social_post_configurations spc
-    WHERE spc.provider_connection_id = p_id
+    DELETE FROM social_post_configurations spc USING social_posts sp
+    WHERE spc.post_id = sp.id
+        AND spc.provider_connection_id = p_id
+        AND sp.status IN ('scheduled', 'draft')
         AND spc.post_id NOT IN (
             SELECT
                 id

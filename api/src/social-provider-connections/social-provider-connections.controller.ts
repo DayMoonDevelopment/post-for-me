@@ -36,6 +36,7 @@ import { SocialAccountProviderAuthUrlDto } from './dto/provider-auth-url.dto';
 import { SocialProviderAppCredentialsService } from '../social-provider-app-credentials/social-provider-app-credentials.service';
 import { CreateSocialAccountProviderAuthUrlDto } from './dto/create-provider-auth-url.dto';
 import { SocialProviderAppCredentialsDto } from '../social-provider-app-credentials/dto/social-provider-app-credentials.dto';
+import { PostStatus, SocialPostDto } from '../social-posts/dto/post.dto';
 import { createAuthUrlDescription } from './docs/create-auth-url.md';
 import { UpdateSocialAccountDto } from './dto/update-social-account.dto';
 import { CreateSocialAccountDto } from './dto/create-social-account.dto';
@@ -435,7 +436,23 @@ export class SocialAccountsController {
           tasks.trigger(PROCESS_WEBHOOK_TASK, {
             projectId: user.projectId,
             eventType: 'social.post.deleted',
-            eventData: post,
+            // Same shape as the direct post-delete webhook (SocialPostDto).
+            // The post's media/configurations/connections are already gone
+            // by this point (cascaded by delete_social_account), so those
+            // relations come back empty rather than omitted or mismatched.
+            eventData: {
+              id: post.id,
+              external_id: post.external_id,
+              caption: post.caption,
+              status: post.status as unknown as PostStatus,
+              scheduled_at: post.post_at,
+              platform_configurations: null,
+              account_configurations: [],
+              media: [],
+              social_accounts: [],
+              created_at: post.created_at,
+              updated_at: post.updated_at,
+            } satisfies SocialPostDto,
           }),
         ),
       );
