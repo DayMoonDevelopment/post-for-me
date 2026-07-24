@@ -41,6 +41,9 @@ export class TikTokBusinessPostClient extends PostClient {
   #requests: any[] = [];
   #responses: any[] = [];
   #bucket: string = "post-media";
+  #maxRequestRetries = 3;
+  #requestRetryInitialDelayMs = 2000;
+  #maxRequestRetryDelayMs = 15000;
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -64,24 +67,40 @@ export class TikTokBusinessPostClient extends PostClient {
       refresh_token: account.refresh_token,
     };
 
-    this.#requests.push({ refreshRequest: { url: this.#tokenUrl } });
-    const refreshResponse = await axios.post(
-      this.#tokenUrl,
-      refreshRequestBody,
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const refreshData = await this.#withTikTokRetry({
+      operation: "refreshing business access token",
+      run: async (attempt) => {
+        this.#requests.push({
+          refreshRequest: { url: this.#tokenUrl },
+          attempt,
+        });
+
+        const refreshResponse = await axios.post(
+          this.#tokenUrl,
+          refreshRequestBody,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        this.#responses.push({ refreshResponse: refreshResponse.data, attempt });
+
+        if (refreshResponse.data.code !== 0) {
+          const refreshError = new Error(
+            `TikTok API error: ${refreshResponse.data.message}`,
+          );
+          (refreshError as any).retryable = this.#isRetryableTikTokApiError({
+            code: refreshResponse.data.code,
+            message: refreshResponse.data.message,
+          });
+          throw refreshError;
+        }
+
+        return refreshResponse.data;
       },
-    );
-
-    const refreshData = refreshResponse.data;
-
-    this.#responses.push({ refreshResponse: refreshData });
-
-    if (refreshData.code !== 0) {
-      throw new Error(`TikTok API error: ${refreshData.message}`);
-    }
+    });
 
     const { access_token, refresh_token, expires_in } = refreshData.data;
 
@@ -232,22 +251,39 @@ export class TikTokBusinessPostClient extends PostClient {
     const creatorInfoUrl =
       "https://business-api.tiktok.com/open_api/v1.3/business/get/";
 
-    this.#requests.push({
-      creatorRequest: creatorInfoUrl,
-    });
+    return await this.#withTikTokRetry({
+      operation: "fetching business creator info",
+      run: async (attempt) => {
+        this.#requests.push({
+          creatorRequest: creatorInfoUrl,
+          attempt,
+        });
 
-    const response = await axios.get(
-      `${creatorInfoUrl}?business_id=${account.social_provider_user_id}&fields=["username"]`,
-      {
-        headers: {
-          "Access-Token": `${account.access_token}`,
-        },
+        const response = await axios.get(
+          `${creatorInfoUrl}?business_id=${account.social_provider_user_id}&fields=["username"]`,
+          {
+            headers: {
+              "Access-Token": `${account.access_token}`,
+            },
+          },
+        );
+
+        this.#responses.push({ creatorResponse: response.data, attempt });
+
+        if (response.data.code !== 0) {
+          const creatorInfoError = new Error(
+            `Failed to fetch business creator info: ${response.data.message}`,
+          );
+          (creatorInfoError as any).retryable = this.#isRetryableTikTokApiError({
+            code: response.data.code,
+            message: response.data.message,
+          });
+          throw creatorInfoError;
+        }
+
+        return response;
       },
-    );
-
-    this.#responses.push({ creatorResponse: response.data });
-
-    return response;
+    });
   }
 
   async #getPublishStatus({
@@ -278,32 +314,74 @@ export class TikTokBusinessPostClient extends PostClient {
           publicPostIdAttempts < maxPublicPostIdAttempts)) &&
       attempts < maxAttempts
     ) {
-      this.#requests.push({
-        statusRequest: {
-          url: statusUrl,
-          params: {
-            publish_id: publishId,
-          },
+      const parsedStatusResponse = await this.#withTikTokRetry({
+        operation: "fetching publish status",
+        run: async (requestAttempt) => {
+          this.#requests.push({
+            statusRequest: {
+              url: statusUrl,
+              params: {
+                publish_id: publishId,
+              },
+            },
+            attempt: attempts + 1,
+            requestAttempt,
+          });
+
+          const statusResponse = await axios.get<string>(
+            `${statusUrl}?business_id=${account.social_provider_user_id}&publish_id=${publishId}`,
+            {
+              headers: {
+                "Access-Token": `${account.access_token}`,
+              },
+              transformResponse: [(data) => data],
+            },
+          );
+
+          const parsedResponse = JSON.parse(statusResponse.data);
+
+          this.#responses.push({
+            statusResponse: parsedResponse,
+            attempt: attempts + 1,
+            requestAttempt,
+          });
+
+          if (parsedResponse.code !== 0) {
+            const statusError = new Error(
+              `Failed to fetch publish status: ${parsedResponse.message}`,
+            );
+            (statusError as any).retryable = this.#isRetryableTikTokApiError({
+              code: parsedResponse.code,
+              message: parsedResponse.message,
+            });
+            throw statusError;
+          }
+
+          return parsedResponse;
         },
       });
-      const statusResponse = await axios.get<string>(
-        `${statusUrl}?business_id=${account.social_provider_user_id}&publish_id=${publishId}`,
-        {
-          headers: {
-            "Access-Token": `${account.access_token}`,
-          },
-          transformResponse: [(data) => data],
-        },
-      );
-
-      const parsedStatusResponse = JSON.parse(statusResponse.data);
-
-      this.#responses.push({ statusResponse: parsedStatusResponse });
 
       status = parsedStatusResponse.data.status;
       failReason = parsedStatusResponse.data.reason;
       publicPostId = parsedStatusResponse.data.post_ids?.[0] || publicPostId;
       attempts++;
+
+      if (
+        status === "FAILED" &&
+        this.#isRetryableTikTokApiError({ reason: failReason }) &&
+        attempts < maxAttempts
+      ) {
+        const delay = this.#getRetryDelayMs(attempts);
+        console.warn(
+          `TikTok Business status check returned retryable failure reason (${failReason}). Retrying in ${
+            delay / 1000
+          } seconds...`,
+        );
+
+        status = "PROCESSING";
+        await wait.for({ seconds: delay / 1000 });
+        continue;
+      }
 
       const waitingForPublicPostId =
         waitForPublicPostId &&
@@ -357,31 +435,182 @@ export class TikTokBusinessPostClient extends PostClient {
     payload: any;
     account: SocialAccount;
   }) {
-    this.#requests.push({
-      publishIdRequest: {
-        postUrl: postUrl,
-        payload: payload,
+    return await this.#withTikTokRetry({
+      operation: "publishing media",
+      run: async (attempt) => {
+        this.#requests.push({
+          publishIdRequest: {
+            postUrl: postUrl,
+            payload: payload,
+          },
+          attempt,
+        });
+
+        const initResponse = await axios.post(postUrl, payload, {
+          headers: {
+            "Access-Token": `${account.access_token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        this.#responses.push({
+          publishIdResponse: initResponse.data,
+          attempt,
+        });
+
+        if (initResponse.data.code !== 0) {
+          const publishError = new Error(
+            `Failed to publish media: ${initResponse.data.message}`,
+          );
+          (publishError as any).retryable = this.#isRetryableTikTokApiError({
+            code: initResponse.data.code,
+            message: initResponse.data.message,
+          });
+          throw publishError;
+        }
+
+        const { share_id } = initResponse.data.data;
+
+        return share_id;
       },
     });
+  }
 
-    const initResponse = await axios.post(postUrl, payload, {
-      headers: {
-        "Access-Token": `${account.access_token}`,
-        "Content-Type": "application/json",
-      },
-    });
+  async #withTikTokRetry<T>({
+    operation,
+    run,
+    maxAttempts = this.#maxRequestRetries,
+  }: {
+    operation: string;
+    run: (attempt: number) => Promise<T>;
+    maxAttempts?: number;
+  }): Promise<T> {
+    let lastError: any;
 
-    this.#responses.push({
-      publishIdResponse: initResponse.data,
-    });
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await run(attempt);
+      } catch (error) {
+        lastError = error;
 
-    if (initResponse.data.code !== 0) {
-      throw new Error(`Failed to publish media: ${initResponse.data.message}`);
+        const shouldRetry =
+          this.#isRetryableRequestError(error) ||
+          this.#shouldFallbackRetryUnknownError({
+            error,
+            attempt,
+            maxAttempts,
+          });
+
+        if (!shouldRetry || attempt === maxAttempts) {
+          throw error;
+        }
+
+        const delayMs = this.#getRetryDelayMs(attempt);
+
+        console.warn(
+          `TikTok Business ${operation} failed on attempt ${attempt}/${maxAttempts}. Retrying in ${
+            delayMs / 1000
+          } seconds...`,
+        );
+
+        await wait.for({ seconds: delayMs / 1000 });
+      }
     }
 
-    const { share_id } = initResponse.data.data;
+    throw lastError;
+  }
 
-    return share_id;
+  #getRetryDelayMs(attempt: number): number {
+    return Math.min(
+      this.#requestRetryInitialDelayMs * Math.pow(2, attempt - 1),
+      this.#maxRequestRetryDelayMs,
+    );
+  }
+
+  #isRetryableRequestError(error: any): boolean {
+    if (error?.retryable === true) {
+      return true;
+    }
+
+    const statusCode = error?.response?.status;
+    if ([429, 500, 502, 503, 504].includes(statusCode)) {
+      return true;
+    }
+
+    const axiosCode = error?.code;
+    if (
+      ["ECONNABORTED", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND"].includes(
+        axiosCode,
+      )
+    ) {
+      return true;
+    }
+
+    const message = String(error?.message ?? "").toLowerCase();
+    if (
+      message.includes("please try again later") ||
+      message.includes("bad gateway") ||
+      message.includes("timeout") ||
+      message.includes("socket hang up")
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  #shouldFallbackRetryUnknownError({
+    error,
+    attempt,
+    maxAttempts,
+  }: {
+    error: any;
+    attempt: number;
+    maxAttempts: number;
+  }): boolean {
+    if (attempt !== 1 || maxAttempts < 2) {
+      return false;
+    }
+
+    const hasRetryableFlag = error?.retryable !== undefined;
+    const hasHttpStatus = typeof error?.response?.status === "number";
+    const hasAxiosCode = typeof error?.code === "string";
+    const hasTikTokApiCode = typeof error?.response?.data?.code === "number";
+
+    return !hasRetryableFlag && !hasHttpStatus && !hasAxiosCode && !hasTikTokApiCode;
+  }
+
+  #isRetryableTikTokApiError({
+    code,
+    message,
+    reason,
+  }: {
+    code?: number;
+    message?: string;
+    reason?: string;
+  }): boolean {
+    if (code === 51065) {
+      return true;
+    }
+
+    const normalizedMessage = String(message ?? "").toLowerCase();
+    if (normalizedMessage.includes("please try again later")) {
+      return true;
+    }
+
+    const normalizedReason = String(reason ?? "").toLowerCase();
+    if (
+      [
+        "photo_pull_failed",
+        "video_pull_failed",
+        "photo_download_failed",
+        "video_download_failed",
+      ].includes(normalizedReason)
+    ) {
+      return true;
+    }
+
+    return false;
   }
 
   async #processVideo({
