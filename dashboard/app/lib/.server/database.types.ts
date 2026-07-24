@@ -275,6 +275,9 @@ export type Database = {
       social_post_results: {
         Row: {
           created_at: string
+          delete_error_message: string | null
+          delete_status: Database["public"]["Enums"]["social_post_result_delete_status"]
+          deleted_at: string | null
           details: Json | null
           error_message: string | null
           id: string
@@ -287,6 +290,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          delete_error_message?: string | null
+          delete_status?: Database["public"]["Enums"]["social_post_result_delete_status"]
+          deleted_at?: string | null
           details?: Json | null
           error_message?: string | null
           id?: string
@@ -299,6 +305,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          delete_error_message?: string | null
+          delete_status?: Database["public"]["Enums"]["social_post_result_delete_status"]
+          deleted_at?: string | null
           details?: Json | null
           error_message?: string | null
           id?: string
@@ -1054,12 +1063,20 @@ export type Database = {
     Enums: {
       delivery_type: "email"
       notification_type: "usage_alert" | "general"
+      social_post_result_delete_status:
+        | "not_deleted"
+        | "deleting"
+        | "deleted"
+        | "delete_failed"
       social_post_status:
         | "draft"
         | "scheduled"
         | "processing"
         | "posted"
         | "processed"
+        | "deleting"
+        | "deleted"
+        | "delete_failed"
       social_provider:
         | "facebook"
         | "instagram"
@@ -1081,6 +1098,7 @@ export type Database = {
         | "social.post.result.created"
         | "social.account.created"
         | "social.account.updated"
+        | "social.post.result.deleted"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1213,12 +1231,21 @@ export const Constants = {
     Enums: {
       delivery_type: ["email"],
       notification_type: ["usage_alert", "general"],
+      social_post_result_delete_status: [
+        "not_deleted",
+        "deleting",
+        "deleted",
+        "delete_failed",
+      ],
       social_post_status: [
         "draft",
         "scheduled",
         "processing",
         "posted",
         "processed",
+        "deleting",
+        "deleted",
+        "delete_failed",
       ],
       social_provider: [
         "facebook",
@@ -1242,6 +1269,7 @@ export const Constants = {
         "social.post.result.created",
         "social.account.created",
         "social.account.updated",
+        "social.post.result.deleted",
       ],
     },
   },

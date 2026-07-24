@@ -41,9 +41,11 @@ import { format } from "date-fns";
 function badgeVariant(status: string) {
   switch (status) {
     case "error":
+    case "delete_failed":
       return "destructive";
     case "posted":
     case "processed":
+    case "deleted":
       return "affirmative";
     default:
       return "secondary";
@@ -62,7 +64,12 @@ const statusIcons: Partial<
   failed: TriangleExclamationIcon,
   error: TriangleExclamationIcon,
   cancelled: CrossLargeIcon,
+  deleting: LoadingCircleIcon,
+  deleted: CrossLargeIcon,
+  delete_failed: TriangleExclamationIcon,
 };
+
+const DELETE_UNSUPPORTED_PLATFORMS = new Set(["tiktok", "tiktok_business"]);
 
 const providerColors = {
   facebook: "bg-blue-500",
@@ -287,7 +294,14 @@ export const columns: ColumnDef<PostWithConnections>[] = [
 ];
 
 function PostRowActions({ post }: { post: PostWithConnections }) {
-  const canDelete = post.status === "draft" || post.status === "scheduled";
+  const isProcessed = post.status === "processed";
+  const hasUnsupportedPlatform = (post.social_accounts || []).some((account) =>
+    DELETE_UNSUPPORTED_PLATFORMS.has(account.platform),
+  );
+  const canDelete =
+    post.status === "draft" ||
+    post.status === "scheduled" ||
+    (isProcessed && !hasUnsupportedPlatform);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const revalidator = useRevalidator();
 
@@ -354,7 +368,9 @@ function PostRowActions({ post }: { post: PostWithConnections }) {
           <DialogHeader>
             <DialogTitle>Delete this post?</DialogTitle>
             <DialogDescription>
-              This will permanently delete the post. This cannot be undone.
+              {isProcessed
+                ? "This will delete the post from every connected platform it was published to. This cannot be undone."
+                : "This will permanently delete the post. This cannot be undone."}
             </DialogDescription>
           </DialogHeader>
 

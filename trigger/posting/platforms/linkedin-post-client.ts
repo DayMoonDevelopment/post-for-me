@@ -179,6 +179,51 @@ export class LinkedInPostClient extends PostClient {
     }
   }
 
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }) {
+    try {
+      const urn = this.#toUgcPostUrn(providerPostId);
+      const response = await fetch(
+        `https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(urn)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${account.access_token}`,
+            "X-Restli-Protocol-Version": "2.0.0",
+          },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `LinkedIn API error: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      return {
+        success: true,
+        provider_connection_id: account.id,
+        details: { status: response.status },
+      };
+    } catch (error) {
+      console.error(
+        `Failed to delete LinkedIn post ${providerPostId} for account: ${account.id}`,
+        error,
+      );
+      return {
+        success: false,
+        provider_connection_id: account.id,
+        error_message: `Failed to delete LinkedIn post: ${error.message}`,
+        details: { error },
+      };
+    }
+  }
+
   #extractFirstUrl(text: string) {
     const urlRegex = /(https?:\/\/|www\.)[^\s]+/g;
     const matches = text.match(urlRegex);

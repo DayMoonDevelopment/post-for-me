@@ -224,6 +224,57 @@ export class BlueskyPostClient extends PostClient {
     }
   }
 
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }) {
+    try {
+      this.#requests.push({ deleteRequest: { uri: providerPostId } });
+
+      const match = providerPostId.match(/^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);
+      if (!match) {
+        throw new Error(`Invalid Bluesky post URI: ${providerPostId}`);
+      }
+
+      const [, repo, collection, rkey] = match;
+
+      await this.#agent.com.atproto.repo.deleteRecord({
+        repo,
+        collection,
+        rkey,
+      });
+
+      this.#responses.push({ deleteResponse: "deleted" });
+
+      return {
+        success: true,
+        provider_connection_id: account.id,
+        details: {
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    } catch (error) {
+      console.error(
+        `Failed to delete Bluesky post ${providerPostId} for account: ${account.id}`,
+        error,
+      );
+      return {
+        success: false,
+        provider_connection_id: account.id,
+        error_message: `Failed to delete Bluesky post: ${error.message}`,
+        details: {
+          error,
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    }
+  }
+
   async #processVideo({ medium }: { medium: PostMedia }): Promise<{
     video: BlobRef;
     aspectRatio: {

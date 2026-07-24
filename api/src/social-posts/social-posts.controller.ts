@@ -316,27 +316,57 @@ export class SocialPostsController {
     }
 
     if (
-      post.status !== PostStatus.SCHEDULED &&
-      post.status !== PostStatus.DRAFT
+      post.status === PostStatus.SCHEDULED ||
+      post.status === PostStatus.DRAFT
     ) {
-      throw new HttpException('Can only delete scheduled or draft posts', 400);
+      try {
+        const deleteResponse = await this.postsService.deletePost({
+          postId: params.id,
+          projectId: user.projectId,
+        });
+
+        await tasks.trigger(PROCESS_WEBHOOK_TASK, {
+          projectId: user.projectId,
+          eventType: 'social.post.deleted',
+          eventData: post,
+        });
+        return deleteResponse;
+      } catch (error) {
+        console.error('[deletePost] Error:', error);
+        throw new HttpException('Internal Server Error', 500);
+      }
     }
 
-    try {
-      const deleteResponse = await this.postsService.deletePost({
-        postId: params.id,
-        projectId: user.projectId,
-      });
+    if (post.status === PostStatus.PROCESSED) {
+      try {
+        const unsupportedProviders =
+          await this.postsService.getUnsupportedDeleteProviders(
+            params.id,
+            user.projectId,
+          );
 
-      await tasks.trigger(PROCESS_WEBHOOK_TASK, {
-        projectId: user.projectId,
-        eventType: 'social.post.deleted',
-        eventData: post,
-      });
-      return deleteResponse;
-    } catch (error) {
-      console.error('[deletePost] Error:', error);
-      throw new HttpException('Internal Server Error', 500);
+        if (unsupportedProviders.length > 0) {
+          throw new HttpException(
+            `Cannot delete post: it was published to platform(s) that do not support deletion (${unsupportedProviders.join(', ')}).`,
+            400,
+          );
+        }
+
+        await this.postsService.triggerDeleteFromPlatforms({
+          postId: params.id,
+          projectId: user.projectId,
+        });
+
+        return { success: true };
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        console.error('[deletePost] Error:', error);
+        throw new HttpException('Internal Server Error', 500);
+      }
     }
+
+    throw new HttpException('Cannot delete post in its current status', 400);
   }
 }

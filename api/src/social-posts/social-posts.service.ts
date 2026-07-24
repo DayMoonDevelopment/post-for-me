@@ -16,6 +16,9 @@ import {
 import { Database, Json } from '../../supabase';
 import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from '../social-post-meters/social-post-meters.service';
+import { SocialProviderAppCredentialsService } from '../social-provider-app-credentials/social-provider-app-credentials.service';
+import { SocialProviderAppCredentialsDto } from '../social-provider-app-credentials/dto/social-provider-app-credentials.dto';
+import { DELETE_SUPPORTED_PROVIDERS } from './social-posts.constants';
 
 type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
 
@@ -26,6 +29,7 @@ export class SocialPostsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly socialPostMetersService: SocialPostMetersService,
+    private readonly socialProviderAppCredentialsService: SocialProviderAppCredentialsService,
   ) {}
 
   async getPostData(postId: string): Promise<any> {
@@ -777,6 +781,196 @@ export class SocialPostsService {
       console.error(err);
       return { success: false };
     }
+  }
+
+  async getUnsupportedDeleteProviders(
+    postId: string,
+    projectId: string,
+  ): Promise<string[]> {
+    const { data, error } = await this.supabaseService.supabaseClient
+      .from('social_post_results')
+      .select('social_provider_connections!inner(provider, project_id)')
+      .eq('post_id', postId)
+      .eq('social_provider_connections.project_id', projectId)
+      .eq('success', true)
+      .not('provider_post_id', 'is', null);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const providers = new Set(
+      (data || []).map((row) => row.social_provider_connections.provider),
+    );
+
+    return Array.from(providers).filter(
+      (provider) => !DELETE_SUPPORTED_PROVIDERS.includes(provider),
+    );
+  }
+
+  private resolveDeleteAppCredentials({
+    provider,
+    connectionType,
+    credentials,
+  }: {
+    provider: ProviderTypeEnum;
+    connectionType: string | undefined;
+    credentials: SocialProviderAppCredentialsDto[];
+  }): { app_id: string; app_secret: string } | null {
+    if (provider === 'bluesky') {
+      return {
+        app_id: 'blue_sky_app_id',
+        app_secret: 'blue_sky_app_secret',
+      };
+    }
+
+    let match: SocialProviderAppCredentialsDto | undefined;
+
+    if (provider === 'instagram') {
+      switch (connectionType) {
+        case 'instagram':
+          match = credentials.find((c) => c.provider === 'instagram');
+          break;
+        case 'facebook':
+          match = credentials.find(
+            (c) => c.provider === 'instagram_w_facebook',
+          );
+          break;
+        default:
+          match = credentials.find(
+            (c) =>
+              c.provider === provider || c.provider === 'instagram_w_facebook',
+          );
+          break;
+      }
+    } else {
+      match = credentials.find((c) => c.provider === provider);
+    }
+
+    if (!match) {
+      return null;
+    }
+
+    return { app_id: match.appId, app_secret: match.appSecret };
+  }
+
+  async triggerDeleteFromPlatforms({
+    postId,
+    projectId,
+  }: {
+    postId: string;
+    projectId: string;
+  }): Promise<void> {
+    const { data: results, error } = await this.supabaseService.supabaseClient
+      .from('social_post_results')
+      .select(
+        `
+        id,
+        post_id,
+        provider_post_id,
+        social_provider_connections!inner (
+          id,
+          provider,
+          project_id,
+          social_provider_user_name,
+          social_provider_user_id,
+          access_token,
+          refresh_token,
+          access_token_expires_at,
+          refresh_token_expires_at,
+          social_provider_metadata
+        )
+        `,
+      )
+      .eq('post_id', postId)
+      .eq('social_provider_connections.project_id', projectId)
+      .eq('success', true)
+      .not('provider_post_id', 'is', null);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!results || results.length === 0) {
+      return;
+    }
+
+    const providers = Array.from(
+      new Set(results.map((r) => r.social_provider_connections.provider)),
+    );
+
+    const credentials =
+      (await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
+        [...providers, 'instagram_w_facebook'],
+        projectId,
+      )) || [];
+
+    const items = results
+      .map((result) => {
+        const connection = result.social_provider_connections;
+        const appCredentials = this.resolveDeleteAppCredentials({
+          provider: connection.provider,
+          connectionType: (
+            connection.social_provider_metadata as { connection_type?: string }
+          )?.connection_type,
+          credentials,
+        });
+
+        if (!appCredentials) {
+          return null;
+        }
+
+        return {
+          payload: {
+            resultId: result.id,
+            postId: result.post_id,
+            projectId,
+            platform: connection.provider,
+            account: {
+              id: connection.id,
+              provider: connection.provider,
+              social_provider_user_name: connection.social_provider_user_name,
+              social_provider_user_id: connection.social_provider_user_id,
+              access_token: connection.access_token,
+              refresh_token: connection.refresh_token,
+              access_token_expires_at: connection.access_token_expires_at
+                ? new Date(connection.access_token_expires_at)
+                : null,
+              refresh_token_expires_at: connection.refresh_token_expires_at
+                ? new Date(connection.refresh_token_expires_at)
+                : null,
+              social_provider_metadata: connection.social_provider_metadata,
+            },
+            providerPostId: result.provider_post_id,
+            appCredentials,
+          },
+          options: {
+            idempotencyKey: `delete-from-platform:${result.id}`,
+            idempotencyKeyTTL: '1h',
+          },
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    if (items.length === 0) {
+      return;
+    }
+
+    await this.supabaseService.supabaseClient
+      .from('social_posts')
+      .update({ status: 'deleting' })
+      .eq('id', postId)
+      .eq('project_id', projectId);
+
+    await this.supabaseService.supabaseClient
+      .from('social_post_results')
+      .update({ delete_status: 'deleting' })
+      .in(
+        'id',
+        items.map((item) => item.payload.resultId),
+      );
+
+    await tasks.batchTrigger('delete-from-platform', items);
   }
 
   private async triggerPost(postId: string): Promise<void> {

@@ -21,6 +21,21 @@ export class SocialPostResultDto {
   details: any;
 
   @ApiProperty({
+    description: 'Status of deleting this result from the platform',
+    enum: ['not_deleted', 'deleting', 'deleted', 'delete_failed'],
+  })
+  delete_status: 'not_deleted' | 'deleting' | 'deleted' | 'delete_failed';
+
+  @ApiProperty({ description: 'Error message if platform deletion failed' })
+  delete_error_message: string | null;
+
+  @ApiProperty({
+    description: 'Timestamp when the post was deleted from the platform',
+    nullable: true,
+  })
+  deleted_at: string | null;
+
+  @ApiProperty({
     description: 'Platform-specific data',
     type: 'object',
     properties: {

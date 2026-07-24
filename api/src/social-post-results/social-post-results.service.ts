@@ -27,6 +27,9 @@ export class PostResultsService {
       post_id: string;
       provider_connection_id: string;
       error_message?: string;
+      delete_status: string;
+      delete_error_message?: string;
+      deleted_at?: string;
       media?: SocialPostResultDto['media'];
     };
   }> {
@@ -34,7 +37,7 @@ export class PostResultsService {
       await this.supabaseService.supabaseClient
         .from('social_post_results')
         .select(
-          'id, success, provider_post_id, provider_post_url, details, post_id, provider_connection_id, error_message, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+          'id, success, provider_post_id, provider_post_url, details, post_id, provider_connection_id, error_message, delete_status, delete_error_message, deleted_at, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
         )
         .eq('id', id)
         .eq('social_provider_connections.project_id', projectId)
@@ -54,6 +57,9 @@ export class PostResultsService {
         post_id: postResult?.post_id,
         provider_connection_id: postResult?.provider_connection_id,
         error_message: postResult?.error_message || undefined,
+        delete_status: postResult?.delete_status,
+        delete_error_message: postResult?.delete_error_message || undefined,
+        deleted_at: postResult?.deleted_at || undefined,
         media:
           postResult?.social_post_result_post_media?.map((resultMedia) => ({
             url: resultMedia.social_post_media.url,
@@ -125,7 +131,7 @@ export class PostResultsService {
     const query = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
-        'id, provider_connection_id, post_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        'id, provider_connection_id, post_id, success, error_message, details, provider_post_id, provider_post_url, created_at, delete_status, delete_error_message, deleted_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
       )
       .eq('social_provider_connections.project_id', projectId)
       .in(
@@ -200,6 +206,9 @@ export class PostResultsService {
         error: raw.error_message,
         details: raw.details,
         platform_data,
+        delete_status: raw.delete_status,
+        delete_error_message: raw.delete_error_message,
+        deleted_at: raw.deleted_at,
         media:
           raw.social_post_result_post_media?.map((resultMedia) => ({
             url: resultMedia.social_post_media.url,
@@ -246,6 +255,10 @@ export class PostResultsService {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       details: postResults.data.details,
       platform_data,
+      delete_status: postResults.data
+        .delete_status as SocialPostResultDto['delete_status'],
+      delete_error_message: postResults.data.delete_error_message || null,
+      deleted_at: postResults.data.deleted_at || null,
       media: postResults.data.media || [],
     };
 

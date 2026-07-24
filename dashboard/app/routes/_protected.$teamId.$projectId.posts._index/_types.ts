@@ -2,7 +2,18 @@ export interface Post {
   id: string;
   project_id: string;
   external_id: string | null;
-  status: "draft" | "scheduled" | "posting" | "posted" | "failed" | "cancelled";
+  status:
+    | "draft"
+    | "scheduled"
+    | "posting"
+    | "posted"
+    | "failed"
+    | "cancelled"
+    | "processing"
+    | "processed"
+    | "deleting"
+    | "deleted"
+    | "delete_failed";
   caption: string;
   scheduled_at: string;
   created_at: string;

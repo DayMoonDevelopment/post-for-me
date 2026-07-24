@@ -159,6 +159,42 @@ export class TwitterPostClient extends PostClient {
     }
   }
 
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }) {
+    try {
+      const twitterClient = new TwitterApi({
+        appKey: this.#appKey,
+        appSecret: this.#appSecret,
+        accessToken: account.access_token,
+        accessSecret: account.refresh_token,
+      } as TwitterApiTokens);
+
+      const result = await twitterClient.v2.deleteTweet(providerPostId);
+
+      return {
+        success: !!result.data?.deleted,
+        provider_connection_id: account.id,
+        details: { response: result },
+      };
+    } catch (error) {
+      console.error(
+        `Error deleting Twitter post ${providerPostId} for account ${account.id} :`,
+        error,
+      );
+      return {
+        success: false,
+        provider_connection_id: account.id,
+        error_message: `Failed to delete Twitter post: ${error.message}`,
+        details: { error },
+      };
+    }
+  }
+
   async #processMedia({
     twitterClient,
     media,
