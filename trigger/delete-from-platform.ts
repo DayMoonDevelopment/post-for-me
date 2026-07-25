@@ -124,14 +124,21 @@ export const deleteFromPlatform = task({
         remainingResultsError,
       });
     } else {
-      const stillPending = remainingResults.some((r) =>
-        ["not_deleted", "deleting"].includes(r.delete_status),
+      const stillPending = remainingResults.some(
+        (r) => r.delete_status === "deleting",
       );
 
       if (!stillPending) {
-        const allDeleted = remainingResults.every(
-          (r) => r.delete_status === "deleted",
+        // Only results that were actually queued for deletion decide the
+        // outcome; `not_deleted` results (original publish failures, missing
+        // app credentials) were never attempted and must not block or fail
+        // finalization.
+        const attempted = remainingResults.filter(
+          (r) => r.delete_status !== "not_deleted",
         );
+        const allDeleted =
+          attempted.length > 0 &&
+          attempted.every((r) => r.delete_status === "deleted");
 
         const { data: finalizedPosts, error: finalizeError } =
           await supabaseClient
