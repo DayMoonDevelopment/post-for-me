@@ -956,6 +956,8 @@ export class SocialPostsService {
       return;
     }
 
+    const resultIds = items.map((item) => item.payload.resultId);
+
     await this.supabaseService.supabaseClient
       .from('social_posts')
       .update({ status: 'deleting' })
@@ -965,12 +967,27 @@ export class SocialPostsService {
     await this.supabaseService.supabaseClient
       .from('social_post_results')
       .update({ delete_status: 'deleting' })
-      .in(
-        'id',
-        items.map((item) => item.payload.resultId),
-      );
+      .in('id', resultIds);
 
-    await tasks.batchTrigger('delete-from-platform', items);
+    try {
+      await tasks.batchTrigger('delete-from-platform', items);
+    } catch (error) {
+      // If we can't enqueue the delete tasks, roll the statuses back so the
+      // post isn't stranded in `deleting` with nothing to finalize it.
+      await this.supabaseService.supabaseClient
+        .from('social_posts')
+        .update({ status: 'processed' })
+        .eq('id', postId)
+        .eq('project_id', projectId)
+        .eq('status', 'deleting');
+
+      await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .update({ delete_status: 'not_deleted' })
+        .in('id', resultIds);
+
+      throw error;
+    }
   }
 
   private async triggerPost(postId: string): Promise<void> {

@@ -8,6 +8,7 @@ import {
 import { DeleteFromPlatformData, DeleteResult, SocialAccount } from "./posting/post.types";
 import { differenceInDays } from "date-fns";
 import { Database } from "./supabase.types";
+import { transformPostData } from "./posting/transform-post-data";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -31,45 +32,66 @@ export const deleteFromPlatform = task({
 
       logger.info("Starting platform delete", { ...payload });
 
-      const postClient = createPostClient({
-        supabaseClient,
-        platformName: platform,
-        appCredentials,
-      });
+      // Platform deletes are not idempotent: deleting an already-deleted post
+      // returns an error on most platforms, which would flip a previously
+      // successful `deleted` result to `delete_failed` on a task retry. If this
+      // result was already deleted on a prior attempt, skip the platform call
+      // and let the finalization logic below run idempotently.
+      const { data: existingResult } = await supabaseClient
+        .from("social_post_results")
+        .select("delete_status")
+        .eq("id", resultId)
+        .maybeSingle();
 
-      if (
-        platformsToAlwaysRefresh.includes(account.provider) ||
-        differenceInDays(
-          account.access_token_expires_at || new Date(),
-          new Date(),
-        ) <= 7
-      ) {
-        logger.info("Refreshing Token", {
-          platform: account.provider,
-          account,
+      if (existingResult?.delete_status === "deleted") {
+        logger.info("Result already deleted on a prior attempt; skipping platform delete", {
+          resultId,
         });
-        const refreshed = await handleTokenRefresh({
+        deleteResult = {
+          provider_connection_id: account.id,
+          success: true,
+        };
+      } else {
+        const postClient = createPostClient({
           supabaseClient,
-          postClient,
-          account: account as SocialAccount,
+          platformName: platform,
+          appCredentials,
         });
 
-        if (!refreshed.success) {
-          logger.error("Failed to refresh token", {
+        if (
+          platformsToAlwaysRefresh.includes(account.provider) ||
+          differenceInDays(
+            account.access_token_expires_at || new Date(),
+            new Date(),
+          ) <= 7
+        ) {
+          logger.info("Refreshing Token", {
+            platform: account.provider,
             account,
-            error: refreshed.error,
           });
-          deleteResult = {
-            provider_connection_id: account.id,
-            success: false,
-            error_message: refreshed.error,
-          };
+          const refreshed = await handleTokenRefresh({
+            supabaseClient,
+            postClient,
+            account: account as SocialAccount,
+          });
 
-          throw new Error("Invalid Token");
+          if (!refreshed.success) {
+            logger.error("Failed to refresh token", {
+              account,
+              error: refreshed.error,
+            });
+            deleteResult = {
+              provider_connection_id: account.id,
+              success: false,
+              error_message: refreshed.error,
+            };
+
+            throw new Error("Invalid Token");
+          }
         }
-      }
 
-      deleteResult = await postClient.delete({ account, providerPostId });
+        deleteResult = await postClient.delete({ account, providerPostId });
+      }
     } catch (error) {
       logger.error("Failed Deleting Platform Post", { error });
 
@@ -148,7 +170,30 @@ export const deleteFromPlatform = task({
             })
             .eq("id", postId)
             .eq("status", "deleting")
-            .select();
+            .select(
+              `
+              *,
+              social_post_provider_connections (
+                social_provider_connections (
+                  *
+                )
+              ),
+              social_post_media (
+                url,
+                thumbnail_url,
+                thumbnail_timestamp_ms,
+                provider,
+                provider_connection_id,
+                tags
+              ),
+              social_post_configurations (
+                caption,
+                provider,
+                provider_connection_id,
+                provider_data
+              )
+              `,
+            );
 
         if (finalizeError) {
           logger.error("Failed to finalize post delete status", {
@@ -158,7 +203,9 @@ export const deleteFromPlatform = task({
           await tasks.trigger("process-webhooks", {
             projectId,
             eventType: "social.post.deleted",
-            eventData: finalizedPosts[0],
+            // Emit the same post shape as `social.post.updated` so every
+            // post-level webhook carries an identical schema.
+            eventData: transformPostData(finalizedPosts[0]),
           });
         }
       }
