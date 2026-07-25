@@ -33,6 +33,12 @@ export interface PostProviderConnection {
   username: string | null;
   platform: string;
   external_id: string | null;
+  /**
+   * Whether a published post on this account can be deleted from the platform.
+   * `false` when the platform doesn't support deletion, or the account must be
+   * reconnected to grant the deletion permission. Absent on older payloads.
+   */
+  delete_supported?: boolean;
 }
 
 export interface PostMedia {

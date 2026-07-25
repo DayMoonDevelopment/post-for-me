@@ -39,7 +39,7 @@ export class InstagramProviderData {
 
   @ApiProperty({
     description:
-      'Override the default permissions/scopes requested during OAuth. Default instagram scopes: instagram_business_basic, instagram_business_content_publish. Default facebook scopes: instagram_basic, instagram_content_publish, pages_show_list, public_profile, business_management',
+      'Override the default permissions/scopes requested during OAuth. Default instagram scopes: instagram_business_basic, instagram_business_content_publish. Default facebook scopes: instagram_basic, instagram_content_publish, instagram_manage_contents, pages_show_list, public_profile, business_management',
     required: false,
     type: [String],
     isArray: true,

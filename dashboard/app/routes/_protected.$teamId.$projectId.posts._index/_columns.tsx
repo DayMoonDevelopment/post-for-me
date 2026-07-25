@@ -69,8 +69,6 @@ const statusIcons: Partial<
   delete_failed: TriangleExclamationIcon,
 };
 
-const DELETE_UNSUPPORTED_PLATFORMS = new Set(["tiktok", "tiktok_business"]);
-
 const providerColors = {
   facebook: "bg-blue-500",
   instagram: "bg-pink-500",
@@ -295,13 +293,21 @@ export const columns: ColumnDef<PostWithConnections>[] = [
 
 function PostRowActions({ post }: { post: PostWithConnections }) {
   const isProcessed = post.status === "processed";
-  const hasUnsupportedPlatform = (post.social_accounts || []).some((account) =>
-    DELETE_UNSUPPORTED_PLATFORMS.has(account.platform),
-  );
-  const canDelete =
-    post.status === "draft" ||
-    post.status === "scheduled" ||
-    (isProcessed && !hasUnsupportedPlatform);
+  // Platforms the post was published to that can't be deleted from — either the
+  // platform doesn't support deletion or the account needs reconnecting to grant
+  // the deletion permission. Deletion is all-or-nothing, so any one blocks it.
+  const blockedPlatforms = isProcessed
+    ? Array.from(
+        new Set(
+          (post.social_accounts || [])
+            .filter((account) => account.delete_supported === false)
+            .map((account) => account.platform),
+        ),
+      )
+    : [];
+  const isDeleteBlocked = blockedPlatforms.length > 0;
+  const isDeletableStatus =
+    post.status === "draft" || post.status === "scheduled" || isProcessed;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const revalidator = useRevalidator();
 
@@ -340,7 +346,7 @@ function PostRowActions({ post }: { post: PostWithConnections }) {
           >
             Copy post ID
           </DropdownMenuItem>
-          {canDelete ? (
+          {isDeletableStatus ? (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -366,32 +372,56 @@ function PostRowActions({ post }: { post: PostWithConnections }) {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete this post?</DialogTitle>
+            <DialogTitle>
+              {isDeleteBlocked ? "Can't delete this post" : "Delete this post?"}
+            </DialogTitle>
             <DialogDescription>
-              {isProcessed
-                ? "This will delete the post from every connected platform it was published to. This cannot be undone."
-                : "This will permanently delete the post. This cannot be undone."}
+              {isDeleteBlocked
+                ? `This post can't be deleted because it was published to ${blockedPlatforms.join(
+                    ", ",
+                  )}, which ${
+                    blockedPlatforms.length > 1 ? "don't" : "doesn't"
+                  } support deletion or need the account reconnected to grant the deletion permission.`
+                : isProcessed
+                  ? "This will delete the post from every connected platform it was published to. This cannot be undone."
+                  : "This will permanently delete the post. This cannot be undone."}
             </DialogDescription>
           </DialogHeader>
 
-          <fetcher.Form method="post">
-            <input type="hidden" name="action" value="delete-post" />
-            <input type="hidden" name="postId" value={post.id} />
-
+          {isDeleteBlocked ? (
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setDeleteOpen(false)}
-                disabled={isSubmitting}
               >
-                Cancel
-              </Button>
-              <Button type="submit" variant="destructive" disabled={isSubmitting}>
-                {isSubmitting ? "Deleting..." : "Delete"}
+                Close
               </Button>
             </DialogFooter>
-          </fetcher.Form>
+          ) : (
+            <fetcher.Form method="post">
+              <input type="hidden" name="action" value="delete-post" />
+              <input type="hidden" name="postId" value={post.id} />
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeleteOpen(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </fetcher.Form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

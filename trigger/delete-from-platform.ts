@@ -8,7 +8,7 @@ import {
 import { DeleteFromPlatformData, DeleteResult, SocialAccount } from "./posting/post.types";
 import { differenceInDays } from "date-fns";
 import { Database } from "./supabase.types";
-import { transformPostData } from "./posting/transform-post-data";
+import { finalizePostDeleteIfComplete } from "./posting/finalize-post-delete";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -135,81 +135,7 @@ export const deleteFromPlatform = task({
       },
     });
 
-    const { data: remainingResults, error: remainingResultsError } =
-      await supabaseClient
-        .from("social_post_results")
-        .select("delete_status")
-        .eq("post_id", postId);
-
-    if (remainingResultsError) {
-      logger.error("Failed to load remaining results for finalization", {
-        remainingResultsError,
-      });
-    } else {
-      const stillPending = remainingResults.some(
-        (r) => r.delete_status === "deleting",
-      );
-
-      if (!stillPending) {
-        // Only results that were actually queued for deletion decide the
-        // outcome; `not_deleted` results (original publish failures, missing
-        // app credentials) were never attempted and must not block or fail
-        // finalization.
-        const attempted = remainingResults.filter(
-          (r) => r.delete_status !== "not_deleted",
-        );
-        const allDeleted =
-          attempted.length > 0 &&
-          attempted.every((r) => r.delete_status === "deleted");
-
-        const { data: finalizedPosts, error: finalizeError } =
-          await supabaseClient
-            .from("social_posts")
-            .update({
-              status: allDeleted ? "deleted" : "delete_failed",
-            })
-            .eq("id", postId)
-            .eq("status", "deleting")
-            .select(
-              `
-              *,
-              social_post_provider_connections (
-                social_provider_connections (
-                  *
-                )
-              ),
-              social_post_media (
-                url,
-                thumbnail_url,
-                thumbnail_timestamp_ms,
-                provider,
-                provider_connection_id,
-                tags
-              ),
-              social_post_configurations (
-                caption,
-                provider,
-                provider_connection_id,
-                provider_data
-              )
-              `,
-            );
-
-        if (finalizeError) {
-          logger.error("Failed to finalize post delete status", {
-            finalizeError,
-          });
-        } else if (finalizedPosts && finalizedPosts.length > 0) {
-          await tasks.trigger("process-webhooks", {
-            projectId,
-            eventType: "social.post.deleted",
-            // Emit the same post shape as `social.post.updated` so every
-            // post-level webhook carries an identical schema.
-            eventData: transformPostData(finalizedPosts[0]),
-          });
-        }
-      }
-    }
+    await finalizePostDeleteIfComplete({ supabaseClient, postId, projectId });
 
     logger.info("Platform delete complete", { ...deleteResult });
     return deleteResult;

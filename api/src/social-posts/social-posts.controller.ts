@@ -339,15 +339,15 @@ export class SocialPostsController {
 
     if (post.status === PostStatus.PROCESSED) {
       try {
-        const unsupportedProviders =
-          await this.postsService.getUnsupportedDeleteProviders(
+        const undeletableReasons =
+          await this.postsService.getUndeletableReasons(
             params.id,
             user.projectId,
           );
 
-        if (unsupportedProviders.length > 0) {
+        if (undeletableReasons.length > 0) {
           throw new HttpException(
-            `Cannot delete post: it was published to platform(s) that do not support deletion (${unsupportedProviders.join(', ')}).`,
+            `Cannot delete post from one or more platforms: ${undeletableReasons.join('; ')}.`,
             400,
           );
         }

@@ -1,5 +1,6 @@
 import type { PlatformConfiguration } from "./post.types";
 import type { Database, Json } from "../supabase.types";
+import { connectionSupportsDelete } from "./delete-capability";
 
 /**
  * Maps a raw `social_posts` row (with its provider-connection, media and
@@ -28,6 +29,7 @@ export const transformPostData = (data: {
       access_token_expires_at: string | null | undefined;
       refresh_token_expires_at: string | null | undefined;
       external_id: string | null | undefined;
+      social_provider_metadata?: Json;
     };
   }[];
   social_post_media: {
@@ -97,21 +99,34 @@ export const transformPostData = (data: {
     });
 
   const socialAccounts = data.social_post_provider_connections.map(
-    (connection) => ({
-      id: connection.social_provider_connections.id,
-      platform: connection.social_provider_connections.provider!,
-      username:
-        connection.social_provider_connections.social_provider_user_name,
-      user_id: connection.social_provider_connections.social_provider_user_id,
-      access_token: connection.social_provider_connections.access_token || "",
-      refresh_token: connection.social_provider_connections.refresh_token,
-      access_token_expires_at:
-        connection.social_provider_connections.access_token_expires_at ||
-        new Date().toISOString(),
-      refresh_token_expires_at:
-        connection.social_provider_connections.refresh_token_expires_at,
-      external_id: connection.social_provider_connections.external_id,
-    }),
+    (connection) => {
+      const metadata = connection.social_provider_connections
+        .social_provider_metadata as {
+        connection_type?: string;
+        granted_scopes?: string[];
+      } | null;
+
+      return {
+        id: connection.social_provider_connections.id,
+        platform: connection.social_provider_connections.provider!,
+        username:
+          connection.social_provider_connections.social_provider_user_name,
+        user_id: connection.social_provider_connections.social_provider_user_id,
+        access_token: connection.social_provider_connections.access_token || "",
+        refresh_token: connection.social_provider_connections.refresh_token,
+        access_token_expires_at:
+          connection.social_provider_connections.access_token_expires_at ||
+          new Date().toISOString(),
+        refresh_token_expires_at:
+          connection.social_provider_connections.refresh_token_expires_at,
+        external_id: connection.social_provider_connections.external_id,
+        delete_supported: connectionSupportsDelete({
+          provider: connection.social_provider_connections.provider,
+          connectionType: metadata?.connection_type,
+          grantedScopes: metadata?.granted_scopes,
+        }),
+      };
+    },
   );
 
   return {

@@ -18,7 +18,10 @@ import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from '../social-post-meters/social-post-meters.service';
 import { SocialProviderAppCredentialsService } from '../social-provider-app-credentials/social-provider-app-credentials.service';
 import { SocialProviderAppCredentialsDto } from '../social-provider-app-credentials/dto/social-provider-app-credentials.dto';
-import { DELETE_SUPPORTED_PROVIDERS } from './social-posts.constants';
+import {
+  connectionSupportsDelete,
+  evaluateDeleteSupport,
+} from './delete-capability';
 
 type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
 
@@ -502,7 +505,8 @@ export class SocialPostsService {
             refresh_token,
             access_token_expires_at,
             refresh_token_expires_at,
-            external_id
+            external_id,
+            social_provider_metadata
           )
         ),
         social_post_media (
@@ -568,7 +572,8 @@ export class SocialPostsService {
             refresh_token,
             access_token_expires_at,
             refresh_token_expires_at,
-            external_id
+            external_id,
+            social_provider_metadata
           )
         ),
         social_post_media (
@@ -783,13 +788,22 @@ export class SocialPostsService {
     }
   }
 
-  async getUnsupportedDeleteProviders(
+  /**
+   * Returns a de-duplicated list of human-readable reasons why a published post
+   * cannot be fully deleted from its platforms — e.g. an unsupported provider, an
+   * Instagram account connected via Instagram Login, or an account that must be
+   * reconnected to grant the deletion permission. Empty when every published
+   * result can be deleted.
+   */
+  async getUndeletableReasons(
     postId: string,
     projectId: string,
   ): Promise<string[]> {
     const { data, error } = await this.supabaseService.supabaseClient
       .from('social_post_results')
-      .select('social_provider_connections!inner(provider, project_id)')
+      .select(
+        'social_provider_connections!inner(provider, project_id, social_provider_metadata)',
+      )
       .eq('post_id', postId)
       .eq('social_provider_connections.project_id', projectId)
       .eq('success', true)
@@ -799,13 +813,27 @@ export class SocialPostsService {
       throw new Error(error.message);
     }
 
-    const providers = new Set(
-      (data || []).map((row) => row.social_provider_connections.provider),
-    );
+    const reasons = new Set<string>();
 
-    return Array.from(providers).filter(
-      (provider) => !DELETE_SUPPORTED_PROVIDERS.includes(provider),
-    );
+    for (const row of data || []) {
+      const connection = row.social_provider_connections;
+      const metadata = connection.social_provider_metadata as {
+        connection_type?: string;
+        granted_scopes?: string[];
+      } | null;
+
+      const support = evaluateDeleteSupport({
+        provider: connection.provider,
+        connectionType: metadata?.connection_type,
+        grantedScopes: metadata?.granted_scopes,
+      });
+
+      if (!support.supported) {
+        reasons.add(support.reason);
+      }
+    }
+
+    return Array.from(reasons);
   }
 
   private resolveDeleteAppCredentials({
@@ -960,7 +988,9 @@ export class SocialPostsService {
 
     await this.supabaseService.supabaseClient
       .from('social_posts')
-      .update({ status: 'deleting' })
+      // Stamp updated_at so the stuck-delete reconciliation cron has a reliable
+      // "deletion started" clock (there is no updated_at trigger on this table).
+      .update({ status: 'deleting', updated_at: new Date().toISOString() })
       .eq('id', postId)
       .eq('project_id', projectId);
 
@@ -1061,6 +1091,7 @@ export class SocialPostsService {
         access_token_expires_at: string | null | undefined;
         refresh_token_expires_at: string | null | undefined;
         external_id: string | null | undefined;
+        social_provider_metadata?: Json;
       };
     }[];
     social_post_media: Array<{
@@ -1148,21 +1179,36 @@ export class SocialPostsService {
       });
 
     const socialAccounts = data.social_post_provider_connections.map(
-      (connection) => ({
-        id: connection.social_provider_connections.id,
-        platform: connection.social_provider_connections.provider!,
-        username:
-          connection.social_provider_connections.social_provider_user_name,
-        user_id: connection.social_provider_connections.social_provider_user_id,
-        access_token: connection.social_provider_connections.access_token || '',
-        refresh_token: connection.social_provider_connections.refresh_token,
-        access_token_expires_at:
-          connection.social_provider_connections.access_token_expires_at ||
-          new Date().toISOString(),
-        refresh_token_expires_at:
-          connection.social_provider_connections.refresh_token_expires_at,
-        external_id: connection.social_provider_connections.external_id,
-      }),
+      (connection) => {
+        const metadata = connection.social_provider_connections
+          .social_provider_metadata as {
+          connection_type?: string;
+          granted_scopes?: string[];
+        } | null;
+
+        return {
+          id: connection.social_provider_connections.id,
+          platform: connection.social_provider_connections.provider!,
+          username:
+            connection.social_provider_connections.social_provider_user_name,
+          user_id:
+            connection.social_provider_connections.social_provider_user_id,
+          access_token:
+            connection.social_provider_connections.access_token || '',
+          refresh_token: connection.social_provider_connections.refresh_token,
+          access_token_expires_at:
+            connection.social_provider_connections.access_token_expires_at ||
+            new Date().toISOString(),
+          refresh_token_expires_at:
+            connection.social_provider_connections.refresh_token_expires_at,
+          external_id: connection.social_provider_connections.external_id,
+          delete_supported: connectionSupportsDelete({
+            provider: connection.social_provider_connections.provider,
+            connectionType: metadata?.connection_type,
+            grantedScopes: metadata?.granted_scopes,
+          }),
+        };
+      },
     );
 
     const postData: SocialPostDto = {
