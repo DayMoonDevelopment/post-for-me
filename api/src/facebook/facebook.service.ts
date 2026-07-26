@@ -104,7 +104,9 @@ export class FacebookService implements SocialPlatformService {
     attachment: FacebookAttachment,
   ): { url: string; thumbnail_url?: string } | null {
     const mediaUrl =
-      attachment.media?.image?.src || attachment.media?.source || attachment.url;
+      attachment.media?.image?.src ||
+      attachment.media?.source ||
+      attachment.url;
 
     if (!mediaUrl) {
       return null;

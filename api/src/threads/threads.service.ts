@@ -98,8 +98,8 @@ export class ThreadsService implements SocialPlatformService {
     thumbnail_url?: string;
   }[] {
     const childMedia =
-      thread.children?.data
-        .reduce<{ url: string; thumbnail_url?: string }[]>((acc, child) => {
+      thread.children?.data.reduce<{ url: string; thumbnail_url?: string }[]>(
+        (acc, child) => {
           if (!child.media_url) {
             return acc;
           }
@@ -111,7 +111,9 @@ export class ThreadsService implements SocialPlatformService {
           );
 
           return acc;
-        }, []) || [];
+        },
+        [],
+      ) || [];
 
     if (childMedia.length > 0) {
       return childMedia;
