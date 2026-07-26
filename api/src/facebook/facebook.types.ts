@@ -20,12 +20,35 @@ export interface FacebookShares {
   count: number;
 }
 
+export interface FacebookAttachmentMediaImage {
+  src?: string;
+}
+
+export interface FacebookAttachmentMedia {
+  image?: FacebookAttachmentMediaImage;
+  source?: string;
+}
+
+export interface FacebookAttachment {
+  media_type?: string;
+  media?: FacebookAttachmentMedia;
+  url?: string;
+  subattachments?: {
+    data: FacebookAttachment[];
+  };
+}
+
+export interface FacebookAttachments {
+  data: FacebookAttachment[];
+}
+
 export interface FacebookPost {
   id: string;
   message?: string;
   created_time: string;
   permalink_url?: string;
   full_picture?: string;
+  attachments?: FacebookAttachments;
   likes?: FacebookLikes;
   comments?: FacebookComments;
   shares?: FacebookShares;

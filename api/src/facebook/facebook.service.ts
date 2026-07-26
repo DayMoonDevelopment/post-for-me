@@ -15,6 +15,7 @@ import type {
   FacebookFeedResponse,
   FacebookInsightsResponse,
   FacebookInsight,
+  FacebookAttachment,
 } from './facebook.types';
 import { FacebookPostMetricsDto } from './dto/facebook-post-metrics.dto';
 import { mapWithConcurrency } from '../lib/async.utils';
@@ -99,6 +100,56 @@ export class FacebookService implements SocialPlatformService {
     }
   }
 
+  private mapAttachmentToMedia(
+    attachment: FacebookAttachment,
+  ): { url: string; thumbnail_url?: string } | null {
+    const mediaUrl =
+      attachment.media?.image?.src || attachment.media?.source || attachment.url;
+
+    if (!mediaUrl) {
+      return null;
+    }
+
+    return {
+      url: mediaUrl,
+      thumbnail_url: attachment.media?.image?.src,
+    };
+  }
+
+  private getPostMedia(post: FacebookPost): {
+    url: string;
+    thumbnail_url?: string;
+  }[] {
+    const attachments = post.attachments?.data || [];
+    const carouselAttachments = attachments.flatMap(
+      (attachment) => attachment.subattachments?.data || [],
+    );
+
+    if (carouselAttachments.length > 0) {
+      return carouselAttachments
+        .map((attachment) => this.mapAttachmentToMedia(attachment))
+        .filter(
+          (attachment): attachment is { url: string; thumbnail_url?: string } =>
+            attachment !== null,
+        );
+    }
+
+    const attachmentMedia = attachments
+      .map((attachment) => this.mapAttachmentToMedia(attachment))
+      .filter(
+        (attachment): attachment is { url: string; thumbnail_url?: string } =>
+          attachment !== null,
+      );
+
+    if (attachmentMedia.length > 0) {
+      return attachmentMedia;
+    }
+
+    return post.full_picture
+      ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
+      : [];
+  }
+
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
       await this.supabaseService.supabaseServiceRole
@@ -174,7 +225,7 @@ export class FacebookService implements SocialPlatformService {
             const response = await axios.get(`${this.graphApiBaseUrl}/${id}`, {
               params: {
                 fields:
-                  'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
+                  'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,subattachments{media_type,media,url}},likes.summary(true),comments.summary(true),shares',
                 access_token: account.access_token,
               },
             });
@@ -202,7 +253,7 @@ export class FacebookService implements SocialPlatformService {
         {
           params: {
             fields:
-              'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
+              'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,subattachments{media_type,media,url}},likes.summary(true),comments.summary(true),shares',
             access_token: account.access_token,
             limit: limit,
             after: cursor,
@@ -621,9 +672,7 @@ export class FacebookService implements SocialPlatformService {
       caption: post.message || '',
       url: post.permalink_url || '',
       posted_at: post.created_time,
-      media: post.full_picture
-        ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
-        : [],
+      media: this.getPostMedia(post),
       metrics: includeMetrics
         ? {
             ...insights,

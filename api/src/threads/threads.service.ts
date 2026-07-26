@@ -26,6 +26,20 @@ interface ThreadsPost {
     | 'REPOST_FACADE';
   media_url?: string;
   thumbnail_url?: string;
+  children?: {
+    data: {
+      id: string;
+      media_type?:
+        | 'TEXT_POST'
+        | 'IMAGE'
+        | 'VIDEO'
+        | 'CAROUSEL_ALBUM'
+        | 'AUDIO'
+        | 'REPOST_FACADE';
+      media_url?: string;
+      thumbnail_url?: string;
+    }[];
+  };
 }
 
 interface ThreadsPostsResponse {
@@ -77,6 +91,40 @@ export class ThreadsService implements SocialPlatformService {
       provider: appCredentials.provider,
       projectId: appCredentials.project_id,
     };
+  }
+
+  private getThreadMedia(thread: ThreadsPost): {
+    url: string;
+    thumbnail_url?: string;
+  }[] {
+    const childMedia =
+      thread.children?.data
+        .reduce<{ url: string; thumbnail_url?: string }[]>((acc, child) => {
+          if (!child.media_url) {
+            return acc;
+          }
+
+          acc.push(
+            child.thumbnail_url
+              ? { url: child.media_url, thumbnail_url: child.thumbnail_url }
+              : { url: child.media_url },
+          );
+
+          return acc;
+        }, []) || [];
+
+    if (childMedia.length > 0) {
+      return childMedia;
+    }
+
+    return thread.media_url
+      ? [
+          {
+            url: thread.media_url,
+            thumbnail_url: thread.thumbnail_url,
+          },
+        ]
+      : [];
   }
 
   private async addMetricsToPost(
@@ -172,7 +220,7 @@ export class ThreadsService implements SocialPlatformService {
               {
                 params: {
                   fields:
-                    'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
+                    'id,text,permalink,timestamp,media_type,media_url,thumbnail_url,children{id,media_type,media_url,thumbnail_url}',
                   access_token: account.access_token,
                 },
               },
@@ -186,14 +234,7 @@ export class ThreadsService implements SocialPlatformService {
               caption: thread.text ?? '',
               url: thread.permalink ?? '',
               posted_at: thread.timestamp,
-              media: thread.media_url
-                ? [
-                    {
-                      url: thread.media_url,
-                      thumbnail_url: thread.thumbnail_url,
-                    },
-                  ]
-                : [],
+              media: this.getThreadMedia(thread),
             };
 
             if (includeMetrics) {
@@ -223,7 +264,7 @@ export class ThreadsService implements SocialPlatformService {
         {
           params: {
             fields:
-              'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
+              'id,text,permalink,timestamp,media_type,media_url,thumbnail_url,children{id,media_type,media_url,thumbnail_url}',
             access_token: account.access_token,
             limit: safeLimit,
             after: cursor,
@@ -243,9 +284,7 @@ export class ThreadsService implements SocialPlatformService {
             caption: thread.text ?? '',
             url: thread.permalink ?? '',
             posted_at: thread.timestamp,
-            media: thread.media_url
-              ? [{ url: thread.media_url, thumbnail_url: thread.thumbnail_url }]
-              : [],
+            media: this.getThreadMedia(thread),
           };
 
           if (includeMetrics) {
