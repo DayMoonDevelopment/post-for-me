@@ -40,6 +40,14 @@ export interface InstagramMediaItem {
   media_product_type?: 'FEED' | 'STORY' | 'REELS';
   media_url?: string;
   thumbnail_url?: string;
+  children?: {
+    data: {
+      id: string;
+      media_type: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+      media_url?: string;
+      thumbnail_url?: string;
+    }[];
+  };
   permalink?: string;
   timestamp?: string;
   // Insights data
