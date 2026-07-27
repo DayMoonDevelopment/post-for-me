@@ -9,6 +9,7 @@ import type {
 import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import type {
+  InstagramMediaChild,
   InstagramMediaItem,
   InstagramMediaListResponse,
   InstagramRefreshTokenResponse,
@@ -219,11 +220,11 @@ export class InstagramService implements SocialPlatformService {
     includeMetrics: boolean = false,
   ): PlatformPost {
     const insights = this.extractInsightsFromResponse(item.insights);
-    const childMedia =
-      item.children?.data.map((child) => ({
-        url: child.media_url || '',
-        thumbnail_url: child.thumbnail_url || child.media_url || '',
-      })) || [];
+    const children: InstagramMediaChild[] = item.children?.data ?? [];
+    const childMedia = children.map((child) => ({
+      url: child.media_url || '',
+      thumbnail_url: child.thumbnail_url || child.media_url || '',
+    }));
     const media =
       childMedia.length > 0
         ? childMedia
