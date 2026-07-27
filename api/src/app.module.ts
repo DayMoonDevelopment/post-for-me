@@ -17,6 +17,7 @@ import { UnkeyModule } from './unkey/unkey.module';
 import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
+import { InstagramModule } from './instagram/instagram.module';
 import { PrivateModule } from './private/private.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
 
@@ -37,6 +38,7 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
     SocialPostPreviewsModule,
     WebhooksModule,
     SocialAccountFeedsModule,
+    InstagramModule,
     PrivateModule,
     HealthcheckModule,
   ],
