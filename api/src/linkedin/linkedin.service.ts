@@ -26,7 +26,10 @@ type LinkedInVideoEntity = {
 };
 
 type LinkedInVideoAnalyticsType =
-  'VIDEO_VIEW' | 'VIEWER' | 'TIME_WATCHED' | 'TIME_WATCHED_FOR_VIDEO_VIEWS';
+  | 'VIDEO_VIEW'
+  | 'VIEWER'
+  | 'TIME_WATCHED'
+  | 'TIME_WATCHED_FOR_VIDEO_VIEWS';
 
 type LinkedInVideoAnalyticsResponse = {
   elements?: Array<{
