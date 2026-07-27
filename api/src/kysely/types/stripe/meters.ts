@@ -17,13 +17,25 @@ export default interface MetersTable {
 
   customer_mapping: ColumnType<unknown | null, unknown | null, unknown | null>;
 
-  default_aggregation: ColumnType<unknown | null, unknown | null, unknown | null>;
+  default_aggregation: ColumnType<
+    unknown | null,
+    unknown | null,
+    unknown | null
+  >;
 
   value_settings: ColumnType<unknown | null, unknown | null, unknown | null>;
 
-  stripe_created: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  stripe_created: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
-  stripe_updated: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  stripe_updated: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   livemode: ColumnType<boolean | null, boolean | null, boolean | null>;
 
@@ -31,7 +43,11 @@ export default interface MetersTable {
 
   synced_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  deleted_at: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 }
 
 export type Meters = Selectable<MetersTable>;

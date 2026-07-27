@@ -11,21 +11,49 @@ export default interface SubscriptionsTable {
 
   status: ColumnType<string | null, string | null, string | null>;
 
-  cancel_at_period_end: ColumnType<boolean | null, boolean | null, boolean | null>;
+  cancel_at_period_end: ColumnType<
+    boolean | null,
+    boolean | null,
+    boolean | null
+  >;
 
-  current_period_start: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  current_period_start: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
-  current_period_end: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  current_period_end: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
-  cancel_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  cancel_at: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
-  canceled_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  canceled_at: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   ended_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  trial_start: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  trial_start: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
-  trial_end: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  trial_end: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   collection_method: ColumnType<string | null, string | null, string | null>;
 
@@ -33,7 +61,11 @@ export default interface SubscriptionsTable {
 
   metadata: ColumnType<unknown | null, unknown | null, unknown | null>;
 
-  stripe_created: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  stripe_created: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   livemode: ColumnType<boolean | null, boolean | null, boolean | null>;
 
@@ -41,7 +73,11 @@ export default interface SubscriptionsTable {
 
   synced_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  deleted_at: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 }
 
 export type Subscriptions = Selectable<SubscriptionsTable>;
