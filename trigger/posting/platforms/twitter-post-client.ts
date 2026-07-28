@@ -1,10 +1,12 @@
 import { PostClient } from "../post-client";
 import {
+  EUploadMimeType,
   SendTweetV2Params,
   TwitterApi,
   TwitterApiTokens,
 } from "twitter-api-v2";
 import sharp from "sharp";
+import { readFile } from "fs/promises";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import {
@@ -93,17 +95,11 @@ export class TwitterPostClient extends PostClient {
             accessSecret: account.refresh_token,
           } as TwitterApiTokens));
 
-      if (isOAuth2 && media.length > 0) {
-        // Media upload via OAuth2 requires the new /2/media/upload chunked
-        // endpoints (the v1.1 endpoint used below is OAuth1-only) - not
-        // wired up yet, pending a rate-limit/reliability spike. Text-only
-        // posts work fine under OAuth2 today.
-        throw new Error(
-          "Posting media to X via OAuth2-connected accounts is not yet supported",
-        );
-      }
-
-      const mediaIds = await this.#processMedia({ twitterClient, media });
+      const mediaIds = await this.#processMedia({
+        twitterClient,
+        media,
+        isOAuth2,
+      });
 
       const allowedCaption = caption.slice(
         0,
@@ -195,9 +191,11 @@ export class TwitterPostClient extends PostClient {
   async #processMedia({
     twitterClient,
     media,
+    isOAuth2,
   }: {
     twitterClient: TwitterApi;
     media: PostMedia[];
+    isOAuth2: boolean;
   }): Promise<string[]> {
     const mediaIds: string[] = [];
     if (media.length == 1) {
@@ -216,6 +214,7 @@ export class TwitterPostClient extends PostClient {
             twitterClient,
             filePath,
             mimeType,
+            isOAuth2,
           });
         } finally {
           await this.unlinkQuiet(filePath);
@@ -223,7 +222,12 @@ export class TwitterPostClient extends PostClient {
       } else {
         const file = await this.getFile(medium);
         const buffer = Buffer.from(await file.arrayBuffer());
-        mediaId = await this.#uploadImage({ twitterClient, file, buffer });
+        mediaId = await this.#uploadImage({
+          twitterClient,
+          file,
+          buffer,
+          isOAuth2,
+        });
       }
 
       this.#responses.push({ uploadResponse: { mediaId } });
@@ -242,6 +246,7 @@ export class TwitterPostClient extends PostClient {
           twitterClient,
           file,
           buffer,
+          isOAuth2,
         });
 
         this.#responses.push({ uploadResponse: { mediaId } });
@@ -258,11 +263,22 @@ export class TwitterPostClient extends PostClient {
     twitterClient,
     filePath,
     mimeType,
+    isOAuth2,
   }: {
     twitterClient: TwitterApi;
     filePath: string;
     mimeType: string;
+    isOAuth2: boolean;
   }): Promise<string> {
+    if (isOAuth2) {
+      // The v2 client chunks, finalizes, and polls processing status
+      // internally - the v1.1 endpoint used below doesn't support OAuth2.
+      const buffer = await readFile(filePath);
+      return await twitterClient.v2.uploadMedia(buffer, {
+        media_type: mimeType as EUploadMimeType,
+      });
+    }
+
     const mediaId = await twitterClient.v1.uploadMedia(filePath, {
       mimeType,
       longVideo: true,
@@ -305,10 +321,12 @@ export class TwitterPostClient extends PostClient {
     twitterClient,
     file,
     buffer,
+    isOAuth2,
   }: {
     twitterClient: TwitterApi;
     file: File;
     buffer: Buffer;
+    isOAuth2: boolean;
   }): Promise<string> {
     let processedImage = buffer;
     if (processedImage.length > this.#maxFileSize) {
@@ -321,6 +339,13 @@ export class TwitterPostClient extends PostClient {
           .jpeg({ quality: 60 })
           .toBuffer();
       }
+    }
+
+    if (isOAuth2) {
+      // The v1.1 endpoint used below doesn't support OAuth2.
+      return await twitterClient.v2.uploadMedia(processedImage, {
+        media_type: file.type as EUploadMimeType,
+      });
     }
 
     return await twitterClient.v1.uploadMedia(processedImage, {

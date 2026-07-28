@@ -253,12 +253,14 @@ export async function generateAuthUrl({
         clientSecret: appSecret,
       });
 
-      // Note: media.write is intentionally omitted for now; posting via
-      // OAuth2 (which requires the new chunked /2/media/upload endpoints)
-      // is being validated separately. Adding it later will require
-      // reauthentication of accounts connected before that scope is added.
       const authLink = client.generateOAuth2AuthLink(callbackUrl, {
-        scope: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+        scope: [
+          'tweet.read',
+          'tweet.write',
+          'users.read',
+          'offline.access',
+          'media.write',
+        ],
         state: authState,
       });
 
