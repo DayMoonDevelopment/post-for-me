@@ -200,17 +200,28 @@ export class YouTubeService implements SocialPlatformService {
     error: unknown,
     authFailureOverride?: boolean,
     retryableOverride?: boolean,
+    codeOverride?: string,
   ): YouTubeError {
     const metadata: YouTubeErrorMetadata = {
       provider: 'youtube',
       operation,
-      code: this.getErrorCode(error),
+      code: codeOverride ?? this.getErrorCode(error),
       status: this.getErrorStatus(error),
       authFailure: authFailureOverride ?? this.isAuthFailure(error),
       retryable: retryableOverride ?? this.isRetryableError(error),
     };
 
     return new YouTubeError(message, metadata, error);
+  }
+
+  private isSuspendedAccountError(error: unknown): boolean {
+    if (this.getErrorStatus(error) !== 403) {
+      return false;
+    }
+
+    return this.getErrorMessage(error)
+      .toLowerCase()
+      .includes('youtube account of the authenticated user is suspended');
   }
 
   async initService(projectId: string): Promise<void> {
@@ -608,7 +619,22 @@ export class YouTubeService implements SocialPlatformService {
         });
       }
 
-      throw error;
+      if (this.isSuspendedAccountError(error)) {
+        throw this.toYouTubeError(
+          'The connected YouTube account is suspended and its videos cannot be retrieved.',
+          'getAccountPosts',
+          error,
+          true,
+          false,
+          'account_suspended',
+        );
+      }
+
+      throw this.toYouTubeError(
+        `Failed to fetch YouTube posts: ${this.getErrorMessage(error)}`,
+        'getAccountPosts',
+        error,
+      );
     }
   }
 }

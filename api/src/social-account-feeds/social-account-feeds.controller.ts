@@ -24,6 +24,7 @@ import { Protect } from '../auth/protect.decorator';
 import { PlatformPostDto } from './dto/platform-post.dto';
 import { PlatformPostQueryDto } from './dto/platform-post-query.dto';
 import { SocialAccountFeedsService } from './social-account-feeds.service';
+import { YouTubeError } from '../youtube/youtube.service';
 import { PaginatedPlatformPostResponse } from './dto/pagination-platform-post-response.dto';
 import { TikTokBusinessMetricsDto } from '../tiktok-business/dto/tiktok-business-post-metrics.dto';
 import { TikTokPostMetricsDto } from '../tiktok/dto/tiktok-post-metrics.dto';
@@ -103,6 +104,10 @@ export class SocialAccountFeedsController {
     },
   })
   @ApiResponse({
+    status: 403,
+    description: `The connected social account is suspended and its content cannot be retrieved.`,
+  })
+  @ApiResponse({
     status: 500,
     description: `Internal server error when fetching social account feed.`,
   })
@@ -112,18 +117,31 @@ export class SocialAccountFeedsController {
     type: String,
     required: true,
   })
-  getAccountFeed(
+  async getAccountFeed(
     @Param() params: { social_account_id: string },
     @Query() query: PlatformPostQueryDto,
     @User() user: RequestUser,
   ): Promise<PaginatedPlatformPostResponse> {
     try {
-      return this.socialPostFeedService.getPlatformPosts({
+      return await this.socialPostFeedService.getPlatformPosts({
         accountId: params.social_account_id,
         queryParams: query,
         projectId: user.projectId,
       });
     } catch (e) {
+      if (e instanceof HttpException) {
+        throw e;
+      }
+
+      if (
+        e instanceof YouTubeError &&
+        e.metadata.code === 'account_suspended'
+      ) {
+        throw new HttpException(e.message, HttpStatus.FORBIDDEN, {
+          cause: e,
+        });
+      }
+
       console.error(e);
       throw new HttpException(
         'Internal server error',
