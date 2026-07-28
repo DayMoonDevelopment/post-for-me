@@ -1280,6 +1280,10 @@ export type Database = {
         Args: { alphabet?: string; prefix: string; size?: number };
         Returns: string;
       };
+      sync_team_usage_limit: {
+        Args: { p_limit: number; p_team_id: string };
+        Returns: undefined;
+      };
       user_has_post_access: { Args: { post_id: string }; Returns: boolean };
       user_has_post_result_access: {
         Args: { post_result_id: string };

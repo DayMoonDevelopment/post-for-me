@@ -148,7 +148,7 @@ export async function trackSubscriptionLifecycle(
  * redirect, which would otherwise drop a brand-new customer's conversion).
  * Fall back to the customer-id lookup for existing/older subscriptions.
  */
-async function resolveTeam(
+export async function resolveTeam(
   subscription: Stripe.Subscription,
   supabaseServiceRole: SupabaseClient<Database>,
 ): Promise<TeamRow | null> {
