@@ -380,6 +380,16 @@ export const processPost = task({
               }
 
               break;
+            case "x":
+              appCredentials = project.social_provider_app_credentials.find(
+                (credential) =>
+                  credential.provider ===
+                  (account.social_provider_metadata?.connection_type ===
+                  "oauth2"
+                    ? "x_oauth2"
+                    : "x"),
+              ) as PlatformAppCredentials;
+              break;
             default:
               appCredentials = project.social_provider_app_credentials.find(
                 (credential) => credential.provider === account.provider,

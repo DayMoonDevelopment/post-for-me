@@ -20,6 +20,7 @@ export type Provider =
   | 'facebook'
   | 'instagram'
   | 'x'
+  | 'x_oauth2'
   | 'tiktok'
   | 'youtube'
   | 'pinterest'

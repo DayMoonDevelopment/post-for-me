@@ -38,14 +38,32 @@ export class TwitterPostClient extends PostClient {
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
-    //No Need to refresh tokens for Twitter
-    const SIX_MONTHS_IN_MS = 180 * 24 * 60 * 60 * 1000;
-    const expiresAt = new Date(Date.now() + SIX_MONTHS_IN_MS).toISOString();
+    if (account.social_provider_metadata?.connection_type !== "oauth2") {
+      // No need to refresh OAuth 1.0a tokens for Twitter, they don't expire.
+      const SIX_MONTHS_IN_MS = 180 * 24 * 60 * 60 * 1000;
+      const expiresAt = new Date(Date.now() + SIX_MONTHS_IN_MS).toISOString();
+
+      return {
+        access_token: account.access_token,
+        expires_at: expiresAt,
+        refresh_token: account.refresh_token,
+      };
+    }
+
+    const client = new TwitterApi({
+      clientId: this.#appKey,
+      clientSecret: this.#appSecret,
+    });
+
+    const { accessToken, refreshToken, expiresIn } =
+      await client.refreshOAuth2Token(account.refresh_token || "");
 
     return {
-      access_token: account.access_token,
-      expires_at: expiresAt,
-      refresh_token: account.refresh_token,
+      access_token: accessToken,
+      // X rotates OAuth2 refresh tokens on every use; fall back to the
+      // existing one only if a new one wasn't returned.
+      refresh_token: refreshToken || account.refresh_token,
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     };
   }
 
@@ -63,12 +81,27 @@ export class TwitterPostClient extends PostClient {
     platformConfig: TwitterConfiguration;
   }) {
     try {
-      const twitterClient = new TwitterApi({
-        appKey: this.#appKey,
-        appSecret: this.#appSecret,
-        accessToken: account.access_token,
-        accessSecret: account.refresh_token,
-      } as TwitterApiTokens);
+      const isOAuth2 =
+        account.social_provider_metadata?.connection_type === "oauth2";
+
+      const twitterClient = isOAuth2
+        ? new TwitterApi(account.access_token)
+        : (new TwitterApi({
+            appKey: this.#appKey,
+            appSecret: this.#appSecret,
+            accessToken: account.access_token,
+            accessSecret: account.refresh_token,
+          } as TwitterApiTokens));
+
+      if (isOAuth2 && media.length > 0) {
+        // Media upload via OAuth2 requires the new /2/media/upload chunked
+        // endpoints (the v1.1 endpoint used below is OAuth1-only) - not
+        // wired up yet, pending a rate-limit/reliability spike. Text-only
+        // posts work fine under OAuth2 today.
+        throw new Error(
+          "Posting media to X via OAuth2-connected accounts is not yet supported",
+        );
+      }
 
       const mediaIds = await this.#processMedia({ twitterClient, media });
 

@@ -35,7 +35,9 @@ export async function generateAuthUrl({
   const provider =
     appCredentials.provider == 'instagram_w_facebook'
       ? 'instagram'
-      : appCredentials.provider;
+      : appCredentials.provider == 'x_oauth2'
+        ? 'x'
+        : appCredentials.provider;
 
   const appUrl = configService.get<string>('DASHBOARD_APP_URL');
 
@@ -242,6 +244,46 @@ export async function generateAuthUrl({
           value: projectId,
         });
       }
+
+      break;
+    }
+    case 'x_oauth2': {
+      const client = new TwitterApi({
+        clientId: appId,
+        clientSecret: appSecret,
+      });
+
+      // Note: media.write is intentionally omitted for now; posting via
+      // OAuth2 (which requires the new chunked /2/media/upload endpoints)
+      // is being validated separately. Adding it later will require
+      // reauthentication of accounts connected before that scope is added.
+      const authLink = client.generateOAuth2AuthLink(callbackUrl, {
+        scope: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+        state: authState,
+      });
+
+      authUrl = authLink.url;
+
+      // Use the normalized provider ('x') here, matching every other
+      // oauth_data row pushed for this auth attempt (isSystem/redirect/
+      // external_id above), since the callback loader looks these rows up
+      // by the URL's provider segment ('x'), before knowing which app
+      // credentials (x vs x_oauth2) apply.
+      oauthData.push({
+        project_id: projectId,
+        provider: provider as SocialProviderEnum,
+        key: 'code_verifier',
+        key_id: authState,
+        value: authLink.codeVerifier,
+      });
+
+      oauthData.push({
+        project_id: projectId,
+        provider: provider as SocialProviderEnum,
+        key: 'connection_type',
+        key_id: authState,
+        value: 'oauth2',
+      });
 
       break;
     }

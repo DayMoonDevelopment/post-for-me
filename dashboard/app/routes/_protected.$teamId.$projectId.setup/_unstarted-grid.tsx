@@ -15,6 +15,7 @@ const allPlatforms = [
   "instagram_w_facebook",
   "youtube",
   "x",
+  "x_oauth2",
   "pinterest",
   "linkedin",
   "threads",

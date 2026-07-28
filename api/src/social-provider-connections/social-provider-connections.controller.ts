@@ -213,6 +213,17 @@ export class SocialAccountsController {
         }
 
         break;
+      case 'x':
+        // New X connections always go through OAuth 2.0; app credentials for
+        // OAuth 2.0 are stored under the separate 'x_oauth2' provider since
+        // they're a distinct client id/secret pair from the OAuth 1.0a
+        // consumer key/secret used by already-connected legacy accounts.
+        socialProviderAppCredentials =
+          await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+            'x_oauth2',
+            user.projectId,
+          );
+        break;
       default:
         socialProviderAppCredentials =
           await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(

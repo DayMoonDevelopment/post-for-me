@@ -17,10 +17,17 @@ export const loader = withSupabase(async function ({
 
   let { provider } = params;
 
-  const key =
-    provider?.toLowerCase() === "x"
-      ? (url.searchParams.get("oauth_token") as string)
-      : (url.searchParams.get("state") as string);
+  // X OAuth1 callbacks use oauth_token+oauth_verifier; X OAuth2 (and every
+  // other provider) uses state+code. New X connections always go through
+  // OAuth2, so only treat this as the legacy OAuth1 flow if oauth_token is
+  // actually present (e.g. an auth link generated just before this change
+  // shipped).
+  const isXOAuth1Callback =
+    provider?.toLowerCase() === "x" && url.searchParams.has("oauth_token");
+
+  const key = isXOAuth1Callback
+    ? (url.searchParams.get("oauth_token") as string)
+    : (url.searchParams.get("state") as string);
 
   if (!key) {
     return createResponse({
@@ -68,8 +75,16 @@ export const loader = withSupabase(async function ({
     provider = "instagram_w_facebook";
   }
 
+  if (provider === "x" && !isXOAuth1Callback) {
+    provider = "x_oauth2";
+  }
+
   const normalizedProvider =
-    provider === "instagram_w_facebook" ? "instagram" : provider;
+    provider === "instagram_w_facebook"
+      ? "instagram"
+      : provider === "x_oauth2"
+        ? "x"
+        : provider;
 
   const { data: project, error: projectError } = await supabaseServiceRole
     .from("projects")
