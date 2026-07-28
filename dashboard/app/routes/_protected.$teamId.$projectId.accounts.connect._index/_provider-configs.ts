@@ -126,7 +126,30 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
     id: "x",
     name: "X (Twitter)",
     description: "Connect your X account",
-    fields: [PERMISSIONS_FIELD, EXTERNAL_ID_FIELD],
+    fields: [
+      {
+        name: "connection_type",
+        required: true,
+        label: "Connection Type",
+        type: "select",
+        placeholder: "choose connection type",
+        description:
+          "Choose <strong>oauth2</strong> for OAuth 2.0 app credentials, or <strong>oauth1</strong> for OAuth 1.0a app credentials",
+        options: [
+          {
+            name: "oauth2",
+            value: "oauth2",
+            selected: true,
+          },
+          {
+            name: "oauth1",
+            value: "oauth1",
+          },
+        ],
+      },
+      PERMISSIONS_FIELD,
+      EXTERNAL_ID_FIELD,
+    ],
   },
   tiktok: {
     id: "tiktok",

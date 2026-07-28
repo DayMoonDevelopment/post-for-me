@@ -18,10 +18,7 @@ export const loader = withSupabase(async function ({
   let { provider } = params;
 
   // X OAuth1 callbacks use oauth_token+oauth_verifier; X OAuth2 (and every
-  // other provider) uses state+code. New X connections always go through
-  // OAuth2, so only treat this as the legacy OAuth1 flow if oauth_token is
-  // actually present (e.g. an auth link generated just before this change
-  // shipped).
+  // other provider) uses state+code. Detect the flow from callback params.
   const isXOAuth1Callback =
     provider?.toLowerCase() === "x" && url.searchParams.has("oauth_token");
 

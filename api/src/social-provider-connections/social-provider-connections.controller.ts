@@ -214,15 +214,45 @@ export class SocialAccountsController {
 
         break;
       case 'x':
-        // New X connections always go through OAuth 2.0; app credentials for
-        // OAuth 2.0 are stored under the separate 'x_oauth2' provider since
-        // they're a distinct client id/secret pair from the OAuth 1.0a
-        // consumer key/secret used by already-connected legacy accounts.
-        socialProviderAppCredentials =
-          await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
-            'x_oauth2',
-            user.projectId,
-          );
+        switch (createAuthUrlInput.platform_data?.x?.connection_type) {
+          case 'oauth1': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                'x',
+                user.projectId,
+              );
+            break;
+          }
+          case 'oauth2': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                'x_oauth2',
+                user.projectId,
+              );
+            break;
+          }
+          default: {
+            const credentials =
+              await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
+                [createAuthUrlInput.platform, 'x_oauth2'],
+                user.projectId,
+              );
+
+            if (credentials) {
+              if (credentials.length > 1) {
+                throw new HttpException(
+                  'X connection_type is required. Use the value "oauth1" to use OAuth 1.0a, use the value "oauth2" to use OAuth 2.0.',
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+
+              socialProviderAppCredentials = credentials[0];
+            }
+
+            break;
+          }
+        }
+
         break;
       default:
         socialProviderAppCredentials =

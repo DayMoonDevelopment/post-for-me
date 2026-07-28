@@ -64,6 +64,7 @@ export async function getXOAuth2SocialProviderConnection({
       social_provider_metadata: {
         connection_type: "oauth2",
         has_platform_premium: isPremium,
+        verified_type: user.verified_type ?? "none",
       },
     },
   ];

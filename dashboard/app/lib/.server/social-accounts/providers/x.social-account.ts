@@ -53,7 +53,10 @@ export async function getXSocialProviderConnection({
       social_provider_user_name: user.username,
       social_provider_photo_url: user.profile_image_url,
       access_token_expires_at: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-      social_provider_metadata: { has_platform_premium: isPremium },
+      social_provider_metadata: {
+        has_platform_premium: isPremium,
+        verified_type: user.verified_type ?? "none",
+      },
     },
   ];
 }
