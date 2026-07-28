@@ -408,7 +408,7 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
   @ApiProperty({
     description:
-      'ISO 8601 datetime at which the video should be published. Only honoured when privacy_status is "private" (maps to status.publishAt).',
+      'ISO 8601 datetime in UTC at which the video should be published. Only honoured when privacy_status is "private" (maps to status.publishAt).',
     nullable: true,
     required: false,
   })
@@ -433,7 +433,7 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
   @ApiProperty({
     description:
-      'ISO 8601 date (YYYY-MM-DD) or datetime when the video was recorded (maps to recordingDetails.recordingDate).',
+      'ISO 8601 date (YYYY-MM-DD) or UTC datetime when the video was recorded (maps to recordingDetails.recordingDate).',
     nullable: true,
     required: false,
   })
@@ -723,7 +723,7 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'ISO 8601 datetime at which the video should be published. Only honoured when privacy_status is "private" (maps to status.publishAt).',
+      'ISO 8601 datetime in UTC at which the video should be published. Only honoured when privacy_status is "private" (maps to status.publishAt).',
     nullable: true,
     required: false,
   })
@@ -731,7 +731,7 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'ISO 8601 date (YYYY-MM-DD) or datetime when the video was recorded (maps to recordingDetails.recordingDate).',
+      'ISO 8601 date (YYYY-MM-DD) or UTC datetime when the video was recorded (maps to recordingDetails.recordingDate).',
     nullable: true,
     required: false,
   })

@@ -23,7 +23,7 @@ export class PlatformPostDto {
   social_post_result_id?: string;
 
   @ApiProperty({
-    description: 'Date the post was published',
+    description: 'Date the post was published, in UTC (ISO 8601)',
     required: false,
     type: Date,
   })
