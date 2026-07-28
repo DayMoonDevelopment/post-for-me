@@ -68,6 +68,13 @@ export class SocialAccountDto {
   external_id?: string | null | undefined;
 
   @ApiProperty({
+    description:
+      'Whether a published post on this account can be deleted from the platform. False when the platform does not support deletion, or the account must be reconnected to grant the deletion permission.',
+    type: Boolean,
+  })
+  delete_supported?: boolean;
+
+  @ApiProperty({
     description: 'The metadata of the social account',
     type: SocialAccountMetadata,
     nullable: true,

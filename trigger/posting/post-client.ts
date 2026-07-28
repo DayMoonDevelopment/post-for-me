@@ -9,6 +9,7 @@ import { pipeline } from "stream/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   BlueskyConfiguration,
+  DeleteResult,
   FacebookConfiguration,
   InstagramConfiguration,
   LinkedinConfiguration,
@@ -79,6 +80,22 @@ export class PostClient {
       post_id: postId,
       provider_connection_id: account.id,
       success: false,
+    };
+  }
+
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }): Promise<DeleteResult> {
+    //Implement at platform level
+    console.log(account, providerPostId);
+    return {
+      provider_connection_id: account.id,
+      success: false,
+      error_message: "Delete not implemented for this platform",
     };
   }
 

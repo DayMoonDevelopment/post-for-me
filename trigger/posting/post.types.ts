@@ -8,6 +8,13 @@ export interface PostResult {
   details?: any;
 }
 
+export interface DeleteResult {
+  provider_connection_id: string;
+  success: boolean;
+  error_message?: string;
+  details?: any;
+}
+
 export interface UserTag {
   id: string;
   type: string;
@@ -240,5 +247,15 @@ export interface IndividualPostData {
   account: SocialAccount;
   projectId: string;
   platformConfig: PlatformConfiguration;
+  appCredentials: PlatformAppCredentials;
+}
+
+export interface DeleteFromPlatformData {
+  resultId: string;
+  postId: string;
+  projectId: string;
+  platform: string;
+  account: SocialAccount;
+  providerPostId: string;
   appCredentials: PlatformAppCredentials;
 }

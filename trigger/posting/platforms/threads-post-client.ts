@@ -208,6 +208,63 @@ export class ThreadsPostClient extends PostClient {
     }
   }
 
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }) {
+    try {
+      this.#requests.push({
+        deleteRequest: {
+          url: `https://graph.threads.net/v1.0/${providerPostId}`,
+        },
+      });
+
+      const response = await axios.delete(
+        `https://graph.threads.net/v1.0/${providerPostId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${account.access_token}`,
+          },
+        },
+      );
+
+      this.#responses.push({ deleteResponse: response.data });
+
+      if (response.data?.error) {
+        throw new Error(response.data.error.message as string);
+      }
+
+      return {
+        success: !!response.data?.success,
+        provider_connection_id: account.id,
+        details: {
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    } catch (error: any) {
+      console.error(
+        `Failed to delete Threads post ${providerPostId} for account: ${account.id}`,
+        error.response?.data || error,
+      );
+      return {
+        success: false,
+        provider_connection_id: account.id,
+        error_message: `Failed to delete Threads post: ${
+          error.response?.data?.error?.message || error.message
+        }`,
+        details: {
+          error: error.response?.data || error.message,
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    }
+  }
+
   async #processText(
     account: SocialAccount,
     caption: string,

@@ -42,6 +42,11 @@ export async function getThreadsSocialProviderConnection({
 
   const { access_token: shortLivedToken, user_id } = tokenData;
 
+  // Persist the scopes the user actually granted so we can tell whether this
+  // account can be deleted from (requires `threads_delete`). The short-lived
+  // token response carries the granted `permissions`.
+  const grantedScopes = normalizeGrantedScopes(tokenData.permissions);
+
   const longLivedTokenParams = new URLSearchParams([
     ["client_secret", appCredentials.appSecret!],
     ["grant_type", "th_exchange_token"],
@@ -92,6 +97,21 @@ export async function getThreadsSocialProviderConnection({
       refresh_token: longLivedToken,
       access_token_expires_at: new Date(Date.now() + expires_in * 1000),
       refresh_token_expires_at: new Date(Date.now() + expires_in * 1000),
+      social_provider_metadata: { granted_scopes: grantedScopes },
     },
   ];
+}
+
+/** Coerces a provider `permissions` value (array or comma/space string) to a scope list. */
+function normalizeGrantedScopes(permissions: unknown): string[] {
+  if (Array.isArray(permissions)) {
+    return permissions.map((p) => String(p)).filter(Boolean);
+  }
+  if (typeof permissions === "string") {
+    return permissions
+      .split(/[,\s]+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+  }
+  return [];
 }

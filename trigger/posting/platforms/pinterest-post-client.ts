@@ -160,6 +160,57 @@ export class PinterestPostClient extends PostClient {
     }
   }
 
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }) {
+    let deleteUrl = `https://api.pinterest.com/v5/pins/${providerPostId}`;
+    if (account.social_provider_metadata?.is_sandbox) {
+      deleteUrl = `https://api-sandbox.pinterest.com/v5/pins/${providerPostId}`;
+    }
+
+    try {
+      this.#requests.push({ deleteRequest: deleteUrl });
+
+      const response = await axios.delete(deleteUrl, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+        },
+      });
+
+      this.#responses.push({ deleteResponse: response.status });
+
+      return {
+        success: response.status === 204 || response.status === 200,
+        provider_connection_id: account.id,
+        details: {
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    } catch (error) {
+      console.error(
+        `Failed to delete Pinterest pin ${providerPostId} for account: ${account.id}`,
+        error.response?.data || error,
+      );
+      return {
+        success: false,
+        provider_connection_id: account.id,
+        error_message: `Failed to delete Pinterest pin: ${
+          error.response?.data?.message || error.message
+        }`,
+        details: {
+          error: error.response?.data || error.message,
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    }
+  }
+
   async #getOrCreateBoardId(account: SocialAccount): Promise<string> {
     let boardsUrl = "https://api.pinterest.com/v5/boards";
     if (account.social_provider_metadata?.is_sandbox) {

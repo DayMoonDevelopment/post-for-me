@@ -273,6 +273,62 @@ export class YouTubePostClient extends PostClient {
     }
   }
 
+  async delete({
+    account,
+    providerPostId,
+  }: {
+    account: SocialAccount;
+    providerPostId: string;
+  }) {
+    try {
+      const oauth2Client = new google.auth.OAuth2(
+        this.#googleClientId,
+        this.#googleClientSecret,
+        `${process.env.NEXTAUTH_URL}/api/youtube-auth/callback`,
+      );
+
+      oauth2Client.setCredentials({
+        access_token: account.access_token,
+        refresh_token: account.refresh_token,
+      });
+
+      const youtube = google.youtube({
+        version: "v3",
+        auth: oauth2Client,
+      }) as youtube_v3.Youtube;
+
+      this.#requests.push({ deleteRequest: { id: providerPostId } });
+
+      await youtube.videos.delete({ id: providerPostId });
+
+      this.#responses.push({ deleteResponse: "deleted" });
+
+      return {
+        success: true,
+        provider_connection_id: account.id,
+        details: {
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    } catch (error: any) {
+      console.error(
+        `Failed to delete YouTube video ${providerPostId} for account: ${account.id}`,
+        error?.response?.data || error,
+      );
+      return {
+        success: false,
+        provider_connection_id: account.id,
+        error_message: `Failed to delete YouTube video: ${error.message}`,
+        details: {
+          error: error?.response?.data || error,
+          requests: this.#requests,
+          responses: this.#responses,
+        },
+      };
+    }
+  }
+
   async #pollProcessingDetails(
     youtube: youtube_v3.Youtube,
     videoId: string,

@@ -43,6 +43,10 @@ export async function getInstagramWFacebookSocialProviderConnection({
 
   const accessToken = longLivedData.access_token;
 
+  // Persist the scopes the user actually granted so we can tell whether these
+  // accounts can be deleted from (requires `instagram_manage_contents`).
+  const grantedScopes = await fetchFacebookGrantedScopes(accessToken);
+
   const allPages: {
     instagram_business_account: {
       id: string;
@@ -87,10 +91,34 @@ export async function getInstagramWFacebookSocialProviderConnection({
           page.instagram_business_account.profile_picture_url,
         social_provider_metadata: {
           connection_type: "facebook",
+          granted_scopes: grantedScopes,
         },
       });
     }
   }
 
   return accounts;
+}
+
+/** Reads the granted (status === "granted") permissions for a Facebook access token. */
+async function fetchFacebookGrantedScopes(
+  accessToken: string,
+): Promise<string[]> {
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v23.0/me/permissions?access_token=${accessToken}`,
+    );
+    if (!response.ok) {
+      return [];
+    }
+    const data = (await response.json()) as {
+      data?: { permission: string; status: string }[];
+    };
+    return (data.data ?? [])
+      .filter((p) => p.status === "granted")
+      .map((p) => p.permission);
+  } catch (error) {
+    console.error("Error fetching Facebook granted permissions", error);
+    return [];
+  }
 }

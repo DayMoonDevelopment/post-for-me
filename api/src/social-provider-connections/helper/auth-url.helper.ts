@@ -146,6 +146,7 @@ export async function generateAuthUrl({
           ...[
             'instagram_basic',
             'instagram_content_publish',
+            'instagram_manage_contents',
             'pages_show_list',
             'public_profile',
             'business_management',
@@ -469,7 +470,9 @@ export async function generateAuthUrl({
       ) {
         scopes.push(...providerData.threads.permission_overrides);
       } else {
-        scopes.push(...['threads_basic', 'threads_content_publish']);
+        scopes.push(
+          ...['threads_basic', 'threads_content_publish', 'threads_delete'],
+        );
 
         if (permissions.includes('feeds')) {
           scopes.push('threads_manage_insights');

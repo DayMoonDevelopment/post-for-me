@@ -2,7 +2,18 @@ export interface Post {
   id: string;
   project_id: string;
   external_id: string | null;
-  status: "draft" | "scheduled" | "posting" | "posted" | "failed" | "cancelled";
+  status:
+    | "draft"
+    | "scheduled"
+    | "posting"
+    | "posted"
+    | "failed"
+    | "cancelled"
+    | "processing"
+    | "processed"
+    | "deleting"
+    | "deleted"
+    | "delete_failed";
   caption: string;
   scheduled_at: string;
   created_at: string;
@@ -22,6 +33,12 @@ export interface PostProviderConnection {
   username: string | null;
   platform: string;
   external_id: string | null;
+  /**
+   * Whether a published post on this account can be deleted from the platform.
+   * `false` when the platform doesn't support deletion, or the account must be
+   * reconnected to grant the deletion permission. Absent on older payloads.
+   */
+  delete_supported?: boolean;
 }
 
 export interface PostMedia {
