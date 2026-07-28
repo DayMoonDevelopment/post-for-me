@@ -202,19 +202,54 @@ export const refreshAccountTokens = schedules.task({
     const sevenDaysFromNow = new Date();
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
-    // Get accounts that need token refresh
-    const { data: accounts, error: accountsError } = await supabaseClient
-      .from("social_provider_connections")
-      .select("*")
-      .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
-      .in("provider", ["facebook", "instagram", "threads", "pinterest", "x"])
-      .order("access_token_expires_at", { ascending: true })
-      .limit(50);
+    // Get accounts that need token refresh. X OAuth1 accounts are
+    // deliberately excluded here (queried separately below) - their tokens
+    // never expire, so letting them compete for this shared, limited batch
+    // would risk starving providers whose tokens actually break if not
+    // refreshed in time.
+    const { data: standardAccounts, error: standardAccountsError } =
+      await supabaseClient
+        .from("social_provider_connections")
+        .select("*")
+        .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
+        .in("provider", ["facebook", "instagram", "threads", "pinterest"])
+        .order("access_token_expires_at", { ascending: true })
+        .limit(50);
 
-    if (accountsError) {
-      logger.error("Failed to fetch accounts:", { error: accountsError });
-      throw new Error(`Failed to fetch accounts: ${accountsError.message}`);
+    if (standardAccountsError) {
+      logger.error("Failed to fetch accounts:", {
+        error: standardAccountsError,
+      });
+      throw new Error(
+        `Failed to fetch accounts: ${standardAccountsError.message}`,
+      );
     }
+
+    // X OAuth2 accounts get their own independent batch budget so they
+    // can't be crowded out by (or crowd out) the providers above.
+    const { data: xOAuth2Accounts, error: xOAuth2AccountsError } =
+      await supabaseClient
+        .from("social_provider_connections")
+        .select("*")
+        .eq("provider", "x")
+        .contains("social_provider_metadata", { connection_type: "oauth2" })
+        .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
+        .order("access_token_expires_at", { ascending: true })
+        .limit(50);
+
+    if (xOAuth2AccountsError) {
+      logger.error("Failed to fetch x accounts:", {
+        error: xOAuth2AccountsError,
+      });
+      throw new Error(
+        `Failed to fetch x accounts: ${xOAuth2AccountsError.message}`,
+      );
+    }
+
+    const accounts = [
+      ...(standardAccounts || []),
+      ...(xOAuth2Accounts || []),
+    ];
 
     if (!accounts || accounts.length === 0) {
       logger.info("No accounts need token refresh");

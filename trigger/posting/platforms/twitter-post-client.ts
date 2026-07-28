@@ -26,6 +26,7 @@ export class TwitterPostClient extends PostClient {
   #requests: any[] = [];
   #responses: any[] = [];
   #maxFileSize = 5 * 1024 * 1024;
+  #uploadChunkSize = 5 * 1024 * 1024;
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -274,9 +275,11 @@ export class TwitterPostClient extends PostClient {
       // The v2 client chunks, finalizes, and polls processing status
       // internally - the v1.1 endpoint used below doesn't support OAuth2.
       const buffer = await readFile(filePath);
-      return await twitterClient.v2.uploadMedia(buffer, {
-        media_type: mimeType as EUploadMimeType,
-      });
+      return await twitterClient.v2.uploadMedia(
+        buffer,
+        { media_type: this.#toUploadMimeType(mimeType) },
+        this.#uploadChunkSize,
+      );
     }
 
     const mediaId = await twitterClient.v1.uploadMedia(filePath, {
@@ -343,13 +346,25 @@ export class TwitterPostClient extends PostClient {
 
     if (isOAuth2) {
       // The v1.1 endpoint used below doesn't support OAuth2.
-      return await twitterClient.v2.uploadMedia(processedImage, {
-        media_type: file.type as EUploadMimeType,
-      });
+      return await twitterClient.v2.uploadMedia(
+        processedImage,
+        { media_type: this.#toUploadMimeType(file.type) },
+        this.#uploadChunkSize,
+      );
     }
 
     return await twitterClient.v1.uploadMedia(processedImage, {
       mimeType: file.type,
     });
+  }
+
+  #toUploadMimeType(mimeType: string): EUploadMimeType {
+    if (
+      !Object.values(EUploadMimeType).includes(mimeType as EUploadMimeType)
+    ) {
+      throw new Error(`Unsupported media type for X: ${mimeType}`);
+    }
+
+    return mimeType as EUploadMimeType;
   }
 }
