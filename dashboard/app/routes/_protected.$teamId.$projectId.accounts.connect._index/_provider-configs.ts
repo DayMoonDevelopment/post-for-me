@@ -139,11 +139,11 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
           {
             name: "oauth2",
             value: "oauth2",
-            selected: true,
           },
           {
             name: "oauth1",
             value: "oauth1",
+            selected: true,
           },
         ],
       },
@@ -184,7 +184,7 @@ export const PROVIDER_CONFIGS: Record<string, SocialProviderConfig> = {
 };
 
 export function getProviderConfig(
-  providerId: string
+  providerId: string,
 ): SocialProviderConfig | null {
   return PROVIDER_CONFIGS[providerId] || null;
 }
