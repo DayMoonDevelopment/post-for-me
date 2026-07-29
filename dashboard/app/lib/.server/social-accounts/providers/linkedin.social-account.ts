@@ -55,6 +55,11 @@ export async function getLinkedInSocialProviderConnection({
       refresh_token: refreshToken,
       refresh_token_expires_at: refreshTokenExpiresAt,
       social_provider_photo_url: profileData.pictureUrl,
+      social_provider_metadata: {
+        connection_type: "personal",
+        profile_slug: profileData.profileSlug,
+        profile_url: profileData.profileUrl,
+      },
     },
   ];
 
@@ -72,7 +77,13 @@ export async function getLinkedInSocialProviderConnection({
 
 async function getProfileData(
   accessToken: string,
-): Promise<{ name: string; pictureUrl: string; id: string }> {
+): Promise<{
+  name: string;
+  pictureUrl: string;
+  id: string;
+  profileSlug?: string;
+  profileUrl?: string;
+}> {
   const userResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -81,10 +92,14 @@ async function getProfileData(
 
   if (userResponse.ok) {
     const userData = await userResponse.json();
+    const profileUrl =
+      typeof userData.profile === "string" ? userData.profile : undefined;
     return {
       name: userData.name,
       pictureUrl: userData.picture,
       id: userData.sub,
+      profileSlug: getLinkedInProfileSlug(profileUrl),
+      profileUrl,
     };
   }
 
@@ -153,6 +168,29 @@ async function getProfileData(
     pictureUrl: profilePictureUrl,
     id: profileData.id,
   };
+}
+
+function getLinkedInProfileSlug(profileUrl?: string): string | undefined {
+  if (!profileUrl) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(profileUrl);
+    const parts = parsed.pathname
+      .split("/")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length < 2) {
+      return undefined;
+    }
+
+    const [, slug] = parts;
+    return slug || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function getPageAccounts(
@@ -260,7 +298,13 @@ async function getPageAccounts(
         accounts.push({
           social_provider_user_id: orgId,
           social_provider_user_name: orgData.localizedName,
-          social_provider_metadata: { connection_type: "page" },
+          social_provider_metadata: {
+            connection_type: "page",
+            profile_slug: pictureData.vanityName,
+            profile_url: pictureData.vanityName
+              ? `https://www.linkedin.com/company/${pictureData.vanityName}`
+              : undefined,
+          },
           social_provider_photo_url: logoUrl,
           access_token: accessToken,
           access_token_expires_at: accessTokenExpiresAt,
