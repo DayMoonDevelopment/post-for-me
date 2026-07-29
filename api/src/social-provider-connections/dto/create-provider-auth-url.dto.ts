@@ -22,8 +22,8 @@ export class LinkedInUrlProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default personal scopes: openid, w_member_social, profile, email. Default organization scopes: r_basicprofile, w_member_social, r_organization_social, w_organization_social, rw_organization_admin',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
@@ -41,8 +41,8 @@ export class InstagramProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default instagram scopes: instagram_business_basic, instagram_business_content_publish. Default facebook scopes: instagram_basic, instagram_content_publish, pages_show_list, public_profile, business_management',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
@@ -62,8 +62,8 @@ export class FacebookProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default scopes: public_profile, pages_show_list, pages_read_engagement, pages_manage_posts, business_management',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
@@ -73,8 +73,8 @@ export class TikTokProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default scopes: user.info.basic, video.list, video.upload, video.publish',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
@@ -84,8 +84,8 @@ export class TikTokBusinessProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default scopes: user.info.basic, user.info.username, user.info.stats, user.info.profile, user.account.type, user.insights, video.list, video.insights, comment.list, comment.list.manage, video.publish, video.upload, biz.spark.auth, discovery.search.words',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
@@ -95,8 +95,8 @@ export class YouTubeProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default scopes: https://www.googleapis.com/auth/youtube.force-ssl, https://www.googleapis.com/auth/youtube.upload, https://www.googleapis.com/auth/youtube.readonly, https://www.googleapis.com/auth/userinfo.profile',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
@@ -106,8 +106,8 @@ export class PinterestProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default scopes: boards:read, boards:write, pins:read, pins:write, user_accounts:read',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
@@ -117,8 +117,8 @@ export class ThreadsProviderData {
     description:
       'Override the default permissions/scopes requested during OAuth. Default scopes: threads_basic, threads_content_publish',
     required: false,
-    type: [String],
-    isArray: true,
+    type: 'array',
+    items: { type: 'string' },
   })
   permission_overrides?: string[];
 }
