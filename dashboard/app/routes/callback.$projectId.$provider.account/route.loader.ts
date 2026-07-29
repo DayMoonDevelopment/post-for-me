@@ -26,14 +26,9 @@ export const loader = withSupabase(async function ({
     });
   }
 
-  // X OAuth1 callbacks use oauth_token+oauth_verifier; X OAuth2 (and every
-  // other provider) uses state+code. Detect the flow from callback params.
-  const isXOAuth1Callback =
-    provider?.toLowerCase() === "x" && url.searchParams.has("oauth_token");
-
-  const key = isXOAuth1Callback
-    ? (url.searchParams.get("oauth_token") as string)
-    : (url.searchParams.get("state") as string);
+  const key =
+    (url.searchParams.get("oauth_token") as string) ||
+    (url.searchParams.get("state") as string);
 
   if (!key) {
     return createResponse({
@@ -99,7 +94,7 @@ export const loader = withSupabase(async function ({
     provider = "instagram_w_facebook";
   }
 
-  if (provider === "x" && !isXOAuth1Callback) {
+  if (provider === "x" && connectionType === "oauth2") {
     provider = "x_oauth2";
   }
 
@@ -142,7 +137,8 @@ export const loader = withSupabase(async function ({
       redirectUrlOverride,
     });
 
-    const { successConnections, failedConnections, errors } = accountConnections;
+    const { successConnections, failedConnections, errors } =
+      accountConnections;
 
     if (successConnections.length === 0) {
       errors.push("No valid accounts found");
