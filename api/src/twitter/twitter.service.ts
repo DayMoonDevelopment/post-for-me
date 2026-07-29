@@ -9,6 +9,11 @@ import type {
 import { TwitterApi, MediaVariantsV2, MediaObjectV2 } from 'twitter-api-v2';
 import { SupabaseService } from '../supabase/supabase.service';
 
+interface TwitterAccountMetadata {
+  connection_type?: 'oauth1' | 'oauth2';
+  has_platform_premium?: boolean;
+}
+
 @Injectable({ scope: Scope.REQUEST })
 export class TwitterService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
@@ -37,9 +42,52 @@ export class TwitterService implements SocialPlatformService {
     };
   }
 
+  async initOAuth2Service(projectId: string): Promise<void> {
+    const { data: appCredentials, error: appCredentialsError } =
+      await this.supabaseService.supabaseServiceRole
+        .from('social_provider_app_credentials')
+        .select()
+        .eq('project_id', projectId)
+        .eq('provider', 'x_oauth2')
+        .single();
+
+    if (!appCredentials || appCredentialsError) {
+      console.error(appCredentialsError);
+      throw new Error('No app credentials found for platform');
+    }
+
+    this.appCredentials = {
+      appId: appCredentials.app_id || '',
+      appSecret: appCredentials.app_secret || '',
+      provider: appCredentials.provider,
+      projectId: appCredentials.project_id,
+    };
+  }
+
   async refreshAccessToken(account: SocialAccount): Promise<SocialAccount> {
-    // Twitter OAuth 1.0a tokens don't expire
-    await Promise.resolve();
+    const accountMetadata =
+      account.social_provider_metadata as TwitterAccountMetadata;
+
+    if (accountMetadata?.connection_type !== 'oauth2') {
+      // Twitter OAuth 1.0a tokens don't expire
+      await Promise.resolve();
+      return account;
+    }
+
+    const client = new TwitterApi({
+      clientId: this.appCredentials.appId,
+      clientSecret: this.appCredentials.appSecret,
+    });
+
+    const { accessToken, refreshToken, expiresIn } =
+      await client.refreshOAuth2Token(account.refresh_token || '');
+
+    account.access_token = accessToken;
+    // X rotates OAuth2 refresh tokens on every use; fall back to the
+    // existing one only if a new one wasn't returned.
+    account.refresh_token = refreshToken || account.refresh_token;
+    account.access_token_expires_at = new Date(Date.now() + expiresIn * 1000);
+
     return account;
   }
 
@@ -58,12 +106,18 @@ export class TwitterService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     try {
-      const twitterClient = new TwitterApi({
-        appKey: this.appCredentials.appId,
-        appSecret: this.appCredentials.appSecret,
-        accessToken: account.access_token,
-        accessSecret: account.refresh_token || '',
-      });
+      const accountMetadata =
+        account.social_provider_metadata as TwitterAccountMetadata;
+
+      const twitterClient =
+        accountMetadata?.connection_type === 'oauth2'
+          ? new TwitterApi(account.access_token)
+          : new TwitterApi({
+              appKey: this.appCredentials.appId,
+              appSecret: this.appCredentials.appSecret,
+              accessToken: account.access_token,
+              accessSecret: account.refresh_token || '',
+            });
 
       const safeLimit = Math.min(limit, 100);
 

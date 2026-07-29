@@ -1,10 +1,12 @@
 import { PostClient } from "../post-client";
 import {
+  EUploadMimeType,
   SendTweetV2Params,
   TwitterApi,
   TwitterApiTokens,
 } from "twitter-api-v2";
 import sharp from "sharp";
+import { readFile } from "fs/promises";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import {
@@ -24,6 +26,7 @@ export class TwitterPostClient extends PostClient {
   #requests: any[] = [];
   #responses: any[] = [];
   #maxFileSize = 5 * 1024 * 1024;
+  #uploadChunkSize = 5 * 1024 * 1024;
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -38,14 +41,32 @@ export class TwitterPostClient extends PostClient {
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
-    //No Need to refresh tokens for Twitter
-    const SIX_MONTHS_IN_MS = 180 * 24 * 60 * 60 * 1000;
-    const expiresAt = new Date(Date.now() + SIX_MONTHS_IN_MS).toISOString();
+    if (account.social_provider_metadata?.connection_type !== "oauth2") {
+      // No need to refresh OAuth 1.0a tokens for Twitter, they don't expire.
+      const SIX_MONTHS_IN_MS = 180 * 24 * 60 * 60 * 1000;
+      const expiresAt = new Date(Date.now() + SIX_MONTHS_IN_MS).toISOString();
+
+      return {
+        access_token: account.access_token,
+        expires_at: expiresAt,
+        refresh_token: account.refresh_token,
+      };
+    }
+
+    const client = new TwitterApi({
+      clientId: this.#appKey,
+      clientSecret: this.#appSecret,
+    });
+
+    const { accessToken, refreshToken, expiresIn } =
+      await client.refreshOAuth2Token(account.refresh_token || "");
 
     return {
-      access_token: account.access_token,
-      expires_at: expiresAt,
-      refresh_token: account.refresh_token,
+      access_token: accessToken,
+      // X rotates OAuth2 refresh tokens on every use; fall back to the
+      // existing one only if a new one wasn't returned.
+      refresh_token: refreshToken || account.refresh_token,
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     };
   }
 
@@ -63,14 +84,23 @@ export class TwitterPostClient extends PostClient {
     platformConfig: TwitterConfiguration;
   }) {
     try {
-      const twitterClient = new TwitterApi({
-        appKey: this.#appKey,
-        appSecret: this.#appSecret,
-        accessToken: account.access_token,
-        accessSecret: account.refresh_token,
-      } as TwitterApiTokens);
+      const isOAuth2 =
+        account.social_provider_metadata?.connection_type === "oauth2";
 
-      const mediaIds = await this.#processMedia({ twitterClient, media });
+      const twitterClient = isOAuth2
+        ? new TwitterApi(account.access_token)
+        : (new TwitterApi({
+            appKey: this.#appKey,
+            appSecret: this.#appSecret,
+            accessToken: account.access_token,
+            accessSecret: account.refresh_token,
+          } as TwitterApiTokens));
+
+      const mediaIds = await this.#processMedia({
+        twitterClient,
+        media,
+        isOAuth2,
+      });
 
       const allowedCaption = caption.slice(
         0,
@@ -162,9 +192,11 @@ export class TwitterPostClient extends PostClient {
   async #processMedia({
     twitterClient,
     media,
+    isOAuth2,
   }: {
     twitterClient: TwitterApi;
     media: PostMedia[];
+    isOAuth2: boolean;
   }): Promise<string[]> {
     const mediaIds: string[] = [];
     if (media.length == 1) {
@@ -183,6 +215,7 @@ export class TwitterPostClient extends PostClient {
             twitterClient,
             filePath,
             mimeType,
+            isOAuth2,
           });
         } finally {
           await this.unlinkQuiet(filePath);
@@ -190,7 +223,12 @@ export class TwitterPostClient extends PostClient {
       } else {
         const file = await this.getFile(medium);
         const buffer = Buffer.from(await file.arrayBuffer());
-        mediaId = await this.#uploadImage({ twitterClient, file, buffer });
+        mediaId = await this.#uploadImage({
+          twitterClient,
+          file,
+          buffer,
+          isOAuth2,
+        });
       }
 
       this.#responses.push({ uploadResponse: { mediaId } });
@@ -209,6 +247,7 @@ export class TwitterPostClient extends PostClient {
           twitterClient,
           file,
           buffer,
+          isOAuth2,
         });
 
         this.#responses.push({ uploadResponse: { mediaId } });
@@ -225,11 +264,24 @@ export class TwitterPostClient extends PostClient {
     twitterClient,
     filePath,
     mimeType,
+    isOAuth2,
   }: {
     twitterClient: TwitterApi;
     filePath: string;
     mimeType: string;
+    isOAuth2: boolean;
   }): Promise<string> {
+    if (isOAuth2) {
+      // The v2 client chunks, finalizes, and polls processing status
+      // internally - the v1.1 endpoint used below doesn't support OAuth2.
+      const buffer = await readFile(filePath);
+      return await twitterClient.v2.uploadMedia(
+        buffer,
+        { media_type: this.#toUploadMimeType(mimeType) },
+        this.#uploadChunkSize,
+      );
+    }
+
     const mediaId = await twitterClient.v1.uploadMedia(filePath, {
       mimeType,
       longVideo: true,
@@ -272,10 +324,12 @@ export class TwitterPostClient extends PostClient {
     twitterClient,
     file,
     buffer,
+    isOAuth2,
   }: {
     twitterClient: TwitterApi;
     file: File;
     buffer: Buffer;
+    isOAuth2: boolean;
   }): Promise<string> {
     let processedImage = buffer;
     if (processedImage.length > this.#maxFileSize) {
@@ -290,8 +344,27 @@ export class TwitterPostClient extends PostClient {
       }
     }
 
+    if (isOAuth2) {
+      // The v1.1 endpoint used below doesn't support OAuth2.
+      return await twitterClient.v2.uploadMedia(
+        processedImage,
+        { media_type: this.#toUploadMimeType(file.type) },
+        this.#uploadChunkSize,
+      );
+    }
+
     return await twitterClient.v1.uploadMedia(processedImage, {
       mimeType: file.type,
     });
+  }
+
+  #toUploadMimeType(mimeType: string): EUploadMimeType {
+    if (
+      !Object.values(EUploadMimeType).includes(mimeType as EUploadMimeType)
+    ) {
+      throw new Error(`Unsupported media type for X: ${mimeType}`);
+    }
+
+    return mimeType as EUploadMimeType;
   }
 }

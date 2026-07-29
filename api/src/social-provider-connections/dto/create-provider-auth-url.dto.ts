@@ -47,6 +47,16 @@ export class InstagramProviderData {
   permission_overrides?: string[];
 }
 
+export class XProviderData {
+  @ApiProperty({
+    enum: ['oauth1', 'oauth2'],
+    description:
+      'The type of connection; oauth1 for OAuth 1.0a app credentials, oauth2 for OAuth 2.0 app credentials.',
+    default: 'oauth2',
+  })
+  connection_type: 'oauth1' | 'oauth2';
+}
+
 export class FacebookProviderData {
   @ApiProperty({
     description:
@@ -141,6 +151,13 @@ export class AuthUrlProviderData {
     type: FacebookProviderData,
   })
   facebook?: FacebookProviderData;
+
+  @ApiProperty({
+    description: 'Additional data for connecting X accounts',
+    required: false,
+    type: XProviderData,
+  })
+  x?: XProviderData;
 
   @ApiProperty({
     description: 'Additional data for connecting TikTok accounts',
