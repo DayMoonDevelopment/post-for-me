@@ -161,6 +161,10 @@ async function getProfileData(accessToken: string): Promise<{
     name: `${profileData.localizedFirstName || ""} ${profileData.localizedLastName || ""}`.trim(),
     pictureUrl: profilePictureUrl,
     profileSlug: profileData.vanityName,
+    profileUrl: profileData.vanityName
+      ? `https://www.linkedin.com/in/${profileData.vanityName}`
+      : undefined,
+
     id: profileData.id,
   };
 }
