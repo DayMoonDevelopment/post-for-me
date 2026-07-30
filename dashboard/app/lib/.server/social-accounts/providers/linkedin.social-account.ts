@@ -75,9 +75,7 @@ export async function getLinkedInSocialProviderConnection({
   return accounts;
 }
 
-async function getProfileData(
-  accessToken: string,
-): Promise<{
+async function getProfileData(accessToken: string): Promise<{
   name: string;
   pictureUrl: string;
   id: string;
@@ -92,14 +90,10 @@ async function getProfileData(
 
   if (userResponse.ok) {
     const userData = await userResponse.json();
-    const profileUrl =
-      typeof userData.profile === "string" ? userData.profile : undefined;
     return {
       name: userData.name,
       pictureUrl: userData.picture,
       id: userData.sub,
-      profileSlug: getLinkedInProfileSlug(profileUrl),
-      profileUrl,
     };
   }
 
@@ -166,31 +160,9 @@ async function getProfileData(
   return {
     name: `${profileData.localizedFirstName || ""} ${profileData.localizedLastName || ""}`.trim(),
     pictureUrl: profilePictureUrl,
+    profileSlug: profileData.vanityName,
     id: profileData.id,
   };
-}
-
-function getLinkedInProfileSlug(profileUrl?: string): string | undefined {
-  if (!profileUrl) {
-    return undefined;
-  }
-
-  try {
-    const parsed = new URL(profileUrl);
-    const parts = parsed.pathname
-      .split("/")
-      .map((part) => part.trim())
-      .filter(Boolean);
-
-    if (parts.length < 2) {
-      return undefined;
-    }
-
-    const [, slug] = parts;
-    return slug || undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 async function getPageAccounts(
@@ -242,7 +214,7 @@ async function getPageAccounts(
 
         // Get organization picture
         const pictureResponse = await fetch(
-          `https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,vanityName,localizedName,logoV2(original~digitalmediaAsset:playableStreams))`,
+          `https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,localizedName,logoV2(original~digitalmediaAsset:playableStreams))`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -300,9 +272,9 @@ async function getPageAccounts(
           social_provider_user_name: orgData.localizedName,
           social_provider_metadata: {
             connection_type: "page",
-            profile_slug: pictureData.vanityName,
-            profile_url: pictureData.vanityName
-              ? `https://www.linkedin.com/company/${pictureData.vanityName}`
+            profile_slug: orgData.vanityName,
+            profile_url: orgData.vanityName
+              ? `https://www.linkedin.com/company/${orgData.vanityName}`
               : undefined,
           },
           social_provider_photo_url: logoUrl,
