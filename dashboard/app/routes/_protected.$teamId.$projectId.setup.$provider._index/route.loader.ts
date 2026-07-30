@@ -55,11 +55,13 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     appSecret: credential?.data?.app_secret || "",
   };
 
+  const callbackProvider = provider === "x_oauth2" ? "x" : provider;
+
   return data({
     provider,
     credential: providerCredential,
     authCallbackUrl: project.data?.auth_callback_url || "",
     setupGuideUrl: `https://www.postforme.dev/resources/getting-started-with-the-${provider}-api`,
-    redirectUrl: `https://app.postforme.dev/callback/${projectId}/${provider}/account`,
+    redirectUrl: `https://app.postforme.dev/callback/${projectId}/${callbackProvider}/account`,
   });
 });
