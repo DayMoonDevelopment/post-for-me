@@ -6,6 +6,7 @@
     "dist",
     "scripts",
     "supabase",
-    "**/*spec.ts"
+    "**/*spec.ts",
+    "vitest.config.ts"
   ]
 }
