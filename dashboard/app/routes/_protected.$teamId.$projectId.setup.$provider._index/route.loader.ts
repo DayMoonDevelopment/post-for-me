@@ -55,11 +55,14 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     appSecret: credential?.data?.app_secret || "",
   };
 
+  const setupGuideProvider =
+    provider === "x" || provider === "x_oauth2" ? "x-twitter" : provider;
+
   return data({
     provider,
     credential: providerCredential,
     authCallbackUrl: project.data?.auth_callback_url || "",
-    setupGuideUrl: `https://www.postforme.dev/resources/getting-started-with-the-${provider}-api`,
+    setupGuideUrl: `https://www.postforme.dev/resources/getting-started-with-the-${setupGuideProvider}-api`,
     redirectUrl: `https://app.postforme.dev/callback/${projectId}/${provider}/account`,
   });
 });
