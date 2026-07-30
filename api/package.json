@@ -24,6 +24,8 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
+    "test:e2e": "vitest run -c vitest-e2e.config.ts",
+    "test:e2e:watch": "vitest -c vitest-e2e.config.ts",
     "stripe:sync": "bun run scripts/stripe-sync.ts"
   },
   "dependencies": {
@@ -82,6 +84,7 @@
     "ts-loader": "^9.5.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0",
+    "unplugin-swc": "^1.5.9",
     "vitest": "^2.1.8"
   },
   "trustedDependencies": [
