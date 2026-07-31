@@ -49,6 +49,13 @@ export async function getFacebookSocialProviderConnection({
 
   const longLivedData = await longLivedResponse.json();
 
+  if (!longLivedData?.access_token) {
+    console.error("Error fetching long-lived access token", longLivedData);
+    throw Error(
+      `Error fetching long-lived access token ${longLivedData?.error?.message || ""}`,
+    );
+  }
+
   const accessToken = longLivedData.access_token;
 
   let accountsUrl = `https://graph.facebook.com/v23.0/me/accounts?fields=name,access_token,picture&limit=100&access_token=${accessToken}`;
