@@ -166,4 +166,48 @@ export class PostClient {
   protected async unlinkQuiet(filePath: string): Promise<void> {
     await fsp.unlink(filePath).catch(() => undefined);
   }
+
+  // Meta Graph API OAuthException (code 190) subcodes that mean the
+  // session/token is permanently dead and will never succeed on retry:
+  // 460 = password changed, 463 = expired, 467 = invalid, 458/490 = deauthorized
+  private static readonly TERMINAL_AUTH_ERROR_SUBCODES = new Set([
+    458, 460, 463, 467, 490,
+  ]);
+
+  private static readonly TERMINAL_AUTH_ERROR_KEYWORDS = [
+    "session has been invalidated",
+    "sessions for the user are not allowed because the user is not a confirmed user",
+    "user access is restricted",
+    "error validating access token",
+  ];
+
+  protected getErrorMessage(error: any): string {
+    return (
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      "Unknown error"
+    );
+  }
+
+  protected isTerminalAuthError(error: any): boolean {
+    const graphError = error?.response?.data?.error;
+    const code = graphError?.code;
+    const subcode = graphError?.error_subcode;
+    const message = this.getErrorMessage(error).toLowerCase();
+
+    const hasTerminalSubcode =
+      code === 190 &&
+      subcode !== undefined &&
+      PostClient.TERMINAL_AUTH_ERROR_SUBCODES.has(subcode);
+
+    const hasTerminalKeyword = PostClient.TERMINAL_AUTH_ERROR_KEYWORDS.some(
+      (kw) => message.includes(kw),
+    );
+
+    return hasTerminalSubcode || hasTerminalKeyword;
+  }
+
+  protected buildAuthErrorMessage(error: any): string {
+    return `Account needs to be reconnected: ${this.getErrorMessage(error)}`;
+  }
 }
