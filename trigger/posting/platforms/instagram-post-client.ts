@@ -33,15 +33,23 @@ export class InstagramPostClient extends PostClient {
   #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 
+  #graphApiUrl =
+    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com";
+  #graphInstagramApiUrl =
+    process.env.INSTAGRAM_GRAPH_API_URL || "https://graph.instagram.com";
+  #apiVersion = process.env.FACEBOOK_API_VERSION || "v25.0";
+  #instagramApiVersion = process.env.INSTAGRAM_API_VERSION || "v23.0";
+  #oauthApiVersion = process.env.FACEBOOK_OAUTH_API_VERSION || "v20.0";
+
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
     if (
       account.social_provider_metadata?.connection_type === "instagram" ||
       (account.access_token && account.access_token.startsWith("IG"))
     ) {
-      return "https://graph.instagram.com/v23.0";
+      return `${this.#graphInstagramApiUrl}/${this.#instagramApiVersion}`;
     }
-    return "https://graph.facebook.com/v23.0";
+    return `${this.#graphApiUrl}/${this.#apiVersion}`;
   }
 
   constructor(
@@ -63,14 +71,14 @@ export class InstagramPostClient extends PostClient {
           `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`,
         );
         this.#requests.push({
-          refreshRequest: "https://graph.instagram.com/refresh_access_token",
+          refreshRequest: `${this.#graphInstagramApiUrl}/refresh_access_token`,
           params: {
             grant_type: "ig_refresh_token",
             access_token: account.access_token,
           },
         });
         const response = await axios.get(
-          `https://graph.instagram.com/refresh_access_token`,
+          `${this.#graphInstagramApiUrl}/refresh_access_token`,
           {
             params: {
               grant_type: "ig_refresh_token",
@@ -106,11 +114,11 @@ export class InstagramPostClient extends PostClient {
         };
 
         this.#requests.push({
-          refreshRequest: "https://graph.facebook.com/v20.0/oauth/access_token",
+          refreshRequest: `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
           params: refreshTokenParams,
         });
         const response = await axios.get(
-          `https://graph.facebook.com/v20.0/oauth/access_token`,
+          `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
           {
             params: refreshTokenParams,
           },
