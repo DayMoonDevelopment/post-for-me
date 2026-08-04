@@ -3,9 +3,14 @@ import { SocialAccountsController } from './social-provider-connections.controll
 import { SocialAccountsService } from './social-provider-connections.service';
 import { PaginationModule } from '../pagination/pagination.module';
 import { SocialProviderAppCredentialsModule } from '../social-provider-app-credentials/social-provider-app-credentials.module';
+import { TokenRefreshModule } from '../token-refresh/token-refresh.module';
 
 @Module({
-  imports: [PaginationModule, SocialProviderAppCredentialsModule],
+  imports: [
+    PaginationModule,
+    SocialProviderAppCredentialsModule,
+    TokenRefreshModule,
+  ],
   controllers: [SocialAccountsController],
   providers: [SocialAccountsService],
 })
