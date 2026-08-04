@@ -198,6 +198,7 @@ export class SocialAccountsService {
         const refreshed = await this.tokenRefreshService.refreshIfNeeded({
           account: this.toSocialAccountEntity(raw),
           projectId,
+          throwOnError: false,
         });
 
         return {
@@ -240,9 +241,11 @@ export class SocialAccountsService {
   async getSocialAccountById({
     id,
     projectId,
+    withTokenRefresh = false,
   }: {
     id: string;
     projectId: string;
+    withTokenRefresh?: boolean;
   }): Promise<SocialAccountDto | null> {
     const socialAccount = await this.supabaseService.supabaseClient
       .from('social_provider_connections')
@@ -266,10 +269,11 @@ export class SocialAccountsService {
     let accessTokenExpiresAt = socialAccount.data.access_token_expires_at;
     let refreshTokenExpiresAt = socialAccount.data.refresh_token_expires_at;
 
-    if (accessToken) {
+    if (withTokenRefresh && accessToken) {
       const refreshed = await this.tokenRefreshService.refreshIfNeeded({
         account: this.toSocialAccountEntity(socialAccount.data),
         projectId,
+        throwOnError: false,
       });
 
       accessToken = refreshed.access_token;
@@ -288,7 +292,7 @@ export class SocialAccountsService {
       username: socialAccount.data.social_provider_user_name || '',
       user_id: socialAccount.data.social_provider_user_id || '',
       profile_photo_url: socialAccount.data.social_provider_profile_photo_url,
-      status: socialAccount.data.access_token ? 'connected' : 'disconnected',
+      status: accessToken ? 'connected' : 'disconnected',
       external_id: socialAccount.data.external_id,
       access_token: accessToken || '',
       refresh_token: refreshToken || '',

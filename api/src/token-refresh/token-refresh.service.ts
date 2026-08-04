@@ -108,9 +108,11 @@ export class TokenRefreshService {
   async refreshIfNeeded({
     account,
     projectId,
+    throwOnError = true,
   }: {
     account: SocialAccount;
     projectId: string;
+    throwOnError?: boolean;
   }): Promise<SocialAccount> {
     if (!account.access_token) {
       return account;
@@ -129,12 +131,15 @@ export class TokenRefreshService {
 
     const platformName = this.resolvePlatformName(account);
 
-    try {
-      const platformService = await this.getPlatformService({
-        platform: platformName,
-        projectId,
-      });
+    // Resolved outside the try block so a platform-resolution/config error
+    // (a code bug, not a per-account refresh failure) always propagates,
+    // regardless of `throwOnError`.
+    const platformService = await this.getPlatformService({
+      platform: platformName,
+      projectId,
+    });
 
+    try {
       const updatedAccount = await platformService.refreshAccessToken(account);
 
       if (!updatedAccount) {
@@ -168,6 +173,23 @@ export class TokenRefreshService {
           status: error.metadata.status,
           message: error.message,
         });
+        return account;
+      }
+
+      const isYouTubeAuthFailure =
+        account.provider === 'youtube' &&
+        error instanceof YouTubeError &&
+        error.metadata.authFailure;
+
+      if (!throwOnError && !isYouTubeAuthFailure) {
+        console.warn(
+          'Proceeding with existing access token after refresh failure',
+          {
+            provider: account.provider,
+            accountId: account.id,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        );
         return account;
       }
 
