@@ -15,15 +15,48 @@ import {
   SocialAccountMetadata,
 } from './dto/create-social-account.dto';
 import { Database } from '../../supabase';
+import { TokenRefreshService } from '../token-refresh/token-refresh.service';
+import { SocialAccount } from '../lib/dto/global.dto';
+import { mapWithConcurrency } from '../lib/async.utils';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
+const TOKEN_REFRESH_CONCURRENCY = 5;
 
 @Injectable()
 export class SocialAccountsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly configService: ConfigService,
+    private readonly tokenRefreshService: TokenRefreshService,
   ) {}
+
+  private toSocialAccountEntity(row: {
+    id: string;
+    provider: string | null;
+    social_provider_user_name: string | null;
+    access_token: string | null;
+    refresh_token: string | null;
+    access_token_expires_at: string | null;
+    refresh_token_expires_at: string | null;
+    social_provider_user_id: string | null;
+    social_provider_metadata: unknown;
+  }): SocialAccount {
+    return {
+      provider: row.provider as SocialAccount['provider'],
+      id: row.id,
+      social_provider_user_name: row.social_provider_user_name,
+      access_token: row.access_token || '',
+      refresh_token: row.refresh_token,
+      access_token_expires_at: row.access_token_expires_at
+        ? new Date(row.access_token_expires_at)
+        : null,
+      refresh_token_expires_at: row.refresh_token_expires_at
+        ? new Date(row.refresh_token_expires_at)
+        : null,
+      social_provider_user_id: row.social_provider_user_id || '',
+      social_provider_metadata: row.social_provider_metadata,
+    };
+  }
 
   async getSocialAccounts(
     queryParams: SocialAccountQueryDto,
@@ -155,7 +188,34 @@ export class SocialAccountsService {
       throw error;
     }
 
-    const transformedData: SocialAccountDto[] = data.map((raw) => ({
+    const refreshedRows = await mapWithConcurrency(
+      data,
+      async (raw) => {
+        if (!raw.access_token) {
+          return raw;
+        }
+
+        const refreshed = await this.tokenRefreshService.refreshIfNeeded({
+          account: this.toSocialAccountEntity(raw),
+          projectId,
+        });
+
+        return {
+          ...raw,
+          access_token: refreshed.access_token,
+          refresh_token: refreshed.refresh_token,
+          access_token_expires_at:
+            refreshed.access_token_expires_at?.toISOString() ??
+            raw.access_token_expires_at,
+          refresh_token_expires_at:
+            refreshed.refresh_token_expires_at?.toISOString() ??
+            raw.refresh_token_expires_at,
+        };
+      },
+      TOKEN_REFRESH_CONCURRENCY,
+    );
+
+    const transformedData: SocialAccountDto[] = refreshedRows.map((raw) => ({
       id: raw.id,
       platform: raw.provider || '',
       username: raw.social_provider_user_name || '',
@@ -201,6 +261,27 @@ export class SocialAccountsService {
       return null;
     }
 
+    let accessToken = socialAccount.data.access_token;
+    let refreshToken = socialAccount.data.refresh_token;
+    let accessTokenExpiresAt = socialAccount.data.access_token_expires_at;
+    let refreshTokenExpiresAt = socialAccount.data.refresh_token_expires_at;
+
+    if (accessToken) {
+      const refreshed = await this.tokenRefreshService.refreshIfNeeded({
+        account: this.toSocialAccountEntity(socialAccount.data),
+        projectId,
+      });
+
+      accessToken = refreshed.access_token;
+      refreshToken = refreshed.refresh_token;
+      accessTokenExpiresAt =
+        refreshed.access_token_expires_at?.toISOString() ??
+        accessTokenExpiresAt;
+      refreshTokenExpiresAt =
+        refreshed.refresh_token_expires_at?.toISOString() ??
+        refreshTokenExpiresAt;
+    }
+
     return {
       id: socialAccount.data.id,
       platform: socialAccount.data.provider || '',
@@ -209,11 +290,10 @@ export class SocialAccountsService {
       profile_photo_url: socialAccount.data.social_provider_profile_photo_url,
       status: socialAccount.data.access_token ? 'connected' : 'disconnected',
       external_id: socialAccount.data.external_id,
-      access_token: socialAccount.data.access_token || '',
-      refresh_token: socialAccount.data.refresh_token || '',
-      access_token_expires_at:
-        socialAccount.data.access_token_expires_at || new Date().toISOString(),
-      refresh_token_expires_at: socialAccount.data.refresh_token_expires_at,
+      access_token: accessToken || '',
+      refresh_token: refreshToken || '',
+      access_token_expires_at: accessTokenExpiresAt || new Date().toISOString(),
+      refresh_token_expires_at: refreshTokenExpiresAt,
       metadata: socialAccount.data
         .social_provider_metadata as SocialAccountMetadata,
     };
