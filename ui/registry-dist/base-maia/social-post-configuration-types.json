@@ -1,0 +1,17 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "social-post-configuration-types",
+  "type": "registry:lib",
+  "title": "Social Post Configuration Types",
+  "description": "Value types for a social post's platform and account configurations, re-exported from the post-for-me SDK.",
+  "dependencies": [
+    "post-for-me"
+  ],
+  "files": [
+    {
+      "path": "registry/base-maia/lib/social-post-configuration.types.ts",
+      "type": "registry:lib",
+      "content": "import type { PostForMe } from \"post-for-me\";\n\n/**\n * The configuration a social post carries — the two config fields on the create-post\n * body, so a value round-trips to `socialPosts.create` with no adapter in between.\n */\nexport type SocialPostConfiguration = Pick<\n  PostForMe.CreateSocialPost,\n  \"platform_configurations\" | \"account_configurations\"\n>;\n\n/** `platform_configurations` — one optional entry per provider (key = provider id). */\nexport type PlatformConfigurationMap = PostForMe.PlatformConfigurationsDto;\n\n/** One account's override entry: `{ social_account_id, configuration }`. */\nexport type AccountConfiguration = NonNullable<\n  PostForMe.CreateSocialPost[\"account_configurations\"]\n>[number];\n\n/** The per-platform configuration union (Instagram | TikTok | Pinterest | …). */\nexport type PlatformConfiguration = NonNullable<\n  PlatformConfigurationMap[keyof PlatformConfigurationMap]\n>;\n\n/** A media override, exactly as the SDK models it. */\nexport type SocialPostConfigurationMedia = NonNullable<\n  PostForMe.PinterestConfigurationDto[\"media\"]\n>[number];\n\n// Per-platform configuration shapes, straight from the SDK.\nexport type InstagramConfiguration = PostForMe.InstagramConfigurationDto;\nexport type FacebookConfiguration = PostForMe.FacebookConfigurationDto;\nexport type ThreadsConfiguration = PostForMe.ThreadsConfigurationDto;\nexport type TiktokConfiguration = PostForMe.TiktokConfiguration;\nexport type TwitterConfiguration = PostForMe.TwitterConfigurationDto;\nexport type YoutubeConfiguration = PostForMe.YoutubeConfigurationDto;\nexport type PinterestConfiguration = PostForMe.PinterestConfigurationDto;\nexport type LinkedinConfiguration = PostForMe.LinkedinConfigurationDto;\nexport type BlueskyConfiguration = PostForMe.BlueskyConfigurationDto;\n\n/**\n * A Post for Me social post — the shape `socialPosts.create` / `.retrieve` / `.update`\n * return. On the response, `social_accounts` is an array of full account objects (not\n * ids) and it carries `platform_configurations` + `account_configurations`, so it's a\n * complete, self-contained input for rendering a preview.\n */\nexport type SocialPost = PostForMe.SocialPost;\n"
+    }
+  ]
+}

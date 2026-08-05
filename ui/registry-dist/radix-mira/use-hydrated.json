@@ -1,0 +1,16 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "use-hydrated",
+  "type": "registry:hook",
+  "title": "useHydrated",
+  "description": "Returns true once mounted on the client (after hydration) — gate client-only rendering (e.g. a local timezone date) so it can't mismatch the server HTML.",
+  "dependencies": [],
+  "registryDependencies": [],
+  "files": [
+    {
+      "path": "registry/radix-mira/hooks/use-hydrated.ts",
+      "type": "registry:hook",
+      "content": "import * as React from \"react\";\n\n/**\n * `true` once the component has mounted on the client — i.e. after hydration.\n *\n * Gate JS-only interactions with this so they can't fire from server-rendered\n * HTML before React takes over. The login flow is fetcher-driven, so a submit\n * before hydration would otherwise do a full-page native POST to\n * `/login?index` instead of a background fetch.\n *\n * Server and first client render both return `false` (no hydration mismatch);\n * the effect flips it to `true` immediately after mount.\n */\nexport function useHydrated(): boolean {\n  const [hydrated, setHydrated] = React.useState(false);\n  React.useEffect(() => setHydrated(true), []);\n  return hydrated;\n}\n"
+    }
+  ]
+}

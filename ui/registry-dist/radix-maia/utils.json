@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "utils",
+  "type": "registry:lib",
+  "title": "Post for Me Utils",
+  "description": "Per-platform caption limits plus helpers for counting and evaluating caption length.",
+  "dependencies": [],
+  "registryDependencies": [
+    "@post-for-me/types"
+  ],
+  "files": [
+    {
+      "path": "registry/radix-maia/lib/post-for-me.utils.ts",
+      "type": "registry:lib",
+      "content": "import type { SocialProvider } from \"~/lib/post-for-me.types\";\n\n/**\n * The maximum caption length each platform accepts, keyed by SocialProvider.\n * Approximate to each network's current published limit — a soft UI hint for\n * surfacing \"characters left\" per target (the tightest budget, X at 280, is the\n * one to watch), NOT a hard input cap. The platform is the source of truth on\n * rejection.\n */\nexport const PLATFORM_CAPTION_LIMITS: Record<SocialProvider, number> = {\n  bluesky: 300,\n  facebook: 63206,\n  instagram: 2200,\n  linkedin: 3000,\n  pinterest: 500,\n  threads: 500,\n  tiktok: 2200,\n  tiktok_business: 2200,\n  x: 280,\n  youtube: 5000,\n};\n\n/** Human labels for each provider — for group headers, tooltips, and chips. */\nexport const PLATFORM_LABELS: Record<SocialProvider, string> = {\n  bluesky: \"Bluesky\",\n  facebook: \"Facebook\",\n  instagram: \"Instagram\",\n  linkedin: \"LinkedIn\",\n  pinterest: \"Pinterest\",\n  threads: \"Threads\",\n  tiktok: \"TikTok\",\n  tiktok_business: \"TikTok (Business API)\",\n  x: \"X\",\n  youtube: \"YouTube\",\n};\n\n/**\n * A stable display order for providers, so grouped lists (the Account Selector,\n * the blocks) don't reshuffle by object key order. Roughly most- to least-common.\n */\nexport const PLATFORM_ORDER: SocialProvider[] = [\n  \"instagram\",\n  \"facebook\",\n  \"x\",\n  \"tiktok\",\n  \"tiktok_business\",\n  \"youtube\",\n  \"linkedin\",\n  \"threads\",\n  \"pinterest\",\n  \"bluesky\",\n];\n\n// A grapheme segmenter so emoji and combined characters count as one, the way a\n// person reads length. Lazily created; falls back to code points where\n// Intl.Segmenter is unavailable.\nlet graphemeSegmenter: Intl.Segmenter | null | undefined;\nfunction getGraphemeSegmenter(): Intl.Segmenter | null {\n  if (graphemeSegmenter === undefined) {\n    graphemeSegmenter =\n      typeof Intl !== \"undefined\" && \"Segmenter\" in Intl\n        ? new Intl.Segmenter(undefined, { granularity: \"grapheme\" })\n        : null;\n  }\n  return graphemeSegmenter;\n}\n\n/** Count the visible characters (graphemes) in a caption. */\nexport function countCaptionLength(text: string): number {\n  if (!text) return 0;\n  const segmenter = getGraphemeSegmenter();\n  if (segmenter) return Array.from(segmenter.segment(text)).length;\n  return [...text].length;\n}\n\n/**\n * The platform with the smallest limit among those given — the tightest budget,\n * the one to surface by default. Returns `null` for an empty list.\n */\nexport function getMostRestrictivePlatform(\n  platforms: SocialProvider[],\n): SocialProvider | null {\n  if (platforms.length === 0) return null;\n  return platforms.reduce((tightest, platform) =>\n    PLATFORM_CAPTION_LIMITS[platform] < PLATFORM_CAPTION_LIMITS[tightest]\n      ? platform\n      : tightest,\n  );\n}\n"
+    }
+  ]
+}
