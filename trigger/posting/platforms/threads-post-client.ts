@@ -85,7 +85,11 @@ export class ThreadsPostClient extends PostClient {
 
       switch (true) {
         case media.length == 0: {
-          containerId = await this.#processText(account, allowedCaption);
+          containerId = await this.#processText(
+            account,
+            allowedCaption,
+            platformConfig?.reply_to_id,
+          );
           break;
         }
         case media.length == 1: {
@@ -94,6 +98,7 @@ export class ThreadsPostClient extends PostClient {
             media,
             platformConfig?.location,
             allowedCaption,
+            platformConfig?.reply_to_id,
           );
           break;
         }
@@ -102,6 +107,7 @@ export class ThreadsPostClient extends PostClient {
             account,
             media,
             allowedCaption,
+            platformConfig?.reply_to_id,
           );
           break;
         }
@@ -211,30 +217,30 @@ export class ThreadsPostClient extends PostClient {
   async #processText(
     account: SocialAccount,
     caption: string,
+    replyToId?: string,
   ): Promise<string | null> {
+    const body: Record<string, unknown> = {
+      media_type: "TEXT",
+      text: caption,
+    };
+
+    if (replyToId) {
+      body.reply_to_id = replyToId;
+    }
+
     this.#requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
-        params: {
-          media_type: "TEXT",
-          text: caption,
-        },
+        params: body,
       },
     });
 
     const createContainerResponse: AxiosResponse<{ id: string }> =
-      await axios.post(
-        this.#containerUrl,
-        {
-          media_type: "TEXT",
-          text: caption,
+      await axios.post(this.#containerUrl, body, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-          },
-        },
-      );
+      });
 
     this.#responses.push({
       createContainerResponse: createContainerResponse.data,
@@ -253,46 +259,36 @@ export class ThreadsPostClient extends PostClient {
     media: PostMedia[],
     location?: string,
     caption?: string,
+    replyToId?: string,
   ): Promise<string | null> {
     const medium = media[0];
     const signedUrl = await this.getSignedUrlForFile(medium);
     const isVideo = medium.type === "video";
 
+    const body: Record<string, unknown> = {
+      media_type:
+        isVideo && location == "reels" ? "REELS" : isVideo ? "VIDEO" : "IMAGE",
+      [isVideo ? "video_url" : "image_url"]: signedUrl,
+      text: caption,
+    };
+
+    if (replyToId) {
+      body.reply_to_id = replyToId;
+    }
+
     this.#requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
-        params: {
-          media_type:
-            isVideo && location == "reels"
-              ? "REELS"
-              : isVideo
-                ? "VIDEO"
-                : "IMAGE",
-          [isVideo ? "video_url" : "image_url"]: signedUrl,
-          text: caption,
-        },
+        params: body,
       },
     });
 
     const createContainerResponse: AxiosResponse<{ id: string }> =
-      await axios.post(
-        this.#containerUrl,
-        {
-          media_type:
-            isVideo && location == "reels"
-              ? "REELS"
-              : isVideo
-                ? "VIDEO"
-                : "IMAGE",
-          [isVideo ? "video_url" : "image_url"]: signedUrl,
-          text: caption,
+      await axios.post(this.#containerUrl, body, {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-          },
-        },
-      );
+      });
 
     this.#responses.push({
       createContainerResponse: createContainerResponse.data,
@@ -368,6 +364,7 @@ export class ThreadsPostClient extends PostClient {
     account: SocialAccount,
     media: PostMedia[],
     caption: string,
+    replyToId?: string,
   ): Promise<string | null> {
     const containerIds: string[] = [];
     const allowedMedia = media.slice(0, this.#maxItems);
@@ -413,25 +410,27 @@ export class ThreadsPostClient extends PostClient {
       await wait.for({ seconds: 2 });
     }
 
+    const carouselBody: Record<string, unknown> = {
+      media_type: "CAROUSEL",
+      children: containerIds.join(","),
+      text: caption,
+    };
+
+    if (replyToId) {
+      carouselBody.reply_to_id = replyToId;
+    }
+
     this.#requests.push({
       createCarouselRequest: {
         url: this.#containerUrl,
-        params: {
-          media_type: "CAROUSEL",
-          children: containerIds.join(","),
-          text: caption,
-        },
+        params: carouselBody,
       },
     });
 
     // Step 2: Create carousel container
     const carouselResponse: AxiosResponse<{ id: string }> = await axios.post(
       this.#containerUrl,
-      {
-        media_type: "CAROUSEL",
-        children: containerIds.join(","),
-        text: caption,
-      },
+      carouselBody,
       {
         headers: {
           Authorization: `Bearer ${account.access_token}`,

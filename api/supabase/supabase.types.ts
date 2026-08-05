@@ -338,6 +338,85 @@ export type Database = {
           },
         ]
       }
+      social_post_chain_item_media: {
+        Row: {
+          chain_item_id: string
+          created_at: string
+          id: string
+          skip_processing: boolean | null
+          tags: Json | null
+          thumbnail_timestamp_ms: number | null
+          thumbnail_url: string | null
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          chain_item_id: string
+          created_at?: string
+          id?: string
+          skip_processing?: boolean | null
+          tags?: Json | null
+          thumbnail_timestamp_ms?: number | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          chain_item_id?: string
+          created_at?: string
+          id?: string
+          skip_processing?: boolean | null
+          tags?: Json | null
+          thumbnail_timestamp_ms?: number | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_post_chain_item_media_chain_item_id_fkey"
+            columns: ["chain_item_id"]
+            isOneToOne: false
+            referencedRelation: "social_post_chain_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_post_chain_items: {
+        Row: {
+          caption: string
+          created_at: string
+          id: string
+          post_id: string
+          sequence: number
+          updated_at: string
+        }
+        Insert: {
+          caption: string
+          created_at?: string
+          id?: string
+          post_id: string
+          sequence: number
+          updated_at?: string
+        }
+        Update: {
+          caption?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+          sequence?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_post_chain_items_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_post_configurations: {
         Row: {
           caption: string | null
@@ -517,6 +596,7 @@ export type Database = {
       }
       social_post_results: {
         Row: {
+          chain_item_id: string | null
           created_at: string
           details: Json | null
           error_message: string | null
@@ -529,6 +609,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          chain_item_id?: string | null
           created_at?: string
           details?: Json | null
           error_message?: string | null
@@ -541,6 +622,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          chain_item_id?: string | null
           created_at?: string
           details?: Json | null
           error_message?: string | null
@@ -553,6 +635,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "social_post_results_chain_item_id_fkey"
+            columns: ["chain_item_id"]
+            isOneToOne: false
+            referencedRelation: "social_post_chain_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "social_post_results_post_id_fkey"
             columns: ["post_id"]
@@ -1279,6 +1368,10 @@ export type Database = {
       nanoid: {
         Args: { alphabet?: string; prefix: string; size?: number }
         Returns: string
+      }
+      user_has_chain_item_access: {
+        Args: { chain_item_id: string }
+        Returns: boolean
       }
       user_has_post_access: { Args: { post_id: string }; Returns: boolean }
       user_has_post_result_access: {

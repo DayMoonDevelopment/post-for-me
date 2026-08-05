@@ -11,6 +11,14 @@ export class SocialPostResultDto {
   @ApiProperty({ description: 'The ID of the associated post' })
   post_id: string;
 
+  @ApiProperty({
+    description:
+      'The ID of the chain item this result belongs to, if the post was part of a reply chain/thread. Null indicates this result is for the root post.',
+    nullable: true,
+    type: String,
+  })
+  chain_item_id: string | null;
+
   @ApiProperty({ description: 'Indicates if the post was successful' })
   success: boolean;
 
