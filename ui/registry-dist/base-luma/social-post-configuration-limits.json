@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "social-post-configuration-limits",
+  "type": "registry:lib",
+  "title": "Social Post Configuration Limits",
+  "description": "Per-platform configuration limits (title/description caps, media counts, poll rules) — the shared source the schema and validation both read.",
+  "dependencies": [],
+  "registryDependencies": [
+    "@post-for-me/types"
+  ],
+  "files": [
+    {
+      "path": "registry/base-luma/lib/social-post-configuration.limits.ts",
+      "type": "registry:lib",
+      "content": "import type { SocialProvider } from \"~/lib/post-for-me.types\";\n\nexport const SOCIAL_POST_CONFIGURATION_LIMITS = {\n  instagram: {\n    captionMax: 2200,\n    hashtagsMax: 30,\n    mentionsMax: 20,\n    carouselMax: 10,\n  },\n  facebook: {\n    captionMax: 63206,\n  },\n  threads: {\n    captionMax: 500,\n    carouselMax: 4,\n  },\n  tiktok: {\n    /** Photo-post title, capped shorter than the caption. */\n    titleMax: 85,\n    captionMax: 2200,\n    photosMax: 32,\n    /** Twitter-style privacy is mapped from these config values. */\n    privacyValues: [\"public\", \"private\"],\n  },\n  tiktok_business: {\n    titleMax: 85,\n    captionMax: 2200,\n    photosMax: 32,\n    privacyValues: [\"public\", \"private\"],\n  },\n  x: {\n    captionMax: 280,\n    /** X Premium raises the ceiling; surfaced when the account has premium. */\n    captionMaxPremium: 2200,\n    imagesMax: 4,\n    poll: {\n      minOptions: 2,\n      maxOptions: 4,\n      optionMaxLength: 25,\n      durationMinutesMin: 5,\n      durationMinutesMax: 10080,\n    },\n  },\n  youtube: {\n    titleMax: 100,\n    descriptionMax: 5000,\n    /** Combined length of all tags. */\n    tagsCharMax: 500,\n    privacyValues: [\"public\", \"unlisted\", \"private\"],\n    licenseValues: [\"youtube\", \"creativeCommon\"],\n  },\n  pinterest: {\n    titleMax: 100,\n    descriptionMax: 800,\n  },\n  linkedin: {\n    captionMax: 3000,\n    imagesMax: 20,\n  },\n  bluesky: {\n    captionMax: 300,\n    imagesMax: 4,\n  },\n} as const satisfies Record<SocialProvider, Record<string, unknown>>;\n\nexport type SocialPostConfigurationLimits =\n  typeof SOCIAL_POST_CONFIGURATION_LIMITS;\n\n/**\n * Platforms that reject a text-only post — they need at least one media item (a base media\n * or a platform/account media override). The rest (X, Bluesky, Threads, LinkedIn, Facebook)\n * accept text-only. A soft UI hint like the rest of this file; the API is the real arbiter.\n */\nexport const PLATFORMS_REQUIRING_MEDIA: readonly SocialProvider[] = [\n  \"instagram\",\n  \"tiktok\",\n  \"tiktok_business\",\n  \"youtube\",\n  \"pinterest\",\n];\n"
+    }
+  ]
+}
