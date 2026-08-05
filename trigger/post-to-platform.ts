@@ -154,6 +154,7 @@ export const postToPlatform = task({
       teamId,
       appCredentials,
       projectId,
+      chainItemId,
     } = payload;
     let postResult: PostResult | null = null;
     try {
@@ -246,6 +247,8 @@ export const postToPlatform = task({
       }
     }
 
+    postResult.chain_item_id = chainItemId ?? null;
+
     await tags.add(`result_${postResult.success ? "success" : "error"}`);
 
     logger.info("Saving Post Result", { postResult });
@@ -299,24 +302,30 @@ export const postToPlatform = task({
             url: insertedPostResult.provider_post_url,
           },
           post_id: insertedPostResult.post_id,
+          chain_item_id: insertedPostResult.chain_item_id,
           social_account_id: insertedPostResult.provider_connection_id,
           success: insertedPostResult.success,
         },
       });
 
-      const { error: postResultMediaError } = await supabaseClient
-        .from("social_post_result_post_media")
-        .insert(
-          media.map((m) => ({
-            social_post_result_id: insertedPostResult.id,
-            social_post_media_id: m.id,
-          })),
-        );
+      // Chain item media is localized from social_post_chain_item_media, not
+      // social_post_media, so it can't be linked via this join table (its FK
+      // only references social_post_media).
+      if (!chainItemId && media.length > 0) {
+        const { error: postResultMediaError } = await supabaseClient
+          .from("social_post_result_post_media")
+          .insert(
+            media.map((m) => ({
+              social_post_result_id: insertedPostResult.id,
+              social_post_media_id: m.id,
+            })),
+          );
 
-      if (postResultMediaError) {
-        logger.error("Failed to insert post result media", {
-          postResultMediaError,
-        });
+        if (postResultMediaError) {
+          logger.error("Failed to insert post result media", {
+            postResultMediaError,
+          });
+        }
       }
     }
 

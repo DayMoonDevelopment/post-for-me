@@ -48,6 +48,19 @@ export const processScheduledPosts = schedules.task({
               provider,
               provider_connection_id,
               provider_data
+            ),
+            social_post_chain_items (
+              id,
+              sequence,
+              caption,
+              social_post_chain_item_media (
+                id,
+                url,
+                thumbnail_url,
+                thumbnail_timestamp_ms,
+                tags,
+                skip_processing
+              )
             )
             `,
         )

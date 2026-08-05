@@ -3,6 +3,7 @@ export interface PostResult {
   success: boolean;
   error_message?: string;
   post_id: string;
+  chain_item_id?: string | null;
   provider_post_url?: string;
   provider_post_id?: string;
   details?: any;
@@ -67,6 +68,19 @@ export interface Post {
     provider: Provider | null;
     provider_connection_id: string | null;
     provider_data: PlatformConfiguration;
+  }[];
+  social_post_chain_items?: {
+    id: string;
+    sequence: number;
+    caption: string;
+    social_post_chain_item_media: {
+      id: string;
+      url: string;
+      thumbnail_url: string | null;
+      thumbnail_timestamp_ms: number | null;
+      tags: UserTag[] | null;
+      skip_processing: boolean | null;
+    }[];
   }[];
 }
 
@@ -154,6 +168,8 @@ export interface TwitterConfiguration {
   community_id?: string;
   quote_tweet_id?: string;
   reply_settings?: string;
+  /** Internal-only: injected by process-post.ts when posting a chain item, never set by API callers. */
+  in_reply_to_tweet_id?: string;
 }
 
 export interface YoutubeLocalization {
@@ -198,15 +214,27 @@ export interface LinkedinConfiguration {
   reshare_post_id?: string;
 }
 
+export interface BlueskyReplyRef {
+  uri: string;
+  cid: string;
+}
+
 export interface BlueskyConfiguration {
   caption?: string;
   media?: PostMedia[];
+  /** Internal-only: injected by process-post.ts when posting a chain item, never set by API callers. */
+  reply?: {
+    root: BlueskyReplyRef;
+    parent: BlueskyReplyRef;
+  };
 }
 
 export interface ThreadsConfiguration {
   caption?: string;
   location?: "reels" | "timeline";
   media?: PostMedia[];
+  /** Internal-only: injected by process-post.ts when posting a chain item, never set by API callers. */
+  reply_to_id?: string;
 }
 
 export interface TempMedia {
@@ -241,4 +269,5 @@ export interface IndividualPostData {
   projectId: string;
   platformConfig: PlatformConfiguration;
   appCredentials: PlatformAppCredentials;
+  chainItemId?: string | null;
 }
