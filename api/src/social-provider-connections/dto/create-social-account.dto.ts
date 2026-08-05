@@ -8,8 +8,18 @@ export class SocialAccountMetadata {
 
   is_sandbox?: boolean;
 
+  @ApiProperty({
+    description: "The platform's verification status of the social account",
+    type: String,
+    required: false,
+  })
   verified_type?: string;
 
+  @ApiProperty({
+    description: "The platform's display name of the social account",
+    type: String,
+    required: false,
+  })
   display_name?: string;
 }
 

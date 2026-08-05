@@ -52,7 +52,7 @@ export async function getXSocialProviderConnection({
       social_provider_user_id: user.id,
       social_provider_user_name: user.username,
       social_provider_photo_url: user.profile_image_url?.replace(
-        "_normal",
+        /_normal(?=\.\w+$)/,
         "",
       ),
       access_token_expires_at: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
