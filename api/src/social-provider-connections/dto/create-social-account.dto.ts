@@ -7,6 +7,10 @@ export class SocialAccountMetadata {
   has_platform_premium?: boolean;
 
   is_sandbox?: boolean;
+
+  verified_type?: string;
+
+  display_name?: string;
 }
 
 export class CreateSocialAccountDto {

@@ -59,12 +59,16 @@ export async function getXOAuth2SocialProviderConnection({
       refresh_token: refreshToken,
       social_provider_user_id: user.id,
       social_provider_user_name: user.username,
-      social_provider_photo_url: user.profile_image_url,
+      social_provider_photo_url: user.profile_image_url?.replace(
+        "_normal",
+        "",
+      ),
       access_token_expires_at: new Date(Date.now() + expiresIn * 1000),
       social_provider_metadata: {
         connection_type: "oauth2",
         has_platform_premium: isPremium,
         verified_type: user.verified_type ?? "none",
+        display_name: user.name,
       },
     },
   ];
