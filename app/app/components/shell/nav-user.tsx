@@ -1,13 +1,19 @@
 import { usePostHog } from "posthog-js/react";
 import { useTranslation } from "react-i18next";
-import { Form } from "react-router";
+import { Form, useFetcher, useRouteLoaderData } from "react-router";
+
+import type { loader as rootLoader } from "~/root";
 
 import {
   AccountIcon,
   ExpandIcon,
   LogoutIcon,
   NotificationsIcon,
+  ThemeDarkIcon,
+  ThemeLightIcon,
+  ThemeSystemIcon,
 } from "~/icons";
+import { resolveThemeIsDark, type ThemePreference } from "~/lib/theme/config";
 import { Avatar, AvatarFallback, AvatarImage } from "~/ui/avatar";
 import {
   DropdownMenu,
@@ -15,7 +21,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/ui/dropdown-menu";
 import {
@@ -48,6 +59,60 @@ function CurrentUserAvatar({ user }: { user: NavUserData }) {
         {label ? initials(label) : <AccountIcon aria-hidden />}
       </AvatarFallback>
     </Avatar>
+  );
+}
+
+/**
+ * Light/Dark/System submenu — nested rather than top-level since it's a
+ * secondary preference, not an account action. Reads the current preference
+ * from the root loader (set from the `theme` cookie); on selection it
+ * optimistically flips `.dark` on `<html>` before the fetcher's POST to
+ * `/api/theme` round-trips, so the switch feels instant.
+ */
+function ThemeMenu() {
+  const { t } = useTranslation();
+  const rootData = useRouteLoaderData<typeof rootLoader>("root");
+  const theme = rootData?.theme ?? "system";
+  const fetcher = useFetcher();
+
+  function handleValueChange(value: unknown) {
+    const preference = value as ThemePreference;
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)",
+    ).matches;
+    document.documentElement.classList.toggle(
+      "dark",
+      resolveThemeIsDark(preference, prefersDark),
+    );
+    fetcher.submit(
+      { theme: preference },
+      { method: "post", action: "/api/theme" },
+    );
+  }
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <ThemeSystemIcon />
+        {t("sidebar.user.theme.label")}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioGroup value={theme} onValueChange={handleValueChange}>
+          <DropdownMenuRadioItem value="light">
+            <ThemeLightIcon />
+            {t("sidebar.user.theme.light")}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark">
+            <ThemeDarkIcon />
+            {t("sidebar.user.theme.dark")}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="system">
+            <ThemeSystemIcon />
+            {t("sidebar.user.theme.system")}
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -100,6 +165,10 @@ export function NavUser({ user }: { user: NavUserData }) {
                 <NotificationsIcon />
                 {t("sidebar.user.notifications")}
               </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <ThemeMenu />
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <Form method="post" action="/logout">

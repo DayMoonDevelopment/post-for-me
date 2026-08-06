@@ -1025,7 +1025,13 @@
     "user": {
       "account": "Account",
       "notifications": "Notifications",
-      "logout": "Log out"
+      "logout": "Log out",
+      "theme": {
+        "label": "Theme",
+        "light": "Light",
+        "dark": "Dark",
+        "system": "System"
+      }
     }
   },
   "common": {

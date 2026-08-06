@@ -17,13 +17,6 @@
     "Roboto Mono", Menlo, Monaco, Consolas, monospace;
 }
 
-html,
-body {
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
-  }
-}
-
 @theme inline {
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -212,6 +205,10 @@ body {
 }
 
 .dark {
+  /* Native chrome (scrollbars, form controls) tracks the RESOLVED theme, not
+     raw OS state — a user who explicitly picks "light" while their OS is dark
+     should still get light-themed scrollbars. */
+  color-scheme: dark;
   --background: oklch(0.12 0.005 264.695);
   --foreground: oklch(0.95 0.005 264.695);
   --card: oklch(0.18 0.008 264.695);

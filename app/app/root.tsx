@@ -13,6 +13,7 @@ import {
 
 import { GlobalPendingBar } from "~/components/global-pending-bar";
 import { useErrorContent } from "~/hooks/use-error-content";
+import { useSystemPrefersDark } from "~/hooks/use-system-prefers-dark";
 import { clearedFlashCookie, readFlash } from "~/lib/.server/flash";
 import { createServices, servicesContext } from "~/lib/.server/services";
 import {
@@ -23,6 +24,8 @@ import {
 import { fallbackLng, isSupportedLocale } from "~/lib/i18n/config";
 import { browserI18n, createI18nInstance } from "~/lib/i18n/i18n";
 import { detectLocale } from "~/lib/i18n/locale.server";
+import { resolveThemeClass, THEME_SYSTEM_SCRIPT } from "~/lib/theme/config";
+import { detectTheme } from "~/lib/theme/theme.server";
 import { Pixels } from "~/tracking/pixels";
 import { PostHogProvider } from "~/tracking/posthog-provider";
 import { ErrorState } from "~/ui/error-state";
@@ -105,10 +108,13 @@ export const middleware: Route.MiddlewareFunction[] = [
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const [locale, flash] = await Promise.all([
+  const [locale, theme, flash] = await Promise.all([
     // The locale resolved for this request. `Layout` reads it (via
     // `useRouteLoaderData`) to build the i18next instance and set `<html lang>`.
     detectLocale(request),
+    // The theme preference resolved for this request. `Layout` reads it to set
+    // `<html class>` (or defer to the blocking inline script for "system").
+    detectTheme(request),
     // Any error/success flashed by a redirect — toasted globally by `App`.
     readFlash(request),
   ]);
@@ -116,11 +122,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (flash) {
     // Hand the flash to the client AND expire the cookie so it fires once.
     return data(
-      { locale, flash },
+      { locale, theme, flash },
       { headers: { "Set-Cookie": await clearedFlashCookie() } },
     );
   }
-  return { locale, flash: null };
+  return { locale, theme, flash: null };
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -144,12 +150,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const locale = isSupportedLocale(data?.locale) ? data.locale : fallbackLng;
   const [i18n] = useState(() => browserI18n ?? createI18nInstance(locale));
   const dir = i18n.dir(locale);
+  const theme = data?.theme ?? "system";
+  const systemPrefersDark = useSystemPrefersDark();
+  const themeClass = resolveThemeClass(theme, systemPrefersDark);
 
   return (
-    <html lang={locale} dir={dir}>
+    // `suppressHydrationWarning` only matters for `theme === "system"`: the
+    // blocking script below mutates this element's class after SSR, which
+    // React would otherwise flag as a hydration mismatch. Explicit
+    // light/dark never hits that path — server and client render the same
+    // class from the same cookie.
+    <html lang={locale} dir={dir} className={themeClass ?? undefined} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {theme === "system" ? (
+          <script dangerouslySetInnerHTML={{ __html: THEME_SYSTEM_SCRIPT }} />
+        ) : null}
         <Meta />
         <Links />
         <Pixels />

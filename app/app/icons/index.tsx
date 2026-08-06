@@ -53,16 +53,16 @@ import {
   IconChevronRightMedium, IconChevronTopMedium,
   IconCircleCheck, IconCircleInfo, IconCirclePlus, IconCode, IconCreditCard1,
   IconCrossMedium,
-  IconCuteRobot, IconDiscord, IconDotGrid1x3Horizontal, IconDotGrid2x3, IconDraft, IconEditSmall1,
+  IconCuteRobot, IconDevices, IconDiscord, IconDotGrid1x3Horizontal, IconDotGrid2x3, IconDraft, IconEditSmall1,
   IconExclamationCircle, IconExclamationTriangle, IconEyeOpen, IconEyeSlash,
   IconFilter2, IconFolder1, IconGlobe, IconHomeLine,
   IconImages2, IconInfoSimple, IconKey2, IconLightBulbSimple, IconLoadingCircle,
   IconMagnifyingGlass,
-  IconMegaphone, IconMinusMedium,
+  IconMegaphone, IconMinusMedium, IconMoon,
   IconPaperPlane, IconPlay, IconPlugin1, IconPlusMedium, IconPostcard2, IconRocket,
   IconSandbox, IconSettingsGear1, IconSettingsSliderHor,
-  IconSidebarSimpleLeftSquare,
-  IconSquareBehindSquare1, IconTag, IconText1,
+  IconSidebarSimpleLeftSquare, IconSquareBehindSquare1,
+  IconSun, IconTag, IconText1,
   IconTrashCan, IconUnpin, IconUser, IconVideo, IconWebhooks,
 } from "@central-icons/outlined";
 // Social-platform chrome glyphs — used by the installed `social-post-preview` component to
@@ -181,6 +181,14 @@ export const AccountIcon = icon(IconUser);
 export const ProjectIcon = icon(IconFolder1);
 /** Filled project folder, for the active/selected project. */
 export const ProjectActiveIcon = icon(IconFolderFilled);
+
+// ── Theme / appearance ───────────────────────────────────────────────────────
+/** Light theme option (the theme-switcher submenu). */
+export const ThemeLightIcon = icon(IconSun);
+/** Dark theme option (the theme-switcher submenu). */
+export const ThemeDarkIcon = icon(IconMoon);
+/** Follow-OS theme option (the theme-switcher submenu). */
+export const ThemeSystemIcon = icon(IconDevices);
 
 // ── Domain / segmentation ────────────────────────────────────────────────────
 export const IntegrationIcon = icon(IconPlugin1);

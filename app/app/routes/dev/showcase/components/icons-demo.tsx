@@ -45,6 +45,10 @@ const GROUPS: { names: (keyof typeof Icons)[]; title: string; }[] = [
     ],
   },
   {
+    title: "Theme / appearance",
+    names: ["ThemeLightIcon", "ThemeDarkIcon", "ThemeSystemIcon"],
+  },
+  {
     title: "Domain / segmentation",
     names: ["IntegrationIcon", "DeveloperIcon", "MarketingIcon", "AiAgentIcon"],
   },
