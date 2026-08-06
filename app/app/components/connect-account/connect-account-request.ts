@@ -20,13 +20,15 @@ export interface ConnectFormValues {
   permissions: Record<"feeds" | "posts", boolean>;
   platform: string;
   tiktokApi: "business" | "standard";
+  xConnection: "oauth1" | "oauth2";
 }
 
 /**
  * Reduce the form values to the `createAuthURL` request shape (the same
  * {@link ConnectSnippetInput} the code samples render): TikTok's Standard/Business
- * choice resolves the real provider, Bluesky carries no OAuth `permissions`, and
- * only the applicable provider's `platform_data` is attached.
+ * and X's OAuth 1.0a/2.0 choices resolve the real provider, Bluesky carries no
+ * OAuth `permissions`, and only the applicable provider's `platform_data` is
+ * attached.
  *
  * `placeholders` fills empty Bluesky credentials with illustrative values — on
  * for the code panel (so the sample always reads plausibly), off for the real
@@ -41,7 +43,11 @@ export function deriveConnectRequest(
       ? values.tiktokApi === "business"
         ? "tiktok_business"
         : "tiktok"
-      : values.platform;
+      : values.platform === "x"
+        ? values.xConnection === "oauth2"
+          ? "x_oauth2"
+          : "x"
+        : values.platform;
 
   // Bluesky authenticates with credentials, not OAuth scopes → no permissions.
   const selected =

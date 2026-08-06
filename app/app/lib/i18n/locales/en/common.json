@@ -313,6 +313,14 @@
             "standard": "Standard API"
           }
         },
+        "x": {
+          "label": "API version",
+          "education": "X offers two OAuth versions. OAuth 2.0 is recommended — it's the current standard and what new developer apps are issued, with access tokens that refresh automatically in the background. OAuth 1.0a is the legacy flow; its tokens never expire, so it's worth keeping only if you already have accounts connected through it.",
+          "options": {
+            "oauth2": "OAuth 2.0",
+            "oauth1": "OAuth 1.0a"
+          }
+        },
         "bluesky": {
           "education": "Use an app password, not your main Bluesky password. Create one in Bluesky → Settings → App Passwords.",
           "handle": {

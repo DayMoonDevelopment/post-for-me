@@ -78,11 +78,12 @@ export async function handleConnectionCallback({
     return finalize({ ok: false, errors: ["Project Id or Provider not found"] });
   }
 
-  // X (OAuth 1.0a) returns `oauth_token`; everyone else carries our `state`.
+  // X (OAuth 1.0a) returns `oauth_token`; everyone else — including X OAuth 2.0,
+  // which shares the same `x` callback path — carries our `state`. Branching on
+  // the param actually present rather than on `provider === "x"` is what lets
+  // both X flows share one callback URL.
   const key =
-    provider.toLowerCase() === "x"
-      ? url.searchParams.get("oauth_token")
-      : url.searchParams.get("state");
+    url.searchParams.get("oauth_token") ?? url.searchParams.get("state");
 
   if (!key) {
     return finalize({ ok: false, errors: ["Auth state not set"] });
@@ -135,8 +136,16 @@ export async function handleConnectionCallback({
     provider = "instagram_w_facebook";
   }
 
+  if (connectionType && provider === "x" && connectionType === "oauth2") {
+    provider = "x_oauth2";
+  }
+
   const normalizedProvider =
-    provider === "instagram_w_facebook" ? "instagram" : provider;
+    provider === "instagram_w_facebook"
+      ? "instagram"
+      : provider === "x_oauth2"
+        ? "x"
+        : provider;
 
   const { data: project, error: projectError } = await supabaseServiceRole
     .from("projects")

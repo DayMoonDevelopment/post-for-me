@@ -93,6 +93,7 @@ type Permission = "feeds" | "posts";
 type InstagramConnection = "facebook" | "instagram";
 type LinkedinConnection = "organization" | "personal";
 type TiktokApi = "business" | "standard";
+type XConnection = "oauth1" | "oauth2";
 
 /**
  * The platforms as presented in the connect dropdown. Note TikTok is a SINGLE
@@ -133,7 +134,9 @@ type ConnectAccountFormState = {
   setPermission: (key: Permission, value: boolean) => void;
   setPlatform: (value: SocialProvider) => void;
   setTiktokApi: (value: TiktokApi) => void;
+  setXConnection: (value: XConnection) => void;
   tiktokApi: TiktokApi;
+  xConnection: XConnection;
 };
 
 const ConnectAccountFormContext =
@@ -207,6 +210,7 @@ export function ConnectAccountModal({
   const [linkedinConnection, setLinkedinConnection] =
     React.useState<LinkedinConnection>("organization");
   const [tiktokApi, setTiktokApi] = React.useState<TiktokApi>("business");
+  const [xConnection, setXConnection] = React.useState<XConnection>("oauth2");
   const [blueskyHandle, setBlueskyHandle] = React.useState("");
   const [blueskyAppPassword, setBlueskyAppPassword] = React.useState("");
 
@@ -224,6 +228,8 @@ export function ConnectAccountModal({
     setLinkedinConnection,
     tiktokApi,
     setTiktokApi,
+    xConnection,
+    setXConnection,
     blueskyHandle,
     setBlueskyHandle,
     blueskyAppPassword,
@@ -425,7 +431,7 @@ function ConnectAccountSetup() {
 }
 
 /** The platform-specific connection control(s). Nothing for the plain OAuth
- * platforms (Facebook / X / YouTube / Threads / Pinterest). */
+ * platforms (Facebook / YouTube / Threads / Pinterest). */
 function ConnectPlatformOptions() {
   const { t } = useTranslation();
   const {
@@ -436,6 +442,8 @@ function ConnectPlatformOptions() {
     setLinkedinConnection,
     tiktokApi,
     setTiktokApi,
+    xConnection,
+    setXConnection,
   } = useConnectAccountForm();
 
   switch (platform) {
@@ -497,6 +505,25 @@ function ConnectPlatformOptions() {
             {
               value: "standard",
               label: t("setup.connectAccount.modal.tiktok.options.standard"),
+            },
+          ]}
+        />
+      );
+    case "x":
+      return (
+        <ConnectRadioField
+          label={t("setup.connectAccount.modal.x.label")}
+          hint={t("setup.connectAccount.modal.x.education")}
+          value={xConnection}
+          onChange={setXConnection}
+          options={[
+            {
+              value: "oauth2",
+              label: t("setup.connectAccount.modal.x.options.oauth2"),
+            },
+            {
+              value: "oauth1",
+              label: t("setup.connectAccount.modal.x.options.oauth1"),
             },
           ]}
         />
@@ -715,6 +742,7 @@ function ConnectAccountCode() {
     instagramConnection,
     linkedinConnection,
     tiktokApi,
+    xConnection,
     blueskyHandle,
     blueskyAppPassword,
   } = useConnectAccountForm();
@@ -729,6 +757,7 @@ function ConnectAccountCode() {
       instagramConnection,
       linkedinConnection,
       tiktokApi,
+      xConnection,
       blueskyHandle,
       blueskyAppPassword,
     };
@@ -742,6 +771,7 @@ function ConnectAccountCode() {
     instagramConnection,
     linkedinConnection,
     tiktokApi,
+    xConnection,
     blueskyHandle,
     blueskyAppPassword,
   ]);
