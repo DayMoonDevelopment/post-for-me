@@ -121,6 +121,7 @@ export async function generateAuthUrl({
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
         ['state', authState],
+        ['auth_type', 'rerequest'],
       ]);
 
       authUrl = `https://www.facebook.com/${facebookVersion}/dialog/oauth?${authParams.toString()}`;
@@ -169,6 +170,7 @@ export async function generateAuthUrl({
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
         ['state', authState],
+        ['auth_type', 'rerequest'],
       ]);
 
       authUrl = `https://www.facebook.com/${facebookVersion}/dialog/oauth?${authParams.toString()}`;

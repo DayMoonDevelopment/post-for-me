@@ -26,6 +26,22 @@ export const loader = withSupabase(async function ({
     });
   }
 
+  const oauthError = url.searchParams.get("error");
+
+  if (oauthError) {
+    return createResponse({
+      isSuccess: false,
+      errors: [
+        url.searchParams.get("error_description") ||
+          url.searchParams.get("error_reason") ||
+          `Authorization was denied (${oauthError})`,
+      ],
+      projectId,
+      provider,
+      isLoggedIn,
+    });
+  }
+
   const key =
     (url.searchParams.get("oauth_token") as string) ||
     (url.searchParams.get("state") as string);

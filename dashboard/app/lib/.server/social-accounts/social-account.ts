@@ -140,6 +140,66 @@ export async function addSocialAccountConnections({
     }
   }
 
+  const multiAssetProviders = new Set(["facebook", "instagram_w_facebook"]);
+
+  if (multiAssetProviders.has(provider) && connectionsToInsert.length > 0) {
+    const newSocialProviderUserIds = connectionsToInsert.map(
+      (c) => c.social_provider_user_id,
+    );
+
+    const { data: staleConnections, error: staleLookupError } =
+      await supabaseServiceRole
+        .from("social_provider_connections")
+        .select("*")
+        .eq("project_id", projectId)
+        .eq("provider", normalizedProvider as Provider)
+        .not("access_token", "is", null)
+        .not(
+          "social_provider_user_id",
+          "in",
+          `(${newSocialProviderUserIds.map((id) => `"${id}"`).join(",")})`,
+        );
+
+    if (staleLookupError) {
+      console.error(staleLookupError);
+    } else if (staleConnections && staleConnections.length > 0) {
+      const { error: reconcileError } = await supabaseServiceRole
+        .from("social_provider_connections")
+        .update({ access_token: null, refresh_token: null })
+        .in(
+          "id",
+          staleConnections.map((c) => c.id),
+        );
+
+      if (reconcileError) {
+        console.error(reconcileError);
+      } else {
+        const disconnectEvents = staleConnections.map((c) => ({
+          payload: {
+            projectId,
+            eventType: "social.account.updated",
+            eventData: {
+              id: c.id,
+              platform: c.provider || "",
+              username: c.social_provider_user_name || "",
+              user_id: c.social_provider_user_id || "",
+              profile_photo_url: c.social_provider_profile_photo_url,
+              status: "disconnected",
+              external_id: c.external_id,
+              access_token: "",
+              refresh_token: "",
+              access_token_expires_at:
+                c.access_token_expires_at || new Date().toISOString(),
+              refresh_token_expires_at: c.refresh_token_expires_at,
+              metadata: c.social_provider_metadata,
+            },
+          },
+        }));
+        await tasks.batchTrigger("process-webhooks", disconnectEvents);
+      }
+    }
+  }
+
   const { data: insertedConnections, error: connectionsError } =
     await supabaseServiceRole
       .from("social_provider_connections")
