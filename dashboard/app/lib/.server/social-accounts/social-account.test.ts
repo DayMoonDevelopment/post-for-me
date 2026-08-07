@@ -46,6 +46,12 @@ function createSupabaseServiceRoleMock({
   insertedConnections?: Record<string, unknown>[];
 }) {
   const updateMock = vi.fn();
+  // Only the reconciliation "select stale connections" query uses .eq()/.is()
+  // filters in the current implementation (the update/upsert chains don't),
+  // so it's safe to capture these globally across every from() call.
+  const eqCalls: { column: string; value: unknown }[] = [];
+  const isCalls: { column: string; value: unknown }[] = [];
+
   const fromMock = vi.fn(() => {
     let mode: "select" | "update" | "upsert" | null = null;
 
@@ -57,8 +63,16 @@ function createSupabaseServiceRoleMock({
         }
         return chain;
       }),
-      eq: vi.fn(() => chain),
+      eq: vi.fn((column: string, value: unknown) => {
+        eqCalls.push({ column, value });
+        return chain;
+      }),
+      is: vi.fn((column: string, value: unknown) => {
+        isCalls.push({ column, value });
+        return chain;
+      }),
       not: vi.fn(() => chain),
+      neq: vi.fn(() => chain),
       update: vi.fn((payload: unknown) => {
         mode = "update";
         updateMock(payload);
@@ -86,9 +100,13 @@ function createSupabaseServiceRoleMock({
     return chain;
   });
 
-  return { from: fromMock, updateMock } as unknown as Parameters<
+  return { from: fromMock, updateMock, eqCalls, isCalls } as unknown as Parameters<
     typeof addSocialAccountConnections
-  >[0]["supabaseServiceRole"] & { updateMock: typeof updateMock };
+  >[0]["supabaseServiceRole"] & {
+    updateMock: typeof updateMock;
+    eqCalls: typeof eqCalls;
+    isCalls: typeof isCalls;
+  };
 }
 
 describe("addSocialAccountConnections stale asset reconciliation", () => {
@@ -98,9 +116,12 @@ describe("addSocialAccountConnections stale asset reconciliation", () => {
     getTikTokSocialProviderConnectionMock.mockReset();
   });
 
-  it("disconnects a previously-granted Facebook Page missing from the new grant", async () => {
+  it("disconnects a previously-granted Facebook Page missing from the new grant, scoped to the same Facebook login", async () => {
     getFacebookSocialProviderConnectionMock.mockResolvedValue([
-      connection({ social_provider_user_id: "page-a" }),
+      connection({
+        social_provider_user_id: "page-a",
+        social_provider_metadata: { facebook_user_id: "fb-user-1" },
+      }),
     ]);
 
     const staleConnection = {
@@ -112,7 +133,7 @@ describe("addSocialAccountConnections stale asset reconciliation", () => {
       external_id: null,
       access_token_expires_at: null,
       refresh_token_expires_at: null,
-      social_provider_metadata: null,
+      social_provider_metadata: { facebook_user_id: "fb-user-1" },
     };
 
     const supabaseServiceRole = createSupabaseServiceRoleMock({
@@ -137,6 +158,17 @@ describe("addSocialAccountConnections stale asset reconciliation", () => {
       refresh_token: null,
     });
 
+    // Reconciliation must be scoped to the Facebook login that produced this
+    // grant, and to "no external_id" since none was provided on this flow.
+    expect(supabaseServiceRole.eqCalls).toContainEqual({
+      column: "social_provider_metadata->>facebook_user_id",
+      value: "fb-user-1",
+    });
+    expect(supabaseServiceRole.isCalls).toContainEqual({
+      column: "external_id",
+      value: null,
+    });
+
     expect(batchTriggerMock).toHaveBeenCalledWith(
       "process-webhooks",
       expect.arrayContaining([
@@ -153,6 +185,63 @@ describe("addSocialAccountConnections stale asset reconciliation", () => {
         }),
       ])
     );
+  });
+
+  it("scopes reconciliation to the current external_id instead of every sub-account in the project", async () => {
+    getFacebookSocialProviderConnectionMock.mockResolvedValue([
+      connection({
+        social_provider_user_id: "page-a",
+        social_provider_metadata: { facebook_user_id: "fb-user-1" },
+      }),
+    ]);
+
+    const supabaseServiceRole = createSupabaseServiceRoleMock({
+      staleConnections: [],
+      insertedConnections: [{ id: "conn-page-a" }],
+    });
+
+    await addSocialAccountConnections({
+      projectId: "project-1",
+      provider: "facebook",
+      request: new Request("https://example.com/callback?code=abc"),
+      supabaseServiceRole,
+      isSystem: false,
+      appCredentials: { appId: "app-id", appSecret: "app-secret" },
+      externalId: "customer-a",
+      redirectUrlOverride: undefined,
+    });
+
+    expect(supabaseServiceRole.eqCalls).toContainEqual({
+      column: "external_id",
+      value: "customer-a",
+    });
+    expect(supabaseServiceRole.isCalls).not.toContainEqual({
+      column: "external_id",
+      value: null,
+    });
+  });
+
+  it("skips reconciliation when the new grant has no facebook_user_id (safe default)", async () => {
+    getFacebookSocialProviderConnectionMock.mockResolvedValue([
+      connection({ social_provider_user_id: "page-a" }),
+    ]);
+
+    const supabaseServiceRole = createSupabaseServiceRoleMock({
+      insertedConnections: [{ id: "conn-page-a" }],
+    });
+
+    await addSocialAccountConnections({
+      projectId: "project-1",
+      provider: "facebook",
+      request: new Request("https://example.com/callback?code=abc"),
+      supabaseServiceRole,
+      isSystem: false,
+      appCredentials: { appId: "app-id", appSecret: "app-secret" },
+      externalId: undefined,
+      redirectUrlOverride: undefined,
+    });
+
+    expect(supabaseServiceRole.updateMock).not.toHaveBeenCalled();
   });
 
   it("does not reconcile single-asset providers like tiktok", async () => {

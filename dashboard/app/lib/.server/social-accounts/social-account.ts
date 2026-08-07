@@ -142,23 +142,41 @@ export async function addSocialAccountConnections({
 
   const multiAssetProviders = new Set(["facebook", "instagram_w_facebook"]);
 
-  if (multiAssetProviders.has(provider) && connectionsToInsert.length > 0) {
+  // The Facebook login that produced this grant. Reconciliation is scoped to
+  // it so re-linking one Facebook/Instagram login never touches Pages or IG
+  // accounts that belong to a different login (or a different external_id
+  // sub-account) connected to the same project.
+  const facebookUserId = connectionsToInsert[0]?.social_provider_metadata
+    ?.facebook_user_id as string | undefined;
+
+  if (
+    multiAssetProviders.has(provider) &&
+    connectionsToInsert.length > 0 &&
+    facebookUserId
+  ) {
     const newSocialProviderUserIds = connectionsToInsert.map(
       (c) => c.social_provider_user_id,
     );
 
+    let staleConnectionsQuery = supabaseServiceRole
+      .from("social_provider_connections")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("provider", normalizedProvider as Provider)
+      .eq("social_provider_metadata->>facebook_user_id", facebookUserId)
+      .not("access_token", "is", null)
+      .not(
+        "social_provider_user_id",
+        "in",
+        `(${newSocialProviderUserIds.map((id) => `"${id}"`).join(",")})`,
+      );
+
+    staleConnectionsQuery = externalId
+      ? staleConnectionsQuery.eq("external_id", externalId)
+      : staleConnectionsQuery.is("external_id", null);
+
     const { data: staleConnections, error: staleLookupError } =
-      await supabaseServiceRole
-        .from("social_provider_connections")
-        .select("*")
-        .eq("project_id", projectId)
-        .eq("provider", normalizedProvider as Provider)
-        .not("access_token", "is", null)
-        .not(
-          "social_provider_user_id",
-          "in",
-          `(${newSocialProviderUserIds.map((id) => `"${id}"`).join(",")})`,
-        );
+      await staleConnectionsQuery;
 
     if (staleLookupError) {
       console.error(staleLookupError);
