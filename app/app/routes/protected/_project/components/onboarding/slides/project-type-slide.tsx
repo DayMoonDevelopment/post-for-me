@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 
-import type { TranslationKey } from "~/lib/i18n/config";
 import type { ProjectType } from "~/lib/types/project";
 
-import { InfoIcon, RocketIcon, TagIcon } from "~/icons";
+import { InfoIcon } from "~/icons";
+import { PROJECT_TYPE_MODES } from "~/lib/project-type-modes";
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
 import {
   Choicebox,
@@ -21,29 +21,6 @@ import {
   OnboardingSlideScroll,
   useOnboardingFlow,
 } from "../onboarding";
-
-/** Mode cards. `data-brand` re-points `--primary`, so each card's accent (icon
- * tile, border, ring, check) falls out of the brand axis — quickstart and
- * white-label read as visibly different without hard-coded colors. */
-const MODES: {
-  descriptionKey: TranslationKey;
-  icon: typeof RocketIcon;
-  id: ProjectType;
-  titleKey: TranslationKey;
-}[] = [
-  {
-    id: "quickstart",
-    icon: RocketIcon,
-    titleKey: "onboarding.project.quickstart.title",
-    descriptionKey: "onboarding.project.quickstart.description",
-  },
-  {
-    id: "white-label",
-    icon: TagIcon,
-    titleKey: "onboarding.project.whiteLabel.title",
-    descriptionKey: "onboarding.project.whiteLabel.description",
-  },
-];
 
 /**
  * "What kind of project?" — the credential model, as two cards in a 2-up grid.
@@ -79,7 +56,7 @@ export function ProjectTypeSlide() {
             if (next) selectProjectType(next as ProjectType);
           }}
         >
-          {MODES.map((mode) => (
+          {PROJECT_TYPE_MODES.map((mode) => (
             <ChoiceboxItem key={mode.id} value={mode.id} data-brand={mode.id}>
               <ChoiceboxItemIcon>
                 <mode.icon />

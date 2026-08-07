@@ -7,7 +7,7 @@ import {
   projectTypeToIsSystem,
 } from "~/lib/types/project";
 
-import type { ProjectsService } from "./projects.service";
+import type { ProjectCreate, ProjectsService } from "./projects.service";
 
 // The columns every read selects, and the row→DTO mapper, kept in one place so
 // `list` and `get` can't drift.
@@ -44,6 +44,20 @@ export function createSupabaseProjectsService(
   supabase: TypedSupabaseClient,
 ): ProjectsService {
   return {
+    async create(input: ProjectCreate): Promise<Project> {
+      const { data, error } = await supabase
+        .from("projects")
+        .insert({
+          name: input.name,
+          team_id: input.teamId,
+          is_system: projectTypeToIsSystem(input.type),
+        })
+        .select(PROJECT_COLUMNS)
+        .single();
+      if (error) throw fromSupabase(error);
+      return toProject(data);
+    },
+
     async list(): Promise<Project[]> {
       const { data, error } = await supabase
         .from("projects")

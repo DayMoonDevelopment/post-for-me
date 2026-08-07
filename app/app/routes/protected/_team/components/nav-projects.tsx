@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router";
 
 import type { Project } from "~/lib/types/project";
 
+import { ModalTrigger } from "~/components/modal";
+import { NewProjectModal } from "~/components/new-project";
 import { AddIcon } from "~/icons";
 import { ProjectTypeIcon } from "~/ui/project-type-badge";
 import {
@@ -32,29 +34,27 @@ export function NavProjects({
   const { t } = useTranslation();
   const { pathname } = useLocation();
 
-  function createProject() {
-    // TODO(new-project): no create-project mechanism exists yet — same gap the
-    // switcher's "New project" item has. When the API + route land, this should
-    // create a project under `teamId` and navigate to it (e.g. POST a
-    // `{ intent: "create", teamId }` action, then `/projects/$new`).
-    void teamId;
-  }
-
   const newProjectLabel = t("sidebar.switcher.newProject");
+  // `top-2.5` centers the action against the h-8 label inside the group's
+  // py-1 — the primitive's default `top-3.5` assumes py-2.
+  const action = (
+    <SidebarGroupAction className="top-2.5" title={newProjectLabel}>
+      <AddIcon />
+      <span className="sr-only">{newProjectLabel}</span>
+    </SidebarGroupAction>
+  );
 
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{t("sidebar.groups.projects")}</SidebarGroupLabel>
-      {/* `top-2.5` centers the action against the h-8 label inside the group's
-          py-1 — the primitive's default `top-3.5` assumes py-2. */}
-      <SidebarGroupAction
-        className="top-2.5"
-        onClick={createProject}
-        title={newProjectLabel}
-      >
-        <AddIcon />
-        <span className="sr-only">{newProjectLabel}</span>
-      </SidebarGroupAction>
+      {teamId ? (
+        <NewProjectModal
+          teamId={teamId}
+          trigger={<ModalTrigger render={action} />}
+        />
+      ) : (
+        action
+      )}
       <SidebarMenu>
         {projects.map((project) => {
           const url = `/projects/${project.id}`;

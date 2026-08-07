@@ -1018,6 +1018,14 @@
       "billingUsage": "Billing & usage",
       "teamSettings": "Team Settings"
     },
+    "newProjectDialog": {
+      "title": "New project",
+      "description": "Name your project and choose its credential model.",
+      "nameLabel": "Project name",
+      "namePlaceholder": "Untitled Project",
+      "typeLabel": "Project type",
+      "create": "Create project"
+    },
     "external": {
       "apiDocs": "API Docs",
       "discord": "Discord"

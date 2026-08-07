@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router";
 import type { Project } from "~/lib/types/project";
 import type { TeamWithProjects } from "~/lib/types/team";
 
+import { NewProjectModal } from "~/components/new-project";
 import { TeamAvatar } from "~/components/team-badge";
 import { useActiveTeamId } from "~/hooks/use-active-team-id";
 import { useRouteProjectId } from "~/hooks/use-route-project-id";
@@ -116,6 +117,13 @@ export function ContextSwitcher({
   const { t } = useTranslation();
   const { isMobile } = useSidebar();
   const navigate = useNavigate();
+  // Which team's "New project" was clicked — null when the dialog is closed.
+  // Controlled (not an uncontrolled Modal-per-trigger) because two different
+  // rows (the active team's item, and each other team's submenu item) share
+  // one dialog but target different teams.
+  const [newProjectTeamId, setNewProjectTeamId] = React.useState<
+    string | null
+  >(null);
 
   // The active project is the one the current route belongs to (see
   // `useRouteProjectId` — URL param on project pages, loader data on prefix-less
@@ -165,10 +173,7 @@ export function ContextSwitcher({
     void navigate(`/teams/${team.id}/billing`);
   }
   function createProject(team: TeamWithProjects) {
-    // TODO(new-project): no create-project mechanism exists yet. When the API +
-    // route land, this should create a project under `team.id` and navigate to
-    // it (e.g. POST a `{ intent: "create", teamId }` action, then `/projects/$new`).
-    void team;
+    setNewProjectTeamId(team.id);
   }
 
   const projects = partition(activeTeam.projects, activeProjectId);
@@ -329,6 +334,15 @@ export function ContextSwitcher({
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
+      {newProjectTeamId ? (
+        <NewProjectModal
+          teamId={newProjectTeamId}
+          open
+          onOpenChange={(open) => {
+            if (!open) setNewProjectTeamId(null);
+          }}
+        />
+      ) : null}
     </ContextSwitcherContext.Provider>
   );
 }
