@@ -1,0 +1,30 @@
+# CI quality gate. `lint` is what enforces PFM-758: the import/export/type-member
+# ordering rules are ESLint ERRORS, so unordered code fails `bun run lint` and
+# this job goes red — blocking the merge (once branch protection requires it).
+#
+# PLACEMENT: this file must sit at the GIT REPO ROOT's `.github/workflows/`. If
+# this dashboard app is a subdirectory of the repo, move it there and set
+# `defaults.run.working-directory` to the app's path (e.g. `my-react-router-app`).
+#
+# ENFORCEMENT: add this job as a REQUIRED status check in the repo's branch
+# protection rule for `main` (GitHub → Settings → Branches) — the workflow
+# reports the check; branch protection is what actually blocks the merge.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # Ordering + all lint rules (errors block the merge).
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run build
