@@ -1,4 +1,4 @@
-import type { Cell, HeaderGroup, Row, Table } from "@tanstack/react-table"
+import type { Cell, HeaderGroup, Row, RowData } from "@tanstack/react-table"
 import type { CSSProperties, ReactNode } from "react"
 
 import {
@@ -42,7 +42,12 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next";
 
-import { useDataGrid } from "~/components/data-grid/data-grid"
+import type {
+  DataGridFeatures,
+  DataGridTableInstance,
+} from "~/components/data-grid/data-grid"
+
+import { useDataGrid, useDataGridOf } from "~/components/data-grid/data-grid"
 import {
   DataGridTableBase,
   DataGridTableBody,
@@ -93,10 +98,10 @@ type DataGridTableDndRowData = {
  * is positioned over the row, so it never adds a column, shifts striping, or
  * gets clipped by a truncating resizable cell.
  */
-type DataGridTableDndRowDecoration<TData> = (context: {
+type DataGridTableDndRowDecoration<TData extends RowData> = (context: {
   isDragging: boolean
   isOver: boolean
-  row: Row<TData>
+  row: Row<DataGridFeatures, TData>
 }) => ReactNode
 
 function DataGridTableDndRowHandle({
@@ -158,12 +163,12 @@ function DataGridTableDndRowHandle({
   )
 }
 
-function DataGridTableDndRow<TData>({
+function DataGridTableDndRow<TData extends RowData>({
   row,
   renderRowDecoration,
 }: {
   renderRowDecoration?: DataGridTableDndRowDecoration<TData>
-  row: Row<TData>
+  row: Row<DataGridFeatures, TData>
 }) {
   const rowData: DataGridTableDndRowData = {
     type: "data-grid-row",
@@ -206,7 +211,7 @@ function DataGridTableDndRow<TData>({
       <DataGridTableBodyRow row={row} dndRef={setNodeRef} dndStyle={style}>
         {row
           .getVisibleCells()
-          .map((cell: Cell<TData, unknown>, index, cells) => {
+          .map((cell: Cell<DataGridFeatures, TData, unknown>, index, cells) => {
             return (
               <DataGridTableBodyRowCell cell={cell} key={cell.id}>
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -239,7 +244,7 @@ function DataGridTableDndRow<TData>({
   )
 }
 
-function DataGridTableDndRowsBody<TData>({
+function DataGridTableDndRowsBody<TData extends RowData>({
   table,
   dataIds,
   renderRowDecoration,
@@ -248,10 +253,10 @@ function DataGridTableDndRowsBody<TData>({
   dataIds: UniqueIdentifier[]
   renderRowDecoration?: DataGridTableDndRowDecoration<TData>
   sortingStrategy: SortingStrategy
-  table: Table<TData>
+  table: DataGridTableInstance<TData>
 }) {
   const { isLoading, props } = useDataGrid()
-  const pagination = table.getState().pagination
+  const pagination = table.state.pagination
 
   if (props.loadingMode === "skeleton" && isLoading && pagination?.pageSize) {
     return (
@@ -279,7 +284,7 @@ function DataGridTableDndRowsBody<TData>({
 
   return (
     <SortableContext items={dataIds} strategy={sortingStrategy}>
-      {table.getRowModel().rows.map((row: Row<TData>) => {
+      {table.getRowModel().rows.map((row: Row<DataGridFeatures, TData>) => {
         return (
           <DataGridTableDndRow
             row={row}
@@ -299,10 +304,10 @@ function DataGridTableDndRowsBody<TData>({
  */
 const MemoizedDataGridTableDndRowsBody = memo(
   DataGridTableDndRowsBody,
-  (_prev, next) => !!next.table.getState().columnSizingInfo.isResizingColumn
+  (_prev, next) => !!next.table.state.columnResizing.isResizingColumn
 ) as typeof DataGridTableDndRowsBody
 
-function DataGridTableDndRows<TData>({
+function DataGridTableDndRows<TData extends RowData>({
   handleDragEnd,
   dataIds,
   footerContent,
@@ -344,7 +349,9 @@ function DataGridTableDndRows<TData>({
    */
   sortingStrategy?: SortingStrategy
 }) {
-  const { table, props } = useDataGrid()
+  // Row-typed: the carried row resolved off this table is rendered through
+  // the caller's TData-typed `renderRowDecoration`.
+  const { table, props } = useDataGridOf<TData>()
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const [isDraggingRow, setIsDraggingRow] = useState(false)
   // The row being carried, plus the column widths measured off the header the
@@ -384,7 +391,7 @@ function DataGridTableDndRows<TData>({
   }, [])
 
   const carriedRow = carried
-    ? table.getRowModel().rows.find((row: Row<TData>) => row.id === carried.id)
+    ? table.getRowModel().rows.find((row: Row<DataGridFeatures, TData>) => row.id === carried.id)
     : undefined
 
   const sensors = useSensors(
@@ -488,7 +495,7 @@ function DataGridTableDndRows<TData>({
           <DataGridTableHead>
             {table
               .getHeaderGroups()
-              .map((headerGroup: HeaderGroup<TData>, index) => {
+              .map((headerGroup: HeaderGroup<DataGridFeatures, TData>, index) => {
                 return (
                   <DataGridTableHeadRow key={index} rowId={headerGroup.id}>
                     {headerGroup.headers.map((header, index) => {
@@ -557,7 +564,7 @@ function DataGridTableDndRows<TData>({
               <tr className="[&>td]:h-14 [&>td]:p-0 [&>td]:align-middle">
                 {carriedRow
                   .getVisibleCells()
-                  .map((cell: Cell<TData, unknown>, index: number) => (
+                  .map((cell: Cell<DataGridFeatures, TData, unknown>, index: number) => (
                     <td
                       key={cell.id}
                       // Falls back to the column's own size so an unforeseen

@@ -1,8 +1,12 @@
-import type { Column } from "@tanstack/react-table"
+import type { CellData, Column, RowData } from "@tanstack/react-table"
 import type { HTMLAttributes, ReactNode } from "react"
 
 import { memo, useMemo } from "react"
 import { useTranslation } from "react-i18next";
+
+import type {
+  DataGridFeatures,
+} from "~/components/data-grid/data-grid"
 
 import {
   getColumnHeaderLabel,
@@ -26,10 +30,10 @@ import {
 } from "~/ui/dropdown-menu"
 
 interface DataGridColumnHeaderProps<
-  TData,
-  TValue,
+  TData extends RowData,
+  TValue extends CellData,
 > extends HTMLAttributes<HTMLDivElement> {
-  column: Column<TData, TValue>
+  column: Column<DataGridFeatures, TData, TValue>
   filter?: ReactNode
   icon?: ReactNode
   /** Reserved; pin controls are gated by tableLayout.columnsPinnable + column.getCanPin(). */
@@ -39,7 +43,7 @@ interface DataGridColumnHeaderProps<
   visibility?: boolean
 }
 
-function DataGridColumnHeaderInner<TData, TValue>({
+function DataGridColumnHeaderInner<TData extends RowData, TValue extends CellData>({
   column,
   title,
   icon,
@@ -53,14 +57,14 @@ function DataGridColumnHeaderInner<TData, TValue>({
 
   // TanStack's columnOrder defaults to [] until a consumer seeds it; fall
   // back to the definition order so Move Left/Right work out of the box.
-  const columnOrderState = table.getState().columnOrder
+  const columnOrderState = table.state.columnOrder
   const columnOrder =
     columnOrderState.length > 0
       ? columnOrderState
       : table.getAllLeafColumns().map((leafColumn) => leafColumn.id)
   const columnVisibilityKey =
     props.tableLayout?.columnsVisibility && visibility
-      ? JSON.stringify(table.getState().columnVisibility)
+      ? JSON.stringify(table.state.columnVisibility)
       : ""
   const isSorted = column.getIsSorted()
   const isPinned = column.getIsPinned()
@@ -167,22 +171,26 @@ function DataGridColumnHeaderInner<TData, TValue>({
       if (hasPreviousSection) {
         items.push(<DropdownMenuSeparator key="sep-pin" />)
       }
+      // The pin targets are v9's logical regions now ("start"/"end"), while
+      // the labels and icons stay physical — unchanged in LTR, which is what
+      // these strings are written for. Making the copy direction-aware is an
+      // i18n change, not part of this port.
       items.push(
         <DropdownMenuItem
-          key="pin-left"
-          onClick={() => column.pin(isPinned === "left" ? false : "left")}
+          key="pin-start"
+          onClick={() => column.pin(isPinned === "start" ? false : "start")}
         >
           <ArrowLeftToLineIcon className="size-3.5!" aria-hidden="true" />
           <span className="grow">{t("dataGrid.pinLeft")}</span>
-          {isPinned === "left" ? <CheckIcon className="text-primary size-4 opacity-100!" /> : null}
+          {isPinned === "start" ? <CheckIcon className="text-primary size-4 opacity-100!" /> : null}
         </DropdownMenuItem>,
         <DropdownMenuItem
-          key="pin-right"
-          onClick={() => column.pin(isPinned === "right" ? false : "right")}
+          key="pin-end"
+          onClick={() => column.pin(isPinned === "end" ? false : "end")}
         >
           <ArrowRightToLineIcon className="size-3.5!" aria-hidden="true" />
           <span className="grow">{t("dataGrid.pinRight")}</span>
-          {isPinned === "right" ? <CheckIcon className="text-primary size-4 opacity-100!" /> : null}
+          {isPinned === "end" ? <CheckIcon className="text-primary size-4 opacity-100!" /> : null}
         </DropdownMenuItem>
       )
       hasPreviousSection = true

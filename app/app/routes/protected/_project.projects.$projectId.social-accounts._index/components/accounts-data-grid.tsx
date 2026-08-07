@@ -1,12 +1,12 @@
 import {
   type ColumnDef,
-  getCoreRowModel,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
+import type { DataGridFeatures } from "~/components/data-grid/data-grid";
 import type {
   SocialAccount,
   SocialAccountListParams,
@@ -15,6 +15,7 @@ import type {
 import {
   DataGrid,
   DataGridContainer,
+  dataGridFeatures,
 } from "~/components/data-grid/data-grid";
 import { DataGridColumnHeader } from "~/components/data-grid/data-grid-column-header";
 import { DataGridPagination } from "~/components/data-grid/data-grid-pagination";
@@ -168,7 +169,7 @@ export function AccountsDataGrid({
     defaultPageSize: DEFAULT_PAGE_SIZE,
   });
 
-  const columns = useMemo<ColumnDef<SocialAccount>[]>(
+  const columns = useMemo<ColumnDef<DataGridFeatures, SocialAccount>[]>(
     () => [
       {
         accessorKey: "username",
@@ -287,14 +288,14 @@ export function AccountsDataGrid({
     [t, onDisconnect],
   );
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     data: accounts,
     columns,
     pageCount: Math.max(1, Math.ceil(total / pagination.pageSize)),
     state: { pagination },
     onPaginationChange,
     manualPagination: true,
-    getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
   });
 

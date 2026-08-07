@@ -1,13 +1,13 @@
 import {
   type ColumnDef,
-  getCoreRowModel,
   type OnChangeFn,
   type SortingState,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { DataGridFeatures } from "~/components/data-grid/data-grid";
 import type {
   WebhookEvent,
   WebhookEventListParams,
@@ -18,6 +18,7 @@ import type {
 import {
   DataGrid,
   DataGridContainer,
+  dataGridFeatures,
 } from "~/components/data-grid/data-grid";
 import { DataGridColumnHeader } from "~/components/data-grid/data-grid-column-header";
 import { DataGridPagination } from "~/components/data-grid/data-grid-pagination";
@@ -86,7 +87,7 @@ export function WebhookEventsGrid({
     onParamsChange({ ...params, sort: nextSort, page: 1 });
   };
 
-  const columns = useMemo<ColumnDef<WebhookEvent>[]>(
+  const columns = useMemo<ColumnDef<DataGridFeatures, WebhookEvent>[]>(
     () => [
       {
         accessorKey: "type",
@@ -153,7 +154,8 @@ export function WebhookEventsGrid({
     [t],
   );
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     data: events,
     columns,
     pageCount: Math.max(1, Math.ceil(total / pagination.pageSize)),
@@ -162,7 +164,6 @@ export function WebhookEventsGrid({
     onPaginationChange,
     manualSorting: true,
     manualPagination: true,
-    getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
   });
 
