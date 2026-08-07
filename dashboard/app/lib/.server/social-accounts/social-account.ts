@@ -140,6 +140,43 @@ export async function addSocialAccountConnections({
     }
   }
 
+  const { data: insertedConnections, error: connectionsError } =
+    await supabaseServiceRole
+      .from("social_provider_connections")
+      .upsert(connectionsToInsert, {
+        onConflict: "provider,project_id,social_provider_user_id",
+      })
+      .select();
+
+  if (insertedConnections && insertedConnections.length > 0) {
+    const events = insertedConnections.map((c) => ({
+      payload: {
+        projectId,
+        eventType: "social.account.created",
+        eventData: {
+          id: c.id,
+          platform: c.provider || "",
+          username: c.social_provider_user_name || "",
+          user_id: c.social_provider_user_id || "",
+          profile_photo_url: c.social_provider_profile_photo_url,
+          status: c.access_token ? "connected" : "disconnected",
+          external_id: c.external_id,
+          access_token: c.access_token || "",
+          refresh_token: c.refresh_token || "",
+          access_token_expires_at:
+            c.access_token_expires_at || new Date().toISOString(),
+          refresh_token_expires_at: c.refresh_token_expires_at,
+          metadata: c.social_provider_metadata,
+        },
+      },
+    }));
+    await tasks.batchTrigger("process-webhooks", events);
+  }
+
+  if (connectionsError) {
+    console.error(connectionsError);
+  }
+
   const multiAssetProviders = new Set(["facebook", "instagram_w_facebook"]);
 
   // The Facebook login that produced this grant. Reconciliation is scoped to
@@ -149,9 +186,13 @@ export async function addSocialAccountConnections({
   const facebookUserId = connectionsToInsert[0]?.social_provider_metadata
     ?.facebook_user_id as string | undefined;
 
+  // Only reconcile once the new grant is confirmed persisted — otherwise a
+  // failed upsert above would leave the user with the old Pages disconnected
+  // and none of the newly-granted ones saved.
   if (
     multiAssetProviders.has(provider) &&
-    connectionsToInsert.length > 0 &&
+    insertedConnections &&
+    insertedConnections.length > 0 &&
     facebookUserId
   ) {
     const newSocialProviderUserIds = connectionsToInsert.map(
@@ -218,42 +259,6 @@ export async function addSocialAccountConnections({
     }
   }
 
-  const { data: insertedConnections, error: connectionsError } =
-    await supabaseServiceRole
-      .from("social_provider_connections")
-      .upsert(connectionsToInsert, {
-        onConflict: "provider,project_id,social_provider_user_id",
-      })
-      .select();
-
-  if (insertedConnections && insertedConnections.length > 0) {
-    const events = insertedConnections.map((c) => ({
-      payload: {
-        projectId,
-        eventType: "social.account.created",
-        eventData: {
-          id: c.id,
-          platform: c.provider || "",
-          username: c.social_provider_user_name || "",
-          user_id: c.social_provider_user_id || "",
-          profile_photo_url: c.social_provider_profile_photo_url,
-          status: c.access_token ? "connected" : "disconnected",
-          external_id: c.external_id,
-          access_token: c.access_token || "",
-          refresh_token: c.refresh_token || "",
-          access_token_expires_at:
-            c.access_token_expires_at || new Date().toISOString(),
-          refresh_token_expires_at: c.refresh_token_expires_at,
-          metadata: c.social_provider_metadata,
-        },
-      },
-    }));
-    await tasks.batchTrigger("process-webhooks", events);
-  }
-
-  if (connectionsError) {
-    console.error(connectionsError);
-  }
   return {
     successConnections: insertedConnections?.map((i) => i.id) || [],
     failedConnections,
