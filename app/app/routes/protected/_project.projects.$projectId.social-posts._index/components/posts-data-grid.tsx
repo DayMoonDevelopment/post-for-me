@@ -1,12 +1,9 @@
-import {
-  type ColumnDef,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
+import { type ColumnDef, useTable } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
+import type { DataGridFeatures } from "~/components/data-grid/data-grid";
 import type {
   SocialPost,
   SocialPostListParams,
@@ -16,6 +13,7 @@ import { AccountAvatars } from "~/components/account-avatars";
 import {
   DataGrid,
   DataGridContainer,
+  dataGridFeatures,
 } from "~/components/data-grid/data-grid";
 import { DataGridColumnHeader } from "~/components/data-grid/data-grid-column-header";
 import { DataGridPagination } from "~/components/data-grid/data-grid-pagination";
@@ -59,7 +57,7 @@ export function PostsDataGrid({
     defaultPageSize: DEFAULT_PAGE_SIZE,
   });
 
-  const columns = useMemo<ColumnDef<SocialPost>[]>(
+  const columns = useMemo<ColumnDef<DataGridFeatures, SocialPost>[]>(
     () => [
       {
         accessorKey: "caption",
@@ -169,14 +167,14 @@ export function PostsDataGrid({
     [t],
   );
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     data: posts,
     columns,
     pageCount: Math.max(1, Math.ceil(total / pagination.pageSize)),
     state: { pagination },
     onPaginationChange,
     manualPagination: true,
-    getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
   });
 

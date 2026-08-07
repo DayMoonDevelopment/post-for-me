@@ -1,15 +1,17 @@
 import {
   type ColumnDef,
-  getCoreRowModel,
   type PaginationState,
   type SortingState,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+
+import type { DataGridFeatures } from "~/components/data-grid/data-grid";
 
 import {
   DataGrid,
   DataGridContainer,
+  dataGridFeatures,
 } from "~/components/data-grid/data-grid";
 import { DataGridColumnHeader } from "~/components/data-grid/data-grid-column-header";
 import { DataGridPagination } from "~/components/data-grid/data-grid-pagination";
@@ -46,7 +48,7 @@ const DATA: Member[] = [
   { id: 8, name: "Frances Allen", email: "frances@example.com", role: "Owner", status: "active", posts: 150 },
 ];
 
-const columns: ColumnDef<Member>[] = [
+const columns: ColumnDef<DataGridFeatures, Member>[] = [
   {
     accessorKey: "name",
     header: ({ column }) => <DataGridColumnHeader title="Name" column={column} />,
@@ -143,7 +145,8 @@ export function DataGridDemo() {
     return sortedData.slice(start, start + pagination.pageSize);
   }, [sortedData, pagination]);
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     data: pageData,
     columns,
     pageCount: Math.ceil(DATA.length / pagination.pageSize),
@@ -152,7 +155,6 @@ export function DataGridDemo() {
     onPaginationChange: setPagination,
     manualPagination: true,
     manualSorting: true,
-    getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => String(row.id),
   });
 

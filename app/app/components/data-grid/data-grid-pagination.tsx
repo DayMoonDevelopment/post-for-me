@@ -52,8 +52,8 @@ function DataGridPagination(props: DataGridPaginationProps): JSX.Element {
   // scale, matching the tighter cell padding.
   const btnBaseClasses = "size-7 p-0 text-sm"
   const btnArrowClasses = btnBaseClasses + " rtl:transform rtl:rotate-180"
-  const pageIndex = table.getState().pagination.pageIndex
-  const pageSize = table.getState().pagination.pageSize
+  const pageIndex = table.store.state.pagination.pageIndex
+  const pageSize = table.store.state.pagination.pageSize
   const from = recordCount === 0 ? 0 : pageIndex * pageSize + 1
   const to = Math.min((pageIndex + 1) * pageSize, recordCount)
   const pageCount = table.getPageCount()

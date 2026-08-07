@@ -1,18 +1,100 @@
 import type {
+  CellData,
   Column,
   ColumnFiltersState,
   RowData,
   SortingState,
   Table,
+  TableFeatures,
 } from "@tanstack/react-table"
 import type { ReactNode } from "react"
 
+import {
+  columnFacetingFeature,
+  columnFilteringFeature,
+  columnOrderingFeature,
+  columnPinningFeature,
+  columnResizingFeature,
+  columnSizingFeature,
+  columnVisibilityFeature,
+  createFacetedRowModel,
+  createFacetedUniqueValues,
+  globalFilteringFeature,
+  rowExpandingFeature,
+  rowPaginationFeature,
+  rowPinningFeature,
+  rowSelectionFeature,
+  rowSortingFeature,
+  sortFn_alphanumeric,
+  sortFn_basic,
+  sortFn_datetime,
+  sortFn_text,
+  tableFeatures,
+} from "@tanstack/react-table"
 import { createContext, useContext, useMemo, useRef } from "react"
 
 import { cn } from "~/lib/utils"
 
+/**
+ * The one feature bundle every grid in this app is built with.
+ *
+ * v9 only exposes a feature's API when that feature is registered, and the
+ * shared renderers below call pinning, sizing, resizing, expanding, and
+ * selection APIs unconditionally — so a consumer with a narrower set would
+ * break the shared components rather than merely shrink its own bundle. One
+ * bundle keeps that invariant honest, and lets the components stay generic
+ * over `TData` alone instead of threading a `TFeatures` parameter through
+ * ~5k lines.
+ *
+ * Client-side row models (`filteredRowModel`, `sortedRowModel`,
+ * `paginatedRowModel`) are deliberately absent: every grid here is
+ * server-driven via `manualPagination`/`manualSorting`. A consumer that wants
+ * client-side processing registers the model it needs on its own table.
+ * Faceting is the exception — it is inherently client-side, so its slots ship
+ * here to keep `column.getFacetedUniqueValues()` working.
+ */
+export const dataGridFeatures = tableFeatures({
+  columnFilteringFeature,
+  globalFilteringFeature,
+  columnFacetingFeature,
+  columnOrderingFeature,
+  columnPinningFeature,
+  columnSizingFeature,
+  columnResizingFeature,
+  columnVisibilityFeature,
+  rowExpandingFeature,
+  rowPaginationFeature,
+  rowPinningFeature,
+  rowSelectionFeature,
+  rowSortingFeature,
+  facetedRowModel: createFacetedRowModel(),
+  facetedUniqueValues: createFacetedUniqueValues(),
+  // `'auto'` resolves only against registered names, so the built-ins a
+  // client-sorting consumer would reach for are registered up front.
+  sortFns: {
+    alphanumeric: sortFn_alphanumeric,
+    basic: sortFn_basic,
+    datetime: sortFn_datetime,
+    text: sortFn_text,
+  },
+})
+
+export type DataGridFeatures = typeof dataGridFeatures
+
+/** The table instance shape every shared grid component consumes. */
+export type DataGridTableInstance<TData extends RowData> = Table<
+  DataGridFeatures,
+  TData
+>
+
 declare module "@tanstack/react-table" {
-  interface ColumnMeta<TData extends RowData, TValue> {
+  // Must mirror v9's declaration exactly — parameter list and variance
+  // annotations included — or the merge is rejected.
+  interface ColumnMeta<
+    in out TFeatures extends TableFeatures,
+    in out TData extends RowData,
+    TValue extends CellData = CellData,
+  > {
     autoSize?: boolean
     cellClassName?: string
     expandedContent?: (row: TData) => ReactNode
@@ -23,9 +105,11 @@ declare module "@tanstack/react-table" {
 }
 
 /** Label for headers / column visibility: `meta.headerTitle`, string `columnDef.header`, or `column.id`. */
-export function getColumnHeaderLabel<TData, TValue>(
-  column: Column<TData, TValue>
-): string {
+export function getColumnHeaderLabel<
+  TFeatures extends TableFeatures,
+  TData extends RowData,
+  TValue extends CellData,
+>(column: Column<TFeatures, TData, TValue>): string {
   const meta = column.columnDef.meta as { headerTitle?: string } | undefined
   if (typeof meta?.headerTitle === "string") return meta.headerTitle
   const defHeader = column.columnDef.header
@@ -50,7 +134,7 @@ export type DataGridApiResponse<T> = {
   }
 }
 
-export interface DataGridContextProps<TData extends object> {
+export interface DataGridContextProps<TData extends RowData> {
   /**
    * Internal coordinator for `meta.autoSize` columns. Lives at the core level
    * so every table variant and viewport instance shares one application state.
@@ -59,7 +143,7 @@ export interface DataGridContextProps<TData extends object> {
   isLoading: boolean
   props: DataGridProps<TData>
   recordCount: number
-  table: Table<TData>
+  table: DataGridTableInstance<TData>
 }
 
 export type DataGridAutoSizeController = {
@@ -71,14 +155,17 @@ export type DataGridAutoSizeController = {
   apply: (fillWidth: number) => boolean
 }
 
-function createDataGridAutoSizeController<TData extends object>(
-  table: Table<TData>
+function createDataGridAutoSizeController<TData extends RowData>(
+  table: DataGridTableInstance<TData>
 ): DataGridAutoSizeController {
   let applied: { base: number; columnId: string; grown: number } | null = null
 
   return {
     apply(fillWidth: number) {
-      const columnSizing = table.getState().columnSizing
+      // A point-in-time read, not a subscription — this runs from viewport
+      // measurement, and `table.store.state` is v9's snapshot surface now that
+      // `getState()` is gone.
+      const columnSizing = table.store.state.columnSizing
 
       // Re-arm after reset flows (double-click resetSize, resetColumnSizing,
       // controlled state replacement) so the column re-fills instead of
@@ -131,7 +218,7 @@ export type DataGridRequestParams = {
   sorting?: SortingState
 }
 
-export interface DataGridProps<TData extends object> {
+export interface DataGridProps<TData extends RowData> {
   allRowsLoadedMessage?: ReactNode | string
   children?: ReactNode
   className?: string
@@ -142,7 +229,7 @@ export interface DataGridProps<TData extends object> {
   loadingMode?: "skeleton" | "spinner"
   onRowClick?: (row: TData) => void
   recordCount: number
-  table?: Table<TData>
+  table?: DataGridTableInstance<TData>
   tableClassNames?: {
     base?: string
     body?: string
@@ -175,6 +262,16 @@ export interface DataGridProps<TData extends object> {
   }
 }
 
+/**
+ * The context is row-type erased on purpose: one provider serves grids of
+ * every row shape, and each renderer re-narrows `TData` at its own boundary.
+ *
+ * v9 declares `Table<in out TFeatures, in out TData>`, making `TData`
+ * invariant — so unlike v8, a `Table<F, Post>` is not assignable to a
+ * `Table<F, any>` and the erasure can no longer happen implicitly. It is done
+ * once, explicitly, in `DataGridProvider` below rather than at each of the
+ * consumers.
+ */
 const DataGridContext = createContext<
   DataGridContextProps<any> | undefined
 >(undefined)
@@ -187,12 +284,29 @@ function useDataGrid() {
   return context
 }
 
-function DataGridProvider<TData extends object>({
+/**
+ * `useDataGrid` re-narrowed to the row type of the component reading it.
+ *
+ * The counterpart to the erasure in `DataGridProvider`: because v9's `TData`
+ * is invariant, a component holding `Row<F, TData>`/`Header<F, TData>` values
+ * cannot mix them with the erased context table in either direction. Use this
+ * in components that pass context state back into row-typed APIs; plain
+ * `useDataGrid()` is fine for everything that only reads `props`.
+ */
+function useDataGridOf<TData extends RowData>() {
+  return useDataGrid() as DataGridContextProps<TData>
+}
+
+function DataGridProvider<TData extends RowData>({
   children,
   table,
   ...props
-}: DataGridProps<TData> & { table: Table<TData> }) {
-  const tableState = table.getState()
+}: DataGridProps<TData> & { table: DataGridTableInstance<TData> }) {
+  // Snapshot, not a subscription. `useTable` hands back a fresh table
+  // reference whenever any registered slice changes, so `table` in the memo
+  // deps below is what actually drives recomputation; the per-slice deps stay
+  // to keep documenting which slices this context is meant to track.
+  const tableState = table.store.state
 
   // Latest-props ref: context reads always resolve fresh props through the
   // getter below without the memoized context value depending on unstable
@@ -203,7 +317,7 @@ function DataGridProvider<TData extends object>({
   propsRef.current = props
 
   // Re-assert an explicit tableLayout resize mode every render so
-  // consumer-level useReactTable options cannot flip it back between drags.
+  // consumer-level useTable options cannot flip it back between drags.
   // Without one, the consumer's own tanstack columnResizeMode (default
   // "onEnd") is honored.
   if (
@@ -226,12 +340,13 @@ function DataGridProvider<TData extends object>({
   // ReactNode/function props (messages, onRowClick) are also excluded: they
   // are served fresh through the props getter, so unstable inline identities
   // cannot invalidate the context value.
-  const value = useMemo(
+  const value = useMemo<DataGridContextProps<any>>(
     () => ({
       get props() {
         return propsRef.current
       },
-      table,
+      // The one row-type erasure, per the context's note above.
+      table: table as DataGridTableInstance<any>,
       recordCount: props.recordCount,
       isLoading: props.isLoading || false,
       autoSize,
@@ -265,7 +380,7 @@ function DataGridProvider<TData extends object>({
   )
 }
 
-function DataGrid<TData extends object>({
+function DataGrid<TData extends RowData>({
   children,
   table,
   ...props
@@ -365,4 +480,10 @@ function DataGridContainer({
   )
 }
 
-export { DataGrid, DataGridContainer, DataGridProvider, useDataGrid }
+export {
+  DataGrid,
+  DataGridContainer,
+  DataGridProvider,
+  useDataGrid,
+  useDataGridOf,
+}

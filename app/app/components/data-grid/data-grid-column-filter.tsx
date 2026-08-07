@@ -1,6 +1,10 @@
-import type { Column } from "@tanstack/react-table"
+import type { CellData, Column, RowData } from "@tanstack/react-table"
 
 import { useMemo, useState } from "react"
+
+import type {
+  DataGridFeatures,
+} from "~/components/data-grid/data-grid"
 
 import { CheckIcon, CirclePlusIcon } from "~/icons"
 import { cn } from "~/lib/utils"
@@ -14,8 +18,8 @@ import {
 } from "~/ui/popover"
 import { Separator } from "~/ui/separator"
 
-interface DataGridColumnFilterProps<TData, TValue> {
-  column?: Column<TData, TValue>
+interface DataGridColumnFilterProps<TData extends RowData, TValue extends CellData> {
+  column?: Column<DataGridFeatures, TData, TValue>
   options: {
     icon?: React.ComponentType<{ className?: string }>
     label: string
@@ -24,7 +28,7 @@ interface DataGridColumnFilterProps<TData, TValue> {
   title?: string
 }
 
-function DataGridColumnFilter<TData, TValue>({
+function DataGridColumnFilter<TData extends RowData, TValue extends CellData>({
   column,
   title,
   options,
