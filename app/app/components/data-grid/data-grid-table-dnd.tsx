@@ -159,7 +159,7 @@ function DataGridTableDndCell<TData extends RowData>({ cell }: { cell: Cell<Data
 
 function DataGridTableDndBodyRows<TData extends RowData>({ table }: { table: DataGridTableInstance<TData> }) {
   const { isLoading, props } = useDataGrid()
-  const pagination = table.store.state.pagination
+  const pagination = table.state.pagination
 
   if (props.loadingMode === "skeleton" && isLoading && pagination?.pageSize) {
     return (
@@ -192,7 +192,7 @@ function DataGridTableDndBodyRows<TData extends RowData>({ table }: { table: Dat
           <Fragment key={row.id}>
             <DataGridTableBodyRow row={row}>
               <SortableContext
-                items={table.store.state.columnOrder}
+                items={table.state.columnOrder}
                 strategy={horizontalListSortingStrategy}
               >
                 {row.getVisibleCells().map((cell: Cell<DataGridFeatures, TData, unknown>) => (
@@ -216,7 +216,7 @@ function DataGridTableDndBodyRows<TData extends RowData>({ table }: { table: Dat
  */
 const MemoizedDataGridTableDndBodyRows = memo(
   DataGridTableDndBodyRows,
-  (_prev, next) => !!next.table.store.state.columnResizing.isResizingColumn
+  (_prev, next) => !!next.table.state.columnResizing.isResizingColumn
 ) as typeof DataGridTableDndBodyRows
 
 function DataGridTableDnd<TData extends RowData>({
@@ -315,7 +315,7 @@ function DataGridTableDnd<TData extends RowData>({
                 return (
                   <DataGridTableHeadRow key={index} rowId={headerGroup.id}>
                     <SortableContext
-                      items={table.store.state.columnOrder}
+                      items={table.state.columnOrder}
                       strategy={horizontalListSortingStrategy}
                     >
                       {headerGroup.headers.map((header) => (

@@ -507,7 +507,7 @@ function getDataGridTableMergedHeaderGroups<TData extends RowData>(table: DataGr
 }
 
 function hasDataGridTableRightPinnedColumns<TData extends RowData>(table: DataGridTableInstance<TData>) {
-  return (table.store.state.columnPinning.end?.length ?? 0) > 0
+  return (table.state.columnPinning.end?.length ?? 0) > 0
 }
 
 function DataGridTableFillCol() {
@@ -595,10 +595,10 @@ function DataGridTableBase({ children }: { children: ReactNode }) {
     props.tableLayout?.columnsResizable,
     // Visibility/order/pinning change the flat header set, so a column shown
     // after mount must get its size variable even though sizing is untouched.
-    table.store.state.columnSizing,
-    table.store.state.columnVisibility,
-    table.store.state.columnOrder,
-    table.store.state.columnPinning,
+    table.state.columnSizing,
+    table.state.columnVisibility,
+    table.state.columnOrder,
+    table.state.columnPinning,
   ])
 
   return (
@@ -1009,7 +1009,7 @@ function DataGridTableResizeIndicator({
     key: string | false
     value: number
   }>({ key: false, value: 0 })
-  const columnResizing = table.store.state.columnResizing
+  const columnResizing = table.state.columnResizing
   const resizingColumnId = columnResizing.isResizingColumn
   const resizeMode =
     props.tableLayout?.columnsResizeMode ?? table.options.columnResizeMode
@@ -1672,7 +1672,7 @@ function DataGridTableRowExpand<TData extends RowData>({
 
 function DataGridTableBodyRows<TData extends RowData>({ table }: { table: DataGridTableInstance<TData> }) {
   const { isLoading, props } = useDataGrid()
-  const pagination = table.store.state.pagination
+  const pagination = table.state.pagination
 
   if (isLoading && props.loadingMode === "skeleton" && pagination?.pageSize) {
     const leftVisibleColumns = table.getStartVisibleLeafColumns()
@@ -1771,7 +1771,7 @@ function DataGridTableBodyRows<TData extends RowData>({ table }: { table: DataGr
  */
 const MemoizedDataGridTableBodyRows = memo(
   DataGridTableBodyRows,
-  (_prev, next) => !!next.table.store.state.columnResizing.isResizingColumn
+  (_prev, next) => !!next.table.state.columnResizing.isResizingColumn
 ) as typeof DataGridTableBodyRows
 
 function DataGridTableHeader<TData extends RowData>() {

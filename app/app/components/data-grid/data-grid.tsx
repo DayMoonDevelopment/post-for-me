@@ -2,9 +2,9 @@ import type {
   CellData,
   Column,
   ColumnFiltersState,
+  ReactTable,
   RowData,
   SortingState,
-  Table,
   TableFeatures,
 } from "@tanstack/react-table"
 import type { ReactNode } from "react"
@@ -20,6 +20,7 @@ import {
   createFacetedRowModel,
   createFacetedUniqueValues,
   globalFilteringFeature,
+  metaHelper,
   rowExpandingFeature,
   rowPaginationFeature,
   rowPinningFeature,
@@ -69,6 +70,7 @@ export const dataGridFeatures = tableFeatures({
   rowSortingFeature,
   facetedRowModel: createFacetedRowModel(),
   facetedUniqueValues: createFacetedUniqueValues(),
+  columnMeta: metaHelper<DataGridColumnMeta>(),
   // `'auto'` resolves only against registered names, so the built-ins a
   // client-sorting consumer would reach for are registered up front.
   sortFns: {
@@ -81,27 +83,38 @@ export const dataGridFeatures = tableFeatures({
 
 export type DataGridFeatures = typeof dataGridFeatures
 
-/** The table instance shape every shared grid component consumes. */
-export type DataGridTableInstance<TData extends RowData> = Table<
+/**
+ * The table instance shape every shared grid component consumes.
+ *
+ * `ReactTable`, not core `Table`: the render-time state surface these
+ * components read (`table.state`) is contributed by the React adapter, which
+ * also deprecates the `table.store.state` snapshot for render reads.
+ */
+export type DataGridTableInstance<TData extends RowData> = ReactTable<
   DataGridFeatures,
   TData
 >
 
-declare module "@tanstack/react-table" {
-  // Must mirror v9's declaration exactly — parameter list and variance
-  // annotations included — or the merge is rejected.
-  interface ColumnMeta<
-    in out TFeatures extends TableFeatures,
-    in out TData extends RowData,
-    TValue extends CellData = CellData,
-  > {
-    autoSize?: boolean
-    cellClassName?: string
-    expandedContent?: (row: TData) => ReactNode
-    headerClassName?: string
-    headerTitle?: string
-    skeleton?: ReactNode
-  }
+/**
+ * The type of `columnDef.meta` for every grid in this app.
+ *
+ * Registered as the features-level `columnMeta` slot rather than by
+ * augmenting the global `ColumnMeta` interface, which is what v9 (and the
+ * upstream ReUI grid) call for. The two are not additive: a features-level
+ * slot *overrides* the global interface, so keeping a `declare module`
+ * augmentation alongside one would silently drop these fields.
+ *
+ * `expandedContent` is row-untyped because a type-only slot is fixed for the
+ * table and cannot be generic over `TData`; the renderer calls it with
+ * `row.original`.
+ */
+export type DataGridColumnMeta = {
+  autoSize?: boolean
+  cellClassName?: string
+  expandedContent?: (row: any) => ReactNode
+  headerClassName?: string
+  headerTitle?: string
+  skeleton?: ReactNode
 }
 
 /** Label for headers / column visibility: `meta.headerTitle`, string `columnDef.header`, or `column.id`. */
@@ -156,16 +169,18 @@ export type DataGridAutoSizeController = {
 }
 
 function createDataGridAutoSizeController<TData extends RowData>(
-  table: DataGridTableInstance<TData>
+  // Resolved per call rather than captured: v9's `useTable` returns a fresh
+  // wrapper on nearly every render (see `DataGridProvider`), and this
+  // controller must outlive that churn to keep its "grown at most once per
+  // column" guard. The ref behind this getter always holds the newest wrapper.
+  getTable: () => DataGridTableInstance<TData>
 ): DataGridAutoSizeController {
   let applied: { base: number; columnId: string; grown: number } | null = null
 
   return {
     apply(fillWidth: number) {
-      // A point-in-time read, not a subscription — this runs from viewport
-      // measurement, and `table.store.state` is v9's snapshot surface now that
-      // `getState()` is gone.
-      const columnSizing = table.store.state.columnSizing
+      const table = getTable()
+      const columnSizing = table.state.columnSizing
 
       // Re-arm after reset flows (double-click resetSize, resetColumnSizing,
       // controlled state replacement) so the column re-fills instead of
@@ -302,11 +317,7 @@ function DataGridProvider<TData extends RowData>({
   table,
   ...props
 }: DataGridProps<TData> & { table: DataGridTableInstance<TData> }) {
-  // Snapshot, not a subscription. `useTable` hands back a fresh table
-  // reference whenever any registered slice changes, so `table` in the memo
-  // deps below is what actually drives recomputation; the per-slice deps stay
-  // to keep documenting which slices this context is meant to track.
-  const tableState = table.store.state
+  const tableState = table.state
 
   // Latest-props ref: context reads always resolve fresh props through the
   // getter below without the memoized context value depending on unstable
@@ -315,6 +326,17 @@ function DataGridProvider<TData extends RowData>({
   // mousemove rate during a resize drag, piercing the body-rows memo).
   const propsRef = useRef(props)
   propsRef.current = props
+
+  // Latest-table ref, for exactly the same reason. Under v8 the table instance
+  // was stable, so depending on it was free. v9's `useTable` returns
+  // `useMemo(() => ({ ...table, options, state }), [table, tableOptions, state])`
+  // and `tableOptions` is a fresh object literal on every consumer render, so
+  // the wrapper identity now churns constantly. Keeping it out of the memo
+  // deps below is what preserves the resize-drag guarantee those comments
+  // describe; the underlying core instance is stable, so serving the newest
+  // wrapper through a getter loses nothing.
+  const tableRef = useRef(table)
+  tableRef.current = table
 
   // Re-assert an explicit tableLayout resize mode every render so
   // consumer-level useTable options cannot flip it back between drags.
@@ -327,11 +349,13 @@ function DataGridProvider<TData extends RowData>({
     table.options.columnResizeMode = props.tableLayout.columnsResizeMode
   }
 
-  // One autoSize coordinator per table instance so split header/body viewports
-  // cannot apply the growth twice.
+  // One autoSize coordinator per grid so split header/body viewports cannot
+  // apply the growth twice. Created once: rebuilding it would reset the
+  // "applied at most once per column" guard, and a column-visibility toggle
+  // could then ratchet the table wider on every pass.
   const autoSize = useMemo(
-    () => createDataGridAutoSizeController(table),
-    [table]
+    () => createDataGridAutoSizeController(() => tableRef.current),
+    []
   )
 
   // Memoize context value so consumers don't re-render during column resize.
@@ -345,14 +369,16 @@ function DataGridProvider<TData extends RowData>({
       get props() {
         return propsRef.current
       },
-      // The one row-type erasure, per the context's note above.
-      table: table as DataGridTableInstance<any>,
+      // Served through the ref, and the one row-type erasure — see the notes
+      // on `tableRef` and on the context itself.
+      get table() {
+        return tableRef.current as DataGridTableInstance<any>
+      },
       recordCount: props.recordCount,
       isLoading: props.isLoading || false,
       autoSize,
     }),
     [
-      table,
       autoSize,
       props.recordCount,
       props.isLoading,

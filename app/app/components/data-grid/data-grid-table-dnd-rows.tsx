@@ -256,7 +256,7 @@ function DataGridTableDndRowsBody<TData extends RowData>({
   table: DataGridTableInstance<TData>
 }) {
   const { isLoading, props } = useDataGrid()
-  const pagination = table.store.state.pagination
+  const pagination = table.state.pagination
 
   if (props.loadingMode === "skeleton" && isLoading && pagination?.pageSize) {
     return (
@@ -304,7 +304,7 @@ function DataGridTableDndRowsBody<TData extends RowData>({
  */
 const MemoizedDataGridTableDndRowsBody = memo(
   DataGridTableDndRowsBody,
-  (_prev, next) => !!next.table.store.state.columnResizing.isResizingColumn
+  (_prev, next) => !!next.table.state.columnResizing.isResizingColumn
 ) as typeof DataGridTableDndRowsBody
 
 function DataGridTableDndRows<TData extends RowData>({

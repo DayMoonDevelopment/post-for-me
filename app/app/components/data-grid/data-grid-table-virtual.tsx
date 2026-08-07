@@ -578,7 +578,7 @@ function DataGridTableVirtualBody<TData extends RowData>({
  */
 const MemoizedVirtualBody = memo(
   DataGridTableVirtualBody,
-  (_prev, next) => !!next.table.store.state.columnResizing.isResizingColumn
+  (_prev, next) => !!next.table.state.columnResizing.isResizingColumn
 ) as typeof DataGridTableVirtualBody
 
 function DataGridTableVirtual<TData extends RowData>({

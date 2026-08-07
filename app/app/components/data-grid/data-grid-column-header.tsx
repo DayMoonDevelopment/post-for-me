@@ -57,14 +57,14 @@ function DataGridColumnHeaderInner<TData extends RowData, TValue extends CellDat
 
   // TanStack's columnOrder defaults to [] until a consumer seeds it; fall
   // back to the definition order so Move Left/Right work out of the box.
-  const columnOrderState = table.store.state.columnOrder
+  const columnOrderState = table.state.columnOrder
   const columnOrder =
     columnOrderState.length > 0
       ? columnOrderState
       : table.getAllLeafColumns().map((leafColumn) => leafColumn.id)
   const columnVisibilityKey =
     props.tableLayout?.columnsVisibility && visibility
-      ? JSON.stringify(table.store.state.columnVisibility)
+      ? JSON.stringify(table.state.columnVisibility)
       : ""
   const isSorted = column.getIsSorted()
   const isPinned = column.getIsPinned()
