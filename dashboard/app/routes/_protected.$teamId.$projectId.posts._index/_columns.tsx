@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
-import { ArrowUpDownIcon, MoreHorizontalIcon } from "lucide-react";
+import { MoreHorizontalIcon } from "lucide-react";
 
 import {
   CalendarClock4Icon,
@@ -33,8 +33,8 @@ import {
 } from "~/ui/dialog";
 
 import { useForm as useFormFetcher } from "~/hooks/use-form";
+import { DataGridColumnHeader, type DataGridColumnDef } from "~/ui/data-grid";
 
-import type { ColumnDef } from "@tanstack/react-table";
 import type { PostWithConnections } from "./_types";
 import { format } from "date-fns";
 
@@ -76,22 +76,13 @@ const providerColors = {
   threads: "bg-purple-500",
 } as const;
 
-export const columns: ColumnDef<PostWithConnections>[] = [
+export const columns: DataGridColumnDef<PostWithConnections>[] = [
   {
     accessorKey: "status",
-    header: ({ column }) => {
-      return (
-        <div className="flex justify-center">
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Status
-            <ArrowUpDownIcon className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      );
-    },
+    meta: { headerTitle: "Status" },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Status" align="center" />
+    ),
     cell: ({ row }) => {
       const status = row.getValue("status") as string;
       const Icon = statusIcons[status];
@@ -107,17 +98,10 @@ export const columns: ColumnDef<PostWithConnections>[] = [
   },
   {
     accessorKey: "id",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Post ID
-          <ArrowUpDownIcon className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    meta: { headerTitle: "Post ID" },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Post ID" />
+    ),
     cell: ({ row }) => {
       const postId = row.getValue("id") as string;
       return (
@@ -129,17 +113,10 @@ export const columns: ColumnDef<PostWithConnections>[] = [
   },
   {
     accessorKey: "external_id",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          External ID
-          <ArrowUpDownIcon className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    meta: { headerTitle: "External ID" },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="External ID" />
+    ),
     cell: ({ row }) => {
       return row.getValue("external_id") as string;
     },
@@ -242,17 +219,10 @@ export const columns: ColumnDef<PostWithConnections>[] = [
   },
   {
     accessorKey: "scheduled_at",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Post At
-          <ArrowUpDownIcon className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    meta: { headerTitle: "Post At" },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Post At" />
+    ),
     cell: ({ row }) => {
       const date = new Date(row.getValue("scheduled_at"));
       return <div className="text-sm">{format(date, "MM/dd/yyyy HH:mm")}</div>;

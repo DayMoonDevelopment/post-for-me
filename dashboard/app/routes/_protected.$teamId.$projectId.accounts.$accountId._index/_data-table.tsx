@@ -1,51 +1,30 @@
 import * as React from "react";
-import {
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import { ChevronDown } from "lucide-react";
+import { useTable } from "@tanstack/react-table";
 import { useLoaderData } from "react-router";
 
 import { Button } from "~/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "~/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/ui/table";
+  DataGridColumnVisibility,
+  DataGridTable,
+  dataGridFeatures,
+} from "~/ui/data-grid";
 
-import { columns, type CustomColumnDef } from "./_columns";
-import type { PlatformPost } from "./_types";
+import { columns } from "./_columns";
+
 import type {
-  ColumnFiltersState,
+  ColumnVisibilityState,
   SortingState,
-  VisibilityState,
 } from "@tanstack/react-table";
 
 export function AccountFeedDataTable() {
   const data = useLoaderData();
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    [],
-  );
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({
+    React.useState<ColumnVisibilityState>({
       engagement: false,
       reach: false,
       watch_time: false,
     });
-  const [rowSelection, setRowSelection] = React.useState({});
 
   const isYouTube = data.accountInfo?.provider === "youtube";
 
@@ -61,22 +40,13 @@ export function AccountFeedDataTable() {
 
   const posts = React.useMemo(() => data.posts || [], [data.posts]);
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     data: posts,
-    columns: tableColumns as CustomColumnDef<PlatformPost>[],
+    columns: tableColumns,
+    state: { sorting, columnVisibility },
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-      rowSelection,
-    },
   });
 
   if (!data.success) {
@@ -92,85 +62,14 @@ export function AccountFeedDataTable() {
   return (
     <div className="w-full space-y-4">
       <div className="flex items-center justify-end">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto bg-card">
-              Columns <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {table
-              .getAllColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) =>
-                      column.toggleVisibility(!!value)
-                    }
-                  >
-                    {(column.columnDef as CustomColumnDef<PlatformPost>)
-                      .label ?? column.id}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <DataGridColumnVisibility table={table} />
       </div>
 
-      <div className="bg-card rounded-md border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() ? "selected" : null}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={tableColumns.length}
-                  className="h-24 text-center"
-                >
-                  No posts found for this account.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataGridTable
+        table={table}
+        columnCount={tableColumns.length}
+        emptyMessage="No posts found for this account."
+      />
 
       {data.meta.has_more ? (
         <div className="flex justify-center">

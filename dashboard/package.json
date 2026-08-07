@@ -40,7 +40,7 @@
     "@shikijs/transformers": "^3.19.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.49.8",
-    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-table": "^9.0.1",
     "@trigger.dev/sdk": "4.0.0-v4-beta.27",
     "@unkey/api": "^2.2.0",
     "class-variance-authority": "^0.7.1",

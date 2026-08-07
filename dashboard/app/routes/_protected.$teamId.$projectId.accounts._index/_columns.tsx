@@ -1,4 +1,4 @@
-import { ArrowUpDown, MoreHorizontal, User } from "lucide-react";
+import { MoreHorizontal, User } from "lucide-react";
 import { useFetcher, useNavigate, useParams } from "react-router";
 
 import { Button } from "~/ui/button";
@@ -13,16 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "~/ui/dropdown-menu";
 import { Switch } from "~/ui/switch";
+import { DataGridColumnHeader, type DataGridColumnDef } from "~/ui/data-grid";
 
 import type { SocialConnection } from "./_types";
-import type { ColumnDef } from "@tanstack/react-table";
-
-export type CustomColumnDef<TData, TValue = unknown> = ColumnDef<
-  TData,
-  TValue
-> & {
-  label?: string;
-};
 
 const providerColors = {
   facebook: "bg-blue-500",
@@ -36,11 +29,12 @@ const providerColors = {
   threads: "bg-purple-500",
 } as const;
 
-export const columns: CustomColumnDef<SocialConnection>[] = [
+export const columns: DataGridColumnDef<SocialConnection>[] = [
   {
-    label: "Social Provider Profile Photo Url",
+    meta: { headerTitle: "Social Provider Profile Photo Url" },
     accessorKey: "social_provider_profile_photo_url",
     header: "",
+    enableSorting: false,
     cell: ({ row }) => {
       const connection = row.original;
       return (
@@ -57,19 +51,11 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
     },
   },
   {
-    label: "Provider",
+    meta: { headerTitle: "Provider" },
     accessorKey: "provider",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Provider
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Provider" />
+    ),
     cell: ({ row }) => {
       const provider = row.getValue("provider") as keyof typeof providerColors;
       return (
@@ -80,26 +66,18 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
     },
   },
   {
-    label: "Social Provider User Name",
+    meta: { headerTitle: "Social Provider User Name" },
     accessorKey: "social_provider_user_name",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Username
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Username" />
+    ),
     cell: ({ row }) => {
       const username = row.getValue("social_provider_user_name") as string;
       return <div className="font-medium">{username || "N/A"}</div>;
     },
   },
   {
-    label: "User Id",
+    meta: { headerTitle: "User Id" },
     accessorKey: "social_provider_user_id",
     header: "User ID",
     cell: ({ row }) => {
@@ -110,7 +88,7 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
     },
   },
   {
-    label: "External Id",
+    meta: { headerTitle: "External Id" },
     accessorKey: "external_id",
     header: "External ID",
     cell: ({ row }) => {
@@ -123,7 +101,7 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
     },
   },
   {
-    label: "Status",
+    meta: { headerTitle: "Status" },
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => {
@@ -134,19 +112,11 @@ export const columns: CustomColumnDef<SocialConnection>[] = [
     },
   },
   {
-    label: "Created At",
+    meta: { headerTitle: "Created At" },
     accessorKey: "created_at",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Connected
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Connected" />
+    ),
     cell: ({ row }) => {
       const date = new Date(row.getValue("created_at"));
       return <div>{date.toLocaleDateString()}</div>;

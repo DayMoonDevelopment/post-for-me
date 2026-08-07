@@ -1,16 +1,8 @@
-import { ArrowUpDown } from "lucide-react";
-import { Button } from "~/ui/button";
 import { Badge } from "~/ui/badge";
+import { DataGridColumnHeader, type DataGridColumnDef } from "~/ui/data-grid";
+
 import type { PlatformPost } from "./_types";
 import type { PostMetrics } from "./_types";
-import type { ColumnDef } from "@tanstack/react-table";
-
-export type CustomColumnDef<TData, TValue = unknown> = ColumnDef<
-  TData,
-  TValue
-> & {
-  label?: string;
-};
 
 const providerColors = {
   facebook: "bg-blue-500",
@@ -63,26 +55,18 @@ function getEngagement(metrics: PostMetrics | undefined): number {
   );
 }
 
-export const columns: CustomColumnDef<PlatformPost>[] = [
+export const columns: DataGridColumnDef<PlatformPost>[] = [
   {
-    label: "Posted At",
+    meta: { headerTitle: "Posted At" },
     id: "posted_at",
     accessorFn: (row) => {
       if (!row.posted_at) return 0;
       const d = new Date(row.posted_at);
       return Number.isNaN(d.getTime()) ? 0 : d.getTime();
     },
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Posted At
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Posted At" />
+    ),
     cell: ({ row }) => {
       const date = row.original.posted_at;
       if (!date) return <div className="text-muted-foreground">N/A</div>;
@@ -90,7 +74,7 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
     },
   },
   {
-    label: "Caption",
+    meta: { headerTitle: "Caption" },
     accessorKey: "caption",
     header: "Caption",
     cell: ({ row }) => {
@@ -107,7 +91,7 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
     },
   },
   {
-    label: "Platform",
+    meta: { headerTitle: "Platform" },
     accessorKey: "platform",
     header: "Platform",
     cell: ({ row }) => {
@@ -120,120 +104,72 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
     },
   },
   {
-    label: "Likes",
+    meta: { headerTitle: "Likes" },
     id: "likes",
     accessorFn: (row) => row.metrics?.likes ?? 0,
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Likes
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Likes" />
+    ),
     cell: ({ row }) => {
       const likes = row.getValue("likes") as number;
       return <div className="font-medium">{formatNumber(likes)}</div>;
     },
   },
   {
-    label: "Comments",
+    meta: { headerTitle: "Comments" },
     id: "comments",
     accessorFn: (row) => row.metrics?.comments ?? 0,
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Comments
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Comments" />
+    ),
     cell: ({ row }) => {
       const comments = row.getValue("comments") as number;
       return <div className="font-medium">{formatNumber(comments)}</div>;
     },
   },
   {
-    label: "Shares",
+    meta: { headerTitle: "Shares" },
     id: "shares",
     accessorFn: (row) => row.metrics?.shares ?? 0,
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Shares
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Shares" />
+    ),
     cell: ({ row }) => {
       const shares = row.getValue("shares") as number;
       return <div className="font-medium">{formatNumber(shares)}</div>;
     },
   },
   {
-    label: "Views",
+    meta: { headerTitle: "Views" },
     id: "views",
     accessorFn: (row) => getViews(row.metrics),
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Views
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Views" />
+    ),
     cell: ({ row }) => {
       const views = row.getValue("views") as number;
       return <div className="font-medium">{formatNumber(views)}</div>;
     },
   },
   {
-    label: "Reach",
+    meta: { headerTitle: "Reach" },
     id: "reach",
     accessorFn: (row) => row.metrics?.reach ?? 0,
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Reach
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Reach" />
+    ),
     cell: ({ row }) => {
       const reach = row.getValue("reach") as number;
       return <div className="font-medium">{formatNumber(reach)}</div>;
     },
   },
   {
-    label: "Watch Time",
+    meta: { headerTitle: "Watch Time" },
     id: "watch_time",
     accessorFn: (row) => row.metrics?.total_time_watched ?? 0,
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Watch Time
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Watch Time" />
+    ),
     cell: ({ row }) => {
       const watchTime = row.getValue("watch_time") as number;
       return (
@@ -244,27 +180,19 @@ export const columns: CustomColumnDef<PlatformPost>[] = [
     },
   },
   {
-    label: "Engagement",
+    meta: { headerTitle: "Engagement" },
     id: "engagement",
     accessorFn: (row) => getEngagement(row.metrics),
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Engagement
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Engagement" />
+    ),
     cell: ({ row }) => {
       const engagement = row.getValue("engagement") as number;
       return <div className="font-medium">{formatNumber(engagement)}</div>;
     },
   },
   {
-    label: "Platform URL",
+    meta: { headerTitle: "Platform URL" },
     accessorKey: "platform_url",
     header: "Link",
     cell: ({ row }) => {
