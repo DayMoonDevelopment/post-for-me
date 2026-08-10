@@ -890,6 +890,26 @@ function DataGridTableHeadRowCell<TData extends RowData>({
   )
 }
 
+/**
+ * TanStack's own default, restated here on purpose.
+ *
+ * v8 merged each feature's default table options into `table.options`, so
+ * reading `table.options.columnResizeMode` gave you `"onEnd"` even when the
+ * consumer never set it. v9 resolves feature defaults internally and leaves
+ * the option `undefined` on the instance, so the v8 `?? table.options...`
+ * fallback quietly produces `undefined` — and every grid that has not opted
+ * into a mode explicitly loses the onEnd drag session: no cursor lock, no
+ * vertical indicator, and an immediate commit instead of a deferred one.
+ */
+const DATA_GRID_DEFAULT_COLUMN_RESIZE_MODE = "onEnd" as const
+
+function getDataGridColumnResizeMode(
+  layoutMode: "onChange" | "onEnd" | undefined,
+  tableMode: "onChange" | "onEnd" | undefined
+) {
+  return layoutMode ?? tableMode ?? DATA_GRID_DEFAULT_COLUMN_RESIZE_MODE
+}
+
 function DataGridTableHeadRowCellResize<TData extends RowData>({
   header,
 }: {
@@ -904,8 +924,10 @@ function DataGridTableHeadRowCellResize<TData extends RowData>({
     column.getIndex() ===
     header.getContext().table.getVisibleLeafColumns().length - 1
   const isResizeModeOnEnd =
-    (props.tableLayout?.columnsResizeMode ?? table.options.columnResizeMode) ===
-    "onEnd"
+    getDataGridColumnResizeMode(
+      props.tableLayout?.columnsResizeMode,
+      table.options.columnResizeMode
+    ) === "onEnd"
   const stopResizeSessionRef = useRef<(() => void) | undefined>(undefined)
 
   // End a live drag if the handle unmounts mid-resize so document listeners
@@ -1011,8 +1033,10 @@ function DataGridTableResizeIndicator({
   }>({ key: false, value: 0 })
   const columnResizing = table.state.columnResizing
   const resizingColumnId = columnResizing.isResizingColumn
-  const resizeMode =
-    props.tableLayout?.columnsResizeMode ?? table.options.columnResizeMode
+  const resizeMode = getDataGridColumnResizeMode(
+    props.tableLayout?.columnsResizeMode,
+    table.options.columnResizeMode
+  )
   const isActive = !!(
     props.tableLayout?.columnsResizable &&
     resizeMode === "onEnd" &&

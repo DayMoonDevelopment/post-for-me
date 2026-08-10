@@ -347,6 +347,22 @@ function DataGridColumnHeaderInner<TData extends RowData, TValue extends CellDat
   )
 }
 
+/**
+ * LOAD-BEARING COUPLING — sort/pin state reaches this header through builder
+ * calls on `column` (`getIsSorted()`, `getIsPinned()`), and `column` is a
+ * stable reference, so `memo` sees unchanged props on every state change and
+ * would skip the render. What saves it is context: this component consumes
+ * `useDataGrid()`, and the provider republishes its value whenever `sorting`,
+ * `columnPinning`, `columnVisibility`, or `columnOrder` change — a context
+ * change re-renders a memoized consumer even when props are equal.
+ *
+ * Dropping any of those four slices from the context memo deps in
+ * `data-grid.tsx` would therefore silently freeze the sort arrows and pin
+ * controls here, with no type error. Upstream ReUI instead wraps this in a
+ * `Subscribe` over exactly those four slices, making the dependency explicit
+ * and narrowing the re-render to headers; worth adopting if the context dep
+ * list is ever trimmed for performance.
+ */
 const DataGridColumnHeader = memo(
   DataGridColumnHeaderInner
 ) as typeof DataGridColumnHeaderInner

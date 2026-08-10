@@ -32,7 +32,7 @@ import {
   sortFn_text,
   tableFeatures,
 } from "@tanstack/react-table"
-import { createContext, useContext, useMemo, useRef } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef } from "react"
 
 import { cn } from "~/lib/utils"
 
@@ -338,16 +338,23 @@ function DataGridProvider<TData extends RowData>({
   const tableRef = useRef(table)
   tableRef.current = table
 
-  // Re-assert an explicit tableLayout resize mode every render so
-  // consumer-level useTable options cannot flip it back between drags.
-  // Without one, the consumer's own tanstack columnResizeMode (default
-  // "onEnd") is honored.
-  if (
-    props.tableLayout?.columnsResizable &&
-    props.tableLayout.columnsResizeMode
-  ) {
-    table.options.columnResizeMode = props.tableLayout.columnsResizeMode
-  }
+  // Re-assert an explicit tableLayout resize mode so consumer-level useTable
+  // options cannot flip it back between drags. This used to be a render-phase
+  // mutation of `table.options`, which v9 no longer honours: the wrapper's
+  // `options` is the consumer's own literal, and the core table has already
+  // resolved its copy by the time we could touch it. It goes through
+  // `setOptions` in an effect now. Without an explicit mode, the consumer's
+  // own tanstack columnResizeMode is honored.
+  const resizeMode =
+    props.tableLayout?.columnsResizable && props.tableLayout.columnsResizeMode
+      ? props.tableLayout.columnsResizeMode
+      : undefined
+
+  useEffect(() => {
+    if (!resizeMode) return
+    if (table.options.columnResizeMode === resizeMode) return
+    table.setOptions((old) => ({ ...old, columnResizeMode: resizeMode }))
+  }, [table, resizeMode])
 
   // One autoSize coordinator per grid so split header/body viewports cannot
   // apply the growth twice. Created once: rebuilding it would reset the
