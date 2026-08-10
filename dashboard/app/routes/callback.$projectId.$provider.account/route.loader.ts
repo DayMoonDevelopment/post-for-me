@@ -27,9 +27,8 @@ export const loader = withSupabase(async function ({
   }
 
   const key =
-    provider?.toLowerCase() === "x"
-      ? (url.searchParams.get("oauth_token") as string)
-      : (url.searchParams.get("state") as string);
+    (url.searchParams.get("oauth_token") as string) ||
+    (url.searchParams.get("state") as string);
 
   if (!key) {
     return createResponse({
@@ -95,12 +94,20 @@ export const loader = withSupabase(async function ({
     provider = "instagram_w_facebook";
   }
 
+  if (provider === "x" && connectionType === "oauth2") {
+    provider = "x_oauth2";
+  }
+
   const providerAppCredentials = project.social_provider_app_credentials.find(
     (appCredential) => appCredential.provider === provider,
   );
 
   const normalizedProvider =
-    provider === "instagram_w_facebook" ? "instagram" : provider;
+    provider === "instagram_w_facebook"
+      ? "instagram"
+      : provider === "x_oauth2"
+        ? "x"
+        : provider;
 
   if (!providerAppCredentials && provider !== "bluesky") {
     console.error("Provider app credentials not found for project");
@@ -130,7 +137,8 @@ export const loader = withSupabase(async function ({
       redirectUrlOverride,
     });
 
-    const { successConnections, failedConnections, errors } = accountConnections;
+    const { successConnections, failedConnections, errors } =
+      accountConnections;
 
     if (successConnections.length === 0) {
       errors.push("No valid accounts found");

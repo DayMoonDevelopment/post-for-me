@@ -198,6 +198,14 @@ export class SocialAccountFeedsService {
       platformName = 'instagram_w_facebook';
     }
 
+    if (
+      platformName == 'x' &&
+      (account.social_provider_metadata as { connection_type?: string } | null)
+        ?.connection_type === 'oauth2'
+    ) {
+      platformName = 'x_oauth2';
+    }
+
     const platformService = await this.getPlatformService({
       platform: platformName,
       projectId,
@@ -534,6 +542,9 @@ export class SocialAccountFeedsService {
         return this.threadsService;
       case 'x':
         await this.twitterService.initService(projectId);
+        return this.twitterService;
+      case 'x_oauth2':
+        await this.twitterService.initOAuth2Service(projectId);
         return this.twitterService;
       case 'bluesky':
         await this.blueskyService.initService();
