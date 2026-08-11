@@ -7,6 +7,14 @@ import type { Project } from "~/lib/types/project";
 
 import { InfoIcon } from "~/icons";
 import { Alert, AlertDescription, AlertTitle } from "~/ui/alert";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/ui/card";
 import { ProjectTypeBadge } from "~/ui/project-type-badge";
 
 import { ProjectCallbackUrlSection } from "./project-callback-url-section";
@@ -113,7 +121,7 @@ export function ProjectSettingsView({
 }
 
 /**
- * One settings card: a bordered panel with a header (title + description on the
+ * One settings card: a {@link Card} with a header (title + description on the
  * left, the optional edit action on the right) above the content.
  */
 function SettingsCard({
@@ -128,20 +136,14 @@ function SettingsCard({
   title: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h2 className="font-heading text-sm font-semibold text-foreground">
-            {title}
-          </h2>
-          {description ? (
-            <p className="text-xs/relaxed text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
-      {children}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
+        {action ? <CardAction>{action}</CardAction> : null}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 

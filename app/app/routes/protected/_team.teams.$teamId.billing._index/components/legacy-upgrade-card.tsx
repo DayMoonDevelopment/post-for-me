@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { BillingPlansDialog } from "~/components/billing";
 import { CheckIcon } from "~/icons";
+import { Card } from "~/ui/card";
 import { Separator } from "~/ui/separator";
 
 /**
@@ -41,8 +42,12 @@ export function LegacyUpgradeCard({ teamId }: { teamId: string }) {
     /* A CONTAINER, not viewport breakpoints: this card is a third of the row on
        a wide screen and the full width of the page on a narrow one, so "is
        there room for two columns" is a question about the card, not the
-       window. `sm:` would have given it two columns at its narrowest. */
-    <section className="@container flex flex-col gap-4 rounded-xl border border-pop/20 bg-pop/5 p-6 dark:bg-pop/10">
+       window. `sm:` would have given it two columns at its narrowest.
+
+       Built on Card for the shared radius + ring, with the `--pop` tint and
+       `p-6` overriding the card defaults so it still reads as the one
+       promotional surface on an otherwise factual page. */
+    <Card className="@container bg-pop/5 p-6 ring-pop/20 dark:bg-pop/10">
       <div className="flex flex-col items-stretch gap-3 @md:flex-row @md:items-start @md:justify-between @md:gap-x-6">
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="font-heading text-base font-semibold text-foreground">
@@ -78,6 +83,6 @@ export function LegacyUpgradeCard({ teamId }: { teamId: string }) {
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }

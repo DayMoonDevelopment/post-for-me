@@ -17,6 +17,13 @@ import type {
 } from "~/lib/types/webhook";
 
 import { ConfirmDialog } from "~/components/confirm-dialog";
+import {
+  DangerZone,
+  DangerZoneActions,
+  DangerZoneDescription,
+  DangerZoneHeader,
+  DangerZoneTitle,
+} from "~/components/danger-zone";
 import { SubscriptionRequired } from "~/components/subscription-required";
 import { WebhookFormDialog } from "~/components/webhook-form-dialog";
 import { useActionErrorToast } from "~/hooks/use-action-error-toast";
@@ -245,20 +252,20 @@ function WebhookDetailView({
         )}
       </section>
 
-      <section className="flex flex-row items-center justify-between gap-3 rounded-xl border border-destructive/10 bg-card p-6">
-        <div className="flex flex-col gap-1">
-          <h2 className="font-heading text-sm font-semibold text-destructive">
-            {t("webhooks.detail.dangerTitle")}
-          </h2>
-          <p className="text-sm text-muted-foreground">
+      <DangerZone>
+        <DangerZoneHeader>
+          <DangerZoneTitle>{t("webhooks.detail.dangerTitle")}</DangerZoneTitle>
+          <DangerZoneDescription>
             {t("webhooks.detail.dangerDescription")}
-          </p>
-        </div>
-        <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-          <DeleteIcon />
-          {t("webhooks.detail.delete")}
-        </Button>
-      </section>
+          </DangerZoneDescription>
+        </DangerZoneHeader>
+        <DangerZoneActions>
+          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+            <DeleteIcon />
+            {t("webhooks.detail.delete")}
+          </Button>
+        </DangerZoneActions>
+      </DangerZone>
 
       <WebhookFormDialog
         open={editOpen}
