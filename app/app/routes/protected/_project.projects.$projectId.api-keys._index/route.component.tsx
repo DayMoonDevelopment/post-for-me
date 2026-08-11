@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useFetcher, useLoaderData } from "react-router";
+import { Await, useFetcher, useLoaderData } from "react-router";
 
 import type { ApiKey } from "~/lib/types/api-key";
 
@@ -40,7 +40,7 @@ function isCreateSuccess(value: unknown): value is CreateResult {
  * replaces the actions.
  */
 export function Component() {
-  const { keys, unavailable } = useLoaderData<typeof loader>();
+  const { keysResult } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
 
   const createFetcher = useFetcher();
@@ -110,18 +110,103 @@ export function Component() {
     );
   }
 
-  const showEmptyState = keys.length === 0 && !unavailable;
-
   return (
     <div className="flex flex-col gap-6 p-6">
+      {/* The list streams in. The fallback is this same view in its loading
+          state, so the heading and the Create button paint immediately and
+          only the rows are replaced by skeletons. */}
+      <Suspense
+        fallback={
+          <ApiKeysView
+            keys={[]}
+            unavailable={false}
+            isLoading
+            onCreate={openCreate}
+            onRename={setRenameTarget}
+            onDelete={setDeleteTarget}
+          />
+        }
+      >
+        <Await resolve={keysResult}>
+          {({ keys, unavailable }) => (
+            <ApiKeysView
+              keys={keys}
+              unavailable={unavailable}
+              onCreate={openCreate}
+              onRename={setRenameTarget}
+              onDelete={setDeleteTarget}
+            />
+          )}
+        </Await>
+      </Suspense>
+
+      <ApiKeyCreateDialog
+        open={createOpen}
+        onOpenChange={handleCreateOpenChange}
+        pending={createPending}
+        createdSecret={createdSecret}
+        onSubmit={submitCreate}
+      />
+
+      <ApiKeyRenameDialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => (open ? undefined : setRenameTarget(null))}
+        defaultName={renameTarget?.name ?? ""}
+        pending={rowPending}
+        onSubmit={submitRename}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => (open ? undefined : setDeleteTarget(null))}
+        title={t("apiKeys.delete.title")}
+        description={t("apiKeys.delete.description")}
+        confirmLabel={t("apiKeys.delete.confirm")}
+        destructive
+        pending={rowPending}
+        onConfirm={confirmDelete}
+      />
+    </div>
+  );
+}
+
+/**
+ * The data-dependent half of the page: heading + create affordance, the
+ * degraded-backend notice, and then either the empty state or the table.
+ *
+ * Rendered twice — once as the Suspense fallback with `isLoading`, once with
+ * resolved data — so the chrome is identical across the transition and only
+ * the rows change. While loading, the empty state is suppressed: an empty list
+ * we haven't fetched yet is not the same as a project with no keys.
+ */
+function ApiKeysView({
+  keys,
+  unavailable,
+  isLoading = false,
+  onCreate,
+  onRename,
+  onDelete,
+}: {
+  isLoading?: boolean;
+  keys: ApiKey[];
+  onCreate: () => void;
+  onDelete: (apiKey: ApiKey) => void;
+  onRename: (apiKey: ApiKey) => void;
+  unavailable: boolean;
+}) {
+  const { t } = useTranslation();
+  const showEmptyState = !isLoading && keys.length === 0 && !unavailable;
+
+  return (
+    <>
       <div className="flex items-center justify-between gap-4">
         <h1 className="font-heading text-2xl font-semibold text-foreground">
           {t("apiKeys.pageTitle")}
         </h1>
         {!showEmptyState ? (
           <Button
-            onClick={openCreate}
-            disabled={unavailable}
+            onClick={onCreate}
+            disabled={unavailable || isLoading}
             className="shrink-0"
           >
             <AddIcon />
@@ -152,46 +237,20 @@ export function Component() {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button onClick={openCreate}>
+            <Button onClick={onCreate}>
               <AddIcon />
               {t("apiKeys.create.submit")}
             </Button>
           </EmptyContent>
         </Empty>
-      ) : keys.length > 0 ? (
+      ) : isLoading || keys.length > 0 ? (
         <ApiKeysTable
           apiKeys={keys}
-          onRename={setRenameTarget}
-          onDelete={setDeleteTarget}
+          isLoading={isLoading}
+          onRename={onRename}
+          onDelete={onDelete}
         />
       ) : null}
-
-      <ApiKeyCreateDialog
-        open={createOpen}
-        onOpenChange={handleCreateOpenChange}
-        pending={createPending}
-        createdSecret={createdSecret}
-        onSubmit={submitCreate}
-      />
-
-      <ApiKeyRenameDialog
-        open={renameTarget !== null}
-        onOpenChange={(open) => (open ? undefined : setRenameTarget(null))}
-        defaultName={renameTarget?.name ?? ""}
-        pending={rowPending}
-        onSubmit={submitRename}
-      />
-
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => (open ? undefined : setDeleteTarget(null))}
-        title={t("apiKeys.delete.title")}
-        description={t("apiKeys.delete.description")}
-        confirmLabel={t("apiKeys.delete.confirm")}
-        destructive
-        pending={rowPending}
-        onConfirm={confirmDelete}
-      />
-    </div>
+    </>
   );
 }

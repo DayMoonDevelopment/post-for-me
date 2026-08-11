@@ -73,6 +73,7 @@ export function Component() {
   );
 }
 
+
 /**
  * The webhook config (URL · event types · revealable signing secret) with an
  * edit action, the server-driven delivery-events grid, and a danger zone. Edit
@@ -244,7 +245,7 @@ function WebhookDetailView({
         )}
       </section>
 
-      <section className="flex flex-col items-start gap-3 rounded-xl border border-destructive/10 bg-card p-6">
+      <section className="flex flex-row items-center justify-between gap-3 rounded-xl border border-destructive/10 bg-card p-6">
         <div className="flex flex-col gap-1">
           <h2 className="font-heading text-sm font-semibold text-destructive">
             {t("webhooks.detail.dangerTitle")}

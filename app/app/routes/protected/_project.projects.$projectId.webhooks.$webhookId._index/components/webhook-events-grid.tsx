@@ -27,6 +27,7 @@ import { useGridPagination } from "~/hooks/use-grid-pagination";
 import { WEBHOOK_EVENTS_DEFAULT_PAGE_SIZE } from "~/lib/types/webhook";
 import { Badge } from "~/ui/badge";
 import { LocaleDateTime } from "~/ui/date-time";
+import { Skeleton } from "~/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/ui/tooltip";
 
 const DEFAULT_SORT: WebhookEventSort = { field: "createdAt", direction: "desc" };
@@ -103,6 +104,14 @@ export function WebhookEventsGrid({
           </Badge>
         ),
         size: 260,
+        meta: {
+          // Absorbs the leftover width. Without a fill column the grid's
+          // default `width: "fixed"` spreads the surplus across all three,
+          // which strands Status and Received in the middle of empty space.
+          autoSize: true,
+          // `size="xs"` badges are h-4 — matched so the row height holds.
+          skeleton: <Skeleton className="h-4 w-40 rounded-md" />,
+        },
       },
       {
         accessorKey: "status",
@@ -130,6 +139,7 @@ export function WebhookEventsGrid({
           );
         },
         size: 140,
+        meta: { skeleton: <Skeleton className="h-4 w-16 rounded-md" /> },
       },
       {
         accessorKey: "createdAt",
@@ -149,6 +159,7 @@ export function WebhookEventsGrid({
             <span className="text-muted-foreground">—</span>
           ),
         size: 220,
+        meta: { skeleton: <Skeleton className="h-3.5 w-28" /> },
       },
     ],
     [t],
