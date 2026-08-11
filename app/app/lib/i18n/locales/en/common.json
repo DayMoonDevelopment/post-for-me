@@ -715,6 +715,7 @@
     "configurationTitle": "Resolved configuration",
     "logsTitle": "Logs",
     "logsEmpty": "No response data.",
+    "logsShowMore": "Show {{count}} more",
     "rawTab": "Raw JSON",
     "askLlm": "Ask LLM",
     "askLlmCopied": "Prompt copied",
