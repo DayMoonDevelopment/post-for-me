@@ -25,6 +25,7 @@ import { MediaIcon, TextIcon } from "~/icons";
 import { DEFAULT_PAGE_SIZE } from "~/lib/types/social-account";
 import { cn } from "~/lib/utils";
 import { LocaleDateTime } from "~/ui/date-time";
+import { Skeleton } from "~/ui/skeleton";
 
 /**
  * The dumb posts grid (PFM-703). It renders the page the loader handed it and
@@ -95,6 +96,15 @@ export function PostsDataGrid({
         },
         enableSorting: false,
         size: 300,
+        meta: {
+          // The media/text glyph plus the caption line, at the cell's own gap.
+          skeleton: (
+            <div className="flex items-center gap-2">
+              <Skeleton className="size-3.5 shrink-0 rounded-sm" />
+              <Skeleton className="h-3.5 w-48" />
+            </div>
+          ),
+        },
       },
       {
         accessorKey: "status",
@@ -108,6 +118,14 @@ export function PostsDataGrid({
         ),
         enableSorting: false,
         size: 80,
+        meta: {
+          // Centered like the status icon it stands in for.
+          skeleton: (
+            <div className="flex justify-center">
+              <Skeleton className="size-4 rounded-full" />
+            </div>
+          ),
+        },
       },
       {
         id: "accounts",
@@ -117,6 +135,17 @@ export function PostsDataGrid({
         cell: ({ row }) => <AccountAvatars accounts={row.original.accounts} />,
         enableSorting: false,
         size: 200,
+        meta: {
+          // Three `size-6` circles at the group's own `gap-1.5` — a stand-in
+          // for a set whose real length isn't knowable until the rows land.
+          skeleton: (
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="size-6 shrink-0 rounded-full" />
+              <Skeleton className="size-6 shrink-0 rounded-full" />
+              <Skeleton className="size-6 shrink-0 rounded-full" />
+            </div>
+          ),
+        },
       },
       {
         accessorKey: "postAt",
@@ -131,6 +160,7 @@ export function PostsDataGrid({
         ),
         enableSorting: false,
         size: 180,
+        meta: { skeleton: <Skeleton className="h-3.5 w-28" /> },
       },
       {
         accessorKey: "id",
@@ -145,6 +175,7 @@ export function PostsDataGrid({
         ),
         enableSorting: false,
         size: 200,
+        meta: { skeleton: <Skeleton className="h-3.5 w-32" /> },
       },
       {
         accessorKey: "externalId",
@@ -162,6 +193,7 @@ export function PostsDataGrid({
           ),
         enableSorting: false,
         size: 180,
+        meta: { skeleton: <Skeleton className="h-3.5 w-24" /> },
       },
     ],
     [t],

@@ -22,11 +22,20 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   const project = await projects.get(projectId);
   await requireTeamMember(context, project.teamId);
 
-  try {
-    const keys = await apiKeys.list(projectId);
-    return { keys, projectId, unavailable: false };
-  } catch (error) {
-    logError(error, { projectId, surface: "api-keys.loader" });
-    return { keys: [], projectId, unavailable: true };
-  }
+  // Streamed rather than awaited, so the page shell — and the table's skeleton
+  // rows — paint immediately and the rows land when the keys backend answers.
+  // The guards above stay awaited: a non-member must never reach the shell.
+  //
+  // The degrade path rides on the promise instead of a try/catch, so an
+  // unconfigured or unreachable backend still resolves to the "unavailable"
+  // notice rather than rejecting into the error boundary.
+  const keysResult = apiKeys
+    .list(projectId)
+    .then((keys) => ({ keys, unavailable: false }))
+    .catch((error) => {
+      logError(error, { projectId, surface: "api-keys.loader" });
+      return { keys: [], unavailable: true };
+    });
+
+  return { keysResult, projectId };
 }

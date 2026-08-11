@@ -787,6 +787,9 @@
       "title": "Delete this API key?",
       "description": "Any request using this key will immediately stop working. This can't be undone.",
       "confirm": "Delete key"
+    },
+    "grid": {
+      "empty": "No API keys yet"
     }
   },
   "webhooks": {
@@ -887,6 +890,9 @@
         "title": "No deliveries yet",
         "description": "Events will appear here once this webhook starts receiving them."
       }
+    },
+    "grid": {
+      "empty": "No webhooks yet"
     }
   },
   "billing": {

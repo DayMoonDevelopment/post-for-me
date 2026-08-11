@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/ui/dropdown-menu";
+import { Skeleton } from "~/ui/skeleton";
 import { toast } from "~/ui/sonner";
 
 /** Format an ISO timestamp in the viewer's locale (medium date). */
@@ -209,6 +210,20 @@ export function AccountsDataGrid({
         },
         enableSorting: false,
         size: 240,
+        meta: {
+          // Mirrors the identity cell above: `size="sm"` avatar (size-6) plus
+          // the stacked username / platform lines, at the same gaps. Matching
+          // the shape is what keeps rows from resizing when data lands.
+          skeleton: (
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="size-6 shrink-0 rounded-full" />
+              <div className="flex flex-col gap-1">
+                <Skeleton className="h-3.5 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </div>
+          ),
+        },
       },
       {
         accessorKey: "id",
@@ -223,6 +238,7 @@ export function AccountsDataGrid({
         ),
         enableSorting: false,
         size: 200,
+        meta: { skeleton: <Skeleton className="h-3.5 w-32" /> },
       },
       {
         accessorKey: "platformId",
@@ -237,6 +253,7 @@ export function AccountsDataGrid({
         ),
         enableSorting: false,
         size: 180,
+        meta: { skeleton: <Skeleton className="h-3.5 w-28" /> },
       },
       {
         accessorKey: "externalId",
@@ -254,6 +271,7 @@ export function AccountsDataGrid({
           ),
         enableSorting: false,
         size: 180,
+        meta: { skeleton: <Skeleton className="h-3.5 w-24" /> },
       },
       {
         accessorKey: "connectedAt",
@@ -269,6 +287,7 @@ export function AccountsDataGrid({
         ),
         enableSorting: false,
         size: 140,
+        meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
       },
       {
         id: "actions",
@@ -283,6 +302,8 @@ export function AccountsDataGrid({
         ),
         enableSorting: false,
         size: 56,
+        // Matches the `size="icon-sm"` trigger, so the column doesn't twitch.
+        meta: { skeleton: <Skeleton className="size-7 rounded-md" /> },
       },
     ],
     [t, onDisconnect],
