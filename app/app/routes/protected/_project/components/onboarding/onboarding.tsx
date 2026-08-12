@@ -482,7 +482,7 @@ export function Onboarding({
         <ModalContent
           layout="framed"
           data-slot="onboarding"
-          className={cn("max-w-xl", className)}
+          className={cn("sm:max-w-xl", className)}
           initialFocus={initialFocusRef}
         >
           <span ref={initialFocusRef} tabIndex={-1} className="sr-only" />

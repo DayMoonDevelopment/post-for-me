@@ -224,7 +224,7 @@ export function ProjectPlatformPicker({
   return (
     <Choicebox
       multiple
-      className="grid grid-cols-2 gap-3"
+      className="grid grid-cols-1 gap-3 md:grid-cols-2"
       value={value}
       onValueChange={(next) => onValueChange(next as OnboardingPlatform[])}
     >

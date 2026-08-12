@@ -67,7 +67,7 @@ export function ProjectSetupModal({
       <ModalContent
         layout="framed"
         data-slot="project-setup-modal"
-        className="max-w-xl"
+        className="sm:max-w-xl"
       >
         <ModalTitle className="sr-only">
           {t("projectSettings.modalTitle")}

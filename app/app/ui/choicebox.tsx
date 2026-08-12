@@ -76,7 +76,7 @@ function ChoiceboxItem({ className, ...props }: Toggle.Props) {
       data-slot="choicebox-item"
       data-orientation={orientation}
       className={cn(
-        "group/choicebox-item flex gap-4 rounded-lg border border-border p-4 text-start transition-colors",
+        "group/choicebox-item flex gap-4 rounded-lg border border-border p-4 pe-5 text-start transition-colors",
         "hover:border-primary/50 hover:bg-accent",
         "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/30",
         "data-pressed:border-primary data-pressed:bg-accent",
@@ -114,7 +114,7 @@ function ChoiceboxItemContent({
   return (
     <span
       data-slot="choicebox-item-content"
-      className={cn("flex flex-1 flex-col gap-0.5", className)}
+      className={cn("flex min-w-0 flex-1 flex-col gap-0.5", className)}
       {...props}
     />
   );
