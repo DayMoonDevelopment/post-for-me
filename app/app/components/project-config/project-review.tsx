@@ -75,12 +75,12 @@ function PlatformStack({ enabled }: { enabled: PlatformMeta[] }) {
     );
   }
   return (
-    <div className="flex items-center">
+    <div className="flex min-w-0 flex-1 items-center">
       {enabled.map((platform) => (
         <span
           key={platform.id}
           title={platform.label}
-          className="-ms-2 flex size-9 items-center justify-center rounded-full bg-muted text-foreground ring-2 ring-popover first:ms-0 [&_svg]:size-4"
+          className="-ms-3 flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground ring-2 ring-popover first:ms-0 [&_svg]:size-4"
         >
           <platform.icon />
         </span>
@@ -105,7 +105,9 @@ function KeyRow({
       <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground [&_svg]:size-4">
         <platform.icon />
       </span>
-      <AlertTitle className="line-clamp-none flex-1">{platform.label}</AlertTitle>
+      <AlertTitle className="line-clamp-none flex-1">
+        {platform.label}
+      </AlertTitle>
       {added ? (
         <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary [&_svg]:size-3.5">
           <SuccessIcon />
@@ -153,7 +155,11 @@ export function ProjectReviewHub({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
-        <ProjectReviewIdentity name={name} type={type} incomplete={incomplete} />
+        <ProjectReviewIdentity
+          name={name}
+          type={type}
+          incomplete={incomplete}
+        />
         <div className="flex flex-col gap-2 border-t border-border pt-4">
           <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {t("onboarding.review.platformsLabel")}
@@ -161,7 +167,12 @@ export function ProjectReviewHub({
           <div className="flex items-center justify-between gap-3">
             <PlatformStack enabled={enabled} />
             {onEditPlatforms ? (
-              <Button variant="outline" size="sm" onClick={onEditPlatforms}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={onEditPlatforms}
+              >
                 <EditIcon />
                 {t("common.edit")}
               </Button>
