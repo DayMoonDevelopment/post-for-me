@@ -159,7 +159,13 @@ jobs:
           # api/ expects, and the newer PUBLISHABLE_KEY / SECRET_KEY pair
           # app/ expects — they are NOT the same values as their legacy
           # counterparts, both sets are needed below.
-          bunx supabase status -o env >> "$GITHUB_ENV"
+          # `-o env` prints shell-quoted `KEY="value"` lines (meant to be
+          # `source`d), but $GITHUB_ENV is a plain KEY=value file with no
+          # quote stripping — appending as-is left literal quote characters
+          # in every value, which broke pg-connection-string's URL parsing
+          # for DATABASE_URL (it fell back to host "base", causing
+          # `getaddrinfo EAI_AGAIN base` at the healthcheck's DB query).
+          bunx supabase status -o env | sed -E 's/^([A-Za-z_][A-Za-z0-9_]*)="(.*)"$/\1=\2/' >> "$GITHUB_ENV"
 
       - name: Start the API
         working-directory: api
