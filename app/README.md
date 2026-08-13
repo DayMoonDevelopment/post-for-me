@@ -78,6 +78,24 @@ Make sure to deploy the output of `npm run build`
 │   └── server/    # Server-side code
 ```
 
+## E2E tests
+
+Playwright tests live in `e2e/`. They run against a real local Supabase + API — there's no mocking layer — so both must be running first:
+
+```bash
+cd api && bun run supabase:start   # local Supabase (Postgres, Auth, Mailpit)
+cd api && bun run start:dev        # local NestJS API on :3000
+```
+
+Then, from `app/`, with `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` / `API_URL` in `.env` pointed at that local stack:
+
+```bash
+bun run test:e2e       # headless
+bun run test:e2e:ui    # Playwright's UI mode
+```
+
+`playwright.config.ts` starts the app's own dev server for you. Global setup seeds one fixed test account (`e2e-login@postforme.test` by default, override via `E2E_TEST_EMAIL`) and mints an authenticated `storageState` other specs can reuse via `test.use({ storageState: "e2e/.auth/user.json" })` instead of re-driving the login UI.
+
 ## Styling
 
 This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.

@@ -101,3 +101,86 @@ jobs:
       - name: Build
         id: build
         run: bun run build
+
+  app:
+    name: App
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: app/.bun-version
+      - run: bun install --frozen-lockfile
+      - name: Lint
+        id: lint
+        run: bun run lint
+      - name: Typecheck
+        id: typecheck
+        run: bun run typecheck
+      - name: Build
+        id: build
+        run: bun run build
+
+  app-e2e:
+    name: App E2E
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: api/.bun-version
+
+      - name: Start local Supabase
+        working-directory: api
+        run: |
+          bun install --frozen-lockfile
+          bun run supabase:start
+          # Verified against a real `supabase status -o env` run: this CLI
+          # version prints both the legacy JWT keys (ANON_KEY, SERVICE_ROLE_KEY)
+          # api/ expects, and the newer PUBLISHABLE_KEY / SECRET_KEY pair
+          # app/ expects — they are NOT the same values as their legacy
+          # counterparts, both sets are needed below.
+          supabase status -o env >> "$GITHUB_ENV"
+
+      - name: Start the API
+        working-directory: api
+        env:
+          SUPABASE_URL: ${{ env.API_URL }}
+          SUPABASE_SERVICE_KEY: ${{ env.SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
+          SUPABASE_JWT_SECRET: ${{ env.JWT_SECRET }}
+          DATABASE_URL: ${{ env.DB_URL }}
+        run: |
+          bun run start:dev &
+          npx wait-on -t 60000 http://localhost:3000/healthcheck
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: app/.bun-version
+
+      - name: Run Playwright tests
+        working-directory: app
+        env:
+          SUPABASE_URL: ${{ env.API_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ env.PUBLISHABLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SECRET_KEY }}
+          API_URL: http://localhost:3000
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+          bun run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: app/playwright-report/
+          retention-days: 14
