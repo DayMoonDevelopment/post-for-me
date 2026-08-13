@@ -140,7 +140,19 @@ jobs:
       - name: Start local Supabase
         working-directory: api
         run: |
-          bun install --frozen-lockfile
+          # The `supabase` devDependency's postinstall downloads its CLI binary
+          # from GitHub releases, which occasionally flakes with a socket
+          # hang up / ECONNRESET on Actions runners — retry a few times
+          # before giving up.
+          for i in 1 2 3; do
+            bun install --frozen-lockfile && break
+            if [ "$i" -eq 3 ]; then
+              echo "bun install failed after 3 attempts" >&2
+              exit 1
+            fi
+            echo "bun install failed (attempt $i/3), retrying in 10s..." >&2
+            sleep 10
+          done
           bun run supabase:start
           # Verified against a real `supabase status -o env` run: this CLI
           # version prints both the legacy JWT keys (ANON_KEY, SERVICE_ROLE_KEY)
