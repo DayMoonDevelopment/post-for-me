@@ -10,6 +10,7 @@ loadEnv({ path: path.resolve(import.meta.dirname, ".env") });
 
 const PORT = Number(process.env.PORT) || 7361;
 const baseURL = `http://localhost:${PORT}`;
+const isCI = !!process.env.CI;
 
 /**
  * This suite talks to a real Supabase instance and a real NestJS API — there
@@ -29,29 +30,41 @@ export default defineConfig({
   // OTP wait even starts.
   timeout: 90_000,
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [["html", { open: "never" }]] : "list",
+  forbidOnly: isCI,
+  retries: isCI ? 1 : 0,
+  workers: isCI ? 1 : undefined,
+  reporter: isCI ? [["html", { open: "never" }]] : "list",
   use: {
     baseURL,
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "bun run dev",
+    // CI serves a real production build; local runs keep the dev server (HMR,
+    // instant restarts, a warm `node_modules/.vite` from previous sessions).
+    //
+    // The dev server is not viable on a cold CI checkout. Vite discovers deps
+    // it hasn't pre-bundled lazily, and a discovery made *after* the tab is
+    // open re-optimizes and strands that tab with a duplicate React copy —
+    // the documented failure in vite.config.ts's `optimizeDeps` comment. On
+    // /login that throws inside `TooltipProvider` (root.tsx), which sits above
+    // every error boundary, so hydration never completes and the email step's
+    // submit button stays permanently disabled (`disabled={pending ||
+    // !hydrated}` in email-step.tsx) — the click below times out with no
+    // visible error. Warming the server graph via the `url` probe doesn't
+    // help: the CLIENT module graph is first requested by the test's own
+    // navigation, so that cost (and that hazard) lands inside the per-test
+    // timeout. A built bundle has no dep optimizer and no lazy transform.
+    command: isCI ? "bun run build && bun run start" : "bun run dev",
+    // `react-router-serve` reads PORT from the environment and defaults to
+    // 3000 — which is the local NestJS API. Pin it either way.
+    env: { PORT: String(PORT) },
     // Probe `/login` specifically, not just `baseURL` — it's the route every
-    // spec starts on, and Vite's dev server compiles a route's module graph
-    // lazily on its first hit. Probing `/` doesn't pay that cost for
-    // `/login`, so the first real test navigation could stall past the
-    // login form's hydration wait (see email-step.tsx's `disabled={!hydrated}`)
-    // and get flagged flaky by the per-test timeout instead. Probing the
-    // actual route here means that cost lands in this step's own generous
-    // timeout instead.
+    // spec starts on, and in dev Vite compiles a route's server module graph
+    // lazily on its first hit.
     url: `${baseURL}/login`,
-    reuseExistingServer: !process.env.CI,
-    // SSR plus Vite's cold dependency pre-bundling (see vite.config.ts) can
-    // make a first boot slow.
-    timeout: 120_000,
+    reuseExistingServer: !isCI,
+    // Generous: in CI this covers `react-router build` as well as boot.
+    timeout: isCI ? 300_000 : 120_000,
   },
 });

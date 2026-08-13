@@ -94,7 +94,7 @@ bun run test:e2e       # headless
 bun run test:e2e:ui    # Playwright's UI mode
 ```
 
-`playwright.config.ts` starts the app's own dev server for you. Global setup seeds one fixed test account (`e2e-login@postforme.test` by default, override via `E2E_TEST_EMAIL`) and mints an authenticated `storageState` other specs can reuse via `test.use({ storageState: "e2e/.auth/user.json" })` instead of re-driving the login UI.
+`playwright.config.ts` starts the app for you — the dev server locally, and a real production build (`bun run build && bun run start`) when `CI` is set, because Vite's dev-time dependency discovery is not safe against a cold `node_modules/.vite` (see the comment on `webServer`). Global setup seeds one fixed test account (`e2e-login@postforme.test` by default, override via `E2E_TEST_EMAIL`) and mints an authenticated `storageState` other specs can reuse via `test.use({ storageState: "e2e/.auth/user.json" })` instead of re-driving the login UI.
 
 ## Styling
 
