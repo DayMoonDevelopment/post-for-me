@@ -170,6 +170,13 @@ jobs:
           SUPABASE_JWT_SECRET: ${{ env.JWT_SECRET }}
           DATABASE_URL: ${{ env.DB_URL }}
           UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
+          # StripeWebhookService is eagerly instantiated at boot (part of
+          # PrivateModule, always in the graph) and only touches Stripe when
+          # a real webhook POST arrives — which e2e browser flows never
+          # trigger — so a non-functional placeholder is enough to satisfy
+          # its constructor without wiring a real Stripe secret into CI.
+          STRIPE_SECRET_KEY: sk_test_ci_placeholder
+          STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
         run: |
           bun run start:dev &
           npx wait-on -t 60000 http://localhost:3000/healthcheck
