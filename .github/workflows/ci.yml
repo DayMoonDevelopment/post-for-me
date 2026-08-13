@@ -153,7 +153,16 @@ jobs:
             echo "bun install failed (attempt $i/3), retrying in 10s..." >&2
             sleep 10
           done
-          bun run supabase:start
+          # Only gotrue (auth/OTP), postgrest (REST), kong (gateway — what
+          # SUPABASE_URL points at) and mailpit (OTP email capture) are
+          # exercised by the e2e suite today; postgres itself can't be
+          # excluded. Skipping the rest avoids pulling ~6.5GB of images
+          # nothing here touches (studio and storage-api alone are ~3GB).
+          # If a future spec needs storage/realtime/etc., drop it from this
+          # list.
+          bunx supabase start \
+            -x realtime -x storage-api -x imgproxy -x postgres-meta \
+            -x studio -x edge-runtime -x logflare -x vector -x supavisor
           # Verified against a real `supabase status -o env` run: this CLI
           # version prints both the legacy JWT keys (ANON_KEY, SERVICE_ROLE_KEY)
           # api/ expects, and the newer PUBLISHABLE_KEY / SECRET_KEY pair
@@ -190,6 +199,16 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: app/.bun-version
+
+      # `playwright install --with-deps` always re-runs apt-get for OS deps
+      # (the runner is a fresh VM each time, so that part can't be skipped),
+      # but the browser binary itself — the multi-hundred-MB download — is
+      # skipped when this cache already has a matching version.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/bun.lock') }}
 
       - name: Run Playwright tests
         working-directory: app
