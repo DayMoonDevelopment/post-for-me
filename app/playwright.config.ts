@@ -22,8 +22,12 @@ export default defineConfig({
   testDir: "./e2e/tests",
   globalSetup: "./e2e/fixtures/global-setup.ts",
   // Playwright's 30s default is tight against the OTP wait alone (local mail
-  // delivery can take up to 45s on a cold container — see e2e/fixtures/mailpit.ts).
-  timeout: 60_000,
+  // delivery can take up to 45s on a cold container — see
+  // e2e/fixtures/mailpit.ts). 60s was already tight on top of that once you
+  // add page load/hydration + typing + the post-verify navigation — bumped
+  // for margin after seeing it flake in CI on hydration alone, before the
+  // OTP wait even starts.
+  timeout: 90_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -36,7 +40,15 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: "bun run dev",
-    url: baseURL,
+    // Probe `/login` specifically, not just `baseURL` — it's the route every
+    // spec starts on, and Vite's dev server compiles a route's module graph
+    // lazily on its first hit. Probing `/` doesn't pay that cost for
+    // `/login`, so the first real test navigation could stall past the
+    // login form's hydration wait (see email-step.tsx's `disabled={!hydrated}`)
+    // and get flagged flaky by the per-test timeout instead. Probing the
+    // actual route here means that cost lands in this step's own generous
+    // timeout instead.
+    url: `${baseURL}/login`,
     reuseExistingServer: !process.env.CI,
     // SSR plus Vite's cold dependency pre-bundling (see vite.config.ts) can
     // make a first boot slow.
