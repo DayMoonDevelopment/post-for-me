@@ -159,7 +159,7 @@ jobs:
           # api/ expects, and the newer PUBLISHABLE_KEY / SECRET_KEY pair
           # app/ expects — they are NOT the same values as their legacy
           # counterparts, both sets are needed below.
-          supabase status -o env >> "$GITHUB_ENV"
+          bunx supabase status -o env >> "$GITHUB_ENV"
 
       - name: Start the API
         working-directory: api
