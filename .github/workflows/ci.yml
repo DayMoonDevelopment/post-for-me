@@ -169,6 +169,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
           SUPABASE_JWT_SECRET: ${{ env.JWT_SECRET }}
           DATABASE_URL: ${{ env.DB_URL }}
+          UNKEY_ROOT_KEY: ${{ secrets.UNKEY_ROOT_KEY }}
         run: |
           bun run start:dev &
           npx wait-on -t 60000 http://localhost:3000/healthcheck
