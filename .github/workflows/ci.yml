@@ -133,11 +133,47 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      # The CLI version pins which image TAGS the stack runs, so it is what the
+      # image cache below is really keyed on. Keying on api/bun.lock instead
+      # would mint a fresh ~850MB entry on every unrelated dependency bump and
+      # churn through the repo's 10GB cache budget. Read straight out of the
+      # lockfile so this needs no `bun install` and can run before it.
+      - name: Resolve Supabase CLI version
+        id: supabase-cli
+        working-directory: api
+        run: |
+          version="$(grep -oE '"supabase@[0-9]+\.[0-9]+\.[0-9]+"' bun.lock \
+            | head -1 | tr -d '"' | sed 's/supabase@//')"
+          if [ -z "$version" ]; then
+            echo "could not resolve the supabase CLI version from api/bun.lock" >&2
+            exit 1
+          fi
+          echo "Supabase CLI $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # A cold `supabase start` pulls ~3.8GB of images (~2min, ~75% of it the
+      # postgres image). The same images `docker save` to ~850MB compressed,
+      # so restoring and loading them is a good deal cheaper. A miss just
+      # falls through to the normal pull — nothing below depends on this
+      # having hit.
+      - name: Restore Supabase docker images
+        id: supabase-images
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/supabase-images.tar
+          key: supabase-images-${{ runner.os }}-${{ steps.supabase-cli.outputs.version }}
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: api/.bun-version
 
-      - name: Start local Supabase
+      # Whether it loads from cache or pulls, bringing the stack up is the
+      # long pole and needs nothing from app/. Backgrounding it means the app/
+      # steps below, which are CPU/disk bound, run inside that window for free
+      # instead of queueing behind it. "Wait for local Supabase" is where the
+      # remaining cost actually lands.
+      - name: Start local Supabase (background)
         working-directory: api
         run: |
           # The `supabase` devDependency's postinstall downloads its CLI binary
@@ -160,9 +196,90 @@ jobs:
           # nothing here touches (studio and storage-api alone are ~3GB).
           # If a future spec needs storage/realtime/etc., drop it from this
           # list.
-          bunx supabase start \
-            -x realtime -x storage-api -x imgproxy -x postgres-meta \
-            -x studio -x edge-runtime -x logflare -x vector -x supavisor
+          #
+          # The exit code goes to a file because the waiter runs in a LATER
+          # step, i.e. a different shell — `wait $pid` only works on your own
+          # children, so the status has to be handed over out-of-band. stdin
+          # and both output streams are detached from this step, or the runner
+          # would block on the inherited pipe waiting for a process that
+          # outlives the step.
+          #
+          # `docker load` is inside the background block, not a step of its
+          # own, so it overlaps the app/ build too. `bash -c` does not inherit
+          # the step's `-e`, which is what we want here: if the restored tar
+          # is somehow unloadable, the group carries on to `supabase start`
+          # and that just pulls. `$?` is the group's status, i.e. the status
+          # of `supabase start`, which is the only failure worth reporting.
+          nohup bash -c '
+            {
+              if [ -f /tmp/supabase-images.tar ]; then
+                docker load -i /tmp/supabase-images.tar
+              fi
+              bunx supabase start \
+                -x realtime -x storage-api -x imgproxy -x postgres-meta \
+                -x studio -x edge-runtime -x logflare -x vector -x supavisor
+            } > /tmp/supabase-start.log 2>&1
+            echo $? > /tmp/supabase-start.exit
+          ' < /dev/null > /dev/null 2>&1 &
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: app/.bun-version
+
+      # `playwright install` skips the browser download when this cache
+      # already holds a matching version. The `shell` in the key busts the
+      # entries written back when this job installed full Chromium: an exact
+      # key hit restores but never re-saves, so without it a stale full-browser
+      # cache would keep "hitting" while the headless shell got re-downloaded
+      # every run, until app/bun.lock happened to change.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-shell-${{ runner.os }}-${{ hashFiles('app/bun.lock') }}
+
+      - name: Install app deps and build
+        working-directory: app
+        env:
+          # Not needed by `react-router build` today (verified: it builds with
+          # no Supabase/Stripe env at all), but app/lib/.server/stripe/client.ts
+          # throws at module-import time, so anything that ever starts
+          # evaluating server modules during a build would need it.
+          STRIPE_SECRET_KEY: sk_test_ci_placeholder
+        run: |
+          bun install --frozen-lockfile
+          # `--only-shell` fetches just chromium-headless-shell: the suite is
+          # headless-only and `devices["Desktop Chrome"]` pins no `channel`,
+          # so the full headed Chromium is never launched. `--with-deps` is
+          # dropped because ubuntu-latest already ships Chromium's shared
+          # libraries — it was re-running apt-get every build for nothing.
+          bunx playwright install chromium --only-shell
+          # Built here, not inside Playwright's `webServer`, so it overlaps
+          # Supabase coming up above. E2E_PREBUILT tells playwright.config.ts
+          # to boot the server without rebuilding.
+          bun run build
+
+      - name: Wait for local Supabase
+        working-directory: api
+        run: |
+          # Spelled as a full `if` rather than `[ -f ... ] && break`: steps run
+          # under `bash -e`, where an && list whose left side fails is the
+          # last command of the loop body and can take the whole step down.
+          for _ in $(seq 1 300); do
+            if [ -f /tmp/supabase-start.exit ]; then break; fi
+            sleep 1
+          done
+          if [ ! -f /tmp/supabase-start.exit ]; then
+            echo "supabase start did not finish within 300s" >&2
+            cat /tmp/supabase-start.log >&2 || true
+            exit 1
+          fi
+          cat /tmp/supabase-start.log
+          status="$(cat /tmp/supabase-start.exit)"
+          if [ "$status" -ne 0 ]; then
+            echo "supabase start exited with status $status" >&2
+            exit 1
+          fi
           # Verified against a real `supabase status -o env` run: this CLI
           # version prints both the legacy JWT keys (ANON_KEY, SERVICE_ROLE_KEY)
           # api/ expects, and the newer PUBLISHABLE_KEY / SECRET_KEY pair
@@ -194,21 +311,17 @@ jobs:
           STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
         run: |
           bun run start:dev &
-          npx wait-on -t 60000 http://localhost:3000/healthcheck
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: app/.bun-version
-
-      # `playwright install --with-deps` always re-runs apt-get for OS deps
-      # (the runner is a fresh VM each time, so that part can't be skipped),
-      # but the browser binary itself — the multi-hundred-MB download — is
-      # skipped when this cache already has a matching version.
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('app/bun.lock') }}
+          # Plain curl rather than `npx wait-on`, which spent ~7s installing
+          # itself from npm just to poll a URL.
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3000/healthcheck > /dev/null; then
+              echo "API is healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become healthy within 60s" >&2
+          exit 1
 
       - name: Run Playwright tests
         working-directory: app
@@ -223,10 +336,10 @@ jobs:
           # the client isn't actually exercised unless a spec drives a real
           # billing/checkout flow.
           STRIPE_SECRET_KEY: sk_test_ci_placeholder
-        run: |
-          bun install --frozen-lockfile
-          bunx playwright install --with-deps chromium
-          bun run test:e2e
+          # Deps, browser and build all happened in "Install app deps and
+          # build" above, while Supabase was still pulling images.
+          E2E_PREBUILT: "1"
+        run: bun run test:e2e
 
       - name: Upload Playwright report
         if: failure()
@@ -235,3 +348,32 @@ jobs:
           name: playwright-report
           path: app/playwright-report/
           retention-days: 14
+
+      # Populating the cache runs last so its ~30s of `docker save` lands
+      # after the tests have already reported, never in front of them. Gated
+      # on the restore having missed: re-exporting on a hit would be pure
+      # waste, and `actions/cache/save` cannot overwrite an existing key
+      # anyway. `always()` so a red run still seeds the cache for the next one.
+      - name: Export Supabase docker images
+        id: export-images
+        if: always() && steps.supabase-images.outputs.cache-hit != 'true'
+        run: |
+          # Scoped to the stack's own containers rather than `docker images`,
+          # which would sweep in whatever the runner ships preinstalled.
+          images="$(docker ps -a --filter name=supabase_ --format '{{.Image}}' | sort -u)"
+          if [ -z "$images" ]; then
+            echo "no supabase containers found — nothing to export"
+            exit 0
+          fi
+          echo "$images"
+          # Unquoted on purpose: this has to expand to one argument per image.
+          # shellcheck disable=SC2086
+          docker save $images -o /tmp/supabase-images.tar
+          echo "exported=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save Supabase docker images
+        if: always() && steps.export-images.outputs.exported == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/supabase-images.tar
+          key: supabase-images-${{ runner.os }}-${{ steps.supabase-cli.outputs.version }}

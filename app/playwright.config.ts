@@ -11,6 +11,13 @@ loadEnv({ path: path.resolve(import.meta.dirname, ".env") });
 const PORT = Number(process.env.PORT) || 7361;
 const baseURL = `http://localhost:${PORT}`;
 const isCI = !!process.env.CI;
+// CI runs `bun run build` in an earlier workflow step so it overlaps the
+// ~2min Supabase docker pull instead of queueing behind it, then sets this —
+// leaving `webServer` with nothing to do but boot the built server. Anywhere
+// else (a bare `CI=1 bun run test:e2e`, a fresh clone) the build still has to
+// happen here, or `react-router-serve` would boot against a stale/absent
+// ./build.
+const isPrebuilt = !!process.env.E2E_PREBUILT;
 
 /**
  * This suite talks to a real Supabase instance and a real NestJS API — there
@@ -55,7 +62,11 @@ export default defineConfig({
     // help: the CLIENT module graph is first requested by the test's own
     // navigation, so that cost (and that hazard) lands inside the per-test
     // timeout. A built bundle has no dep optimizer and no lazy transform.
-    command: isCI ? "bun run build && bun run start" : "bun run dev",
+    command: isCI
+      ? isPrebuilt
+        ? "bun run start"
+        : "bun run build && bun run start"
+      : "bun run dev",
     // `react-router-serve` reads PORT from the environment and defaults to
     // 3000 — which is the local NestJS API. Pin it either way.
     env: { PORT: String(PORT) },
@@ -64,7 +75,8 @@ export default defineConfig({
     // lazily on its first hit.
     url: `${baseURL}/login`,
     reuseExistingServer: !isCI,
-    // Generous: in CI this covers `react-router build` as well as boot.
-    timeout: isCI ? 300_000 : 120_000,
+    // Generous: unless the build already happened in CI, this covers
+    // `react-router build` as well as boot.
+    timeout: isCI && !isPrebuilt ? 300_000 : 120_000,
   },
 });
