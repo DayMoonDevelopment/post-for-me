@@ -198,6 +198,12 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: ${{ env.PUBLISHABLE_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SECRET_KEY }}
           API_URL: http://localhost:3000
+          # app/lib/.server/stripe/client.ts throws at module-import time
+          # (not lazily, unlike the webhook secrets) if this is unset, so the
+          # dev server 500s on first request. A placeholder is enough since
+          # the client isn't actually exercised unless a spec drives a real
+          # billing/checkout flow.
+          STRIPE_SECRET_KEY: sk_test_ci_placeholder
         run: |
           bun install --frozen-lockfile
           bunx playwright install --with-deps chromium
