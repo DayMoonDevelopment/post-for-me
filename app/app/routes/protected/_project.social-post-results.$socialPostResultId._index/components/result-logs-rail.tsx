@@ -69,7 +69,7 @@ export function LogRail({ operations }: { operations: LogOperation[] }) {
           type="button"
           variant="outline"
           size="sm"
-          className="self-start"
+          className="self-center"
           onClick={() => setExpanded(true)}
         >
           {t("socialPostResults.logsShowMore", { count: hiddenCount })}
