@@ -145,12 +145,13 @@ export class TikTokPostClient extends PostClient {
 
       if (platformConfig?.is_draft) {
         const { status } = await this.#getPublishStatus({ publishId, account });
+        const isProcessing = this.#processingStatuses.includes(status);
 
         return {
-          success: true,
+          success: !isProcessing,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message: this.#processingStatuses.includes(status)
+          error_message: isProcessing
             ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
             : undefined,
           details: {
