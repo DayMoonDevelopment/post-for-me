@@ -1,8 +1,17 @@
 import type * as React from "react";
 
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/ui/card";
+
 /**
- * One detail card: a bordered panel with a header (title + optional description
- * on the left, an optional action on the right) above the content. Mirrors the
+ * One detail card: a {@link Card} with a header (title + optional description on
+ * the left, an optional action on the right) above the content. Mirrors the
  * Project Settings page's `SettingsCard` so the two read-only surfaces share the
  * same visual structure.
  */
@@ -18,20 +27,14 @@ export function DetailCard({
   title: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h2 className="font-heading text-sm font-semibold text-foreground">
-            {title}
-          </h2>
-          {description ? (
-            <p className="text-xs/relaxed text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
-      {children}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
+        {action ? <CardAction>{action}</CardAction> : null}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 

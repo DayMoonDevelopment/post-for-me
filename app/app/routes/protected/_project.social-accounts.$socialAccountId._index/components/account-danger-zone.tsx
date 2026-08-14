@@ -5,6 +5,13 @@ import { useFetcher } from "react-router";
 import type { SocialAccount } from "~/lib/types/social-account";
 
 import { ConfirmDialog } from "~/components/confirm-dialog";
+import {
+  DangerZone,
+  DangerZoneActions,
+  DangerZoneDescription,
+  DangerZoneHeader,
+  DangerZoneTitle,
+} from "~/components/danger-zone";
 import { useActionErrorToast } from "~/hooks/use-action-error-toast";
 import { DisconnectIcon } from "~/icons";
 import { isActionError } from "~/lib/action-result";
@@ -40,17 +47,17 @@ export function AccountDangerZone({ account }: { account: SocialAccount }) {
   }, [fetcher.state, fetcher.data]);
 
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-destructive/10 bg-card p-6">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <h2 className="font-heading text-sm font-semibold text-destructive">
+    <DangerZone>
+      <DangerZoneHeader>
+        <DangerZoneTitle>
           {t("socialAccounts.detail.dangerTitle")}
-        </h2>
-        <p className="text-xs/relaxed text-muted-foreground">
+        </DangerZoneTitle>
+        <DangerZoneDescription>
           {t("socialAccounts.detail.dangerDescription")}
-        </p>
-      </div>
+        </DangerZoneDescription>
+      </DangerZoneHeader>
 
-      <div className="flex flex-wrap justify-end gap-2">
+      <DangerZoneActions>
         <Button
           type="button"
           variant="secondary"
@@ -60,7 +67,7 @@ export function AccountDangerZone({ account }: { account: SocialAccount }) {
           <DisconnectIcon />
           {t("socialAccounts.actions.disconnect")}
         </Button>
-      </div>
+      </DangerZoneActions>
 
       <ConfirmDialog
         open={disconnectOpen}
@@ -73,6 +80,6 @@ export function AccountDangerZone({ account }: { account: SocialAccount }) {
         pending={pending}
         onConfirm={() => fetcher.submit({ intent: "disconnect" }, { method: "post" })}
       />
-    </section>
+    </DangerZone>
   );
 }

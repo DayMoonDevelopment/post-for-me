@@ -8,6 +8,7 @@ import type {
 
 import { ChevronRightIcon, PostsIcon } from "~/icons";
 import { Badge } from "~/ui/badge";
+import { Card } from "~/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -60,7 +61,9 @@ export function AccountPostsTable({ posts }: { posts: AccountPost[] }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
+        // A flush list, not a titled card: zero the Card's padding/gap so the
+        // divided rows sit edge-to-edge inside its ring + radius.
+        <Card className="gap-0 py-0">
           {posts.map((post) => (
             <Link
               key={post.id}
@@ -83,7 +86,7 @@ export function AccountPostsTable({ posts }: { posts: AccountPost[] }) {
               <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
             </Link>
           ))}
-        </div>
+        </Card>
       )}
     </section>
   );

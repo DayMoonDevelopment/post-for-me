@@ -6,6 +6,7 @@ import { CopyableId } from "~/components/copyable-id";
 import { ReferenceRow } from "~/components/reference-row";
 import { InfoIcon } from "~/icons";
 import { Alert, AlertDescription } from "~/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "~/ui/card";
 import { LocaleDateTime } from "~/ui/date-time";
 
 /**
@@ -16,30 +17,32 @@ export function PostReferences({ post }: { post: SocialPostDetail }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6">
-        <h2 className="font-heading text-sm font-semibold text-foreground">
-          {t("socialPosts.detail.referencesTitle")}
-        </h2>
-        <dl className="flex flex-col gap-3">
-          <ReferenceRow label={t("socialPosts.columns.pfmId")}>
-            <CopyableId
-              value={post.id}
-              copyLabel={t("socialPosts.actions.copyPfmId")}
-              className="break-all"
-            />
-          </ReferenceRow>
-          <ReferenceRow label={t("socialPosts.columns.externalId")}>
-            <CopyableId
-              value={post.externalId}
-              copyLabel={t("socialPosts.actions.copyExternalId")}
-              className="break-all"
-            />
-          </ReferenceRow>
-          <ReferenceRow label={t("socialPosts.detail.createdAt")}>
-            <LocaleDateTime value={post.createdAt} />
-          </ReferenceRow>
-        </dl>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("socialPosts.detail.referencesTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="flex flex-col gap-3">
+            <ReferenceRow label={t("socialPosts.columns.pfmId")}>
+              <CopyableId
+                value={post.id}
+                copyLabel={t("socialPosts.actions.copyPfmId")}
+                className="break-all"
+              />
+            </ReferenceRow>
+            <ReferenceRow label={t("socialPosts.columns.externalId")}>
+              <CopyableId
+                value={post.externalId}
+                copyLabel={t("socialPosts.actions.copyExternalId")}
+                className="break-all"
+              />
+            </ReferenceRow>
+            <ReferenceRow label={t("socialPosts.detail.createdAt")}>
+              <LocaleDateTime value={post.createdAt} />
+            </ReferenceRow>
+          </dl>
+        </CardContent>
+      </Card>
 
       {post.status === "processed" ? (
         <Alert variant="info">
