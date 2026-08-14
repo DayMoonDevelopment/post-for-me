@@ -18,6 +18,10 @@ const isCI = !!process.env.CI;
 // happen here, or `react-router-serve` would boot against a stale/absent
 // ./build.
 const isPrebuilt = !!process.env.E2E_PREBUILT;
+// `--headed` on its own runs every action at full speed, which is unwatchable.
+// `E2E_SLOWMO` inserts a delay (ms) before each Playwright action so you can
+// see the clicks and typing happen; `bun run test:e2e:headed` sets it to 300.
+const slowMo = Number(process.env.E2E_SLOWMO) || 0;
 
 /**
  * This suite talks to a real Supabase instance and a real NestJS API — there
@@ -35,7 +39,10 @@ export default defineConfig({
   // add page load/hydration + typing + the post-verify navigation — bumped
   // for margin after seeing it flake in CI on hydration alone, before the
   // OTP wait even starts.
-  timeout: 90_000,
+  //
+  // Under `E2E_SLOWMO` every action pays that delay on top, so give watched
+  // runs extra headroom rather than have them time out mid-demo.
+  timeout: slowMo ? 180_000 : 90_000,
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
@@ -44,6 +51,7 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "retain-on-failure",
+    launchOptions: { slowMo },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
