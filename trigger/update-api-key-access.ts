@@ -67,9 +67,12 @@ export async function updateApiKeyAccess(
     return;
   }
 
-  // Only stamp plan metadata when entitled; an empty plan would otherwise wipe
-  // existing metadata off a key on the way down.
-  const planMetadata = resolved.planMetadata ?? {};
+  // Only stamp plan metadata on the way up. Keyed off `enabled` rather than the
+  // verdict because `payment_failure` reaches here both ways: re-enabling a
+  // team inside its grace window (metadata should be reconciled) and revoking
+  // one past the deadline (it should not — writing to a key being disabled is
+  // pointless churn, and an empty plan would wipe the metadata outright).
+  const planMetadata = enabled ? (resolved.planMetadata ?? {}) : {};
 
   const failures: string[] = [];
 

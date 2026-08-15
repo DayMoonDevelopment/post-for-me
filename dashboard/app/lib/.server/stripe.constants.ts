@@ -4,7 +4,6 @@ export const STRIPE_API_PRODUCT_ID = process.env?.STRIPE_API_PRODUCT_ID || "";
 export const STRIPE_CREDS_ADDON_PRODUCT_ID =
   process.env?.STRIPE_CREDS_ADDON_PRODUCT_ID || "";
 export const STRIPE_METER_EVENT_ID = process.env?.STRIPE_METER_EVENT_ID || "";
-export const STRIPE_CANCELLED_STATUSES = ["canceled", "unpaid"];
 
 // Days a team keeps API access after its subscription leaves active/trialing
 // (e.g. a failed payment) before access is actually revoked. Explicit

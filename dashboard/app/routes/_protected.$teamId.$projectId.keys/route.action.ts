@@ -1,12 +1,10 @@
 import { data } from "react-router";
-import { customerHasActiveSubscriptions } from "~/lib/.server/customer-has-active-subscriptions.request";
-import { customerHasSubscriptionSystemCredsAddon } from "~/lib/.server/customer-has-subscription-system-creds-addon.request";
 
 import { withSupabase } from "~/lib/.server/supabase";
 import { unkey } from "~/lib/.server/unkey";
 import { RATE_LIMITS, UNKEY_API_ID } from "~/lib/.server/unkey.constants";
-import { stripe } from "~/lib/.server/stripe";
-import { getSubscriptionPlanInfo } from "~/lib/.server/get-subscription-plan-info";
+import { resolveSubscriptionEntitlement } from "~/lib/.server/resolve-subscription-entitlement.request";
+import { planMetadataFromPlanInfo } from "~/lib/.server/get-subscription-plan-info";
 
 export const action = withSupabase(async ({ supabase, params }) => {
   const { teamId, projectId } = params;
@@ -38,13 +36,17 @@ export const action = withSupabase(async ({ supabase, params }) => {
     return data({ success: false, error: "Not found", result: null });
   }
 
-  const hasActiveSubscription = project.data.is_system
-    ? await customerHasSubscriptionSystemCredsAddon(
-        team.data.stripe_customer_id,
-      )
-    : await customerHasActiveSubscriptions(team.data.stripe_customer_id);
+  // Same verdict the Stripe webhook and reconcile sweep act on, and the same
+  // per-project rule updateAPIKeyAccess applies, so a key can be minted exactly
+  // when the sweep would leave it enabled. The previous `status: "active"`
+  // lookups disagreed on both counts: they refused to mint for a trialing team
+  // or one inside its payment grace window, even though enforcement was keeping
+  // that team's existing keys working.
+  const entitlement = await resolveSubscriptionEntitlement(
+    team.data.stripe_customer_id,
+  );
 
-  if (!hasActiveSubscription) {
+  if (entitlement.verdict === "immediate_revoke") {
     return data({
       success: false,
       toast_msg: "You must have an active subscription to create an API key",
@@ -52,38 +54,16 @@ export const action = withSupabase(async ({ supabase, params }) => {
     });
   }
 
-  // Get plan info to add to metadata
-  const planMetadata: Record<string, string> = {};
-  if (team.data.stripe_customer_id) {
-    try {
-      const subscriptions = await stripe.subscriptions.list({
-        customer: team.data.stripe_customer_id,
-        status: "active",
-        limit: 1,
-      });
-
-      if (subscriptions.data.length > 0) {
-        const planInfo = getSubscriptionPlanInfo(subscriptions.data[0]);
-        if (planInfo.productId) {
-          planMetadata.plan_product_id = planInfo.productId;
-        }
-        if (planInfo.planName) {
-          planMetadata.plan_name = planInfo.planName;
-        }
-        if (planInfo.postLimit) {
-          planMetadata.plan_post_limit = planInfo.postLimit.toString();
-        }
-        planMetadata.plan_type = planInfo.isNewPricing
-          ? "new_pricing"
-          : planInfo.isLegacy
-            ? "legacy"
-            : "unknown";
-      }
-    } catch (error) {
-      console.error("Error fetching plan info for API key metadata:", error);
-      // Continue without plan metadata
-    }
+  if (project.data.is_system && !entitlement.grantsSystemCredentials) {
+    return data({
+      success: false,
+      toast_msg:
+        "Your plan doesn't include managed social app credentials. Upgrade to create a key for this project.",
+      result: null,
+    });
   }
+
+  const planMetadata = planMetadataFromPlanInfo(entitlement.planInfo);
 
   try {
     const apiKey = await unkey.keys.createKey({

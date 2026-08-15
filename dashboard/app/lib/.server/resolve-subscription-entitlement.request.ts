@@ -42,7 +42,11 @@ export type SubscriptionEntitlement = {
    * subscriptions at all.
    */
   latestStatus: Stripe.Subscription.Status | null;
-  /** Plan info for the entitling subscription, or the empty plan when none. */
+  /**
+   * Plan info for the subscription that currently backs access — the entitling
+   * one, or the payment-failing one whose grace window is keeping the team
+   * alive. The empty plan on `immediate_revoke`, where nothing is granted.
+   */
   planInfo: PlanInfo;
   /** Whether an entitling subscription grants managed/system credentials. */
   grantsSystemCredentials: boolean;
@@ -67,6 +71,42 @@ function subscriptionGrantsSystemCredentials(
 }
 
 /**
+ * The one subscription that currently backs a customer's access, or `null` when
+ * nothing does.
+ *
+ * Entitled customers get the subscription that names the plan — a new-pricing
+ * tier first, then a legacy plan — so a tier sitting alongside an add-on is the
+ * one that answers. Customers with no entitling subscription get the
+ * payment-failing one, because a team inside its grace window is still running
+ * on that subscription's plan.
+ *
+ * Exported so surfaces that need the subscription object itself (the billing
+ * page's portal link, upcoming invoice and cancel date) pick the same one
+ * enforcement does, rather than asking Stripe for the newest.
+ */
+export function selectBillableSubscription(
+  subscriptions: Stripe.Subscription[],
+): Stripe.Subscription | null {
+  const entitling = subscriptions.filter((sub) =>
+    ENTITLING_STATUSES.includes(sub.status),
+  );
+
+  if (entitling.length > 0) {
+    return (
+      entitling.find((sub) => getSubscriptionPlanInfo(sub).isNewPricing) ??
+      entitling.find((sub) => getSubscriptionPlanInfo(sub).isLegacy) ??
+      entitling[0]
+    );
+  }
+
+  return (
+    subscriptions.find(
+      (sub) => !IMMEDIATE_REVOKE_STATUSES.includes(sub.status),
+    ) ?? null
+  );
+}
+
+/**
  * Reduces every subscription a customer has to a single access verdict.
  *
  * Pure — no network — so the decision itself is unit-testable. Callers that
@@ -83,20 +123,15 @@ export function reduceSubscriptionsToEntitlement(
   const entitling = subscriptions.filter((sub) =>
     ENTITLING_STATUSES.includes(sub.status),
   );
+  const billable = selectBillableSubscription(subscriptions);
 
-  if (entitling.length > 0) {
-    // Prefer a new-pricing tier for plan metadata, then a legacy plan, so a
-    // tier subscription sitting alongside an add-on is the one that names the
-    // plan. Falls back to the first entitling subscription.
-    const planSubscription =
-      entitling.find((sub) => getSubscriptionPlanInfo(sub).isNewPricing) ??
-      entitling.find((sub) => getSubscriptionPlanInfo(sub).isLegacy) ??
-      entitling[0];
-
+  // `billable` is non-null whenever anything is entitling; the check is here to
+  // narrow the type, not because the case is reachable.
+  if (entitling.length > 0 && billable) {
     return {
       verdict: "entitled",
-      latestStatus: planSubscription.status,
-      planInfo: getSubscriptionPlanInfo(planSubscription),
+      latestStatus: billable.status,
+      planInfo: getSubscriptionPlanInfo(billable),
       grantsSystemCredentials: entitling.some(
         subscriptionGrantsSystemCredentials,
       ),
@@ -117,14 +152,18 @@ export function reduceSubscriptionsToEntitlement(
   // Nothing entitling. If every remaining subscription is a hard stop, revoke
   // now; if any is payment-failure-shaped, that path owns the decision so the
   // grace period still applies.
-  const paymentFailure = subscriptions.find(
-    (sub) => !IMMEDIATE_REVOKE_STATUSES.includes(sub.status),
-  );
+  const paymentFailure = billable;
 
   return {
     verdict: paymentFailure ? "payment_failure" : "immediate_revoke",
     latestStatus: (paymentFailure ?? subscriptions[0]).status,
-    planInfo: emptyPlanInfo,
+    // Same reasoning as grantsSystemCredentials below: a team inside its grace
+    // window is still running on the failing subscription's plan, so callers
+    // re-enabling it can reconcile the plan metadata on its keys rather than
+    // repairing the `enabled` bit and leaving a stale `plan_type` beside it.
+    planInfo: paymentFailure
+      ? getSubscriptionPlanInfo(paymentFailure)
+      : emptyPlanInfo,
     // A team inside its grace period keeps whatever the failing subscription
     // granted, so this reports what that subscription *would* grant. Callers
     // only consult it when enabling, and the revoke path leaves it false, so
@@ -144,24 +183,24 @@ export function reduceSubscriptionsToEntitlement(
  * late `customer.subscription.updated` carrying a stale `active` status can no
  * longer resurrect a churned team's keys.
  */
-export async function resolveSubscriptionEntitlement(
-  stripeCustomerId: string | null | undefined,
-): Promise<SubscriptionEntitlement> {
-  if (!stripeCustomerId) {
-    return reduceSubscriptionsToEntitlement([]);
-  }
-
+/**
+ * Every subscription the customer holds. Paginated rather than `limit: 1` — the
+ * whole point is to see all of them, not the newest one.
+ */
+async function listAllSubscriptions(
+  stripeCustomerId: string,
+  expand?: string[],
+): Promise<Stripe.Subscription[]> {
   const subscriptions: Stripe.Subscription[] = [];
   let startingAfter: string | undefined = undefined;
 
-  // Paginate rather than `limit: 1` — the whole point is to see every
-  // subscription, not the newest one.
   for (;;) {
     const page: Stripe.ApiList<Stripe.Subscription> =
       await stripe.subscriptions.list({
         customer: stripeCustomerId,
         status: "all",
         limit: 100,
+        ...(expand ? { expand } : {}),
         ...(startingAfter ? { starting_after: startingAfter } : {}),
       });
 
@@ -174,5 +213,32 @@ export async function resolveSubscriptionEntitlement(
     startingAfter = page.data[page.data.length - 1].id;
   }
 
-  return reduceSubscriptionsToEntitlement(subscriptions);
+  return subscriptions;
+}
+
+export async function resolveSubscriptionEntitlement(
+  stripeCustomerId: string | null | undefined,
+): Promise<SubscriptionEntitlement> {
+  if (!stripeCustomerId) {
+    return reduceSubscriptionsToEntitlement([]);
+  }
+
+  return reduceSubscriptionsToEntitlement(
+    await listAllSubscriptions(stripeCustomerId),
+  );
+}
+
+/**
+ * The subscription backing a customer's access, read from live Stripe. For
+ * surfaces that need the Stripe object rather than just the verdict.
+ */
+export async function resolveBillableSubscription(
+  stripeCustomerId: string | null | undefined,
+  expand?: string[],
+): Promise<Stripe.Subscription | null> {
+  if (!stripeCustomerId) return null;
+
+  return selectBillableSubscription(
+    await listAllSubscriptions(stripeCustomerId, expand),
+  );
 }

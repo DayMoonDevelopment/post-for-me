@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { reduceSubscriptionsToEntitlement } from "./resolve-subscription-entitlement.request";
+import {
+  reduceSubscriptionsToEntitlement,
+  selectBillableSubscription,
+} from "./resolve-subscription-entitlement";
 
 import type Stripe from "stripe";
 
+// Match the placeholder ids vitest.config.ts puts in the environment.
 const TIER_1K = "prod_tier_1k";
+const TIER_2_5K = "prod_tier_2_5k";
 const LEGACY_API = "prod_legacy_api";
+const ADDON = "prod_addon";
 
 type ItemSpec = {
   productId: string;
@@ -62,6 +68,7 @@ describe("reduceSubscriptionsToEntitlement", () => {
       expect(result.verdict).toBe("immediate_revoke");
       expect(result.latestStatus).toBeNull();
       expect(result.grantsSystemCredentials).toBe(false);
+      expect(result.planMetadata).toBeNull();
     });
   });
 
@@ -117,26 +124,61 @@ describe("reduceSubscriptionsToEntitlement", () => {
 
       expect(result.verdict).toBe("immediate_revoke");
     });
+  });
+
+  describe("plan metadata", () => {
+    it("describes a new-pricing tier", () => {
+      const result = reduceSubscriptionsToEntitlement([
+        subscription("active", [{ productId: TIER_1K }]),
+      ]);
+
+      expect(result.planMetadata).toEqual({
+        plan_product_id: TIER_1K,
+        plan_name: "Pro",
+        plan_post_limit: "1000",
+        plan_type: "new_pricing",
+      });
+    });
+
+    it("describes a legacy plan", () => {
+      const result = reduceSubscriptionsToEntitlement([
+        subscription("active", [{ productId: LEGACY_API }]),
+      ]);
+
+      expect(result.planMetadata).toEqual({
+        plan_product_id: LEGACY_API,
+        plan_name: "Legacy Plan",
+        plan_type: "legacy",
+      });
+    });
+
+    it("falls back to unknown for an unrecognized product", () => {
+      const result = reduceSubscriptionsToEntitlement([
+        subscription("active", [{ productId: "prod_something_else" }]),
+      ]);
+
+      expect(result.planMetadata).toEqual({ plan_type: "unknown" });
+    });
 
     it("names the plan from the tier subscription, not the add-on", () => {
       const result = reduceSubscriptionsToEntitlement([
         subscription("active", [
-          { productId: "prod_addon", allowsSystemCredentials: true },
+          { productId: ADDON, allowsSystemCredentials: true },
         ]),
-        subscription("active", [{ productId: TIER_1K }]),
+        subscription("active", [{ productId: TIER_2_5K }]),
       ]);
 
-      expect(result.planInfo.isNewPricing).toBe(true);
-      expect(result.planInfo.productId).toBe(TIER_1K);
-      expect(result.planInfo.postLimit).toBe(1000);
+      expect(result.planMetadata).toMatchObject({
+        plan_product_id: TIER_2_5K,
+        plan_post_limit: "2500",
+        plan_type: "new_pricing",
+      });
     });
-  });
 
-  describe("plan info", () => {
-    // updateAPIKeyAccess stamps this onto the team's Unkey keys whenever it
-    // enables them, and the sweep enables teams inside their grace window. An
-    // empty plan here meant an in-grace team got its `enabled` bit repaired but
-    // kept a stale `plan_type` beside it — and api/src/auth/auth.guard.ts 401s
+    // The sweep re-enables teams inside their grace window, and
+    // update-api-key-access.ts stamps whatever lands here. Reporting `null`
+    // meant an in-grace team got its `enabled` bit repaired but kept a stale
+    // `plan_type` beside it — and api/src/auth/auth.guard.ts 401s
     // /social-account-feeds on anything but "new_pricing".
     it("still describes the plan while a payment is failing", () => {
       const result = reduceSubscriptionsToEntitlement([
@@ -144,20 +186,20 @@ describe("reduceSubscriptionsToEntitlement", () => {
       ]);
 
       expect(result.verdict).toBe("payment_failure");
-      expect(result.planInfo.isNewPricing).toBe(true);
-      expect(result.planInfo.productId).toBe(TIER_1K);
+      expect(result.planMetadata).toMatchObject({
+        plan_product_id: TIER_1K,
+        plan_type: "new_pricing",
+      });
     });
 
     // Nothing is being granted on this path, and an empty plan would wipe the
     // metadata off keys on their way down.
     it("describes no plan when access is revoked", () => {
-      const result = reduceSubscriptionsToEntitlement([
-        subscription("canceled", [{ productId: TIER_1K }]),
-      ]);
-
-      expect(result.verdict).toBe("immediate_revoke");
-      expect(result.planInfo.productId).toBeNull();
-      expect(result.planInfo.isNewPricing).toBe(false);
+      expect(
+        reduceSubscriptionsToEntitlement([
+          subscription("canceled", [{ productId: TIER_1K }]),
+        ]).planMetadata,
+      ).toBeNull();
     });
   });
 
@@ -176,7 +218,6 @@ describe("reduceSubscriptionsToEntitlement", () => {
       ]);
 
       expect(result.verdict).toBe("entitled");
-      expect(result.planInfo.isLegacy).toBe(true);
       expect(result.grantsSystemCredentials).toBe(false);
     });
 
@@ -184,7 +225,7 @@ describe("reduceSubscriptionsToEntitlement", () => {
       const result = reduceSubscriptionsToEntitlement([
         subscription("active", [
           { productId: LEGACY_API },
-          { productId: "prod_addon", allowsSystemCredentials: true },
+          { productId: ADDON, allowsSystemCredentials: true },
         ]),
       ]);
 
@@ -224,5 +265,74 @@ describe("reduceSubscriptionsToEntitlement", () => {
       expect(result.verdict).toBe("immediate_revoke");
       expect(result.grantsSystemCredentials).toBe(false);
     });
+  });
+});
+
+// increment-team-usage.ts meters against whatever this returns. It has to agree
+// with the verdict above about which teams have access, or posts publish and
+// then fail to meter — which is exactly what `status: "active"` did to trialing
+// and in-grace teams.
+describe("selectBillableSubscription", () => {
+  it("returns nothing when the customer has no subscriptions", () => {
+    expect(selectBillableSubscription([])).toBeNull();
+  });
+
+  it("returns the entitling subscription", () => {
+    const active = subscription("active", [{ productId: TIER_1K }], "sub_live");
+
+    expect(selectBillableSubscription([active])?.id).toBe("sub_live");
+  });
+
+  it("meters a trialing team", () => {
+    const trial = subscription("trialing", [{ productId: TIER_1K }], "sub_trial");
+
+    expect(selectBillableSubscription([trial])?.id).toBe("sub_trial");
+  });
+
+  it("meters a team inside its grace window", () => {
+    const failing = subscription("past_due", [{ productId: TIER_1K }], "sub_late");
+
+    expect(selectBillableSubscription([failing])?.id).toBe("sub_late");
+  });
+
+  it("prefers the tier subscription over the add-on", () => {
+    const addon = subscription(
+      "active",
+      [{ productId: ADDON, allowsSystemCredentials: true }],
+      "sub_addon",
+    );
+    const tier = subscription("active", [{ productId: TIER_1K }], "sub_tier");
+
+    expect(selectBillableSubscription([addon, tier])?.id).toBe("sub_tier");
+  });
+
+  it("returns nothing when every subscription is a hard stop", () => {
+    expect(
+      selectBillableSubscription([
+        subscription("canceled"),
+        subscription("incomplete_expired"),
+      ]),
+    ).toBeNull();
+  });
+
+  it("agrees with the verdict on every status", () => {
+    const statuses: Stripe.Subscription.Status[] = [
+      "active",
+      "trialing",
+      "past_due",
+      "unpaid",
+      "paused",
+      "canceled",
+      "incomplete",
+      "incomplete_expired",
+    ];
+
+    for (const status of statuses) {
+      const subs = [subscription(status)];
+      const revoked =
+        reduceSubscriptionsToEntitlement(subs).verdict === "immediate_revoke";
+
+      expect(selectBillableSubscription(subs) === null).toBe(revoked);
+    }
   });
 });

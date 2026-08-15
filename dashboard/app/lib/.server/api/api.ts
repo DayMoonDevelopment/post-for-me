@@ -11,9 +11,8 @@ import { RATE_LIMITS, UNKEY_API_ID } from "../unkey.constants";
 import type { SupabaseContext } from "../supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "~/lib/.server/database.types";
-import { customerHasActiveSubscriptions } from "../customer-has-active-subscriptions.request";
-import { stripe } from "../stripe";
-import { getSubscriptionPlanInfo } from "../get-subscription-plan-info";
+import { resolveSubscriptionEntitlement } from "../resolve-subscription-entitlement.request";
+import { planMetadataFromPlanInfo } from "../get-subscription-plan-info";
 
 interface DashboardKeyContext {
   apiKey: string | null;
@@ -56,49 +55,19 @@ async function getTemporaryApiKey(
     return { apiKey: null, error: "no team found" };
   }
 
-  const hasActiveSubscription = await customerHasActiveSubscriptions(
+  // Same verdict enforcement acts on, so the dashboard stays usable for exactly
+  // the teams whose API keys still work. A `status: "active"` check locked
+  // trialing teams and teams inside their payment grace window out of their own
+  // dashboard while their keys kept serving traffic.
+  const entitlement = await resolveSubscriptionEntitlement(
     team.data.stripe_customer_id,
   );
 
-  if (!hasActiveSubscription) {
+  if (entitlement.verdict === "immediate_revoke") {
     return { apiKey: null, error: "no active subscription" };
   }
 
-  // Get plan info to add to metadata
-  const planMetadata: Record<string, string> = {};
-  if (team.data.stripe_customer_id) {
-    try {
-      const subscriptions = await stripe.subscriptions.list({
-        customer: team.data.stripe_customer_id,
-        status: "active",
-        limit: 1,
-      });
-
-      if (subscriptions.data.length > 0) {
-        const planInfo = getSubscriptionPlanInfo(subscriptions.data[0]);
-        if (planInfo.productId) {
-          planMetadata.plan_product_id = planInfo.productId;
-        }
-        if (planInfo.planName) {
-          planMetadata.plan_name = planInfo.planName;
-        }
-        if (planInfo.postLimit) {
-          planMetadata.plan_post_limit = planInfo.postLimit.toString();
-        }
-        planMetadata.plan_type = planInfo.isNewPricing
-          ? "new_pricing"
-          : planInfo.isLegacy
-            ? "legacy"
-            : "unknown";
-      }
-    } catch (error) {
-      console.error(
-        "Error fetching plan info for temporary API key metadata:",
-        error,
-      );
-      // Continue without plan metadata
-    }
-  }
+  const planMetadata = planMetadataFromPlanInfo(entitlement.planInfo);
 
   let key: string | null = null;
   try {
@@ -125,7 +94,14 @@ async function getTemporaryApiKey(
   }
 
   const newSession = createCookie(cookieName, {
-    maxAge: 60 * 60 * 23, // 1 day in seconds
+    // One hour, matching the reconcile sweep's cadence. This cookie short-
+    // circuits the entitlement check above on a hit, so its lifetime *is* the
+    // window in which the dashboard can disagree with enforcement. At the
+    // previous 23 hours, a team that churned saw a working-looking dashboard
+    // fail with a generic API error for most of a day instead of a billing
+    // prompt — exactly when we most want to convert them back. Minting a
+    // replacement is cheap, and unkey-tmp-key-cleanup reaps the expired ones.
+    maxAge: 60 * 60,
     httpOnly: true,
   });
 

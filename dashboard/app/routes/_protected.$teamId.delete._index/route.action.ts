@@ -1,7 +1,7 @@
 import { redirect, data } from "react-router";
 import { withSupabase } from "~/lib/.server/supabase";
 import { currentUserIsInTeam } from "~/lib/.server/current-user-is-in-team.request";
-import { customerHasActiveSubscriptions } from "~/lib/.server/customer-has-active-subscriptions.request";
+import { resolveSubscriptionEntitlement } from "~/lib/.server/resolve-subscription-entitlement.request";
 
 export const action = withSupabase(async ({ supabase, params, request }) => {
   const { teamId } = params;
@@ -66,11 +66,14 @@ export const action = withSupabase(async ({ supabase, params, request }) => {
     });
   }
 
-  const hasActiveSubscription = await customerHasActiveSubscriptions(
+  // Anything short of a full revoke still bills the customer — a trialing
+  // subscription converts, and one in its grace window can still be recovered —
+  // so deleting the team out from under it would strand a live subscription.
+  const entitlement = await resolveSubscriptionEntitlement(
     team.stripe_customer_id,
   );
 
-  if (hasActiveSubscription) {
+  if (entitlement.verdict !== "immediate_revoke") {
     return data({
       success: false,
       errors: {

@@ -43,7 +43,15 @@ export const action = withSupabase(async ({ request, supabaseServiceRole }) => {
       case "customer.subscription.deleted":
         await handleSubscriptionEvent(event, supabaseServiceRole);
         break;
+      // handleInvoiceEvent ignores the invoice's own state and re-derives
+      // entitlement from live Stripe, so every invoice event routes to the same
+      // handler. `payment_failed` and `paid` are the two that actually bracket
+      // the grace period; without them the clock only started when some
+      // unrelated event happened to fire, or an hour later when the reconcile
+      // sweep noticed.
       case "invoice.created":
+      case "invoice.payment_failed":
+      case "invoice.paid":
         await handleInvoiceEvent(event.data.object, supabaseServiceRole);
         break;
       default:

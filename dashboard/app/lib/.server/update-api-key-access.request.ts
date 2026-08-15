@@ -4,6 +4,7 @@ import {
   resolveSubscriptionEntitlement,
   type SubscriptionEntitlement,
 } from "./resolve-subscription-entitlement.request";
+import { planMetadataFromPlanInfo } from "./get-subscription-plan-info";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "~/lib/.server/database.types";
@@ -83,27 +84,18 @@ export async function updateAPIKeyAccess(
     params.entitlement ??
     (await resolveSubscriptionEntitlement(stripeCustomerId));
 
-  // Only stamp plan metadata when the team is actually entitled; an empty plan
-  // would otherwise wipe the existing metadata off a key on the way down.
-  const planMetadata: Record<string, string> = {};
-  if (entitlement.verdict === "entitled") {
-    const { planInfo } = entitlement;
-
-    if (planInfo.productId) {
-      planMetadata.plan_product_id = planInfo.productId;
-    }
-    if (planInfo.planName) {
-      planMetadata.plan_name = planInfo.planName;
-    }
-    if (planInfo.postLimit) {
-      planMetadata.plan_post_limit = planInfo.postLimit.toString();
-    }
-    planMetadata.plan_type = planInfo.isNewPricing
-      ? "new_pricing"
-      : planInfo.isLegacy
-        ? "legacy"
-        : "unknown";
-  }
+  // Only stamp plan metadata on the way up. Keyed off `enabled` rather than the
+  // verdict because `payment_failure` reaches here both ways: re-enabling a
+  // team inside its grace window (metadata should be reconciled) and revoking
+  // one past the deadline (it should not — writing to a key being disabled is
+  // pointless churn, and an empty plan would wipe the metadata outright).
+  //
+  // `immediate_revoke` is excluded on both counts: it carries the empty plan,
+  // which would stamp `plan_type: "unknown"` and 401 the team on feeds.
+  const planMetadata: Record<string, string> =
+    params.enabled && entitlement.verdict !== "immediate_revoke"
+      ? planMetadataFromPlanInfo(entitlement.planInfo)
+      : {};
 
   const projects = await supabaseServiceRole
     .from("projects")
