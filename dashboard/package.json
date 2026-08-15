@@ -11,6 +11,10 @@
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "E2E_SLOWMO=${E2E_SLOWMO:-300} playwright test --headed --workers=1",
+    "test:e2e:debug": "playwright test --debug",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext ts,tsx --fix"
   },
@@ -67,6 +71,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.62.1",
     "@react-router/dev": "7.11.0",
     "@tailwindcss/vite": "^4.1.4",
     "@types/lodash": "^4.17.17",

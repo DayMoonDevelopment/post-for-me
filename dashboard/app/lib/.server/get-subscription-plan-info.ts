@@ -80,3 +80,36 @@ export function getSubscriptionPlanInfo(
     includesSystemCredentials: false,
   };
 }
+
+/**
+ * The plan fields we stamp onto an Unkey key's metadata.
+ *
+ * `plan_type` is a cross-service contract: `api/src/auth/auth.guard.ts` reads it
+ * off the verified key and gates /social-account-feeds on `"new_pricing"`. It
+ * was previously rebuilt inline at every mint/sync site, which is how those
+ * sites drifted apart — one source now, so a key minted in the dashboard and a
+ * key restamped by the reconcile sweep describe the plan the same way.
+ */
+export function planMetadataFromPlanInfo(
+  planInfo: PlanInfo,
+): Record<string, string> {
+  const metadata: Record<string, string> = {};
+
+  if (planInfo.productId) {
+    metadata.plan_product_id = planInfo.productId;
+  }
+  if (planInfo.planName) {
+    metadata.plan_name = planInfo.planName;
+  }
+  if (planInfo.postLimit) {
+    metadata.plan_post_limit = planInfo.postLimit.toString();
+  }
+
+  metadata.plan_type = planInfo.isNewPricing
+    ? "new_pricing"
+    : planInfo.isLegacy
+      ? "legacy"
+      : "unknown";
+
+  return metadata;
+}

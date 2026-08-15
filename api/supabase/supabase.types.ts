@@ -1025,6 +1025,7 @@ export type Database = {
           name: string
           payment_failed_at: string | null
           stripe_customer_id: string | null
+          subscription_reconciled_at: string | null
           updated_at: string | null
           updated_by: string | null
         }
@@ -1036,6 +1037,7 @@ export type Database = {
           name: string
           payment_failed_at?: string | null
           stripe_customer_id?: string | null
+          subscription_reconciled_at?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -1047,6 +1049,7 @@ export type Database = {
           name?: string
           payment_failed_at?: string | null
           stripe_customer_id?: string | null
+          subscription_reconciled_at?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }

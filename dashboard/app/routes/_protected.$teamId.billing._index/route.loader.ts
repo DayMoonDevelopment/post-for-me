@@ -7,9 +7,9 @@ import { withSupabase } from "~/lib/.server/supabase";
 import {
   STRIPE_CREDS_ADDON_PRODUCT_ID,
   PRICING_TIERS,
-  STRIPE_CANCELLED_STATUSES,
 } from "~/lib/.server/stripe.constants";
 import { getSubscriptionPlanInfo } from "~/lib/.server/get-subscription-plan-info";
+import { resolveBillableSubscription } from "~/lib/.server/resolve-subscription-entitlement.request";
 import type Stripe from "stripe";
 
 export const loader = withSupabase(async ({ supabase, params, request }) => {
@@ -58,21 +58,18 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
   let cancelAt: number | null = null;
 
   if (team.data.stripe_customer_id) {
-    // Fetch the most recent subscription, but ignore statuses we can't update.
-    const subscriptions = await stripe.subscriptions.list({
-      customer: team.data.stripe_customer_id,
-      status: "all",
-      limit: 1,
-      expand: ["data.items.data.price"],
-    });
+    // The subscription enforcement is acting on, not whichever one Stripe
+    // returns first. `limit: 1` showed a customer holding a tier plus an add-on
+    // whichever was newest, and the old cancelled-status filter treated `unpaid`
+    // as gone — so a team inside its payment grace window was sent to checkout
+    // instead of to the portal where it could fix the card that failed.
+    const billableSubscription = await resolveBillableSubscription(
+      team.data.stripe_customer_id,
+      ["data.items.data.price"],
+    );
 
-    const latestSubscription = subscriptions.data[0] || null;
-
-    if (
-      latestSubscription &&
-      STRIPE_CANCELLED_STATUSES.indexOf(latestSubscription.status) < 0
-    ) {
-      subscription = latestSubscription;
+    if (billableSubscription) {
+      subscription = billableSubscription;
       hasSubscription = true;
       planInfo = getSubscriptionPlanInfo(subscription);
       isLegacyPlan = planInfo.isLegacy;

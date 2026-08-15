@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 import Stripe from "stripe";
 import { Database } from "./supabase.types";
+import { resolveBillableSubscription } from "./resolve-subscription-entitlement";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -51,16 +52,20 @@ export const incrementTeamUsage = task({
   run: async (payload: IncrementTeamUsagePayload) => {
     const { team_id, stripe_customer_id } = payload;
 
-    const subscriptions = await stripe.subscriptions.list({
-      customer: stripe_customer_id,
-      status: "active",
-      limit: 1,
-    });
-
-    const subscription: Stripe.Subscription | undefined = subscriptions.data[0];
+    // Resolved through the same selection enforcement uses, rather than asking
+    // Stripe for `status: "active"` directly. Access is granted to trialing
+    // teams and — for PAYMENT_GRACE_PERIOD_DAYS — to teams whose payment
+    // failed, neither of which is `active`. Querying for `active` meant every
+    // post those teams published metered nothing: the post shipped, then this
+    // task threw "No active subscription found" after the fact, so
+    // social_post_usage never incremented and process-usage-limits never saw
+    // the overage.
+    const subscription = await resolveBillableSubscription(stripe_customer_id);
 
     if (!subscription) {
-      throw new Error("No active subscription found");
+      throw new Error(
+        `No billable subscription found for customer ${stripe_customer_id}; a post published for a team with no subscription backing access`,
+      );
     }
 
     const subscriptionItem = subscription.items.data[0];

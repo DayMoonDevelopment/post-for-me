@@ -25,23 +25,51 @@ export const action = withSupabase(async ({ request, supabaseServiceRole }) => {
     return new Response(`Webhook Error: ${error.message}`, { status: 400 });
   }
 
-  // Handle the event
+  // Handle the event.
+  //
+  // A handler that throws must answer 5xx so Stripe redelivers. These handlers
+  // are what revoke a churned team's API access, and they are idempotent
+  // (access is re-derived from live Stripe state on each attempt), so a retry
+  // is always safe. Answering 200 on failure — as this did previously — told
+  // Stripe the delivery succeeded and left the team's keys enabled for good.
+  try {
+    switch (event.type) {
+      case "customer.created":
+      case "customer.updated":
+        await handleCustomerEvent(event.data.object, supabaseServiceRole);
+        break;
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        await handleSubscriptionEvent(event, supabaseServiceRole);
+        break;
+      // handleInvoiceEvent ignores the invoice's own state and re-derives
+      // entitlement from live Stripe, so every invoice event routes to the same
+      // handler. `payment_failed` and `paid` are the two that actually bracket
+      // the grace period; without them the clock only started when some
+      // unrelated event happened to fire, or an hour later when the reconcile
+      // sweep noticed.
+      case "invoice.created":
+      case "invoice.payment_failed":
+      case "invoice.paid":
+        await handleInvoiceEvent(event.data.object, supabaseServiceRole);
+        break;
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+  } catch (err: unknown) {
+    // Narrowed rather than cast: a non-Error throw would otherwise render as
+    // "Webhook handler error: undefined" in both the log and the 500 body,
+    // hiding what actually failed.
+    const message = err instanceof Error ? err.message : String(err);
 
-  switch (event.type) {
-    case "customer.created":
-    case "customer.updated":
-      await handleCustomerEvent(event.data.object, supabaseServiceRole);
-      break;
-    case "customer.subscription.created":
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted":
-      await handleSubscriptionEvent(event, supabaseServiceRole);
-      break;
-    case "invoice.created":
-      await handleInvoiceEvent(event.data.object, supabaseServiceRole);
-      break;
-    default:
-      console.log(`Unhandled event type ${event.type}`);
+    console.error(
+      `Stripe webhook handler failed for ${event.type} (${event.id}):`,
+      err,
+    );
+    return new Response(`Webhook handler error: ${message}`, {
+      status: 500,
+    });
   }
 
   return new Response("OK");

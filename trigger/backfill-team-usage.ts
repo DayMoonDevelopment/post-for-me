@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { logger, task } from "@trigger.dev/sdk";
 import Stripe from "stripe";
 import { Database } from "./supabase.types";
+import { resolveBillableSubscription } from "./resolve-subscription-entitlement";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -203,18 +204,14 @@ export const backfillTeamUsage = task({
       }
 
       try {
-        const subscriptions = await stripe.subscriptions.list({
-          customer: stripeCustomerId,
-          status: "active",
-          limit: 1,
-        });
-
-        const subscription: Stripe.Subscription | undefined =
-          subscriptions.data[0];
+        // Same selection increment-team-usage.ts meters against, so a backfill
+        // doesn't silently skip the trialing and in-grace teams whose posts it
+        // is meant to be reconstructing.
+        const subscription = await resolveBillableSubscription(stripeCustomerId);
 
         if (!subscription) {
           skipCount += 1;
-          logger.info("Skipping team without active subscription", {
+          logger.info("Skipping team without a billable subscription", {
             team_id: team.id,
             team_name: team.name,
             stripe_customer_id: stripeCustomerId,
