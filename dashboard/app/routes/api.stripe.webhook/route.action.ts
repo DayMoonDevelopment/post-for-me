@@ -25,23 +25,39 @@ export const action = withSupabase(async ({ request, supabaseServiceRole }) => {
     return new Response(`Webhook Error: ${error.message}`, { status: 400 });
   }
 
-  // Handle the event
-
-  switch (event.type) {
-    case "customer.created":
-    case "customer.updated":
-      await handleCustomerEvent(event.data.object, supabaseServiceRole);
-      break;
-    case "customer.subscription.created":
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted":
-      await handleSubscriptionEvent(event, supabaseServiceRole);
-      break;
-    case "invoice.created":
-      await handleInvoiceEvent(event.data.object, supabaseServiceRole);
-      break;
-    default:
-      console.log(`Unhandled event type ${event.type}`);
+  // Handle the event.
+  //
+  // A handler that throws must answer 5xx so Stripe redelivers. These handlers
+  // are what revoke a churned team's API access, and they are idempotent
+  // (access is re-derived from live Stripe state on each attempt), so a retry
+  // is always safe. Answering 200 on failure — as this did previously — told
+  // Stripe the delivery succeeded and left the team's keys enabled for good.
+  try {
+    switch (event.type) {
+      case "customer.created":
+      case "customer.updated":
+        await handleCustomerEvent(event.data.object, supabaseServiceRole);
+        break;
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        await handleSubscriptionEvent(event, supabaseServiceRole);
+        break;
+      case "invoice.created":
+        await handleInvoiceEvent(event.data.object, supabaseServiceRole);
+        break;
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error(
+      `Stripe webhook handler failed for ${event.type} (${event.id}):`,
+      error,
+    );
+    return new Response(`Webhook handler error: ${error.message}`, {
+      status: 500,
+    });
   }
 
   return new Response("OK");

@@ -1,18 +1,8 @@
 import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request";
+import { resolveSubscriptionEntitlement } from "~/lib/.server/resolve-subscription-entitlement.request";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type Stripe from "stripe";
 import type { Database } from "~/lib/.server/database.types";
-
-// Statuses where the team fully lost its subscription by choice (or it was
-// never completed) — access is revoked immediately, no grace period. Every
-// other non-active status (past_due, unpaid, incomplete, paused, ...) is
-// treated as a payment-failure-shaped issue and gets the grace period.
-const IMMEDIATE_REVOKE_STATUSES: Array<Stripe.Subscription.Status | null> = [
-  null,
-  "canceled",
-  "incomplete_expired",
-];
 
 /**
  * Single decision path for both Stripe webhook entry points
@@ -21,59 +11,74 @@ const IMMEDIATE_REVOKE_STATUSES: Array<Stripe.Subscription.Status | null> = [
  * lets us apply a configurable grace period to payment failures while still
  * revoking immediately on explicit cancellation, without the two webhook
  * paths racing each other or diverging in behavior.
+ *
+ * The triggering event is deliberately not passed in. Access is re-derived
+ * from live Stripe state on every call, so a replayed or out-of-order delivery
+ * converges on the same answer instead of applying whatever status the event
+ * happened to be carrying.
+ *
+ * Throws on failure so the webhook can answer 5xx and let Stripe retry. A
+ * swallowed error here leaves a churned team's keys enabled permanently, with
+ * Stripe having been told the delivery succeeded.
  */
 export async function handleSubscriptionHealthChange(
-  {
-    stripeCustomerId,
-    latestStatus,
-  }: {
-    stripeCustomerId: string;
-    latestStatus: Stripe.Subscription.Status | null;
-  },
+  { stripeCustomerId }: { stripeCustomerId: string },
   supabaseServiceRole: SupabaseClient<Database>,
 ) {
-  const isActive = latestStatus === "active" || latestStatus === "trialing";
-  const isImmediateRevoke = IMMEDIATE_REVOKE_STATUSES.includes(latestStatus);
-
   const team = await supabaseServiceRole
     .from("teams")
     .select("id, payment_failed_at")
     .eq("stripe_customer_id", stripeCustomerId)
     .maybeSingle();
 
-  if (team.error || !team.data) {
-    console.error(
-      `Failed to find team for customer ${stripeCustomerId}:`,
-      team.error,
+  if (team.error) {
+    throw new Error(
+      `Failed to look up team for customer ${stripeCustomerId}: ${team.error.message}`,
     );
-    return;
   }
 
-  if (isActive) {
-    if (team.data.payment_failed_at) {
-      await supabaseServiceRole
-        .from("teams")
-        .update({ payment_failed_at: null })
-        .eq("id", team.data.id);
-    }
+  if (!team.data) {
+    // No team carries this customer id — usually because the customer-link
+    // webhook hasn't landed yet, or the Stripe customer was created without
+    // team_id metadata. Throwing puts it in Stripe's failed-delivery list to
+    // be retried and surfaced, instead of silently leaving keys enabled.
+    throw new Error(
+      `No team linked to Stripe customer ${stripeCustomerId}; cannot sync API key access`,
+    );
+  }
 
+  const { id: teamId, payment_failed_at: paymentFailedAt } = team.data;
+
+  const entitlement = await resolveSubscriptionEntitlement(stripeCustomerId);
+
+  const clearGracePeriod = async () => {
+    if (!paymentFailedAt) return;
+
+    const cleared = await supabaseServiceRole
+      .from("teams")
+      .update({ payment_failed_at: null })
+      .eq("id", teamId);
+
+    if (cleared.error) {
+      throw new Error(
+        `Failed to clear payment_failed_at for team ${teamId}: ${cleared.error.message}`,
+      );
+    }
+  };
+
+  if (entitlement.verdict === "entitled") {
+    await clearGracePeriod();
     await updateAPIKeyAccess(
-      { teamId: team.data.id, enabled: true },
+      { teamId, enabled: true, entitlement },
       supabaseServiceRole,
     );
     return;
   }
 
-  if (isImmediateRevoke) {
-    if (team.data.payment_failed_at) {
-      await supabaseServiceRole
-        .from("teams")
-        .update({ payment_failed_at: null })
-        .eq("id", team.data.id);
-    }
-
+  if (entitlement.verdict === "immediate_revoke") {
+    await clearGracePeriod();
     await updateAPIKeyAccess(
-      { teamId: team.data.id, enabled: false },
+      { teamId, enabled: false, entitlement },
       supabaseServiceRole,
     );
     return;
@@ -83,13 +88,19 @@ export async function handleSubscriptionHealthChange(
   // Start the grace period clock only if it isn't already running — the
   // conditional WHERE keeps this safe against subscription-event.ts and
   // invoice-event.ts racing each other for the same failure. Access is left
-  // untouched here; only trigger/process-payment-grace-period.ts revokes it,
+  // untouched here; only trigger/reconcile-subscription-access.ts revokes it,
   // once the grace period has actually elapsed.
-  if (!team.data.payment_failed_at) {
-    await supabaseServiceRole
+  if (!paymentFailedAt) {
+    const marked = await supabaseServiceRole
       .from("teams")
       .update({ payment_failed_at: new Date().toISOString() })
-      .eq("id", team.data.id)
+      .eq("id", teamId)
       .is("payment_failed_at", null);
+
+    if (marked.error) {
+      throw new Error(
+        `Failed to start grace period for team ${teamId}: ${marked.error.message}`,
+      );
+    }
   }
 }

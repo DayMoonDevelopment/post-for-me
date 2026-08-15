@@ -9,3 +9,9 @@
 
 .env.*
 !.env.example
+
+# Playwright (local-only e2e suite)
+/e2e/.auth/
+/playwright-report/
+/test-results/
+/blob-report/

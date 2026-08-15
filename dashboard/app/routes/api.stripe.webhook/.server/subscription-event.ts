@@ -16,15 +16,18 @@ export async function handleSubscriptionEvent(
   const subscription = event.data.object;
   const customerId = subscription.customer as string;
 
-  // Toggle API key access based on subscription status. Payment-failure-shaped
-  // statuses (past_due, unpaid, ...) get a grace period instead of an
-  // immediate revoke; explicit cancellation (status "canceled" from a
-  // customer.subscription.deleted event) still revokes right away.
+  // Toggle API key access. Payment-failure-shaped statuses (past_due, unpaid,
+  // ...) get a grace period instead of an immediate revoke; explicit
+  // cancellation still revokes right away.
+  //
+  // Deliberately does not forward `subscription.status`. This event is only a
+  // trigger — the status on it is a snapshot from when Stripe queued the
+  // delivery, and Stripe guarantees neither ordering nor exactly-once. Passing
+  // it through meant a late `updated` (status "active") arriving after a
+  // `deleted` re-enabled a churned team's keys, and that cancelling one of two
+  // subscriptions revoked access for a customer still paying on the other.
   await handleSubscriptionHealthChange(
-    {
-      stripeCustomerId: customerId,
-      latestStatus: subscription.status,
-    },
+    { stripeCustomerId: customerId },
     supabaseServiceRole,
   );
 
