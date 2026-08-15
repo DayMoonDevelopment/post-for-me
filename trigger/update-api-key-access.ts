@@ -67,6 +67,10 @@ export async function updateApiKeyAccess(
     return;
   }
 
+  // Only stamp plan metadata when entitled; an empty plan would otherwise wipe
+  // existing metadata off a key on the way down.
+  const planMetadata = resolved.planMetadata ?? {};
+
   const failures: string[] = [];
 
   for (const project of projects.data) {
@@ -77,7 +81,7 @@ export async function updateApiKeyAccess(
       : enabled;
 
     try {
-      await syncProjectKeys(project.id, projectEnabled);
+      await syncProjectKeys(project.id, projectEnabled, planMetadata);
     } catch (error) {
       failures.push(
         `${project.id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -92,7 +96,11 @@ export async function updateApiKeyAccess(
   }
 }
 
-async function syncProjectKeys(projectId: string, enabled: boolean) {
+async function syncProjectKeys(
+  projectId: string,
+  enabled: boolean,
+  planMetadata: Record<string, string>,
+) {
   let cursor: string | undefined = undefined;
   let hasMore = true;
 
@@ -109,14 +117,27 @@ async function syncProjectKeys(projectId: string, enabled: boolean) {
 
     // Skip keys already in the desired state — this sweep runs over every team,
     // so without it a routine tick would rewrite every key in the system.
-    const stale = apiKeys.data.filter((key) => key.enabled !== enabled);
+    const stale = apiKeys.data.filter(
+      (key) =>
+        key.enabled !== enabled ||
+        Object.entries(planMetadata).some(
+          ([metaKey, value]) =>
+            (key.meta as Record<string, unknown> | undefined)?.[metaKey] !==
+            value,
+        ),
+    );
 
     const batchSize = 10;
     for (let i = 0; i < stale.length; i += batchSize) {
       const batch = stale.slice(i, i + batchSize);
       await Promise.all(
         batch.map((key) =>
-          unkey.keys.updateKey({ keyId: key.keyId, enabled }),
+          unkey.keys.updateKey({
+            keyId: key.keyId,
+            enabled,
+            // Merge, so vendored syncing never drops project_id/team_id.
+            meta: { ...key.meta, ...planMetadata },
+          }),
         ),
       );
     }

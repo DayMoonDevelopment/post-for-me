@@ -86,9 +86,10 @@ test.describe("subscription access enforcement", () => {
     expect(await isKeyEnabled(scenario.keyId)).toBe(true);
   });
 
-  // D1: a failure must not be reported to Stripe as success, or the retry that
-  // would have fixed it never happens.
-  test("answers 5xx when the customer has no linked team", async () => {
+  // A customer with genuinely no team (a manual Stripe customer, or a team
+  // deleted while its customer lived on) must NOT 5xx: retrying can't fix it,
+  // and sustained 5xx makes Stripe disable the endpoint entirely.
+  test("accepts an event for a customer with no team rather than 5xx-ing", async () => {
     const orphan = await stripe.customers.create({
       metadata: { e2e: "true" },
     });
@@ -99,9 +100,53 @@ test.describe("subscription access enforcement", () => {
         { id: "sub_orphan", customer: orphan.id, status: "canceled" },
       );
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(200);
     } finally {
       await stripe.customers.del(orphan.id).catch(() => {});
+    }
+  });
+
+  // Checkout creates a first-time subscriber's customer with no customer
+  // metadata, and teams.stripe_customer_id is only written when the browser
+  // reaches /stripe/success — which these events race. The team_id stamped on
+  // the subscription has to resolve (and repair) the link, or every new
+  // subscriber's first events would fail.
+  test("links the team from subscription metadata before the redirect lands", async () => {
+    const unlinked = await stripe.customers.create({
+      metadata: { e2e: "true" },
+    });
+
+    try {
+      await supabase
+        .from("teams")
+        .update({ stripe_customer_id: null })
+        .eq("id", scenario.teamId);
+
+      const response = await deliverStripeEvent(
+        "customer.subscription.updated",
+        {
+          id: "sub_pending_link",
+          customer: unlinked.id,
+          status: "active",
+          metadata: { team_id: scenario.teamId },
+        },
+      );
+
+      expect(response.status).toBe(200);
+
+      const team = await supabase
+        .from("teams")
+        .select("stripe_customer_id")
+        .eq("id", scenario.teamId)
+        .single();
+
+      expect(team.data?.stripe_customer_id).toBe(unlinked.id);
+    } finally {
+      await supabase
+        .from("teams")
+        .update({ stripe_customer_id: scenario.stripeCustomerId })
+        .eq("id", scenario.teamId);
+      await stripe.customers.del(unlinked.id).catch(() => {});
     }
   });
 });

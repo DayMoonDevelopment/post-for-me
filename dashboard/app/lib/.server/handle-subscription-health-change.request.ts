@@ -4,6 +4,79 @@ import { resolveSubscriptionEntitlement } from "~/lib/.server/resolve-subscripti
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "~/lib/.server/database.types";
 
+type TeamRow = { id: string; payment_failed_at: string | null };
+
+/**
+ * Finds the team a Stripe customer belongs to, preferring the `team_id` stamped
+ * on the subscription at checkout over the `teams.stripe_customer_id` link.
+ *
+ * That ordering matters for first-time subscribers. Checkout creates the
+ * customer with `customer_email` and no customer metadata, so
+ * `handleCustomerEvent` can't link it; the link is written only when the
+ * browser lands on /stripe/success. Stripe delivers
+ * `customer.subscription.created` and `invoice.created` before that redirect
+ * completes, so a customer-id-only lookup misses every new subscriber — and if
+ * they close the tab, misses them permanently.
+ *
+ * Resolving via the hint also lets us repair the link here, which is why a
+ * closed tab no longer strands a paying team.
+ */
+async function resolveTeam(
+  {
+    stripeCustomerId,
+    teamIdHint,
+  }: { stripeCustomerId: string; teamIdHint?: string | null },
+  supabaseServiceRole: SupabaseClient<Database>,
+): Promise<TeamRow | null> {
+  if (teamIdHint) {
+    const byId = await supabaseServiceRole
+      .from("teams")
+      .select("id, payment_failed_at, stripe_customer_id")
+      .eq("id", teamIdHint)
+      .maybeSingle();
+
+    if (byId.error) {
+      throw new Error(
+        `Failed to look up team ${teamIdHint}: ${byId.error.message}`,
+      );
+    }
+
+    if (byId.data) {
+      // Backfill the link the post-checkout redirect would otherwise own.
+      // Guarded on NULL so a redelivery can never move an existing link.
+      if (!byId.data.stripe_customer_id) {
+        const linked = await supabaseServiceRole
+          .from("teams")
+          .update({ stripe_customer_id: stripeCustomerId })
+          .eq("id", byId.data.id)
+          .is("stripe_customer_id", null);
+
+        if (linked.error) {
+          throw new Error(
+            `Failed to link customer ${stripeCustomerId} to team ${byId.data.id}: ${linked.error.message}`,
+          );
+        }
+      }
+
+      return { id: byId.data.id, payment_failed_at: byId.data.payment_failed_at };
+    }
+  }
+
+  const byCustomer = await supabaseServiceRole
+    .from("teams")
+    .select("id, payment_failed_at")
+    .eq("stripe_customer_id", stripeCustomerId)
+    .maybeSingle();
+
+  if (byCustomer.error) {
+    throw new Error(
+      `Failed to look up team for customer ${stripeCustomerId}: ${byCustomer.error.message}`,
+    );
+  }
+
+  return byCustomer.data ?? null;
+}
+
 /**
  * Single decision path for both Stripe webhook entry points
  * (subscription-event.ts and invoice-event.ts) that previously each computed
@@ -22,32 +95,39 @@ import type { Database } from "~/lib/.server/database.types";
  * Stripe having been told the delivery succeeded.
  */
 export async function handleSubscriptionHealthChange(
-  { stripeCustomerId }: { stripeCustomerId: string },
+  {
+    stripeCustomerId,
+    teamIdHint,
+  }: {
+    stripeCustomerId: string;
+    /**
+     * `subscription.metadata.team_id`, stamped at checkout by
+     * `buildSubscriptionMetadata`. Resolves the team before
+     * `teams.stripe_customer_id` is linked — that link only happens when the
+     * browser reaches /stripe/success, which these events race.
+     */
+    teamIdHint?: string | null;
+  },
   supabaseServiceRole: SupabaseClient<Database>,
 ) {
-  const team = await supabaseServiceRole
-    .from("teams")
-    .select("id, payment_failed_at")
-    .eq("stripe_customer_id", stripeCustomerId)
-    .maybeSingle();
+  const team = await resolveTeam(
+    { stripeCustomerId, teamIdHint },
+    supabaseServiceRole,
+  );
 
-  if (team.error) {
-    throw new Error(
-      `Failed to look up team for customer ${stripeCustomerId}: ${team.error.message}`,
+  if (!team) {
+    // Genuinely no team owns this customer — a manual/one-off Stripe customer,
+    // or a team that was deleted while its Stripe customer lived on. Retrying
+    // can't fix that, and sustained 5xx makes Stripe disable the endpoint, so
+    // this is logged and accepted. The hourly reconcile sweep is the backstop
+    // for anything that *is* linked but out of sync.
+    console.warn(
+      `[subscription-health] No team for Stripe customer ${stripeCustomerId}; nothing to sync`,
     );
+    return;
   }
 
-  if (!team.data) {
-    // No team carries this customer id — usually because the customer-link
-    // webhook hasn't landed yet, or the Stripe customer was created without
-    // team_id metadata. Throwing puts it in Stripe's failed-delivery list to
-    // be retried and surfaced, instead of silently leaving keys enabled.
-    throw new Error(
-      `No team linked to Stripe customer ${stripeCustomerId}; cannot sync API key access`,
-    );
-  }
-
-  const { id: teamId, payment_failed_at: paymentFailedAt } = team.data;
+  const { id: teamId, payment_failed_at: paymentFailedAt } = team;
 
   const entitlement = await resolveSubscriptionEntitlement(stripeCustomerId);
 

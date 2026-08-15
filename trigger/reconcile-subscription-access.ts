@@ -52,31 +52,53 @@ const getBillableTeams = async (): Promise<Team[]> => {
   return teams;
 };
 
-const setGracePeriod = async (
-  teamId: string,
-  value: string | null,
-): Promise<void> => {
+const clearGracePeriod = async (teamId: string): Promise<void> => {
   const { error } = await supabaseClient
     .from("teams")
-    .update({ payment_failed_at: value })
+    .update({ payment_failed_at: null })
     .eq("id", teamId);
 
   if (error) {
     throw new Error(
-      `Failed to set payment_failed_at for team ${teamId}: ${error.message}`,
+      `Failed to clear payment_failed_at for team ${teamId}: ${error.message}`,
     );
   }
 };
 
-type Outcome = "enabled" | "revoked" | "grace_started" | "in_grace" | "noop";
+/**
+ * Starts the grace-period clock, but only if it isn't already running.
+ *
+ * The NULL guard is load-bearing: `payment_failed_at` is read once when the
+ * sweep lists teams, and the sweep can run for up to an hour. Without it, a
+ * team whose payment failed *during* the sweep would have the clock the webhook
+ * just set overwritten with a fresh `now`, handing a non-paying team up to an
+ * extra full grace period.
+ */
+const startGracePeriod = async (teamId: string): Promise<void> => {
+  const { error } = await supabaseClient
+    .from("teams")
+    .update({ payment_failed_at: new Date().toISOString() })
+    .eq("id", teamId)
+    .is("payment_failed_at", null);
+
+  if (error) {
+    throw new Error(
+      `Failed to start grace period for team ${teamId}: ${error.message}`,
+    );
+  }
+};
+
+type Outcome = "enabled" | "revoked" | "grace_started" | "in_grace";
 
 /**
- * Reconciles one team's Unkey key state against its live Stripe state.
+ * Reconciles one team's Unkey key state and plan metadata against live Stripe.
  *
- * `updateApiKeyAccess` skips keys already in the desired state, so calling it
- * unconditionally is cheap for the overwhelming majority of teams that are
- * already correct — that's what lets this run over every team rather than only
- * the ones a webhook told us about.
+ * Not free: every team costs one Stripe `subscriptions.list` plus one
+ * cache-bypassing Unkey `listKeys` per project, on every tick, whether or not
+ * anything changed. What the skip-if-already-correct filter avoids is the
+ * `updateKey` writes, so a steady-state sweep is read-heavy but write-free.
+ * If team count makes that too expensive, narrow what this visits rather than
+ * loosening the filter.
  */
 const reconcileTeam = async (team: Team): Promise<Outcome> => {
   const entitlement = await resolveSubscriptionEntitlement(
@@ -87,7 +109,7 @@ const reconcileTeam = async (team: Team): Promise<Outcome> => {
     if (team.payment_failed_at) {
       // Recovered before the deadline, and the webhook that should have told us
       // never landed.
-      await setGracePeriod(team.id, null);
+      await clearGracePeriod(team.id);
     }
     await updateApiKeyAccess(
       { teamId: team.id, enabled: true, entitlement },
@@ -98,7 +120,7 @@ const reconcileTeam = async (team: Team): Promise<Outcome> => {
 
   if (entitlement.verdict === "immediate_revoke") {
     if (team.payment_failed_at) {
-      await setGracePeriod(team.id, null);
+      await clearGracePeriod(team.id);
     }
     await updateApiKeyAccess(
       { teamId: team.id, enabled: false, entitlement },
@@ -111,7 +133,7 @@ const reconcileTeam = async (team: Team): Promise<Outcome> => {
   if (!team.payment_failed_at) {
     // The webhook that should have started the clock was missed — start it now
     // rather than revoking, so the team still gets its full grace period.
-    await setGracePeriod(team.id, new Date().toISOString());
+    await startGracePeriod(team.id);
     return "grace_started";
   }
 
@@ -148,6 +170,9 @@ const reconcileTeam = async (team: Team): Promise<Outcome> => {
 export const reconcileSubscriptionAccess = schedules.task({
   cron: { pattern: "0 * * * *", environments: ["PRODUCTION"] },
   id: "reconcile-subscription-access",
+  // The sweep now visits every billable team, so a slow run could otherwise
+  // still be going when the next hour fires and compound the API load.
+  queue: { concurrencyLimit: 1 },
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
   run: async () => {
@@ -163,7 +188,6 @@ export const reconcileSubscriptionAccess = schedules.task({
       revoked: 0,
       grace_started: 0,
       in_grace: 0,
-      noop: 0,
     };
     let failed = 0;
 
