@@ -44,10 +44,10 @@ describe("reduceSubscriptionsToEntitlement", () => {
       ["active", "entitled"],
       ["trialing", "entitled"],
       ["canceled", "immediate_revoke"],
+      ["incomplete", "immediate_revoke"],
       ["incomplete_expired", "immediate_revoke"],
       ["past_due", "payment_failure"],
       ["unpaid", "payment_failure"],
-      ["incomplete", "payment_failure"],
       ["paused", "payment_failure"],
     ] as const)("classifies %s as %s", (status, verdict) => {
       const result = reduceSubscriptionsToEntitlement([subscription(status)]);
@@ -101,6 +101,18 @@ describe("reduceSubscriptionsToEntitlement", () => {
       const result = reduceSubscriptionsToEntitlement([
         subscription("canceled"),
         subscription("incomplete_expired"),
+      ]);
+
+      expect(result.verdict).toBe("immediate_revoke");
+    });
+
+    // Stripe leaves an abandoned checkout's subscription `incomplete` for ~23
+    // hours. Treating that as a payment failure handed a team that had just
+    // cancelled a full grace period, so their keys kept working for days.
+    it("still revokes a cancellation sitting next to a leftover incomplete", () => {
+      const result = reduceSubscriptionsToEntitlement([
+        subscription("incomplete"),
+        subscription("canceled"),
       ]);
 
       expect(result.verdict).toBe("immediate_revoke");
@@ -160,6 +172,19 @@ describe("reduceSubscriptionsToEntitlement", () => {
 
       expect(result.verdict).toBe("entitled");
       expect(result.grantsSystemCredentials).toBe(false);
+    });
+
+    // The reconcile sweep re-enables teams inside their grace window. If a
+    // past_due subscription reported `false` here, that sync would disable the
+    // team's managed-credential projects — a downgrade in the middle of the
+    // grace period it was promised.
+    it("reports what a payment-failing subscription would grant", () => {
+      const result = reduceSubscriptionsToEntitlement([
+        subscription("past_due", [{ productId: TIER_1K }]),
+      ]);
+
+      expect(result.verdict).toBe("payment_failure");
+      expect(result.grantsSystemCredentials).toBe(true);
     });
 
     it("is never granted when access is revoked", () => {

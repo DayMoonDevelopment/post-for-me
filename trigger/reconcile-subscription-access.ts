@@ -25,11 +25,31 @@ const TEAM_PAGE_SIZE = 500;
 // handful in a grace period.
 const CONCURRENCY = 5;
 
+// Stop with room to spare inside maxDuration. A run killed at the hard limit
+// dies mid-batch and logs nothing, so there is no signal that the sweep has
+// outgrown its window; stopping ourselves lets us report what we didn't reach.
+const RUN_BUDGET_MS = 50 * 60 * 1000;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 type Team = Pick<
   Database["public"]["Tables"]["teams"]["Row"],
   "id" | "stripe_customer_id" | "payment_failed_at"
 >;
 
+/**
+ * Every team with a Stripe customer, least-recently-reconciled first.
+ *
+ * That ordering is the resume cursor. Teams are stamped as the sweep finishes
+ * with them, so the ones a time-limited run never reached still carry an older
+ * (or NULL) timestamp and sort to the front next hour. Ordering by `id`
+ * instead — as this did — restarted from the first team every hour, which
+ * meant an over-long run starved the same tail permanently.
+ *
+ * Safe to order by a column the sweep mutates: the whole list is materialized
+ * before any team is reconciled, and `concurrencyLimit: 1` keeps a second
+ * sweep from writing underneath this one.
+ */
 const getBillableTeams = async (): Promise<Team[]> => {
   const teams: Team[] = [];
 
@@ -38,6 +58,10 @@ const getBillableTeams = async (): Promise<Team[]> => {
       .from("teams")
       .select("id, stripe_customer_id, payment_failed_at")
       .not("stripe_customer_id", "is", null)
+      .order("subscription_reconciled_at", {
+        ascending: true,
+        nullsFirst: true,
+      })
       .order("id", { ascending: true })
       .range(from, from + TEAM_PAGE_SIZE - 1);
 
@@ -50,6 +74,29 @@ const getBillableTeams = async (): Promise<Team[]> => {
   }
 
   return teams;
+};
+
+/**
+ * Advances the resume cursor for the teams this run actually finished.
+ *
+ * Only successful reconciles are stamped, so a team that threw sorts to the
+ * front again next hour and gets retried. Failing to stamp costs nothing worse
+ * than reconciling those teams again, so it never aborts the sweep.
+ */
+const markReconciled = async (teamIds: string[]): Promise<void> => {
+  if (teamIds.length === 0) return;
+
+  const { error } = await supabaseClient
+    .from("teams")
+    .update({ subscription_reconciled_at: new Date().toISOString() })
+    .in("id", teamIds);
+
+  if (error) {
+    logger.error("Failed to advance subscription reconcile cursor", {
+      team_ids: teamIds,
+      error,
+    });
+  }
 };
 
 const clearGracePeriod = async (teamId: string): Promise<void> => {
@@ -129,20 +176,31 @@ const reconcileTeam = async (team: Team): Promise<Outcome> => {
     return "revoked";
   }
 
-  // Payment-failure-shaped (past_due, unpaid, incomplete, paused, ...).
-  if (!team.payment_failed_at) {
+  // Payment-failure-shaped (past_due, unpaid, paused, ...).
+  const clockStartedNow = !team.payment_failed_at;
+
+  if (clockStartedNow) {
     // The webhook that should have started the clock was missed — start it now
     // rather than revoking, so the team still gets its full grace period.
     await startGracePeriod(team.id);
-    return "grace_started";
   }
 
-  const deadline =
-    new Date(team.payment_failed_at).getTime() +
-    PAYMENT_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+  const failedAt = clockStartedNow
+    ? Date.now()
+    : new Date(team.payment_failed_at as string).getTime();
 
-  if (Date.now() < deadline) {
-    return "in_grace";
+  if (Date.now() < failedAt + PAYMENT_GRACE_PERIOD_DAYS * DAY_MS) {
+    // Inside the window the team keeps the access it had, so this branch still
+    // syncs rather than returning early. Returning early meant a team whose
+    // keys were wrongly disabled — a transient Unkey failure during an earlier
+    // revoke, a stale webhook, a manual change — stayed broken until the
+    // deadline passed, silently costing it the entire grace period this
+    // mechanism exists to give. Write-free when the keys are already correct.
+    await updateApiKeyAccess(
+      { teamId: team.id, enabled: true, entitlement },
+      supabaseClient,
+    );
+    return clockStartedNow ? "grace_started" : "in_grace";
   }
 
   // payment_failed_at is intentionally left set — it doubles as an "already
@@ -166,6 +224,11 @@ const reconcileTeam = async (team: Team): Promise<Outcome> => {
  *
  * Also owns grace-period expiry: teams whose payment failed keep access until
  * PAYMENT_GRACE_PERIOD_DAYS has elapsed, then lose it here.
+ *
+ * Resumable rather than all-or-nothing. Teams are visited
+ * least-recently-reconciled first and stamped as they complete, so a run that
+ * hits its time budget hands the rest to the next hour instead of dropping
+ * them.
  */
 export const reconcileSubscriptionAccess = schedules.task({
   cron: { pattern: "0 * * * *", environments: ["PRODUCTION"] },
@@ -176,6 +239,7 @@ export const reconcileSubscriptionAccess = schedules.task({
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
   run: async () => {
+    const startedAt = Date.now();
     const teams = await getBillableTeams();
 
     if (teams.length === 0) {
@@ -190,15 +254,20 @@ export const reconcileSubscriptionAccess = schedules.task({
       in_grace: 0,
     };
     let failed = 0;
+    let attempted = 0;
 
     for (let i = 0; i < teams.length; i += CONCURRENCY) {
+      if (Date.now() - startedAt > RUN_BUDGET_MS) break;
+
       const batch = teams.slice(i, i + CONCURRENCY);
+      const reconciled: string[] = [];
 
       await Promise.all(
         batch.map(async (team) => {
           try {
             const outcome = await reconcileTeam(team);
             counts[outcome] += 1;
+            reconciled.push(team.id);
           } catch (error) {
             // One bad team must not stop the sweep; it gets retried next tick.
             failed += 1;
@@ -210,12 +279,32 @@ export const reconcileSubscriptionAccess = schedules.task({
           }
         }),
       );
+
+      attempted += batch.length;
+      await markReconciled(reconciled);
     }
+
+    const skipped = teams.length - attempted;
 
     logger.info("Subscription access reconciliation complete", {
       teams: teams.length,
+      attempted,
+      skipped,
       ...counts,
       failed,
+      duration_ms: Date.now() - startedAt,
     });
+
+    if (skipped > 0) {
+      // Worth alerting on rather than just counting: the sweep no longer fits
+      // in its hour, so every team is being reconciled less often than the
+      // schedule claims. Skipped teams sort first next run, so nothing is
+      // starved — but the window keeps shrinking until this is addressed.
+      logger.error("Subscription access reconciliation ran out of time", {
+        teams: teams.length,
+        skipped,
+        budget_ms: RUN_BUDGET_MS,
+      });
+    }
   },
 });

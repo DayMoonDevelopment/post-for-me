@@ -35,8 +35,16 @@ const PRICING_TIERS = [
 
 const ENTITLING_STATUSES: Stripe.Subscription.Status[] = ["active", "trialing"];
 
+/**
+ * Statuses with no claim to a grace period: given up by choice (`canceled`) or
+ * never completed (`incomplete`, `incomplete_expired`). `incomplete` is here
+ * because Stripe leaves an abandoned checkout's subscription in that status for
+ * ~23 hours, and counting it as a payment failure would convert an explicit
+ * cancellation into a full grace period.
+ */
 const IMMEDIATE_REVOKE_STATUSES: Stripe.Subscription.Status[] = [
   "canceled",
+  "incomplete",
   "incomplete_expired",
 ];
 
@@ -156,7 +164,15 @@ export function reduceSubscriptionsToEntitlement(
   return {
     verdict: paymentFailure ? "payment_failure" : "immediate_revoke",
     latestStatus: (paymentFailure ?? subscriptions[0]).status,
-    grantsSystemCredentials: false,
+    // Load-bearing for the grace period: reconcile-subscription-access.ts
+    // re-enables teams inside their window, and reporting `false` here would
+    // make that sync quietly disable their managed-credential projects — a
+    // downgrade in the middle of the grace period they were promised. Reports
+    // what the failing subscription would grant; still false on the revoke
+    // path, where nothing is being enabled.
+    grantsSystemCredentials: paymentFailure
+      ? subscriptionGrantsSystemCredentials(paymentFailure)
+      : false,
     planMetadata: null,
   };
 }

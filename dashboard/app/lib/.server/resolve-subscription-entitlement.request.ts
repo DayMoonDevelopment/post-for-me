@@ -10,13 +10,22 @@ import type Stripe from "stripe";
 const ENTITLING_STATUSES: Stripe.Subscription.Status[] = ["active", "trialing"];
 
 /**
- * Statuses where the team fully lost its subscription by choice (or it was
- * never completed) — access is revoked immediately, no grace period. Every
- * other non-entitling status (past_due, unpaid, incomplete, paused, ...) is
- * treated as payment-failure-shaped and gets the grace period.
+ * Statuses with no claim to a grace period: the team either gave the
+ * subscription up by choice (`canceled`) or never completed one in the first
+ * place (`incomplete`, `incomplete_expired`). Access is revoked immediately.
+ * Every other non-entitling status (past_due, unpaid, paused, ...) describes a
+ * subscription that *was* paying and stopped, which is what the grace period
+ * exists for.
+ *
+ * `incomplete` sits here rather than with the payment failures because Stripe
+ * leaves an abandoned checkout's subscription `incomplete` for ~23 hours
+ * before expiring it. Counted as a payment failure, that leftover would
+ * silently convert an explicit cancellation into a full grace period and keep
+ * a churned team's API keys working for days.
  */
 const IMMEDIATE_REVOKE_STATUSES: Stripe.Subscription.Status[] = [
   "canceled",
+  "incomplete",
   "incomplete_expired",
 ];
 
@@ -116,7 +125,13 @@ export function reduceSubscriptionsToEntitlement(
     verdict: paymentFailure ? "payment_failure" : "immediate_revoke",
     latestStatus: (paymentFailure ?? subscriptions[0]).status,
     planInfo: emptyPlanInfo,
-    grantsSystemCredentials: false,
+    // A team inside its grace period keeps whatever the failing subscription
+    // granted, so this reports what that subscription *would* grant. Callers
+    // only consult it when enabling, and the revoke path leaves it false, so
+    // this can never over-grant.
+    grantsSystemCredentials: paymentFailure
+      ? subscriptionGrantsSystemCredentials(paymentFailure)
+      : false,
   };
 }
 

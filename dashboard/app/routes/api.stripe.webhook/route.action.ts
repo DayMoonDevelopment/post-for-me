@@ -50,12 +50,16 @@ export const action = withSupabase(async ({ request, supabaseServiceRole }) => {
         console.log(`Unhandled event type ${event.type}`);
     }
   } catch (err: unknown) {
-    const error = err as Error;
+    // Narrowed rather than cast: a non-Error throw would otherwise render as
+    // "Webhook handler error: undefined" in both the log and the 500 body,
+    // hiding what actually failed.
+    const message = err instanceof Error ? err.message : String(err);
+
     console.error(
       `Stripe webhook handler failed for ${event.type} (${event.id}):`,
-      error,
+      err,
     );
-    return new Response(`Webhook handler error: ${error.message}`, {
+    return new Response(`Webhook handler error: ${message}`, {
       status: 500,
     });
   }

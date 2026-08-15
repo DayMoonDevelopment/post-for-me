@@ -42,23 +42,45 @@ async function resolveTeam(
     }
 
     if (byId.data) {
-      // Backfill the link the post-checkout redirect would otherwise own.
-      // Guarded on NULL so a redelivery can never move an existing link.
-      if (!byId.data.stripe_customer_id) {
-        const linked = await supabaseServiceRole
-          .from("teams")
-          .update({ stripe_customer_id: stripeCustomerId })
-          .eq("id", byId.data.id)
-          .is("stripe_customer_id", null);
+      const linkedCustomerId = byId.data.stripe_customer_id;
 
-        if (linked.error) {
-          throw new Error(
-            `Failed to link customer ${stripeCustomerId} to team ${byId.data.id}: ${linked.error.message}`,
-          );
+      // A team already linked to a *different* customer means this event is
+      // from a stale customer that still carries the team's id in its
+      // subscription metadata. Teams can end up with two Stripe customers:
+      // checkout mints a fresh one whenever the link is absent, and
+      // /stripe/success overwrites the link unconditionally.
+      //
+      // Honoring the hint there would derive the verdict from the wrong
+      // customer and disable every key of a team that is actively paying under
+      // the other one — and the hourly sweep, which reads the team's own
+      // customer, would re-enable them an hour later, flip-flopping forever.
+      // So the hint is dropped and the customer lookup below decides.
+      if (linkedCustomerId && linkedCustomerId !== stripeCustomerId) {
+        console.warn(
+          `[subscription-health] Ignoring team_id hint ${teamIdHint}: that team is linked to customer ${linkedCustomerId}, not ${stripeCustomerId}`,
+        );
+      } else {
+        // Backfill the link the post-checkout redirect would otherwise own.
+        // Guarded on NULL so a redelivery can never move an existing link.
+        if (!linkedCustomerId) {
+          const linked = await supabaseServiceRole
+            .from("teams")
+            .update({ stripe_customer_id: stripeCustomerId })
+            .eq("id", byId.data.id)
+            .is("stripe_customer_id", null);
+
+          if (linked.error) {
+            throw new Error(
+              `Failed to link customer ${stripeCustomerId} to team ${byId.data.id}: ${linked.error.message}`,
+            );
+          }
         }
-      }
 
-      return { id: byId.data.id, payment_failed_at: byId.data.payment_failed_at };
+        return {
+          id: byId.data.id,
+          payment_failed_at: byId.data.payment_failed_at,
+        };
+      }
     }
   }
 
