@@ -1,7 +1,9 @@
+import axios from "axios";
 import { createClient } from "@supabase/supabase-js";
 import { idempotencyKeys, logger, schedules, tasks } from "@trigger.dev/sdk";
 import { TikTokPostClient } from "./posting/platforms/tiktok-post-client";
 import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
+import { TIKTOK_PROCESSING_STATUSES } from "./posting/platforms/tiktok-shared";
 import { handleTokenRefresh, shouldRefreshToken } from "./posting/token-refresh";
 import { PlatformAppCredentials, SocialAccount } from "./posting/post.types";
 import { Database } from "./supabase.types";
@@ -12,11 +14,6 @@ const supabaseClient = createClient<Database>(
 );
 
 const MAX_RECONCILIATION_ATTEMPTS = 50;
-const PROCESSING_STATUSES = [
-  "PROCESSING",
-  "PROCESSING_DOWNLOAD",
-  "PROCESSING_UPLOAD",
-];
 
 type ReconcilableClient = TikTokPostClient | TikTokBusinessPostClient;
 
@@ -51,6 +48,16 @@ type PendingResultRow = {
   };
 };
 
+type ResolvableRow = Pick<
+  PendingResultRow,
+  "id" | "post_id" | "details" | "reconciliation_attempts"
+> & {
+  social_provider_connections: Pick<
+    PendingResultRow["social_provider_connections"],
+    "project_id"
+  >;
+};
+
 const bumpAttempts = async (id: string, currentAttempts: number) => {
   const { error } = await supabaseClient
     .from("social_post_results")
@@ -70,7 +77,7 @@ const resolveRow = async ({
   teamId,
   stripeCustomerId,
 }: {
-  row: PendingResultRow;
+  row: ResolvableRow;
   success: boolean;
   errorMessage: string | null;
   details: any;
@@ -194,7 +201,7 @@ const reconcileRow = async ({
       account,
     });
 
-    if (PROCESSING_STATUSES.includes(status)) {
+    if (TIKTOK_PROCESSING_STATUSES.includes(status)) {
       await bumpAttempts(row.id, row.reconciliation_attempts);
       return;
     }
@@ -214,6 +221,15 @@ const reconcileRow = async ({
       stripeCustomerId: connection.projects?.teams?.stripe_customer_id,
     });
   } catch (statusError) {
+    if (axios.isAxiosError(statusError)) {
+      logger.error("Transient error checking TikTok draft status, will retry", {
+        id: row.id,
+        error: statusError.message,
+      });
+      await bumpAttempts(row.id, row.reconciliation_attempts);
+      return;
+    }
+
     logger.error("TikTok draft reconciliation resolved to failure", {
       id: row.id,
       error: statusError,
@@ -237,21 +253,41 @@ export const reconcileTikTokDraftResults = schedules.task({
   id: "reconcile-tiktok-draft-results",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
+  queue: { concurrencyLimit: 1 },
   run: async () => {
     const now = new Date().toISOString();
 
-    const { error: expireError } = await supabaseClient
+    const { data: expiredRows, error: expiredFetchError } = await supabaseClient
       .from("social_post_results")
-      .update({ is_processing: false })
+      .select(
+        `id, post_id, details, reconciliation_attempts, social_provider_connections!inner(project_id)`,
+      )
       .eq("is_processing", true)
       .or(
         `reconciliation_deadline_at.lte.${now},reconciliation_attempts.gte.${MAX_RECONCILIATION_ATTEMPTS}`,
       );
 
-    if (expireError) {
-      logger.error("Failed to expire stale reconciliation rows", {
-        error: expireError,
+    if (expiredFetchError) {
+      logger.error("Failed to fetch expired reconciliation rows", {
+        error: expiredFetchError,
       });
+    } else if (expiredRows?.length) {
+      logger.info(`Giving up on ${expiredRows.length} expired reconciliation row(s)`);
+      await Promise.allSettled(
+        (expiredRows as unknown as ResolvableRow[]).map((row) =>
+          resolveRow({
+            row,
+            success: false,
+            errorMessage:
+              "Reconciliation for this TikTok draft did not complete within the allotted time or attempt limit.",
+            details: {
+              ...row.details,
+              status: "Reconciliation abandoned",
+              reconciled_at: new Date().toISOString(),
+            },
+          }),
+        ),
+      );
     }
 
     const { data: rows, error } = await supabaseClient
@@ -337,9 +373,9 @@ export const reconcileTikTokDraftResults = schedules.task({
           app_secret: credentialRow.app_secret || "",
         });
 
-        for (const row of groupRows) {
-          await reconcileRow({ row, client });
-        }
+        await Promise.allSettled(
+          groupRows.map((row) => reconcileRow({ row, client })),
+        );
       }),
     );
 

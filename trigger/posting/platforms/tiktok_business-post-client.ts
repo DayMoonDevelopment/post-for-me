@@ -11,15 +11,12 @@ import {
   SocialAccount,
   TiktokConfiguration,
 } from "../post.types";
+import { TIKTOK_PROCESSING_STATUSES } from "./tiktok-shared";
 
 export class TikTokBusinessPostClient extends PostClient {
   #tokenUrl =
     "https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/refresh_token/";
-  #processingStatuses = [
-    "PROCESSING",
-    "PROCESSING_DOWNLOAD",
-    "PROCESSING_UPLOAD",
-  ];
+  #processingStatuses = TIKTOK_PROCESSING_STATUSES;
   #processedStatuses = [
     "PUBLISH_COMPLETE",
     "PUBLISH_SUCCESS",

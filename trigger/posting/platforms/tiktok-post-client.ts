@@ -12,14 +12,11 @@ import {
   SocialAccount,
   TiktokConfiguration,
 } from "../post.types";
+import { TIKTOK_PROCESSING_STATUSES } from "./tiktok-shared";
 
 export class TikTokPostClient extends PostClient {
   #tokenUrl = "https://open.tiktokapis.com/v2/oauth/token/";
-  #processingStatuses = [
-    "PROCESSING",
-    "PROCESSING_DOWNLOAD",
-    "PROCESSING_UPLOAD",
-  ];
+  #processingStatuses = TIKTOK_PROCESSING_STATUSES;
   #processedStatuses = [
     "PUBLISH_COMPLETE",
     "PUBLISH_SUCCESS",
