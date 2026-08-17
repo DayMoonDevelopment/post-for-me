@@ -6,7 +6,11 @@ import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-po
 import { TIKTOK_PROCESSING_STATUSES } from "./posting/platforms/tiktok-shared";
 import { handleTokenRefresh, shouldRefreshToken } from "./posting/token-refresh";
 import { PlatformAppCredentials, SocialAccount } from "./posting/post.types";
+import Stripe from "stripe";
 import { Database } from "./supabase.types";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -103,6 +107,27 @@ const resolveRow = async ({
   }
 
   if (success && teamId && stripeCustomerId) {
+    try {
+      logger.info("Increasing stripe meter", {
+        meter: STRIPE_METER_EVENT,
+        stripe_customer_id: stripeCustomerId,
+      });
+      const meterEvent = await stripe.billing.meterEvents.create({
+        event_name: STRIPE_METER_EVENT,
+        payload: {
+          stripe_customer_id: stripeCustomerId,
+        },
+      });
+
+      logger.info("Created meter event", { meterEvent });
+    } catch (error) {
+      logger.error("Failed to increase stripe meter", {
+        meter: STRIPE_METER_EVENT,
+        stripe_customer_id: stripeCustomerId,
+        error,
+      });
+    }
+
     void idempotencyKeys
       .create(["increment-team-usage", updated.id], { scope: "global" })
       .then((idempotencyKey) =>
@@ -222,11 +247,38 @@ const reconcileRow = async ({
     });
   } catch (statusError) {
     if (axios.isAxiosError(statusError)) {
-      logger.error("Transient error checking TikTok draft status, will retry", {
+      const status = statusError.response?.status;
+      const isTransient =
+        !statusError.response ||
+        status === 429 ||
+        status === 408 ||
+        (status !== undefined && status >= 500);
+
+      if (isTransient) {
+        logger.error("Transient error checking TikTok draft status, will retry", {
+          id: row.id,
+          error: statusError.message,
+        });
+        await bumpAttempts(row.id, row.reconciliation_attempts);
+        return;
+      }
+
+      logger.error("Permanent error checking TikTok draft status, giving up", {
         id: row.id,
+        status,
         error: statusError.message,
       });
-      await bumpAttempts(row.id, row.reconciliation_attempts);
+      await resolveRow({
+        row,
+        success: false,
+        errorMessage: statusError.message,
+        details: {
+          ...row.details,
+          status: "Processing failed",
+          message: statusError.message,
+          reconciled_at: new Date().toISOString(),
+        },
+      });
       return;
     }
 
@@ -260,9 +312,10 @@ export const reconcileTikTokDraftResults = schedules.task({
     const { data: expiredRows, error: expiredFetchError } = await supabaseClient
       .from("social_post_results")
       .select(
-        `id, post_id, details, reconciliation_attempts, social_provider_connections!inner(project_id)`,
+        `id, post_id, details, reconciliation_attempts, social_provider_connections!inner(provider, project_id)`,
       )
       .eq("is_processing", true)
+      .in("social_provider_connections.provider", ["tiktok", "tiktok_business"])
       .or(
         `reconciliation_deadline_at.lte.${now},reconciliation_attempts.gte.${MAX_RECONCILIATION_ATTEMPTS}`,
       );
@@ -350,8 +403,8 @@ export const reconcileTikTokDraftResults = schedules.task({
       groups.set(key, groupRows);
     }
 
-    await Promise.allSettled(
-      Array.from(groups.values()).map(async (groupRows) => {
+    const groupResults = await Promise.allSettled(
+      Array.from(groups.entries()).map(async ([, groupRows]) => {
         const { provider, project_id: projectId } =
           groupRows[0].social_provider_connections;
 
@@ -373,11 +426,27 @@ export const reconcileTikTokDraftResults = schedules.task({
           app_secret: credentialRow.app_secret || "",
         });
 
-        await Promise.allSettled(
+        const rowResults = await Promise.allSettled(
           groupRows.map((row) => reconcileRow({ row, client })),
         );
+        rowResults.forEach((result, i) => {
+          if (result.status === "rejected") {
+            logger.error("Unhandled error reconciling TikTok draft row", {
+              id: groupRows[i].id,
+              error: result.reason,
+            });
+          }
+        });
       }),
     );
+    groupResults.forEach((result, i) => {
+      if (result.status === "rejected") {
+        logger.error("Unhandled error reconciling TikTok draft group", {
+          key: Array.from(groups.keys())[i],
+          error: result.reason,
+        });
+      }
+    });
 
     logger.info("TikTok draft result reconciliation complete");
   },
