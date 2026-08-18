@@ -166,6 +166,16 @@ const getSubscriptionPlanInfo = (subscription: Stripe.Subscription) => {
   };
 };
 
+const hasScheduledCancellation = (
+  subscription: Stripe.Subscription,
+): boolean => {
+  return Boolean(
+    subscription.cancel_at_period_end ||
+      subscription.cancel_at ||
+      subscription.cancellation_details?.reason,
+  );
+};
+
 const getDefaultPriceId = (product: Stripe.Product): string => {
   const defaultPrice = product.default_price;
 
@@ -671,6 +681,19 @@ export const processUsageLimits = schedules.task({
               ),
               checkForDuplicates: true,
             });
+            continue;
+          }
+
+          if (hasScheduledCancellation(subscription)) {
+            logger.info(
+              "Skipping usage-limit upgrade for subscription with scheduled cancellation",
+              {
+                team_id: teamId,
+                subscription_id: subscription.id,
+                cancel_at_period_end: subscription.cancel_at_period_end,
+                cancel_at: subscription.cancel_at,
+              },
+            );
             continue;
           }
 
