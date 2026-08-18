@@ -109,6 +109,30 @@ export const loader = withSupabase(async function ({
         ? "x"
         : provider;
 
+  const oauthError = url.searchParams.get("error");
+  if (oauthError) {
+    const errorReason = url.searchParams.get("error_reason");
+    const errorDescription = url.searchParams.get("error_description");
+    console.error(
+      "OAuth provider returned an error during account connection",
+      {
+        provider: normalizedProvider,
+        error: oauthError,
+        error_reason: errorReason,
+        error_description: errorDescription,
+      },
+    );
+    return createResponse({
+      isSuccess: false,
+      teamId: project.team_id,
+      projectId,
+      provider: normalizedProvider,
+      callbackUrl: project.auth_callback_url,
+      errors: [errorDescription || errorReason || oauthError],
+      isLoggedIn,
+    });
+  }
+
   if (!providerAppCredentials && provider !== "bluesky") {
     console.error("Provider app credentials not found for project");
     return createResponse({
