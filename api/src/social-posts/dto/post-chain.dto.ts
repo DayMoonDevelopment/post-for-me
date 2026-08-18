@@ -17,3 +17,14 @@ export class SocialPostChainItemDto {
   })
   media?: SocialPostMediaDto[] | null;
 }
+
+export class SocialPostChainItemResponseDto extends SocialPostChainItemDto {
+  @ApiProperty({ description: 'Unique identifier of the chain item' })
+  id: string;
+
+  @ApiProperty({
+    description:
+      'Position of this chain item in the reply chain, starting at 1',
+  })
+  sequence: number;
+}

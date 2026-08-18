@@ -512,7 +512,7 @@ export class SocialPostsService {
           .select('id, sequence');
 
       if (insertChainItemsError) {
-        console.error(insertChainItemsError);
+        throw new Error(insertChainItemsError.message);
       } else if (insertedChainItems) {
         const chainItemMedia = post.chain.flatMap((item, index) => {
           const chainItem = insertedChainItems.find(
@@ -540,7 +540,7 @@ export class SocialPostsService {
               .insert(chainItemMedia);
 
           if (insertChainItemMediaError) {
-            console.error(insertChainItemMediaError);
+            throw new Error(insertChainItemMediaError.message);
           }
         }
       }
@@ -967,6 +967,7 @@ export class SocialPostsService {
       provider_data: Json;
     }>;
     social_post_chain_items?: Array<{
+      id: string;
       sequence: number;
       caption: string;
       social_post_chain_item_media: Array<{
@@ -1066,6 +1067,8 @@ export class SocialPostsService {
     const chain = [...(data.social_post_chain_items ?? [])]
       .sort((a, b) => a.sequence - b.sequence)
       .map((item) => ({
+        id: item.id,
+        sequence: item.sequence,
         caption: item.caption,
         media: item.social_post_chain_item_media.map((media) => ({
           url: media.url,

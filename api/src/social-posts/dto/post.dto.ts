@@ -5,7 +5,7 @@ import {
   PlatformConfigurationsDto,
 } from './post-configurations.dto';
 import { SocialAccountDto } from '../../social-provider-connections/dto/social-accounts.dto';
-import { SocialPostChainItemDto } from './post-chain.dto';
+import { SocialPostChainItemResponseDto } from './post-chain.dto';
 
 export enum PostStatus {
   DRAFT = 'draft',
@@ -77,9 +77,9 @@ export class SocialPostDto {
       'Ordered list of follow-up posts published as a reply chain/thread after the root post',
     nullable: true,
     isArray: true,
-    type: SocialPostChainItemDto,
+    type: SocialPostChainItemResponseDto,
   })
-  chain: SocialPostChainItemDto[] | undefined | null;
+  chain: SocialPostChainItemResponseDto[] | undefined | null;
 
   @ApiProperty({ description: 'Timestamp when the post was created' })
   created_at: string;

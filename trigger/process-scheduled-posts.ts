@@ -1,6 +1,7 @@
 import { logger, schedules, tasks } from "@trigger.dev/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { Post } from "./posting/post.types";
+import { CHAIN_SELECT } from "./posting/chain-select";
 
 import { Database } from "./supabase.types";
 
@@ -49,19 +50,7 @@ export const processScheduledPosts = schedules.task({
               provider_connection_id,
               provider_data
             ),
-            social_post_chain_items (
-              id,
-              sequence,
-              caption,
-              social_post_chain_item_media (
-                id,
-                url,
-                thumbnail_url,
-                thumbnail_timestamp_ms,
-                tags,
-                skip_processing
-              )
-            )
+            ${CHAIN_SELECT}
             `,
         )
         .eq("status", "scheduled")

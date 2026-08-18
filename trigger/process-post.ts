@@ -11,6 +11,7 @@ import type {
   SocialAccount,
   UserTag,
 } from "./posting/post.types";
+import { CHAIN_SELECT } from "./posting/chain-select";
 import { Unkey } from "@unkey/api";
 
 const CHAIN_CAPABLE_PROVIDERS: Provider[] = ["x", "threads", "bluesky"];
@@ -644,7 +645,7 @@ export const processPost = task({
       }
 
       if (chainAccounts.length > 0) {
-        logger.info("Posting Chain Items Sequentially", {
+        logger.info("Posting Chain Items Per Account In Parallel", {
           totalChainAccounts: chainAccounts.length,
           chainLength: chainItems.length,
         });
@@ -678,153 +679,155 @@ export const processPost = task({
             .map((item) => item.id),
         );
 
-        for (const { account, appCredentials } of chainAccounts) {
-          const rootResult = rootResultsByAccountId.get(account.id);
+        await Promise.allSettled(
+          chainAccounts.map(async ({ account, appCredentials }) => {
+            const rootResult = rootResultsByAccountId.get(account.id);
 
-          if (!rootResult?.success) {
-            logger.warn("Skipping chain: root post did not succeed", {
-              provider: account.provider,
-              provider_connection_id: account.id,
-            });
-            errorResults.push(
-              ...chainItems.map((item) => ({
-                success: false,
+            if (!rootResult?.success) {
+              logger.warn("Skipping chain: root post did not succeed", {
+                provider: account.provider,
                 provider_connection_id: account.id,
-                post_id: postData.id,
-                chain_item_id: item.id,
-                error_message: `Skipped chain item: root post did not succeed for ${account.provider}`,
-              })),
-            );
-            continue;
-          }
-
-          let previousResult: PostResult = rootResult;
-          const rootRef: PostResult = rootResult;
-          let chainBroken = false;
-
-          for (const item of chainItems) {
-            if (chainBroken) {
-              errorResults.push({
-                success: false,
-                provider_connection_id: account.id,
-                post_id: postData.id,
-                chain_item_id: item.id,
-                error_message: `Skipped chain item: an earlier item in the chain failed for ${account.provider}`,
               });
-              continue;
+              errorResults.push(
+                ...chainItems.map((item) => ({
+                  success: false,
+                  provider_connection_id: account.id,
+                  post_id: postData.id,
+                  chain_item_id: item.id,
+                  error_message: `Skipped chain item: root post did not succeed for ${account.provider}`,
+                })),
+              );
+              return;
             }
 
-            try {
-              if (failedMediaItemIds.has(item.id)) {
-                logger.error("All Chain Item Media Failed", {
+            let previousResult: PostResult = rootResult;
+            const rootRef: PostResult = rootResult;
+            let chainBroken = false;
+
+            for (const item of chainItems) {
+              if (chainBroken) {
+                errorResults.push({
+                  success: false,
                   provider_connection_id: account.id,
+                  post_id: postData.id,
                   chain_item_id: item.id,
+                  error_message: `Skipped chain item: an earlier item in the chain failed for ${account.provider}`,
+                });
+                continue;
+              }
+
+              try {
+                if (failedMediaItemIds.has(item.id)) {
+                  logger.error("All Chain Item Media Failed", {
+                    provider_connection_id: account.id,
+                    chain_item_id: item.id,
+                  });
+                  errorResults.push({
+                    success: false,
+                    provider_connection_id: account.id,
+                    post_id: postData.id,
+                    chain_item_id: item.id,
+                    error_message: `All media failed to process for chain item, please check media URLS`,
+                  });
+                  chainBroken = true;
+                  continue;
+                }
+
+                // Re-fetch the account on every chain item: an earlier item
+                // (or the root post) may have refreshed and persisted a new
+                // access/refresh token, and platforms like X rotate the OAuth2
+                // refresh_token on every use, so a stale in-memory `account`
+                // would fail to refresh again.
+                const { data: freshAccountRow, error: freshAccountError } =
+                  await supabaseClient
+                    .from("social_provider_connections")
+                    .select("*")
+                    .eq("id", account.id)
+                    .single();
+
+                if (freshAccountError || !freshAccountRow) {
+                  logger.warn(
+                    "Failed to refresh account before chain item, reusing last known token",
+                    {
+                      provider_connection_id: account.id,
+                      error: freshAccountError,
+                    },
+                  );
+                }
+
+                const currentAccount: SocialAccount = freshAccountRow
+                  ? (freshAccountRow as unknown as SocialAccount)
+                  : account;
+
+                const itemMedia = itemMediaById.get(item.id) ?? [];
+
+                const platformConfig = buildReplyPlatformConfig(
+                  account.provider,
+                  previousResult,
+                  rootRef,
+                );
+
+                logger.info("Posting Chain Item", {
+                  provider: account.provider,
+                  provider_connection_id: account.id,
+                  sequence: item.sequence,
+                });
+
+                const result = await tasks.triggerAndWait("post-to-platform", {
+                  stripeCustomerId: postData.stripe_customer_id,
+                  teamId: project.team_id,
+                  platform: account.provider,
+                  postId: postData.id,
+                  account: currentAccount,
+                  media: itemMedia,
+                  caption: item.caption,
+                  platformConfig,
+                  appCredentials,
+                  projectId: post.project_id,
+                  chainItemId: item.id,
+                });
+
+                logger.info("Posting Chain Item Complete", {
+                  provider: account.provider,
+                  provider_connection_id: account.id,
+                  sequence: item.sequence,
+                  success: result.ok && result.output.success,
+                });
+
+                if (result.ok && result.output.success) {
+                  previousResult = result.output;
+                } else {
+                  chainBroken = true;
+                  if (!result.ok) {
+                    errorResults.push({
+                      success: false,
+                      provider_connection_id: account.id,
+                      post_id: postData.id,
+                      chain_item_id: item.id,
+                      error_message:
+                        "post-to-platform run failed unexpectedly for chain item",
+                    });
+                  }
+                }
+              } catch (error: any) {
+                logger.error("Failed Posting Chain Item", {
+                  account,
+                  item,
+                  error,
                 });
                 errorResults.push({
                   success: false,
                   provider_connection_id: account.id,
                   post_id: postData.id,
                   chain_item_id: item.id,
-                  error_message: `All media failed to process for chain item, please check media URLS`,
+                  error_message: error?.message || "Unknown error",
+                  details: { error },
                 });
                 chainBroken = true;
-                continue;
               }
-
-              // Re-fetch the account on every chain item: an earlier item
-              // (or the root post) may have refreshed and persisted a new
-              // access/refresh token, and platforms like X rotate the OAuth2
-              // refresh_token on every use, so a stale in-memory `account`
-              // would fail to refresh again.
-              const { data: freshAccountRow, error: freshAccountError } =
-                await supabaseClient
-                  .from("social_provider_connections")
-                  .select("*")
-                  .eq("id", account.id)
-                  .single();
-
-              if (freshAccountError || !freshAccountRow) {
-                logger.warn(
-                  "Failed to refresh account before chain item, reusing last known token",
-                  {
-                    provider_connection_id: account.id,
-                    error: freshAccountError,
-                  },
-                );
-              }
-
-              const currentAccount: SocialAccount = freshAccountRow
-                ? (freshAccountRow as unknown as SocialAccount)
-                : account;
-
-              const itemMedia = itemMediaById.get(item.id) ?? [];
-
-              const platformConfig = buildReplyPlatformConfig(
-                account.provider,
-                previousResult,
-                rootRef,
-              );
-
-              logger.info("Posting Chain Item", {
-                provider: account.provider,
-                provider_connection_id: account.id,
-                sequence: item.sequence,
-              });
-
-              const result = await tasks.triggerAndWait("post-to-platform", {
-                stripeCustomerId: postData.stripe_customer_id,
-                teamId: project.team_id,
-                platform: account.provider,
-                postId: postData.id,
-                account: currentAccount,
-                media: itemMedia,
-                caption: item.caption,
-                platformConfig,
-                appCredentials,
-                projectId: post.project_id,
-                chainItemId: item.id,
-              });
-
-              logger.info("Posting Chain Item Complete", {
-                provider: account.provider,
-                provider_connection_id: account.id,
-                sequence: item.sequence,
-                success: result.ok && result.output.success,
-              });
-
-              if (result.ok && result.output.success) {
-                previousResult = result.output;
-              } else {
-                chainBroken = true;
-                if (!result.ok) {
-                  errorResults.push({
-                    success: false,
-                    provider_connection_id: account.id,
-                    post_id: postData.id,
-                    chain_item_id: item.id,
-                    error_message:
-                      "post-to-platform run failed unexpectedly for chain item",
-                  });
-                }
-              }
-            } catch (error: any) {
-              logger.error("Failed Posting Chain Item", {
-                account,
-                item,
-                error,
-              });
-              errorResults.push({
-                success: false,
-                provider_connection_id: account.id,
-                post_id: postData.id,
-                chain_item_id: item.id,
-                error_message: error?.message || "Unknown error",
-                details: { error },
-              });
-              chainBroken = true;
             }
-          }
-        }
+          }),
+        );
       }
     } catch (error) {
       logger.error("Unexpected Error", { error });
@@ -892,19 +895,7 @@ export const processPost = task({
          provider_connection_id,
          provider_data
         ),
-        social_post_chain_items (
-          id,
-          sequence,
-          caption,
-          social_post_chain_item_media (
-            id,
-            url,
-            thumbnail_url,
-            thumbnail_timestamp_ms,
-            tags,
-            skip_processing
-          )
-        )
+        ${CHAIN_SELECT}
         `,
         )
         .single();
