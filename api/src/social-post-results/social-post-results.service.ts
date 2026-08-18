@@ -35,7 +35,7 @@ export class PostResultsService {
       await this.supabaseService.supabaseClient
         .from('social_post_results')
         .select(
-          'id, success, provider_post_id, provider_post_url, details, post_id, chain_item_id, provider_connection_id, error_message, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+          'id, success, provider_post_id, provider_post_url, details, post_id, chain_item_id, provider_connection_id, error_message, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing)), social_post_result_chain_item_media(social_post_chain_item_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
         )
         .eq('id', id)
         .eq('social_provider_connections.project_id', projectId)
@@ -56,15 +56,30 @@ export class PostResultsService {
         chain_item_id: postResult?.chain_item_id ?? null,
         provider_connection_id: postResult?.provider_connection_id,
         error_message: postResult?.error_message || undefined,
-        media:
-          postResult?.social_post_result_post_media?.map((resultMedia) => ({
+        media: [
+          ...(postResult?.social_post_result_post_media?.map((resultMedia) => ({
             url: resultMedia.social_post_media.url,
             thumbnail_url: resultMedia.social_post_media.thumbnail_url,
             thumbnail_timestamp_ms:
               resultMedia.social_post_media.thumbnail_timestamp_ms,
             tags: resultMedia.social_post_media.tags as any[] | null,
             skip_processing: resultMedia.social_post_media.skip_processing,
-          })) || [],
+          })) || []),
+          ...(postResult?.social_post_result_chain_item_media?.map(
+            (resultMedia) => ({
+              url: resultMedia.social_post_chain_item_media.url,
+              thumbnail_url:
+                resultMedia.social_post_chain_item_media.thumbnail_url,
+              thumbnail_timestamp_ms:
+                resultMedia.social_post_chain_item_media.thumbnail_timestamp_ms,
+              tags: resultMedia.social_post_chain_item_media.tags as
+                | any[]
+                | null,
+              skip_processing:
+                resultMedia.social_post_chain_item_media.skip_processing,
+            }),
+          ) || []),
+        ],
       },
     };
   }
@@ -127,7 +142,7 @@ export class PostResultsService {
     const query = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
-        'id, provider_connection_id, post_id, chain_item_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        'id, provider_connection_id, post_id, chain_item_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing)), social_post_result_chain_item_media(social_post_chain_item_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
       )
       .eq('social_provider_connections.project_id', projectId)
       .in(
@@ -203,15 +218,26 @@ export class PostResultsService {
         error: raw.error_message,
         details: raw.details,
         platform_data,
-        media:
-          raw.social_post_result_post_media?.map((resultMedia) => ({
+        media: [
+          ...(raw.social_post_result_post_media?.map((resultMedia) => ({
             url: resultMedia.social_post_media.url,
             thumbnail_url: resultMedia.social_post_media.thumbnail_url,
             thumbnail_timestamp_ms:
               resultMedia.social_post_media.thumbnail_timestamp_ms,
             tags: resultMedia.social_post_media.tags as any[] | null,
             skip_processing: resultMedia.social_post_media.skip_processing,
-          })) || [],
+          })) || []),
+          ...(raw.social_post_result_chain_item_media?.map((resultMedia) => ({
+            url: resultMedia.social_post_chain_item_media.url,
+            thumbnail_url:
+              resultMedia.social_post_chain_item_media.thumbnail_url,
+            thumbnail_timestamp_ms:
+              resultMedia.social_post_chain_item_media.thumbnail_timestamp_ms,
+            tags: resultMedia.social_post_chain_item_media.tags as any[] | null,
+            skip_processing:
+              resultMedia.social_post_chain_item_media.skip_processing,
+          })) || []),
+        ],
       };
     });
 

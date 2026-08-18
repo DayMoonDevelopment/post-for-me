@@ -58,6 +58,17 @@ const transformPostData = (data: {
     provider_connection_id: string | null;
     provider_data: any;
   }[];
+  social_post_chain_items?: {
+    sequence: number;
+    caption: string;
+    social_post_chain_item_media: {
+      url: string;
+      thumbnail_url: string | null;
+      thumbnail_timestamp_ms: number | null;
+      tags: Json;
+      skip_processing: boolean | null;
+    }[];
+  }[];
 }) => {
   const postMedia = data.social_post_media
     .filter((media) => !media.provider && !media.provider_connection_id)
@@ -128,6 +139,19 @@ const transformPostData = (data: {
     }),
   );
 
+  const chain = [...(data.social_post_chain_items ?? [])]
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((item) => ({
+      caption: item.caption,
+      media: item.social_post_chain_item_media.map((media) => ({
+        url: media.url,
+        thumbnail_url: media.thumbnail_url,
+        thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+        tags: media.tags as any[],
+        skip_processing: media.skip_processing,
+      })),
+    }));
+
   return {
     id: data.id,
     external_id: data.external_id,
@@ -137,6 +161,7 @@ const transformPostData = (data: {
     platform_configurations: platformConfigurations,
     account_configurations: accountConfigurations,
     social_accounts: socialAccounts,
+    chain: chain.length > 0 ? chain : null,
     scheduled_at: data.post_at,
     created_at: data.created_at,
     updated_at: data.updated_at,
@@ -624,6 +649,35 @@ export const processPost = task({
           chainLength: chainItems.length,
         });
 
+        // Localize every chain item's media once up front (it doesn't vary
+        // by account, unlike root-post media), instead of re-localizing it
+        // once per chain-capable account.
+        const localizedChainMedia = await localizeMedia(
+          chainItems.flatMap((item) => item.social_post_chain_item_media),
+        );
+        const localizedChainMediaById = new Map(
+          localizedChainMedia.map((medium) => [medium.id, medium]),
+        );
+        const itemMediaById = new Map(
+          chainItems.map((item) => [
+            item.id,
+            item.social_post_chain_item_media
+              .map((medium) => localizedChainMediaById.get(medium.id))
+              .filter(
+                (medium): medium is LocalizedMedia => medium !== undefined,
+              ),
+          ]),
+        );
+        const failedMediaItemIds = new Set(
+          chainItems
+            .filter(
+              (item) =>
+                item.social_post_chain_item_media.length > 0 &&
+                (itemMediaById.get(item.id)?.length ?? 0) === 0,
+            )
+            .map((item) => item.id),
+        );
+
         for (const { account, appCredentials } of chainAccounts) {
           const rootResult = rootResultsByAccountId.get(account.id);
 
@@ -660,57 +714,114 @@ export const processPost = task({
               continue;
             }
 
-            const itemMedia = await localizeMedia(
-              item.social_post_chain_item_media,
-            );
-
-            const platformConfig = buildReplyPlatformConfig(
-              account.provider,
-              previousResult,
-              rootRef,
-            );
-
-            logger.info("Posting Chain Item", {
-              provider: account.provider,
-              provider_connection_id: account.id,
-              sequence: item.sequence,
-            });
-
-            const result = await tasks.triggerAndWait("post-to-platform", {
-              stripeCustomerId: postData.stripe_customer_id,
-              teamId: project.team_id,
-              platform: account.provider,
-              postId: postData.id,
-              account,
-              media: itemMedia,
-              caption: item.caption,
-              platformConfig,
-              appCredentials,
-              projectId: post.project_id,
-              chainItemId: item.id,
-            });
-
-            logger.info("Posting Chain Item Complete", {
-              provider: account.provider,
-              provider_connection_id: account.id,
-              sequence: item.sequence,
-              success: result.ok && result.output.success,
-            });
-
-            if (result.ok && result.output.success) {
-              previousResult = result.output;
-            } else {
-              chainBroken = true;
-              if (!result.ok) {
+            try {
+              if (failedMediaItemIds.has(item.id)) {
+                logger.error("All Chain Item Media Failed", {
+                  provider_connection_id: account.id,
+                  chain_item_id: item.id,
+                });
                 errorResults.push({
                   success: false,
                   provider_connection_id: account.id,
                   post_id: postData.id,
                   chain_item_id: item.id,
-                  error_message:
-                    "post-to-platform run failed unexpectedly for chain item",
+                  error_message: `All media failed to process for chain item, please check media URLS`,
                 });
+                chainBroken = true;
+                continue;
               }
+
+              // Re-fetch the account on every chain item: an earlier item
+              // (or the root post) may have refreshed and persisted a new
+              // access/refresh token, and platforms like X rotate the OAuth2
+              // refresh_token on every use, so a stale in-memory `account`
+              // would fail to refresh again.
+              const { data: freshAccountRow, error: freshAccountError } =
+                await supabaseClient
+                  .from("social_provider_connections")
+                  .select("*")
+                  .eq("id", account.id)
+                  .single();
+
+              if (freshAccountError || !freshAccountRow) {
+                logger.warn(
+                  "Failed to refresh account before chain item, reusing last known token",
+                  {
+                    provider_connection_id: account.id,
+                    error: freshAccountError,
+                  },
+                );
+              }
+
+              const currentAccount: SocialAccount = freshAccountRow
+                ? (freshAccountRow as unknown as SocialAccount)
+                : account;
+
+              const itemMedia = itemMediaById.get(item.id) ?? [];
+
+              const platformConfig = buildReplyPlatformConfig(
+                account.provider,
+                previousResult,
+                rootRef,
+              );
+
+              logger.info("Posting Chain Item", {
+                provider: account.provider,
+                provider_connection_id: account.id,
+                sequence: item.sequence,
+              });
+
+              const result = await tasks.triggerAndWait("post-to-platform", {
+                stripeCustomerId: postData.stripe_customer_id,
+                teamId: project.team_id,
+                platform: account.provider,
+                postId: postData.id,
+                account: currentAccount,
+                media: itemMedia,
+                caption: item.caption,
+                platformConfig,
+                appCredentials,
+                projectId: post.project_id,
+                chainItemId: item.id,
+              });
+
+              logger.info("Posting Chain Item Complete", {
+                provider: account.provider,
+                provider_connection_id: account.id,
+                sequence: item.sequence,
+                success: result.ok && result.output.success,
+              });
+
+              if (result.ok && result.output.success) {
+                previousResult = result.output;
+              } else {
+                chainBroken = true;
+                if (!result.ok) {
+                  errorResults.push({
+                    success: false,
+                    provider_connection_id: account.id,
+                    post_id: postData.id,
+                    chain_item_id: item.id,
+                    error_message:
+                      "post-to-platform run failed unexpectedly for chain item",
+                  });
+                }
+              }
+            } catch (error: any) {
+              logger.error("Failed Posting Chain Item", {
+                account,
+                item,
+                error,
+              });
+              errorResults.push({
+                success: false,
+                provider_connection_id: account.id,
+                post_id: postData.id,
+                chain_item_id: item.id,
+                error_message: error?.message || "Unknown error",
+                details: { error },
+              });
+              chainBroken = true;
             }
           }
         }
@@ -780,6 +891,19 @@ export const processPost = task({
          provider,
          provider_connection_id,
          provider_data
+        ),
+        social_post_chain_items (
+          id,
+          sequence,
+          caption,
+          social_post_chain_item_media (
+            id,
+            url,
+            thumbnail_url,
+            thumbnail_timestamp_ms,
+            tags,
+            skip_processing
+          )
         )
         `,
         )

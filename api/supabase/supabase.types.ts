@@ -561,6 +561,39 @@ export type Database = {
           },
         ]
       }
+      social_post_result_chain_item_media: {
+        Row: {
+          id: string
+          social_post_chain_item_media_id: string
+          social_post_result_id: string
+        }
+        Insert: {
+          id?: string
+          social_post_chain_item_media_id: string
+          social_post_result_id: string
+        }
+        Update: {
+          id?: string
+          social_post_chain_item_media_id?: string
+          social_post_result_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_post_result_chain_item_media_social_post_result_id_fkey"
+            columns: ["social_post_result_id"]
+            isOneToOne: false
+            referencedRelation: "social_post_results"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_post_result_chain_item_social_post_chain_item_media_fkey"
+            columns: ["social_post_chain_item_media_id"]
+            isOneToOne: false
+            referencedRelation: "social_post_chain_item_media"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_post_result_post_media: {
         Row: {
           id: string

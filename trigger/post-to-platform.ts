@@ -308,23 +308,40 @@ export const postToPlatform = task({
         },
       });
 
-      // Chain item media is localized from social_post_chain_item_media, not
-      // social_post_media, so it can't be linked via this join table (its FK
-      // only references social_post_media).
-      if (!chainItemId && media.length > 0) {
-        const { error: postResultMediaError } = await supabaseClient
-          .from("social_post_result_post_media")
-          .insert(
-            media.map((m) => ({
-              social_post_result_id: insertedPostResult.id,
-              social_post_media_id: m.id,
-            })),
-          );
+      // Root-post media lives in social_post_media, chain-item media lives in
+      // social_post_chain_item_media — each links to the result through its
+      // own join table since the FKs point at different source tables.
+      if (media.length > 0) {
+        if (chainItemId) {
+          const { error: postResultChainItemMediaError } = await supabaseClient
+            .from("social_post_result_chain_item_media")
+            .insert(
+              media.map((m) => ({
+                social_post_result_id: insertedPostResult.id,
+                social_post_chain_item_media_id: m.id,
+              })),
+            );
 
-        if (postResultMediaError) {
-          logger.error("Failed to insert post result media", {
-            postResultMediaError,
-          });
+          if (postResultChainItemMediaError) {
+            logger.error("Failed to insert post result chain item media", {
+              postResultChainItemMediaError,
+            });
+          }
+        } else {
+          const { error: postResultMediaError } = await supabaseClient
+            .from("social_post_result_post_media")
+            .insert(
+              media.map((m) => ({
+                social_post_result_id: insertedPostResult.id,
+                social_post_media_id: m.id,
+              })),
+            );
+
+          if (postResultMediaError) {
+            logger.error("Failed to insert post result media", {
+              postResultMediaError,
+            });
+          }
         }
       }
     }
