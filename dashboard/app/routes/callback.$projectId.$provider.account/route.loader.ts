@@ -18,10 +18,29 @@ export const loader = withSupabase(async function ({
 
   let { provider } = params;
 
+  const oauthError = url.searchParams.get("error");
+  const oauthErrorReason = url.searchParams.get("error_reason");
+  const oauthErrorDescription = url.searchParams.get("error_description");
+  const oauthErrorMessage = oauthError
+    ? oauthErrorDescription || oauthErrorReason || oauthError
+    : null;
+
+  if (oauthError) {
+    console.error(
+      "OAuth provider returned an error during account connection",
+      {
+        provider,
+        error: oauthError,
+        error_reason: oauthErrorReason,
+        error_description: oauthErrorDescription,
+      },
+    );
+  }
+
   if (!projectId || !provider) {
     return createResponse({
       isSuccess: false,
-      errors: ["Project Id or Provider not found"],
+      errors: [oauthErrorMessage || "Project Id or Provider not found"],
       isLoggedIn,
     });
   }
@@ -33,7 +52,7 @@ export const loader = withSupabase(async function ({
   if (!key) {
     return createResponse({
       isSuccess: false,
-      errors: ["Auth state not set"],
+      errors: [oauthErrorMessage || "Auth state not set"],
       isLoggedIn,
     });
   }
@@ -59,7 +78,7 @@ export const loader = withSupabase(async function ({
     console.error("Project not found");
     return createResponse({
       isSuccess: false,
-      errors: ["Project not found"],
+      errors: [oauthErrorMessage || "Project not found"],
       projectId,
       provider,
       isLoggedIn,
@@ -109,26 +128,14 @@ export const loader = withSupabase(async function ({
         ? "x"
         : provider;
 
-  const oauthError = url.searchParams.get("error");
-  if (oauthError) {
-    const errorReason = url.searchParams.get("error_reason");
-    const errorDescription = url.searchParams.get("error_description");
-    console.error(
-      "OAuth provider returned an error during account connection",
-      {
-        provider: normalizedProvider,
-        error: oauthError,
-        error_reason: errorReason,
-        error_description: errorDescription,
-      },
-    );
+  if (oauthErrorMessage) {
     return createResponse({
       isSuccess: false,
       teamId: project.team_id,
       projectId,
       provider: normalizedProvider,
       callbackUrl: project.auth_callback_url,
-      errors: [errorDescription || errorReason || oauthError],
+      errors: [oauthErrorMessage],
       isLoggedIn,
     });
   }
