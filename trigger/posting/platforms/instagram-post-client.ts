@@ -33,10 +33,12 @@ export class InstagramPostClient extends PostClient {
   #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 
-  #graphApiUrl =
-    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com";
-  #graphInstagramApiUrl =
-    process.env.INSTAGRAM_GRAPH_API_URL || "https://graph.instagram.com";
+  #graphApiUrl = (
+    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com"
+  ).replace(/\/+$/, "");
+  #graphInstagramApiUrl = (
+    process.env.INSTAGRAM_GRAPH_API_URL || "https://graph.instagram.com"
+  ).replace(/\/+$/, "");
   #apiVersion = process.env.FACEBOOK_API_VERSION || "v25.0";
   #instagramApiVersion = process.env.INSTAGRAM_API_VERSION || "v23.0";
   #oauthApiVersion = process.env.FACEBOOK_OAUTH_API_VERSION || "v20.0";

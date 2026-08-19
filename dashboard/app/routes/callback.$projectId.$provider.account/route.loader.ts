@@ -1,7 +1,10 @@
 import type { Database } from "~/lib/.server/database.types";
-import { redirect } from "react-router";
 import { addSocialAccountConnections } from "~/lib/.server/social-accounts/social-account";
 import { withSupabase } from "~/lib/.server/supabase";
+import {
+  parseOauthCallbackError,
+  createOauthCallbackResponse,
+} from "~/lib/.server/social-accounts/oauth-callback-response";
 
 type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 
@@ -18,27 +21,10 @@ export const loader = withSupabase(async function ({
 
   let { provider } = params;
 
-  const oauthError = url.searchParams.get("error");
-  const oauthErrorReason = url.searchParams.get("error_reason");
-  const oauthErrorDescription = url.searchParams.get("error_description");
-  const oauthErrorMessage = oauthError
-    ? oauthErrorDescription || oauthErrorReason || oauthError
-    : null;
-
-  if (oauthError) {
-    console.error(
-      "OAuth provider returned an error during account connection",
-      {
-        provider,
-        error: oauthError,
-        error_reason: oauthErrorReason,
-        error_description: oauthErrorDescription,
-      },
-    );
-  }
+  const { oauthErrorMessage } = parseOauthCallbackError(url, provider);
 
   if (!projectId || !provider) {
-    return createResponse({
+    return createOauthCallbackResponse({
       isSuccess: false,
       errors: [oauthErrorMessage || "Project Id or Provider not found"],
       isLoggedIn,
@@ -50,7 +36,7 @@ export const loader = withSupabase(async function ({
     (url.searchParams.get("state") as string);
 
   if (!key) {
-    return createResponse({
+    return createOauthCallbackResponse({
       isSuccess: false,
       errors: [oauthErrorMessage || "Auth state not set"],
       isLoggedIn,
@@ -76,11 +62,30 @@ export const loader = withSupabase(async function ({
 
   if (projectError || !project) {
     console.error("Project not found");
-    return createResponse({
+    return createOauthCallbackResponse({
       isSuccess: false,
       errors: [oauthErrorMessage || "Project not found"],
       projectId,
       provider,
+      isLoggedIn,
+    });
+  }
+
+  const normalizedProvider =
+    provider === "instagram_w_facebook"
+      ? "instagram"
+      : provider === "x_oauth2"
+        ? "x"
+        : provider;
+
+  if (oauthErrorMessage) {
+    return createOauthCallbackResponse({
+      isSuccess: false,
+      teamId: project.team_id,
+      projectId,
+      provider: normalizedProvider,
+      callbackUrl: project.auth_callback_url,
+      errors: [oauthErrorMessage],
       isLoggedIn,
     });
   }
@@ -121,28 +126,9 @@ export const loader = withSupabase(async function ({
     (appCredential) => appCredential.provider === provider,
   );
 
-  const normalizedProvider =
-    provider === "instagram_w_facebook"
-      ? "instagram"
-      : provider === "x_oauth2"
-        ? "x"
-        : provider;
-
-  if (oauthErrorMessage) {
-    return createResponse({
-      isSuccess: false,
-      teamId: project.team_id,
-      projectId,
-      provider: normalizedProvider,
-      callbackUrl: project.auth_callback_url,
-      errors: [oauthErrorMessage],
-      isLoggedIn,
-    });
-  }
-
   if (!providerAppCredentials && provider !== "bluesky") {
     console.error("Provider app credentials not found for project");
-    return createResponse({
+    return createOauthCallbackResponse({
       projectId,
       provider: normalizedProvider,
       teamId: project.team_id,
@@ -173,7 +159,7 @@ export const loader = withSupabase(async function ({
 
     if (successConnections.length === 0) {
       errors.push("No valid accounts found");
-      return createResponse({
+      return createOauthCallbackResponse({
         isSuccess: false,
         teamId: project.team_id,
         projectId,
@@ -185,7 +171,7 @@ export const loader = withSupabase(async function ({
       });
     }
 
-    return createResponse({
+    return createOauthCallbackResponse({
       isSuccess: true,
       teamId: project.team_id,
       projectId,
@@ -198,7 +184,7 @@ export const loader = withSupabase(async function ({
     });
   } catch (error) {
     console.error(error);
-    return createResponse({
+    return createOauthCallbackResponse({
       isSuccess: false,
       errors: [
         (error as { message?: string })?.message ||
@@ -212,58 +198,3 @@ export const loader = withSupabase(async function ({
     });
   }
 });
-
-//Either return to component or redirect to project callback url
-const createResponse = ({
-  teamId,
-  projectId,
-  provider,
-  isSuccess,
-  callbackUrl,
-  accountIds,
-  failedAccountIds,
-  errors,
-  isLoggedIn,
-}: {
-  teamId?: string;
-  projectId?: string;
-  provider?: string;
-  isSuccess: boolean;
-  accountIds?: string[];
-  failedAccountIds?: string[];
-  errors?: string[];
-  callbackUrl?: string | null | undefined;
-  isLoggedIn?: boolean;
-}) => {
-  const error = errors && errors.length > 0 ? errors.join("|") : null;
-
-  if (callbackUrl) {
-    const authParams = new URLSearchParams([
-      ["provider", provider || ""],
-      ["projectId", projectId || ""],
-      ["isSuccess", isSuccess ? "true" : "false"],
-      ["accountIds", accountIds?.join(",") || ""],
-    ]);
-
-    if (failedAccountIds && failedAccountIds.length > 0) {
-      authParams.append("failedAccountIds", failedAccountIds?.join(","));
-    }
-
-    if (error) {
-      authParams.append("error", error);
-    }
-
-    return redirect(`${callbackUrl}?${authParams.toString()}`);
-  }
-
-  return {
-    teamId,
-    projectId,
-    provider,
-    isSuccess,
-    accountIds,
-    failedAccountIds,
-    error,
-    isLoggedIn,
-  };
-};

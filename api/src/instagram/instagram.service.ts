@@ -20,10 +20,13 @@ import type {
   InstagramInsight,
 } from './instagram.types';
 import { mapWithConcurrency } from '../lib/async.utils';
+import {
+  getFacebookApiVersion,
+  getInstagramApiVersion,
+} from '../lib/graph-api-version.util';
 
 const INSTAGRAM_METRICS_CONCURRENCY = 3;
-const DEFAULT_FACEBOOK_API_VERSION = 'v25.0';
-const DEFAULT_INSTAGRAM_API_VERSION = 'v23.0';
+const GRAPH_INSTAGRAM_DOMAIN = 'https://graph.instagram.com';
 
 @Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
@@ -35,17 +38,11 @@ export class InstagramService implements SocialPlatformService {
   ) {}
 
   private get facebookApiVersion(): string {
-    return (
-      this.configService.get<string>('FACEBOOK_API_VERSION') ||
-      DEFAULT_FACEBOOK_API_VERSION
-    );
+    return getFacebookApiVersion(this.configService);
   }
 
   private get instagramApiVersion(): string {
-    return (
-      this.configService.get<string>('INSTAGRAM_API_VERSION') ||
-      DEFAULT_INSTAGRAM_API_VERSION
-    );
+    return getInstagramApiVersion(this.configService);
   }
 
   getApiBaseUrl(account: SocialAccount) {
@@ -57,7 +54,7 @@ export class InstagramService implements SocialPlatformService {
       accountMetaData?.connection_type === 'instagram' ||
       (account.access_token && account.access_token.startsWith('IG'))
     ) {
-      return `https://graph.instagram.com/${this.instagramApiVersion}`;
+      return `${GRAPH_INSTAGRAM_DOMAIN}/${this.instagramApiVersion}`;
     }
     return `https://graph.facebook.com/${this.facebookApiVersion}`;
   }
@@ -113,7 +110,7 @@ export class InstagramService implements SocialPlatformService {
 
       if (accountMetaData?.connection_type === 'instagram') {
         const response = await axios.get<InstagramRefreshTokenResponse>(
-          'https://graph.instagram.com/refresh_access_token',
+          `${GRAPH_INSTAGRAM_DOMAIN}/refresh_access_token`,
           {
             params: {
               grant_type: 'ig_refresh_token',
