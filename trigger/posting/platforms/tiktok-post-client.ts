@@ -212,12 +212,18 @@ export class TikTokPostClient extends PostClient {
     } catch (error) {
       console.error("Error in postToTikTok:", error.message);
       const errorDetails = await this.#getErrorDetails(error);
+      const tiktokErrorCode = error.response?.data?.error?.code;
+
+      const errorMessage =
+        tiktokErrorCode === "reached_active_user_cap"
+          ? "TikTok has temporarily reached its daily cap on new active users for our app (this is a limit TikTok imposes until our app completes their review — it is not a Post for Me limit). This resets automatically within 24 hours; please try posting again after that."
+          : "Failed to post to TikTok";
 
       return {
         success: false,
         post_id: postId,
         provider_connection_id: account.id,
-        error_message: "Failed to post to TikTok",
+        error_message: errorMessage,
         details: {
           error: errorDetails,
           requests: this.#requests,
