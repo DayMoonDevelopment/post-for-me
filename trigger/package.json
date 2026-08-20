@@ -10,7 +10,8 @@
     "typegen": "bun run supabase:typegen",
     "supabase:typegen": "supabase gen types typescript --local > supabase.types.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext ts --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts --report-unused-disable-directives --max-warnings 0",
+    "test": "bun test"
   },
   "dependencies": {
     "@atproto/api": "^0.14.20",
@@ -30,14 +31,17 @@
     "stripe": "^18.1.1",
     "tus-js-client": "^4.3.1",
     "twitter-api-v2": "^1.22.0",
+    "twitter-text": "^3.1.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@trigger.dev/build": "4.4.4",
     "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/bun": "^1.4.0",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.10.7",
+    "@types/twitter-text": "^3.1.10",
     "@types/uuid": "^10.0.0",
     "eslint": "^9.18.0",
     "supabase": "^2.30.4",

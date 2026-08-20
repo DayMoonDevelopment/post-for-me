@@ -9,6 +9,7 @@ import sharp from "sharp";
 import { readFile } from "fs/promises";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import { parseTweet } from "twitter-text";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -16,6 +17,47 @@ import {
   SocialAccount,
   TwitterConfiguration,
 } from "../post.types";
+
+// twitter-text's weighting config ("configs.defaults") isn't part of its
+// public API surface (no `configs` export), and `parseTweet` replaces
+// rather than merges a partial options object — so overriding just
+// `maxWeightedTweetLength` requires supplying the full v3 config below
+// (mirrors twitter-text/dist/configs.js `defaults`) or weight calculation
+// silently breaks.
+const TWITTER_TEXT_V3_CONFIG = {
+  version: 3,
+  scale: 100,
+  defaultWeight: 200,
+  emojiParsingEnabled: true,
+  transformedURLLength: 23,
+  ranges: [
+    { start: 0, end: 4351, weight: 100 },
+    { start: 8192, end: 8205, weight: 100 },
+    { start: 8208, end: 8223, weight: 100 },
+    { start: 8242, end: 8247, weight: 100 },
+  ],
+};
+
+export function getAllowedCaption(
+  caption: string,
+  characterLimit: number,
+): { allowedCaption: string; trimmed: boolean } {
+  if (!caption) return { allowedCaption: caption, trimmed: false };
+
+  const parsed = parseTweet(caption, {
+    ...TWITTER_TEXT_V3_CONFIG,
+    maxWeightedTweetLength: characterLimit,
+  });
+
+  if (parsed.weightedLength <= characterLimit) {
+    return { allowedCaption: caption, trimmed: false };
+  }
+
+  return {
+    allowedCaption: caption.slice(0, parsed.validRangeEnd + 1),
+    trimmed: true,
+  };
+}
 
 export class TwitterPostClient extends PostClient {
   #IMAGE_LIMIT = 4;
@@ -102,11 +144,13 @@ export class TwitterPostClient extends PostClient {
         isOAuth2,
       });
 
-      const allowedCaption = caption.slice(
-        0,
-        account.social_provider_metadata?.has_platform_premium
-          ? this.#PREMIUM_CHARACTER_LIMIT
-          : this.#CHARACTER_LIMIT,
+      const characterLimit = account.social_provider_metadata?.has_platform_premium
+        ? this.#PREMIUM_CHARACTER_LIMIT
+        : this.#CHARACTER_LIMIT;
+
+      const { allowedCaption, trimmed } = getAllowedCaption(
+        caption,
+        characterLimit,
       );
 
       const postPayload: SendTweetV2Params = {
@@ -159,7 +203,7 @@ export class TwitterPostClient extends PostClient {
         provider_post_id: tweet.data.id,
         provider_post_url: `https://twitter.com/user/status/${tweet.data.id}`,
         details: {
-          trimmed: caption.length > allowedCaption.length,
+          trimmed,
           requests: this.#requests,
           responses: this.#responses,
         },
