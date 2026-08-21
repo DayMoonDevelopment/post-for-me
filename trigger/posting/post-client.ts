@@ -7,6 +7,7 @@ import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { TimestampedArray } from "./timestamped-array";
 import type {
   BlueskyConfiguration,
   FacebookConfiguration,
@@ -25,6 +26,9 @@ import type {
 } from "./post.types";
 
 export class PostClient {
+  protected requests: TimestampedArray = new TimestampedArray();
+  protected responses: TimestampedArray = new TimestampedArray();
+
   constructor(
     _supabaseClient: SupabaseClient,
     _appCredentials: PlatformAppCredentials,

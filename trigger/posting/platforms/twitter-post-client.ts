@@ -1,5 +1,4 @@
 import { PostClient } from "../post-client";
-import { TimestampedArray } from "../timestamped-array";
 import {
   EUploadMimeType,
   SendTweetV2Params,
@@ -24,8 +23,6 @@ export class TwitterPostClient extends PostClient {
   #CHARACTER_LIMIT = 280;
   #appKey;
   #appSecret;
-  #requests: TimestampedArray = new TimestampedArray();
-  #responses: TimestampedArray = new TimestampedArray();
   #maxFileSize = 5 * 1024 * 1024;
   #uploadChunkSize = 5 * 1024 * 1024;
 
@@ -143,13 +140,13 @@ export class TwitterPostClient extends PostClient {
         postPayload.quote_tweet_id = platformConfig.quote_tweet_id;
       }
 
-      this.#requests.push({
+      this.requests.push({
         postRequest: postPayload,
       });
 
       const tweet = await twitterClient.v2.tweet(postPayload);
 
-      this.#responses.push({
+      this.responses.push({
         postResponse: tweet,
       });
 
@@ -161,8 +158,8 @@ export class TwitterPostClient extends PostClient {
         provider_post_url: `https://twitter.com/user/status/${tweet.data.id}`,
         details: {
           trimmed: caption.length > allowedCaption.length,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -183,8 +180,8 @@ export class TwitterPostClient extends PostClient {
         error_message: `Failed to post to Twitter: ${error.message}`,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -202,7 +199,7 @@ export class TwitterPostClient extends PostClient {
     const mediaIds: string[] = [];
     if (media.length == 1) {
       const medium = media[0];
-      this.#requests.push({ uploadRequest: { file: medium } });
+      this.requests.push({ uploadRequest: { file: medium } });
       const isVideo = medium.type === "video";
 
       let mediaId: string;
@@ -232,7 +229,7 @@ export class TwitterPostClient extends PostClient {
         });
       }
 
-      this.#responses.push({ uploadResponse: { mediaId } });
+      this.responses.push({ uploadResponse: { mediaId } });
       mediaIds.push(mediaId);
       // Add a small delay after successful upload
       await wait.for({ seconds: 1 });
@@ -240,7 +237,7 @@ export class TwitterPostClient extends PostClient {
       const allowedMedia = media.slice(0, this.#IMAGE_LIMIT);
       for (const medium of allowedMedia) {
         if (medium.type === "video") continue;
-        this.#requests.push({ uploadRequest: { file: medium } });
+        this.requests.push({ uploadRequest: { file: medium } });
         const file = await this.getFile(medium);
         const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -251,7 +248,7 @@ export class TwitterPostClient extends PostClient {
           isOAuth2,
         });
 
-        this.#responses.push({ uploadResponse: { mediaId } });
+        this.responses.push({ uploadResponse: { mediaId } });
         mediaIds.push(mediaId);
       }
       // Add a small delay after uploads

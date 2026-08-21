@@ -1,7 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
-import { TimestampedArray } from "../timestamped-array";
 import axios from "axios";
 import sharp from "sharp";
 import {
@@ -39,8 +38,6 @@ export class TikTokBusinessPostClient extends PostClient {
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
   #addedMedia: any[] = [];
-  #requests: TimestampedArray = new TimestampedArray();
-  #responses: TimestampedArray = new TimestampedArray();
   #bucket: string = "post-media";
   #maxRequestRetries = 3;
   #requestRetryInitialDelayMs = 2000;
@@ -71,7 +68,7 @@ export class TikTokBusinessPostClient extends PostClient {
     const refreshData = await this.#withTikTokRetry({
       operation: "refreshing business access token",
       run: async (attempt) => {
-        this.#requests.push({
+        this.requests.push({
           refreshRequest: { url: this.#tokenUrl },
           attempt,
         });
@@ -86,7 +83,7 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ refreshResponse: refreshResponse.data, attempt });
+        this.responses.push({ refreshResponse: refreshResponse.data, attempt });
 
         if (refreshResponse.data.code !== 0) {
           const refreshError = new Error(
@@ -180,8 +177,8 @@ export class TikTokBusinessPostClient extends PostClient {
             message:
               "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.username,
             publish_id: publishId,
           },
@@ -205,8 +202,8 @@ export class TikTokBusinessPostClient extends PostClient {
             status: "Processing",
             message: "Still Proccessing, check TikTok account to confirm status",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.username,
             publish_id: publishId,
           },
@@ -223,8 +220,8 @@ export class TikTokBusinessPostClient extends PostClient {
         details: {
           status: "Published successfully",
           addedMedia: this.#addedMedia,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
           username: creatorInfoResponse.data.data.username,
           publish_id: publishId,
         },
@@ -241,8 +238,8 @@ export class TikTokBusinessPostClient extends PostClient {
         error_message: "Failed to post to TikTok",
         details: {
           error: errorDetails,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -255,7 +252,7 @@ export class TikTokBusinessPostClient extends PostClient {
     return await this.#withTikTokRetry({
       operation: "fetching business creator info",
       run: async (attempt) => {
-        this.#requests.push({
+        this.requests.push({
           creatorRequest: creatorInfoUrl,
           attempt,
         });
@@ -269,7 +266,7 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ creatorResponse: response.data, attempt });
+        this.responses.push({ creatorResponse: response.data, attempt });
 
         if (response.data.code !== 0) {
           const creatorInfoError = new Error(
@@ -318,7 +315,7 @@ export class TikTokBusinessPostClient extends PostClient {
       const parsedStatusResponse = await this.#withTikTokRetry({
         operation: "fetching publish status",
         run: async (requestAttempt) => {
-          this.#requests.push({
+          this.requests.push({
             statusRequest: {
               url: statusUrl,
               params: {
@@ -341,7 +338,7 @@ export class TikTokBusinessPostClient extends PostClient {
 
           const parsedResponse = JSON.parse(statusResponse.data);
 
-          this.#responses.push({
+          this.responses.push({
             statusResponse: parsedResponse,
             attempt: attempts + 1,
             requestAttempt,
@@ -439,7 +436,7 @@ export class TikTokBusinessPostClient extends PostClient {
     return await this.#withTikTokRetry({
       operation: "publishing media",
       run: async (attempt) => {
-        this.#requests.push({
+        this.requests.push({
           publishIdRequest: {
             postUrl: postUrl,
             payload: payload,
@@ -454,7 +451,7 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         });
 
-        this.#responses.push({
+        this.responses.push({
           publishIdResponse: initResponse.data,
           attempt,
         });

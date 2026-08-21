@@ -1,5 +1,4 @@
 import { PostClient } from "../post-client";
-import { TimestampedArray } from "../timestamped-array";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
 import { JSDOM } from "jsdom";
@@ -27,8 +26,6 @@ export class BlueskyPostClient extends PostClient {
   #videoStatusInitialDelayMs = 5000;
   #videoStatusRetryBackoffMultiplier = 1.5;
   #maxRetryDelayMs = 60000;
-  #requests: TimestampedArray = new TimestampedArray();
-  #responses: TimestampedArray = new TimestampedArray();
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -44,7 +41,7 @@ export class BlueskyPostClient extends PostClient {
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     try {
-      this.#requests.push({ refreshRequest: "Resuming Session" });
+      this.requests.push({ refreshRequest: "Resuming Session" });
       await this.#agent.resumeSession({
         accessJwt: account.access_token,
         refreshJwt: account.refresh_token!,
@@ -53,7 +50,7 @@ export class BlueskyPostClient extends PostClient {
         active: true,
       });
 
-      this.#responses.push({ refreshResponse: "Resumed Session" });
+      this.responses.push({ refreshResponse: "Resumed Session" });
       return {
         access_token: account.access_token,
         refresh_token: account.refresh_token,
@@ -66,7 +63,7 @@ export class BlueskyPostClient extends PostClient {
         password: account.social_provider_metadata.bluesky_app_password!,
       });
 
-      this.#responses.push({ refreshResponse: "New Session Created" });
+      this.responses.push({ refreshResponse: "New Session Created" });
       return {
         access_token: this.#agent.session?.accessJwt,
         refresh_token: this.#agent.session?.refreshJwt,
@@ -190,11 +187,11 @@ export class BlueskyPostClient extends PostClient {
         postPayload.embed = embed;
       }
 
-      this.#requests.push({ postRequest: postPayload });
+      this.requests.push({ postRequest: postPayload });
 
       const response = await this.#agent.post(postPayload);
 
-      this.#responses.push({ postResponse: response });
+      this.responses.push({ postResponse: response });
       return {
         post_id: postId,
         provider_connection_id: account.id,
@@ -205,8 +202,8 @@ export class BlueskyPostClient extends PostClient {
         }/post/${response.uri.split("/").pop()}`,
         details: {
           trimmed: caption.length > trimmedCaption.length,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -218,8 +215,8 @@ export class BlueskyPostClient extends PostClient {
         error_message: error.message,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -284,7 +281,7 @@ export class BlueskyPostClient extends PostClient {
       uploadUrl.searchParams.append("did", this.#agent.session!.did);
       uploadUrl.searchParams.append("name", remoteName);
 
-      this.#requests.push({ uploadVideoRequest: uploadUrl });
+      this.requests.push({ uploadVideoRequest: uploadUrl });
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
         headers: {
@@ -300,7 +297,7 @@ export class BlueskyPostClient extends PostClient {
       await this.unlinkQuiet(inputPath);
     }
 
-    this.#responses.push({ uploadVideoResponse: uploadResponseData });
+    this.responses.push({ uploadVideoResponse: uploadResponseData });
 
     const jobStatus = uploadResponseData as AppBskyVideoDefs.JobStatus;
 
@@ -325,7 +322,7 @@ export class BlueskyPostClient extends PostClient {
         `Checking Bluesky video status, attempt ${attempt}/${this.#videoStatusMaxAttempts}`,
       );
 
-      this.#requests.push({
+      this.requests.push({
         videoStatusRequest: {
           jobId: jobStatus.jobId,
           attempt,
@@ -338,7 +335,7 @@ export class BlueskyPostClient extends PostClient {
 
       lastJobStatus = status.jobStatus;
 
-      this.#responses.push({
+      this.responses.push({
         videoStatusResponse: status.jobStatus,
         attempt,
       });

@@ -1,7 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
-import { TimestampedArray } from "../timestamped-array";
 import axios from "axios";
 import sharp from "sharp";
 import {
@@ -29,8 +28,6 @@ export class InstagramPostClient extends PostClient {
   #postStartedAtMs: number | null = null;
   #localSupabaseClient;
   #addedMedia: any[] = [];
-  #requests: TimestampedArray = new TimestampedArray();
-  #responses: TimestampedArray = new TimestampedArray();
   #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 
@@ -63,7 +60,7 @@ export class InstagramPostClient extends PostClient {
         console.log(
           `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`,
         );
-        this.#requests.push({
+        this.requests.push({
           refreshRequest: "https://graph.instagram.com/refresh_access_token",
           params: {
             grant_type: "ig_refresh_token",
@@ -80,7 +77,7 @@ export class InstagramPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ refreshResponse: response.data });
+        this.responses.push({ refreshResponse: response.data });
 
         if (response.data && response.data.access_token) {
           const newAccessToken = response.data.access_token;
@@ -106,7 +103,7 @@ export class InstagramPostClient extends PostClient {
           fb_exchange_token: account.access_token,
         };
 
-        this.#requests.push({
+        this.requests.push({
           refreshRequest: "https://graph.facebook.com/v20.0/oauth/access_token",
           params: refreshTokenParams,
         });
@@ -117,7 +114,7 @@ export class InstagramPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ refreshResponse: response.data });
+        this.responses.push({ refreshResponse: response.data });
 
         if (response.data && response.data.access_token) {
           const newAccessToken = response.data.access_token;
@@ -203,7 +200,7 @@ export class InstagramPostClient extends PostClient {
 
         try {
           console.log(`Publish attempt #${publishAttempts + 1}`);
-          this.#requests.push({
+          this.requests.push({
             publishRequest: {
               creation_id: containerId,
               access_token: account.access_token,
@@ -222,7 +219,7 @@ export class InstagramPostClient extends PostClient {
             );
           }
 
-          this.#responses.push({ publishResponse: publishResponse.data });
+          this.responses.push({ publishResponse: publishResponse.data });
 
           platformId = publishResponse.data.id;
         } catch (error) {
@@ -272,8 +269,8 @@ export class InstagramPostClient extends PostClient {
               ? `Only first ${this.#maxItems} items were posted`
               : null,
           addedMedia: this.#addedMedia,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -288,8 +285,8 @@ export class InstagramPostClient extends PostClient {
             "Account needs to be reconnected, Access token has expired",
           details: {
             error,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
           },
         };
       }
@@ -303,8 +300,8 @@ export class InstagramPostClient extends PostClient {
         provider_connection_id: account.id,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } finally {
@@ -555,7 +552,7 @@ export class InstagramPostClient extends PostClient {
       carouselPayload.location_id = platformConfig.location;
     }
 
-    this.#requests.push({
+    this.requests.push({
       createCarouselRequest: carouselPayload,
     });
     const carouselResponse = await axios.post(
@@ -563,7 +560,7 @@ export class InstagramPostClient extends PostClient {
       carouselPayload,
     );
 
-    this.#responses.push({ createCarouselResponse: carouselResponse.data });
+    this.responses.push({ createCarouselResponse: carouselResponse.data });
 
     if (carouselResponse.data.error) {
       throw new Error(
@@ -599,7 +596,7 @@ export class InstagramPostClient extends PostClient {
           `Creating ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}`,
         );
 
-        this.#requests.push({
+        this.requests.push({
           [requestLogKey]: payload,
           attempt,
         });
@@ -609,7 +606,7 @@ export class InstagramPostClient extends PostClient {
           payload,
         );
 
-        this.#responses.push({
+        this.responses.push({
           [responseLogKey]: createMediaResponse.data,
           attempt,
         });
@@ -629,7 +626,7 @@ export class InstagramPostClient extends PostClient {
         return containerId;
       } catch (error) {
         if (error?.response?.data) {
-          this.#responses.push({
+          this.responses.push({
             [responseLogKey]: error.response.data,
             attempt,
             failed: true,
@@ -687,7 +684,7 @@ export class InstagramPostClient extends PostClient {
         `Checking ${mediaLabel} status, attempt ${attempt}/${this.#mediaStatusMaxAttempts}`,
       );
 
-      this.#requests.push({
+      this.requests.push({
         statusRequest: {
           url: `${this.getApiBaseUrl(account)}/${containerId}`,
           mediaLabel,
@@ -704,7 +701,7 @@ export class InstagramPostClient extends PostClient {
         },
       );
 
-      this.#responses.push({ statusResponse: statusResponse.data });
+      this.responses.push({ statusResponse: statusResponse.data });
 
       statusData = statusResponse.data;
       console.log(`${mediaLabel} status:`, statusData);
@@ -818,7 +815,7 @@ export class InstagramPostClient extends PostClient {
       }
 
       try {
-        this.#requests.push({
+        this.requests.push({
           getPostUrlRequest: {
             url: `${this.getApiBaseUrl(account)}/${postId}`,
             attempt,
@@ -836,7 +833,7 @@ export class InstagramPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({
+        this.responses.push({
           getPostUrlResponse: mediaResponse.data,
           attempt,
         });
@@ -861,7 +858,7 @@ export class InstagramPostClient extends PostClient {
         }
 
         if (error?.response?.data) {
-          this.#responses.push({
+          this.responses.push({
             getPostUrlResponse: error.response.data,
             attempt,
             failed: true,

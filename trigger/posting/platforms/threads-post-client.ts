@@ -1,5 +1,4 @@
 import { PostClient } from "../post-client";
-import { TimestampedArray } from "../timestamped-array";
 import axios, { AxiosResponse } from "axios";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
@@ -32,8 +31,6 @@ interface ThreadsPostParams {
 export class ThreadsPostClient extends PostClient {
   #maxItems = 4;
   #containerUrl = "https://graph.threads.net/v1.0/me/threads";
-  #requests: TimestampedArray = new TimestampedArray();
-  #responses: TimestampedArray = new TimestampedArray();
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -45,7 +42,7 @@ export class ThreadsPostClient extends PostClient {
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<TokenRefreshResult> {
-    this.#requests.push({
+    this.requests.push({
       refreshRequest: "https://graph.threads.net/refresh_access_token",
     });
 
@@ -59,7 +56,7 @@ export class ThreadsPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     const { access_token, expires_in } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
@@ -118,7 +115,7 @@ export class ThreadsPostClient extends PostClient {
       while (!platformId && publishAttempts < maxPublishAttempts) {
         try {
           console.log(`Publish attempt #${publishAttempts + 1}`);
-          this.#requests.push({
+          this.requests.push({
             postRequest: {
               url: `https://graph.threads.net/v1.0/me/threads_publish`,
               params: {
@@ -140,7 +137,7 @@ export class ThreadsPostClient extends PostClient {
               },
             );
 
-          this.#responses.push({ publishResponse: publishResponse.data });
+          this.responses.push({ publishResponse: publishResponse.data });
 
           platformId = publishResponse.data.id;
         } catch (error: any) {
@@ -173,8 +170,8 @@ export class ThreadsPostClient extends PostClient {
         provider_post_id: platformId,
         provider_post_url: platformUrl,
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error: any) {
@@ -189,8 +186,8 @@ export class ThreadsPostClient extends PostClient {
           error_message: "Account needs to be reconnected",
           details: {
             error,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
           },
         };
       }
@@ -202,8 +199,8 @@ export class ThreadsPostClient extends PostClient {
         error_message: "Failed to post to Threads",
         details: {
           error: error.response?.data || error.message,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -213,7 +210,7 @@ export class ThreadsPostClient extends PostClient {
     account: SocialAccount,
     caption: string,
   ): Promise<string | null> {
-    this.#requests.push({
+    this.requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
         params: {
@@ -237,7 +234,7 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-    this.#responses.push({
+    this.responses.push({
       createContainerResponse: createContainerResponse.data,
     });
 
@@ -259,7 +256,7 @@ export class ThreadsPostClient extends PostClient {
     const signedUrl = await this.getSignedUrlForFile(medium);
     const isVideo = medium.type === "video";
 
-    this.#requests.push({
+    this.requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
         params: {
@@ -295,7 +292,7 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-    this.#responses.push({
+    this.responses.push({
       createContainerResponse: createContainerResponse.data,
     });
 
@@ -308,7 +305,7 @@ export class ThreadsPostClient extends PostClient {
 
     while (attempts < maxStatusChecks) {
       try {
-        this.#requests.push({
+        this.requests.push({
           checkContainerStatusRequest: {
             url: `https://graph.threads.net/v1.0/${containerId}`,
             params: {
@@ -326,7 +323,7 @@ export class ThreadsPostClient extends PostClient {
             },
           });
 
-        this.#responses.push({
+        this.responses.push({
           checkContainerStatusResponse: statusResponse.data,
         });
 
@@ -377,7 +374,7 @@ export class ThreadsPostClient extends PostClient {
       const signedUrl = await this.getSignedUrlForFile(medium);
       const isVideo = medium.type === "video";
 
-      this.#requests.push({
+      this.requests.push({
         carouselItemRequest: {
           url: this.#containerUrl,
           params: {
@@ -403,7 +400,7 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-      this.#responses.push({
+      this.responses.push({
         carouselItemResponse: itemResponse.data,
       });
 
@@ -414,7 +411,7 @@ export class ThreadsPostClient extends PostClient {
       await wait.for({ seconds: 2 });
     }
 
-    this.#requests.push({
+    this.requests.push({
       createCarouselRequest: {
         url: this.#containerUrl,
         params: {
@@ -440,7 +437,7 @@ export class ThreadsPostClient extends PostClient {
       },
     );
 
-    this.#responses.push({
+    this.responses.push({
       createCarouselResponse: carouselResponse.data,
     });
 
@@ -454,7 +451,7 @@ export class ThreadsPostClient extends PostClient {
 
   async #getPostUrl(account: SocialAccount, postId: string): Promise<string> {
     // After successful publish, fetch the media object to get the permalink
-    this.#requests.push({
+    this.requests.push({
       getPostUrlRequest: { url: `https://graph.threads.net/v1.0/${postId}` },
     });
 
@@ -468,7 +465,7 @@ export class ThreadsPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ getPostUrlResponse: mediaResponse.data });
+    this.responses.push({ getPostUrlResponse: mediaResponse.data });
 
     if (mediaResponse.data.error) {
       throw new Error(
