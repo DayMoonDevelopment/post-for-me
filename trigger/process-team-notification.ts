@@ -24,6 +24,7 @@ type TeamNotificationMetadata = {
     current_limit?: number;
     plan_post_limit?: number | null;
     suggested_plan_post_limit?: number | null;
+    threshold_percent?: number;
     period_start?: string;
   };
   data?: {
@@ -309,6 +310,7 @@ async function trackNotificationSent({
         current_limit: tracking.current_limit ?? null,
         plan_post_limit: tracking.plan_post_limit ?? null,
         suggested_plan_post_limit: tracking.suggested_plan_post_limit ?? null,
+        threshold_percent: tracking.threshold_percent ?? null,
         ...channelProperties,
       },
       dedupeKey: deterministicUuid(

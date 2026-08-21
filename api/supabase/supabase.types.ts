@@ -1238,6 +1238,18 @@ export type Database = {
       }
     }
     Functions: {
+      get_active_team_usage_windows: {
+        Args: never
+        Returns: {
+          count: number
+          end_at: string
+          limit: number
+          start_at: string
+          stripe_customer_id: string
+          team_id: string
+          team_name: string
+        }[]
+      }
       get_exceeded_team_usage_windows: {
         Args: never
         Returns: {
@@ -1296,7 +1308,12 @@ export type Database = {
     }
     Enums: {
       delivery_type: "email"
-      notification_type: "usage_alert" | "general"
+      notification_type:
+        | "usage_alert"
+        | "general"
+        | "usage_alert_80"
+        | "usage_alert_90"
+        | "usage_alert_95"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1459,7 +1476,13 @@ export const Constants = {
   public: {
     Enums: {
       delivery_type: ["email"],
-      notification_type: ["usage_alert", "general"],
+      notification_type: [
+        "usage_alert",
+        "general",
+        "usage_alert_80",
+        "usage_alert_90",
+        "usage_alert_95",
+      ],
       social_post_status: [
         "draft",
         "scheduled",

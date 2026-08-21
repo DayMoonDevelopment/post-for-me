@@ -33,22 +33,57 @@ const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID || "";
 const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
+const LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID || "";
+const LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID || "";
+const LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID || "";
 
 type TeamUsageWindow =
   Database["public"]["Tables"]["social_post_team_usage"]["Row"];
 type ExceededUsageWindow =
   Database["public"]["Functions"]["get_exceeded_team_usage_windows"]["Returns"][number];
+type ActiveUsageWindow =
+  Database["public"]["Functions"]["get_active_team_usage_windows"]["Returns"][number];
+type TeamNotificationType =
+  Database["public"]["Tables"]["team_notifications"]["Row"]["notification_type"];
+
+// Ordered highest-first so a single cron pass only fires the highest
+// newly-crossed threshold for a team (skipping lower ones already implied).
+const USAGE_WARNING_THRESHOLDS: {
+  percent: number;
+  notificationType: TeamNotificationType;
+  transactionalEmailId: string;
+}[] = [
+  {
+    percent: 95,
+    notificationType: "usage_alert_95",
+    transactionalEmailId: LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID,
+  },
+  {
+    percent: 90,
+    notificationType: "usage_alert_90",
+    transactionalEmailId: LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID,
+  },
+  {
+    percent: 80,
+    notificationType: "usage_alert_80",
+    transactionalEmailId: LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID,
+  },
+];
 
 const triggerTeamNotification = async (
   teamId: string,
   message: string,
   metadata: Json,
+  notificationType: TeamNotificationType = "usage_alert",
 ): Promise<void> => {
   await tasks.trigger("process-team-notification", {
     id: `tn_${randomUUID()}`,
     team_id: teamId,
     project_id: null,
-    notification_type: "usage_alert",
+    notification_type: notificationType,
     delivery_types: ["email"],
     message,
     meta_data: metadata,
@@ -224,6 +259,18 @@ const getExceededUsageWindows = async (): Promise<ExceededUsageWindow[]> => {
   return data ?? [];
 };
 
+const getActiveUsageWindows = async (): Promise<ActiveUsageWindow[]> => {
+  const { data, error } = await supabaseClient.rpc(
+    "get_active_team_usage_windows",
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+};
+
 const hasExceededPreviouseLimit = async (
   teamId: string,
   currentWindow: TeamUsageWindow,
@@ -252,13 +299,14 @@ const hasExceededPreviouseLimit = async (
 
 const hasUsageNotificationForPeriod = async (
   teamId: string,
+  notificationType: TeamNotificationType,
   periodStart: string,
   periodEnd: string,
 ): Promise<boolean> => {
   const { data, error } = await supabaseClient
     .from("team_notifications")
     .select("id")
-    .eq("notification_type", "usage_alert")
+    .eq("notification_type", notificationType)
     .eq("team_id", teamId)
     .gte("created_at", periodStart)
     .lt("created_at", periodEnd)
@@ -274,6 +322,7 @@ const hasUsageNotificationForPeriod = async (
 
 const maybeTriggerUsageNotification = async ({
   teamId,
+  notificationType,
   periodStart,
   periodEnd,
   message,
@@ -281,6 +330,7 @@ const maybeTriggerUsageNotification = async ({
   checkForDuplicates,
 }: {
   teamId: string;
+  notificationType: TeamNotificationType;
   periodStart: string;
   periodEnd: string;
   message: string;
@@ -290,6 +340,7 @@ const maybeTriggerUsageNotification = async ({
   if (checkForDuplicates) {
     const alreadySent = await hasUsageNotificationForPeriod(
       teamId,
+      notificationType,
       periodStart,
       periodEnd,
     );
@@ -297,6 +348,7 @@ const maybeTriggerUsageNotification = async ({
     if (alreadySent) {
       logger.info("Usage notification already sent for period", {
         team_id: teamId,
+        notification_type: notificationType,
         period_start: periodStart,
         period_end: periodEnd,
       });
@@ -306,10 +358,11 @@ const maybeTriggerUsageNotification = async ({
 
   logger.info("Triggering usage notification", {
     team_id: teamId,
+    notification_type: notificationType,
     period_start: periodStart,
     period_end: periodEnd,
   });
-  await triggerTeamNotification(teamId, message, metadata);
+  await triggerTeamNotification(teamId, message, metadata, notificationType);
   return true;
 };
 
@@ -671,6 +724,7 @@ export const processUsageLimits = schedules.task({
           if (!exceededPreviousLimit) {
             await maybeTriggerUsageNotification({
               teamId,
+              notificationType: "usage_alert",
               periodStart: usageWindow.start_at,
               periodEnd: usageWindow.end_at,
               message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period).`,
@@ -713,6 +767,7 @@ export const processUsageLimits = schedules.task({
 
             await maybeTriggerUsageNotification({
               teamId,
+              notificationType: "usage_alert",
               periodStart: usageWindow.start_at,
               periodEnd: usageWindow.end_at,
               message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
@@ -784,6 +839,7 @@ export const processUsageLimits = schedules.task({
 
             await maybeTriggerUsageNotification({
               teamId,
+              notificationType: "usage_alert",
               periodStart: usageWindow.start_at,
               periodEnd: usageWindow.end_at,
               message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
@@ -824,6 +880,100 @@ export const processUsageLimits = schedules.task({
           });
         } catch (teamError) {
           logger.error("Error processing team usage limits", {
+            team_id: teamId,
+            error: teamError,
+          });
+        }
+      }
+
+      const activeUsageWindows = await getActiveUsageWindows();
+
+      for (const usageWindow of activeUsageWindows) {
+        const {
+          team_id: teamId,
+          count: usage,
+          limit: currentLimit,
+          team_name: teamName,
+          start_at: periodStart,
+          end_at: periodEnd,
+        } = usageWindow;
+
+        try {
+          if (currentLimit <= 0) {
+            continue;
+          }
+
+          const percentage = (usage / currentLimit) * 100;
+          const crossedThreshold = USAGE_WARNING_THRESHOLDS.find(
+            (threshold) => percentage >= threshold.percent,
+          );
+
+          if (!crossedThreshold) {
+            continue;
+          }
+
+          if (!crossedThreshold.transactionalEmailId) {
+            logger.info(
+              "Usage threshold crossed but no Loops template configured",
+              {
+                team_id: teamId,
+                threshold_percent: crossedThreshold.percent,
+              },
+            );
+            continue;
+          }
+
+          // Map the window's cap back to a tier by post count — the window's
+          // `limit` already reflects the plan's cap at window creation, so no
+          // Stripe lookup is needed here (unlike the exceeded-usage pass above).
+          const currentTier = PRICING_TIERS.find(
+            (tier) => tier.posts === currentLimit,
+          );
+          const currentTierIndex = currentTier
+            ? PRICING_TIERS.indexOf(currentTier)
+            : -1;
+          const nextTier =
+            currentTierIndex >= 0 ? PRICING_TIERS[currentTierIndex + 1] : null;
+
+          const metadata: Json = {
+            notification_category: "transactional",
+            notification_template: crossedThreshold.notificationType,
+            tracking: {
+              usage_count: usage,
+              current_limit: currentLimit,
+              plan_post_limit: currentTier?.posts ?? null,
+              suggested_plan_post_limit: nextTier?.posts ?? null,
+              threshold_percent: crossedThreshold.percent,
+              period_start: periodStart,
+            },
+            data: {
+              loops: {
+                transactional_id: crossedThreshold.transactionalEmailId,
+                data: {
+                  team_name: teamName,
+                  current_plan_post_limit: currentTier?.posts ?? null,
+                  current_plan_name: currentTier?.name ?? null,
+                  suggested_plan_name: nextTier?.name ?? null,
+                  suggested_plan_post_limit: nextTier?.posts ?? null,
+                  threshold_percent: crossedThreshold.percent,
+                  billing_link: `https://app.postforme.dev/${teamId}/billing`,
+                },
+              },
+            },
+            results: [],
+          };
+
+          await maybeTriggerUsageNotification({
+            teamId,
+            notificationType: crossedThreshold.notificationType,
+            periodStart,
+            periodEnd,
+            message: `Usage at ${Math.round(percentage)}% of plan limit (${usage}/${currentLimit} posts used this period).`,
+            metadata,
+            checkForDuplicates: true,
+          });
+        } catch (teamError) {
+          logger.error("Error processing team usage threshold warning", {
             team_id: teamId,
             error: teamError,
           });
