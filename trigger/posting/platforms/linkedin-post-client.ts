@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import {
   LinkedinConfiguration,
   PlatformAppCredentials,
@@ -13,8 +14,8 @@ export class LinkedInPostClient extends PostClient {
   #clientId: string;
   #clientSecret: string;
   #maxImages = 20;
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
 
   constructor(
     supabaseClient: SupabaseClient,

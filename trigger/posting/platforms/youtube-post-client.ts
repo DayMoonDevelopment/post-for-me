@@ -1,4 +1,5 @@
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { logger, wait } from "@trigger.dev/sdk";
@@ -21,8 +22,8 @@ export class YouTubePostClient extends PostClient {
   #oauth2Client: any;
   #googleClientId: string;
   #googleClientSecret: string;
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
 
   // Must be a multiple of 256KB per YouTube resumable upload guidance.
   static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB

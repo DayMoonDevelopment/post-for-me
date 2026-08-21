@@ -1,4 +1,5 @@
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import axios from "axios";
 import FormData from "form-data";
 import { wait } from "@trigger.dev/sdk";
@@ -13,8 +14,8 @@ import {
 import { SupabaseClient } from "@supabase/supabase-js";
 
 export class PinterestPostClient extends PostClient {
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
   #appCredentials: PlatformAppCredentials;
   constructor(
     supabaseClient: SupabaseClient,

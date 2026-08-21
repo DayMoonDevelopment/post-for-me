@@ -1,4 +1,5 @@
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
 import { JSDOM } from "jsdom";
@@ -26,8 +27,8 @@ export class BlueskyPostClient extends PostClient {
   #videoStatusInitialDelayMs = 5000;
   #videoStatusRetryBackoffMultiplier = 1.5;
   #maxRetryDelayMs = 60000;
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
 
   constructor(
     supabaseClient: SupabaseClient,

@@ -1,4 +1,5 @@
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import {
   EUploadMimeType,
   SendTweetV2Params,
@@ -23,8 +24,8 @@ export class TwitterPostClient extends PostClient {
   #CHARACTER_LIMIT = 280;
   #appKey;
   #appSecret;
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
   #maxFileSize = 5 * 1024 * 1024;
   #uploadChunkSize = 5 * 1024 * 1024;
 

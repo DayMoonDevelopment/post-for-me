@@ -1,4 +1,5 @@
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import axios, { AxiosResponse } from "axios";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
@@ -31,8 +32,8 @@ interface ThreadsPostParams {
 export class ThreadsPostClient extends PostClient {
   #maxItems = 4;
   #containerUrl = "https://graph.threads.net/v1.0/me/threads";
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
 
   constructor(
     supabaseClient: SupabaseClient,

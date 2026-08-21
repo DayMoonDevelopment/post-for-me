@@ -2,6 +2,7 @@ import { createReadStream } from "fs";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import axios from "axios";
 import sharp from "sharp";
 import {
@@ -38,8 +39,8 @@ export class TikTokPostClient extends PostClient {
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
   #addedMedia: any[] = [];
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
   #bucket: string = "post-media";
 
   constructor(

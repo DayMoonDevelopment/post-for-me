@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import axios from "axios";
 import sharp from "sharp";
 import {
@@ -28,8 +29,8 @@ export class InstagramPostClient extends PostClient {
   #postStartedAtMs: number | null = null;
   #localSupabaseClient;
   #addedMedia: any[] = [];
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
   #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 

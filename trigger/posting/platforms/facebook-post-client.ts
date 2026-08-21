@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
+import { TimestampedArray } from "../timestamped-array";
 import axios from "axios";
 import fetch from "node-fetch";
 import {
@@ -14,8 +15,8 @@ import { logger, wait } from "@trigger.dev/sdk";
 import FormData from "form-data";
 
 export class FacebookPostClient extends PostClient {
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #requests: TimestampedArray = new TimestampedArray();
+  #responses: TimestampedArray = new TimestampedArray();
   #appCredentials: PlatformAppCredentials;
   #completeStatuses = [
     "error",
