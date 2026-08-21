@@ -17,6 +17,22 @@ import {
   YoutubeConfiguration,
 } from "../post.types";
 
+export function isRetriableYouTubeSessionInitError(
+  status: number,
+  bodyText: string,
+): boolean {
+  if (status === 429 || (status >= 500 && status <= 599)) return true;
+  if (status === 409) {
+    try {
+      const parsed = JSON.parse(bodyText);
+      return parsed?.error?.errors?.[0]?.reason === "alreadyExists";
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export class YouTubePostClient extends PostClient {
   #oauth2Client: any;
   #googleClientId: string;
@@ -28,6 +44,7 @@ export class YouTubePostClient extends PostClient {
   static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
   static readonly MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
   static readonly MAX_RESUMABLE_UPLOAD_ATTEMPTS = 5;
+  static readonly MAX_SESSION_INIT_ATTEMPTS = 3;
   static readonly MAX_PROCESSING_POLL_ATTEMPTS = 20;
   static readonly MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS = 1_000;
   static readonly PROCESSING_POLL_INITIAL_DELAY_MS = 5_000;
@@ -377,39 +394,79 @@ export class YouTubePostClient extends PostClient {
       part: videoRequest.part,
     });
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Length": String(fileSize),
-        "X-Upload-Content-Type": mimeType,
-      },
-      body: JSON.stringify(videoRequest.requestBody ?? {}),
-    });
+    for (
+      let attempt = 1;
+      attempt <= YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS;
+      attempt += 1
+    ) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Length": String(fileSize),
+          "X-Upload-Content-Type": mimeType,
+        },
+        body: JSON.stringify(videoRequest.requestBody ?? {}),
+      });
 
-    const location = res.headers.get("location") || res.headers.get("Location");
-    if (!res.ok || !location) {
+      const location =
+        res.headers.get("location") || res.headers.get("Location");
+      if (res.ok && location) {
+        this.#responses.push({
+          resumableSession: {
+            status: res.status,
+            location,
+          },
+        });
+
+        logger.info("Started YouTube resumable upload session", {
+          status: res.status,
+          fileSize,
+          mimeType,
+        });
+
+        return location;
+      }
+
       const bodyText = await this.#safeReadText(res);
+      const retriable = isRetriableYouTubeSessionInitError(
+        res.status,
+        bodyText,
+      );
+
+      if (
+        retriable &&
+        attempt < YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS
+      ) {
+        const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
+        this.#responses.push({
+          sessionInitRetry: {
+            attempt,
+            maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
+            status: res.status,
+            waitMs,
+          },
+        });
+        logger.warn("Retrying YouTube resumable upload session init", {
+          attempt,
+          maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
+          status: res.status,
+          statusText: res.statusText,
+          waitMs,
+        });
+        await this.#sleep(waitMs);
+        continue;
+      }
+
       throw new Error(
         `Failed to start YouTube resumable upload session: ${res.status} ${res.statusText}. ${bodyText}`,
       );
     }
 
-    this.#responses.push({
-      resumableSession: {
-        status: res.status,
-        location,
-      },
-    });
-
-    logger.info("Started YouTube resumable upload session", {
-      status: res.status,
-      fileSize,
-      mimeType,
-    });
-
-    return location;
+    throw new Error(
+      "Failed to start YouTube resumable upload session: exhausted retry attempts",
+    );
   }
 
   async #downloadRemoteFileToTemp({
