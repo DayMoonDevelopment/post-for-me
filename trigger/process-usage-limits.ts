@@ -505,6 +505,73 @@ const scheduleUpgrade = async ({
 };
 
 /**
+ * Shared metadata builder for both the exceeded-usage (100%) and the
+ * active-usage threshold-warning (80/90/95%) flows, so the Loops/PostHog
+ * payload shape can't drift between the two email paths.
+ */
+const buildUsageEmailMetadata = ({
+  teamId,
+  teamName,
+  usage,
+  currentLimit,
+  currentPlanPostLimit,
+  currentPlanName,
+  suggestedTier,
+  periodStart,
+  transactionalEmailId,
+  notificationTemplate,
+  thresholdPercent,
+}: {
+  teamId: string;
+  teamName: string | null;
+  usage: number;
+  currentLimit: number;
+  currentPlanPostLimit: number | null;
+  currentPlanName: string | null;
+  suggestedTier: (typeof PRICING_TIERS)[number] | null;
+  periodStart: string;
+  transactionalEmailId: string;
+  notificationTemplate: string;
+  thresholdPercent?: number;
+}): Json => ({
+  // Stamped for analytics: process-team-notification reads the
+  // semantic intent (`notification_category` + `notification_template`)
+  // and `tracking` to fire the generic `notification_sent` event once
+  // Loops confirms delivery. The channel + provider are added by the
+  // consumer. Kept out of `data.loops.data` so these analytics-only
+  // fields aren't forwarded to Loops as email variables.
+  notification_category: "transactional",
+  notification_template: notificationTemplate,
+  tracking: {
+    usage_count: usage,
+    current_limit: currentLimit,
+    plan_post_limit: currentPlanPostLimit,
+    suggested_plan_post_limit: suggestedTier?.posts ?? null,
+    period_start: periodStart,
+    ...(thresholdPercent !== undefined
+      ? { threshold_percent: thresholdPercent }
+      : {}),
+  },
+  data: {
+    loops: {
+      transactional_id: transactionalEmailId,
+      data: {
+        team_name: teamName,
+        current_plan_post_limit: currentPlanPostLimit,
+        current_plan_name: currentPlanName,
+        suggested_plan_name: suggestedTier?.name ?? null,
+        suggested_plan_post_limit: suggestedTier?.posts ?? null,
+        billing_link: `https://app.postforme.dev/${teamId}/billing`,
+        ...(thresholdPercent !== undefined
+          ? { threshold_percent: thresholdPercent }
+          : {}),
+      },
+    },
+  },
+  results: [],
+});
+
+/**
  * Emit `subscription_upgrade_scheduled` for the automated usage-based upgrade.
  * Attributed to the team's owner (`created_by`) as the distinct_id and the
  * `team` group — billing reports run against the team. `system_triggered: true`
@@ -589,11 +656,17 @@ export const processUsageLimits = schedules.task({
     try {
       logger.info("Starting usage limit processing");
 
-      const exceededUsageWindows = await getExceededUsageWindows();
+      // Fetched concurrently: the two RPCs are independent (disjoint
+      // count > limit / count <= limit windows) and this keeps the two
+      // snapshots close together in time rather than taking the active
+      // snapshot only after every exceeded team's Stripe calls finish.
+      const [exceededUsageWindows, activeUsageWindows] = await Promise.all([
+        getExceededUsageWindows(),
+        getActiveUsageWindows(),
+      ]);
 
       if (exceededUsageWindows.length === 0) {
         logger.info("No teams currently over usage limits");
-        return;
       }
 
       for (const usageWindow of exceededUsageWindows) {
@@ -685,42 +758,6 @@ export const processUsageLimits = schedules.task({
             continue;
           }
 
-          const buildUsageMetadata = (
-            transactionalEmailId: string,
-            suggestedTier: (typeof PRICING_TIERS)[number] | null,
-            notificationTemplate: "usage_limit_alert" | "usage_limit_upgrade",
-          ): Json => ({
-            // Stamped for analytics: process-team-notification reads the
-            // semantic intent (`notification_category` + `notification_template`)
-            // and `tracking` to fire the generic `notification_sent` event once
-            // Loops confirms delivery. The channel + provider are added by the
-            // consumer. Kept out of `data.loops.data` so these analytics-only
-            // fields aren't forwarded to Loops as email variables.
-            notification_category: "transactional",
-            notification_template: notificationTemplate,
-            tracking: {
-              usage_count: usage,
-              current_limit: currentLimit,
-              plan_post_limit: planInfo.postLimit,
-              suggested_plan_post_limit: suggestedTier?.posts ?? null,
-              period_start: usageWindow.start_at,
-            },
-            data: {
-              loops: {
-                transactional_id: transactionalEmailId,
-                data: {
-                  team_name: teamName,
-                  current_plan_post_limit: planInfo.postLimit,
-                  current_plan_name: planInfo.planName,
-                  suggested_plan_name: suggestedTier?.name ?? null,
-                  suggested_plan_post_limit: suggestedTier?.posts ?? null,
-                  billing_link: `https://app.postforme.dev/${teamId}/billing`,
-                },
-              },
-            },
-            results: [],
-          });
-
           if (!exceededPreviousLimit) {
             await maybeTriggerUsageNotification({
               teamId,
@@ -728,11 +765,18 @@ export const processUsageLimits = schedules.task({
               periodStart: usageWindow.start_at,
               periodEnd: usageWindow.end_at,
               message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period).`,
-              metadata: buildUsageMetadata(
-                LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
-                nextTier,
-                "usage_limit_alert",
-              ),
+              metadata: buildUsageEmailMetadata({
+                teamId,
+                teamName,
+                usage,
+                currentLimit,
+                currentPlanPostLimit: planInfo.postLimit,
+                currentPlanName: planInfo.planName,
+                suggestedTier: nextTier,
+                periodStart: usageWindow.start_at,
+                transactionalEmailId: LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
+                notificationTemplate: "usage_limit_alert",
+              }),
               checkForDuplicates: true,
             });
             continue;
@@ -771,11 +815,18 @@ export const processUsageLimits = schedules.task({
               periodStart: usageWindow.start_at,
               periodEnd: usageWindow.end_at,
               message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
-              metadata: buildUsageMetadata(
-                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-                nextTier,
-                "usage_limit_upgrade",
-              ),
+              metadata: buildUsageEmailMetadata({
+                teamId,
+                teamName,
+                usage,
+                currentLimit,
+                currentPlanPostLimit: planInfo.postLimit,
+                currentPlanName: planInfo.planName,
+                suggestedTier: nextTier,
+                periodStart: usageWindow.start_at,
+                transactionalEmailId: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+                notificationTemplate: "usage_limit_upgrade",
+              }),
               checkForDuplicates: false,
             });
 
@@ -843,11 +894,18 @@ export const processUsageLimits = schedules.task({
               periodStart: usageWindow.start_at,
               periodEnd: usageWindow.end_at,
               message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
-              metadata: buildUsageMetadata(
-                LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-                nextScheduledTier,
-                "usage_limit_upgrade",
-              ),
+              metadata: buildUsageEmailMetadata({
+                teamId,
+                teamName,
+                usage,
+                currentLimit,
+                currentPlanPostLimit: planInfo.postLimit,
+                currentPlanName: planInfo.planName,
+                suggestedTier: nextScheduledTier,
+                periodStart: usageWindow.start_at,
+                transactionalEmailId: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+                notificationTemplate: "usage_limit_upgrade",
+              }),
               checkForDuplicates: false,
             });
 
@@ -886,13 +944,12 @@ export const processUsageLimits = schedules.task({
         }
       }
 
-      const activeUsageWindows = await getActiveUsageWindows();
-
       for (const usageWindow of activeUsageWindows) {
         const {
           team_id: teamId,
           count: usage,
           limit: currentLimit,
+          stripe_customer_id: stripeCustomerId,
           team_name: teamName,
           start_at: periodStart,
           end_at: periodEnd,
@@ -923,45 +980,63 @@ export const processUsageLimits = schedules.task({
             continue;
           }
 
-          // Map the window's cap back to a tier by post count — the window's
-          // `limit` already reflects the plan's cap at window creation, so no
-          // Stripe lookup is needed here (unlike the exceeded-usage pass above).
-          const currentTier = PRICING_TIERS.find(
-            (tier) => tier.posts === currentLimit,
+          // Mirror the eligibility checks the exceeded-usage pass above
+          // applies, so a team on a legacy/canceling/customer-less plan
+          // doesn't get billing-focused warning emails that don't apply.
+          if (!stripeCustomerId) {
+            logger.info("Skipping team without Stripe customer", {
+              team_id: teamId,
+            });
+            continue;
+          }
+
+          const subscriptions = await stripe.subscriptions.list({
+            customer: stripeCustomerId,
+            status: "active",
+            limit: 1,
+            expand: ["data.items.data.price"],
+          });
+
+          const subscription = subscriptions.data[0] as Stripe.Subscription;
+
+          if (!subscription) {
+            logger.error("No active subscription for customer", {
+              stripe_customer_id: stripeCustomerId,
+              team_id: teamId,
+            });
+            continue;
+          }
+
+          const planInfo = getSubscriptionPlanInfo(subscription);
+
+          if (planInfo.isLegacy || !planInfo.postLimit) {
+            logger.info("Skipping usage-threshold warning for subscription", {
+              team_id: teamId,
+              subscription_id: subscription.id,
+              is_legacy: planInfo.isLegacy,
+              post_limit: planInfo.postLimit,
+            });
+            continue;
+          }
+
+          if (hasScheduledCancellation(subscription)) {
+            logger.info(
+              "Skipping usage-threshold warning for subscription with scheduled cancellation",
+              {
+                team_id: teamId,
+                subscription_id: subscription.id,
+                cancel_at_period_end: subscription.cancel_at_period_end,
+                cancel_at: subscription.cancel_at,
+              },
+            );
+            continue;
+          }
+
+          const currentTierIndex = PRICING_TIERS.findIndex(
+            (tier) => tier.productId === planInfo.productId,
           );
-          const currentTierIndex = currentTier
-            ? PRICING_TIERS.indexOf(currentTier)
-            : -1;
           const nextTier =
             currentTierIndex >= 0 ? PRICING_TIERS[currentTierIndex + 1] : null;
-
-          const metadata: Json = {
-            notification_category: "transactional",
-            notification_template: crossedThreshold.notificationType,
-            tracking: {
-              usage_count: usage,
-              current_limit: currentLimit,
-              plan_post_limit: currentTier?.posts ?? null,
-              suggested_plan_post_limit: nextTier?.posts ?? null,
-              threshold_percent: crossedThreshold.percent,
-              period_start: periodStart,
-            },
-            data: {
-              loops: {
-                transactional_id: crossedThreshold.transactionalEmailId,
-                data: {
-                  team_name: teamName,
-                  current_plan_post_limit: currentTier?.posts ?? null,
-                  current_plan_name: currentTier?.name ?? null,
-                  suggested_plan_name: nextTier?.name ?? null,
-                  suggested_plan_post_limit: nextTier?.posts ?? null,
-                  threshold_percent: crossedThreshold.percent,
-                  billing_link: `https://app.postforme.dev/${teamId}/billing`,
-                },
-              },
-            },
-            results: [],
-          };
 
           await maybeTriggerUsageNotification({
             teamId,
@@ -969,7 +1044,19 @@ export const processUsageLimits = schedules.task({
             periodStart,
             periodEnd,
             message: `Usage at ${Math.round(percentage)}% of plan limit (${usage}/${currentLimit} posts used this period).`,
-            metadata,
+            metadata: buildUsageEmailMetadata({
+              teamId,
+              teamName,
+              usage,
+              currentLimit,
+              currentPlanPostLimit: planInfo.postLimit,
+              currentPlanName: planInfo.planName,
+              suggestedTier: nextTier,
+              periodStart,
+              transactionalEmailId: crossedThreshold.transactionalEmailId,
+              notificationTemplate: crossedThreshold.notificationType,
+              thresholdPercent: crossedThreshold.percent,
+            }),
             checkForDuplicates: true,
           });
         } catch (teamError) {
