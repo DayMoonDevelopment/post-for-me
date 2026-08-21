@@ -464,6 +464,8 @@ export class YouTubePostClient extends PostClient {
       );
     }
 
+    // Unreachable: every loop iteration above returns or throws. Present only
+    // because TS can't prove that and requires a return on this code path.
     throw new Error(
       "Failed to start YouTube resumable upload session: exhausted retry attempts",
     );
