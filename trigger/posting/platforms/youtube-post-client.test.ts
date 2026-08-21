@@ -6,7 +6,7 @@ describe("isRetriableYouTubeSessionInitError", () => {
     expect(isRetriableYouTubeSessionInitError(429, "")).toBe(true);
   });
 
-  test.each([500, 502, 503, 599])("retries on %i", (status) => {
+  test.each([500, 502, 503, 599])("retries on %i", (status: number) => {
     expect(isRetriableYouTubeSessionInitError(status, "")).toBe(true);
   });
 
