@@ -13,8 +13,6 @@ import {
 import { SupabaseClient } from "@supabase/supabase-js";
 
 export class PinterestPostClient extends PostClient {
-  #requests: any[] = [];
-  #responses: any[] = [];
   #appCredentials: PlatformAppCredentials;
   constructor(
     supabaseClient: SupabaseClient,
@@ -42,7 +40,7 @@ export class PinterestPostClient extends PostClient {
       requestUrl = "https://api-sandbox.pinterest.com/v5/oauth/token";
     }
 
-    this.#requests.push({
+    this.requests.push({
       refreshRequest: requestUrl,
       params,
     });
@@ -54,7 +52,7 @@ export class PinterestPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     const { access_token, expires_in, refresh_token } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
@@ -116,7 +114,7 @@ export class PinterestPostClient extends PostClient {
         media_source: mediaSource,
       };
 
-      this.#requests.push({ postRequest: pinData });
+      this.requests.push({ postRequest: pinData });
 
       let publishUrl = "https://api.pinterest.com/v5/pins";
       if (account.social_provider_metadata?.is_sandbox) {
@@ -130,7 +128,7 @@ export class PinterestPostClient extends PostClient {
         },
       });
 
-      this.#responses.push({ postResponse: response.data });
+      this.responses.push({ postResponse: response.data });
 
       return {
         success: true,
@@ -139,8 +137,8 @@ export class PinterestPostClient extends PostClient {
         provider_post_id: response.data.id,
         provider_post_url: `https://pinterest.com/pin/${response.data.id}`,
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -153,8 +151,8 @@ export class PinterestPostClient extends PostClient {
         error_message: "Failed to post to Pinterest",
         details: {
           error: error.response?.data || error.message,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -166,7 +164,7 @@ export class PinterestPostClient extends PostClient {
       boardsUrl = "https://api-sandbox.pinterest.com/v5/boards";
     }
 
-    this.#requests.push({
+    this.requests.push({
       getBoardsRequest: boardsUrl,
     });
     const boardsResponse = await axios.get(boardsUrl, {
@@ -175,7 +173,7 @@ export class PinterestPostClient extends PostClient {
         "Content-Type": "application/json",
       },
     });
-    this.#responses.push({ getBoardsResponse: boardsResponse.data });
+    this.responses.push({ getBoardsResponse: boardsResponse.data });
 
     if (boardsResponse.data.items && boardsResponse.data.items.length > 0) {
       return boardsResponse.data.items[0].id;
@@ -185,7 +183,7 @@ export class PinterestPostClient extends PostClient {
       name: "Post For Me",
       description: "Posts from Post For Me",
     };
-    this.#requests.push({
+    this.requests.push({
       createBoardRequest: {
         url: boardsUrl,
         params: createBoardParams,
@@ -198,7 +196,7 @@ export class PinterestPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ createBoardResponse: createBoardResponse.data });
+    this.responses.push({ createBoardResponse: createBoardResponse.data });
 
     return createBoardResponse.data.id;
   }
@@ -217,7 +215,7 @@ export class PinterestPostClient extends PostClient {
       mediaUrl = "https://api-sandbox.pinterest.com/v5/media";
     }
 
-    this.#requests.push({
+    this.requests.push({
       registerMediaRequest: mediaUrl,
     });
     // Step 1: Register media with Pinterest
@@ -234,7 +232,7 @@ export class PinterestPostClient extends PostClient {
       },
     );
 
-    this.#responses.push({ registerMediaResponse: registerMediaResponse.data });
+    this.responses.push({ registerMediaResponse: registerMediaResponse.data });
 
     const mediaId = registerMediaResponse.data.media_id;
     const { upload_url, upload_parameters } = registerMediaResponse.data;
@@ -275,7 +273,7 @@ export class PinterestPostClient extends PostClient {
         : {}),
     });
 
-    this.#requests.push({ uploadRequest: { file: medium } });
+    this.requests.push({ uploadRequest: { file: medium } });
 
     const headers: Record<string, string> = {
       ...(form.getHeaders() as Record<string, string>),
@@ -300,7 +298,7 @@ export class PinterestPostClient extends PostClient {
       maxBodyLength: Infinity,
     });
 
-    this.#responses.push({ uploadResponse: uploadResponse.status });
+    this.responses.push({ uploadResponse: uploadResponse.status });
 
     if (uploadResponse.status !== 204) {
       throw new Error(`Upload failed with status: ${uploadResponse.status}`);
@@ -313,7 +311,7 @@ export class PinterestPostClient extends PostClient {
     let delay = 4000;
 
     while (attempts < maxAttempts) {
-      this.#requests.push({
+      this.requests.push({
         checkMediaStatusRequest: `${mediaUrl}/${mediaId}`,
       });
       const statusResponse = await axios.get(`${mediaUrl}/${mediaId}`, {
@@ -322,7 +320,7 @@ export class PinterestPostClient extends PostClient {
         },
       });
 
-      this.#responses.push({ checkMediaStatusResponse: statusResponse.data });
+      this.responses.push({ checkMediaStatusResponse: statusResponse.data });
 
       mediaStatus = statusResponse.data.status;
 
