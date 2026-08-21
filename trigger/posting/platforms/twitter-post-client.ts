@@ -9,7 +9,8 @@ import sharp from "sharp";
 import { readFile } from "fs/promises";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
-import { parseTweet } from "twitter-text";
+import * as twitterText from "twitter-text";
+import type { ParseTweetOptions } from "twitter-text";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -18,25 +19,18 @@ import {
   TwitterConfiguration,
 } from "../post.types";
 
-// twitter-text's weighting config ("configs.defaults") isn't part of its
-// public API surface (no `configs` export), and `parseTweet` replaces
-// rather than merges a partial options object — so overriding just
-// `maxWeightedTweetLength` requires supplying the full v3 config below
-// (mirrors twitter-text/dist/configs.js `defaults`) or weight calculation
-// silently breaks.
-const TWITTER_TEXT_V3_CONFIG = {
-  version: 3,
-  scale: 100,
-  defaultWeight: 200,
-  emojiParsingEnabled: true,
-  transformedURLLength: 23,
-  ranges: [
-    { start: 0, end: 4351, weight: 100 },
-    { start: 8192, end: 8205, weight: 100 },
-    { start: 8208, end: 8223, weight: 100 },
-    { start: 8242, end: 8247, weight: 100 },
-  ],
-};
+const { parseTweet } = twitterText;
+
+// `configs` isn't part of twitter-text's typed public API
+// (@types/twitter-text doesn't declare it), but the package does export it
+// at runtime alongside `parseTweet`. Sourcing the v3 weighting config
+// directly from the installed package - instead of hand-copying its ranges -
+// keeps our weighting in sync with whatever version of twitter-text we ship.
+const TWITTER_TEXT_V3_CONFIG = (
+  twitterText as unknown as {
+    configs: { version3: ParseTweetOptions };
+  }
+).configs.version3;
 
 export function getAllowedCaption(
   caption: string,
@@ -44,17 +38,40 @@ export function getAllowedCaption(
 ): { allowedCaption: string; trimmed: boolean } {
   if (!caption) return { allowedCaption: caption, trimmed: false };
 
-  const parsed = parseTweet(caption, {
+  const parseOptions = {
     ...TWITTER_TEXT_V3_CONFIG,
     maxWeightedTweetLength: characterLimit,
-  });
+  };
+
+  const parsed = parseTweet(caption, parseOptions);
 
   if (parsed.weightedLength <= characterLimit) {
     return { allowedCaption: caption, trimmed: false };
   }
 
+  // Binary search for the longest prefix (by Unicode code point, so we
+  // never split a surrogate pair) whose weighted length fits the limit.
+  // We can't use `validRangeEnd` here: twitter-text freezes it at the first
+  // character it considers "invalid" (e.g. a stray BOM) and never advances
+  // it again even as weightedLength keeps growing past the limit, which
+  // can collapse a caption down to just a few characters.
+  const codePoints = Array.from(caption);
+  let low = 0;
+  let high = codePoints.length;
+
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = codePoints.slice(0, mid).join("");
+
+    if (parseTweet(candidate, parseOptions).weightedLength <= characterLimit) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
   return {
-    allowedCaption: caption.slice(0, parsed.validRangeEnd + 1),
+    allowedCaption: codePoints.slice(0, low).join(""),
     trimmed: true,
   };
 }

@@ -1,26 +1,20 @@
 import { describe, expect, it } from "bun:test";
-import { parseTweet } from "twitter-text";
+import * as twitterText from "twitter-text";
+import type { ParseTweetOptions } from "twitter-text";
 import { getAllowedCaption } from "./twitter-post-client";
+
+const { parseTweet } = twitterText;
 
 const STANDARD_LIMIT = 280;
 const PREMIUM_LIMIT = 2200;
 
-// Mirrors the v3 config `getAllowedCaption` uses internally — see the
-// comment in twitter-post-client.ts for why this can't be imported from
-// twitter-text directly.
-const TWITTER_TEXT_V3_CONFIG = {
-  version: 3,
-  scale: 100,
-  defaultWeight: 200,
-  emojiParsingEnabled: true,
-  transformedURLLength: 23,
-  ranges: [
-    { start: 0, end: 4351, weight: 100 },
-    { start: 8192, end: 8205, weight: 100 },
-    { start: 8208, end: 8223, weight: 100 },
-    { start: 8242, end: 8247, weight: 100 },
-  ],
-};
+// Same runtime-sourced config `getAllowedCaption` uses internally — see the
+// comment in twitter-post-client.ts for why this isn't in the typed API.
+const TWITTER_TEXT_V3_CONFIG = (
+  twitterText as unknown as {
+    configs: { version3: ParseTweetOptions };
+  }
+).configs.version3;
 
 function weightedLength(text: string, limit: number): number {
   return parseTweet(text, {
@@ -110,5 +104,27 @@ describe("getAllowedCaption", () => {
 
     expect(trimmed).toBe(false);
     expect(allowedCaption).toBe("");
+  });
+
+  it("trims to near the weighted limit even when an invalid character appears early", () => {
+    // twitter-text freezes `validRangeEnd` at the first character it
+    // considers invalid (e.g. a BOM) and never advances it again, even
+    // though weightedLength keeps growing past the limit. Truncation must
+    // not key off validRangeEnd or this collapses to a handful of chars.
+    const caption = "Hello﻿" + "a".repeat(400);
+    expect(weightedLength(caption, STANDARD_LIMIT)).toBeGreaterThan(
+      STANDARD_LIMIT,
+    );
+
+    const { allowedCaption, trimmed } = getAllowedCaption(
+      caption,
+      STANDARD_LIMIT,
+    );
+
+    expect(trimmed).toBe(true);
+    expect(allowedCaption.length).toBeGreaterThan(200);
+    expect(weightedLength(allowedCaption, STANDARD_LIMIT)).toBeLessThanOrEqual(
+      STANDARD_LIMIT,
+    );
   });
 });
