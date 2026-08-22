@@ -5,8 +5,8 @@ import { Database, Json } from "./supabase.types";
 import { captureServerEvent, deterministicUuid } from "./posthog";
 import { randomUUID } from "crypto";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const supabaseClient = createClient<Database>(
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+export const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
@@ -49,29 +49,48 @@ type ActiveUsageWindow =
 type TeamNotificationType =
   Database["public"]["Tables"]["team_notifications"]["Row"]["notification_type"];
 
-// Ordered highest-first so a single cron pass only fires the highest
-// newly-crossed threshold for a team (skipping lower ones already implied).
-const USAGE_WARNING_THRESHOLDS: {
-  percent: number;
-  notificationType: TeamNotificationType;
-  transactionalEmailId: string;
-}[] = [
+export const USAGE_WARNING_THRESHOLDS = [
   {
     percent: 95,
     notificationType: "usage_alert_95",
+    notificationTemplate: "usage_threshold_alert_95",
     transactionalEmailId: LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID,
   },
   {
     percent: 90,
     notificationType: "usage_alert_90",
+    notificationTemplate: "usage_threshold_alert_90",
     transactionalEmailId: LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID,
   },
   {
     percent: 80,
     notificationType: "usage_alert_80",
+    notificationTemplate: "usage_threshold_alert_80",
     transactionalEmailId: LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID,
   },
-];
+] as const satisfies {
+  percent: number;
+  notificationType: TeamNotificationType;
+  notificationTemplate: string;
+  transactionalEmailId: string;
+}[];
+
+type UsageEmailTemplate =
+  | "usage_limit_alert"
+  | "usage_limit_upgrade"
+  | (typeof USAGE_WARNING_THRESHOLDS)[number]["notificationTemplate"];
+
+// Returns the highest threshold whose percent has been crossed. Does not
+// depend on array order, so appending a new threshold can't silently change
+// which one wins.
+export const getCrossedUsageThreshold = (percentage: number) =>
+  USAGE_WARNING_THRESHOLDS.filter(
+    (threshold) => percentage >= threshold.percent,
+  ).reduce<(typeof USAGE_WARNING_THRESHOLDS)[number] | null>(
+    (highest, candidate) =>
+      !highest || candidate.percent > highest.percent ? candidate : highest,
+    null,
+  );
 
 const triggerTeamNotification = async (
   teamId: string,
@@ -154,7 +173,7 @@ const NEW_PRICING_TIER_PRODUCT_IDS = [
   STRIPE_PRICING_TIER_200K_PRODUCT_ID,
 ].filter(Boolean); // Filter out empty strings
 
-const getSubscriptionPlanInfo = (subscription: Stripe.Subscription) => {
+export const getSubscriptionPlanInfo = (subscription: Stripe.Subscription) => {
   // Check if subscription has any new pricing tier products
   for (const item of subscription.items.data) {
     const productId = item.price.product as string;
@@ -201,7 +220,7 @@ const getSubscriptionPlanInfo = (subscription: Stripe.Subscription) => {
   };
 };
 
-const hasScheduledCancellation = (
+export const hasScheduledCancellation = (
   subscription: Stripe.Subscription,
 ): boolean => {
   return Boolean(
@@ -245,6 +264,103 @@ const getProductIdFromPrice = async (
   }
 
   return product?.id ?? null;
+};
+
+type EligibleSubscriptionPlan = {
+  subscription: Stripe.Subscription;
+  planInfo: ReturnType<typeof getSubscriptionPlanInfo>;
+  currentPlanItem: Stripe.SubscriptionItem;
+  currentPeriodEnd: number;
+  nextTier: (typeof PRICING_TIERS)[number] | null;
+};
+
+/**
+ * Shared eligibility resolution for both the exceeded-usage (100%) and the
+ * active-usage threshold-warning (80/90/95%) flows, so a team on a legacy
+ * plan, without a Stripe customer, or with a scheduled cancellation is
+ * excluded consistently from both email paths rather than drifting apart.
+ */
+export const getEligibleSubscriptionPlan = async ({
+  teamId,
+  stripeCustomerId,
+}: {
+  teamId: string;
+  stripeCustomerId: string | null;
+}): Promise<EligibleSubscriptionPlan | null> => {
+  if (!stripeCustomerId) {
+    logger.info("Skipping team without Stripe customer", { team_id: teamId });
+    return null;
+  }
+
+  const subscriptions = await stripe.subscriptions.list({
+    customer: stripeCustomerId,
+    status: "active",
+    limit: 1,
+    expand: ["data.items.data.price"],
+  });
+
+  const subscription = subscriptions.data[0] as Stripe.Subscription;
+
+  if (!subscription) {
+    logger.error("No active subscription for customer", {
+      stripe_customer_id: stripeCustomerId,
+      team_id: teamId,
+    });
+    return null;
+  }
+
+  const planInfo = getSubscriptionPlanInfo(subscription);
+
+  if (planInfo.isLegacy || !planInfo.postLimit) {
+    logger.info("Skipping usage-limit automation for subscription", {
+      team_id: teamId,
+      subscription_id: subscription.id,
+      is_legacy: planInfo.isLegacy,
+      post_limit: planInfo.postLimit,
+    });
+    return null;
+  }
+
+  if (hasScheduledCancellation(subscription)) {
+    logger.info(
+      "Skipping usage-limit automation for subscription with scheduled cancellation",
+      {
+        team_id: teamId,
+        subscription_id: subscription.id,
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        cancel_at: subscription.cancel_at,
+      },
+    );
+    return null;
+  }
+
+  const currentPlanItem = subscription.items.data.find(
+    (subscriptionItem) => subscriptionItem.price.product === planInfo.productId,
+  );
+
+  if (!currentPlanItem) {
+    logger.error("Could not find current plan item", {
+      team_id: teamId,
+      subscription_id: subscription.id,
+      product_id: planInfo.productId,
+    });
+    return null;
+  }
+
+  const currentPeriodEnd = currentPlanItem.current_period_end;
+  const currentTierIndex = PRICING_TIERS.findIndex(
+    (tier) => tier.productId === planInfo.productId,
+  );
+  const nextTier =
+    currentTierIndex >= 0 ? (PRICING_TIERS[currentTierIndex + 1] ?? null) : null;
+
+  return {
+    subscription,
+    planInfo,
+    currentPlanItem,
+    currentPeriodEnd,
+    nextTier,
+  };
 };
 
 const getExceededUsageWindows = async (): Promise<ExceededUsageWindow[]> => {
@@ -318,6 +434,36 @@ const hasUsageNotificationForPeriod = async (
   }
 
   return Boolean(data?.id);
+};
+
+/**
+ * True if the team was already notified this period at `threshold` or any
+ * higher threshold. Prevents a later downward usage recalculation (e.g. a
+ * Stripe-derived backfill) from firing a lower-severity warning after a
+ * higher one has already gone out.
+ */
+export const hasHigherOrEqualUsageNotification = async (
+  teamId: string,
+  threshold: (typeof USAGE_WARNING_THRESHOLDS)[number],
+  periodStart: string,
+  periodEnd: string,
+): Promise<boolean> => {
+  const thresholdsAtOrAbove = USAGE_WARNING_THRESHOLDS.filter(
+    (candidate) => candidate.percent >= threshold.percent,
+  );
+
+  const results = await Promise.all(
+    thresholdsAtOrAbove.map((candidate) =>
+      hasUsageNotificationForPeriod(
+        teamId,
+        candidate.notificationType,
+        periodStart,
+        periodEnd,
+      ),
+    ),
+  );
+
+  return results.some(Boolean);
 };
 
 const maybeTriggerUsageNotification = async ({
@@ -531,7 +677,7 @@ const buildUsageEmailMetadata = ({
   suggestedTier: (typeof PRICING_TIERS)[number] | null;
   periodStart: string;
   transactionalEmailId: string;
-  notificationTemplate: string;
+  notificationTemplate: UsageEmailTemplate;
   thresholdPercent?: number;
 }): Json => ({
   // Stamped for analytics: process-team-notification reads the
@@ -701,54 +847,22 @@ export const processUsageLimits = schedules.task({
             usageWindow,
           );
 
-          const subscriptions = await stripe.subscriptions.list({
-            customer: stripeCustomerId,
-            status: "active",
-            limit: 1,
-            expand: ["data.items.data.price"],
+          const eligiblePlan = await getEligibleSubscriptionPlan({
+            teamId,
+            stripeCustomerId,
           });
 
-          const subscription = subscriptions.data[0] as Stripe.Subscription;
-
-          if (!subscription) {
-            logger.error("No active subscription for customer", {
-              stripe_customer_id: stripeCustomerId,
-              team_id: teamId,
-            });
+          if (!eligiblePlan) {
             continue;
           }
 
-          const planInfo = getSubscriptionPlanInfo(subscription);
-
-          if (planInfo.isLegacy || !planInfo.postLimit) {
-            logger.info("Skipping usage-limit automation for subscription", {
-              team_id: teamId,
-              subscription_id: subscription.id,
-              is_legacy: planInfo.isLegacy,
-              post_limit: planInfo.postLimit,
-            });
-            continue;
-          }
-
-          const currentPlanItem = subscription.items.data.find(
-            (subscriptionItem) =>
-              subscriptionItem.price.product === planInfo.productId,
-          );
-
-          if (!currentPlanItem) {
-            logger.error("Could not find current plan item", {
-              team_id: teamId,
-              subscription_id: subscription.id,
-              product_id: planInfo.productId,
-            });
-            continue;
-          }
-
-          const currentPeriodEnd = currentPlanItem.current_period_end;
-          const currentTierIndex = PRICING_TIERS.findIndex(
-            (tier) => tier.productId === planInfo.productId,
-          );
-          const nextTier = PRICING_TIERS[currentTierIndex + 1];
+          const {
+            subscription,
+            planInfo,
+            currentPlanItem,
+            currentPeriodEnd,
+            nextTier,
+          } = eligiblePlan;
 
           if (!nextTier) {
             logger.info("Team is already on highest pricing tier", {
@@ -779,19 +893,6 @@ export const processUsageLimits = schedules.task({
               }),
               checkForDuplicates: true,
             });
-            continue;
-          }
-
-          if (hasScheduledCancellation(subscription)) {
-            logger.info(
-              "Skipping usage-limit upgrade for subscription with scheduled cancellation",
-              {
-                team_id: teamId,
-                subscription_id: subscription.id,
-                cancel_at_period_end: subscription.cancel_at_period_end,
-                cancel_at: subscription.cancel_at,
-              },
-            );
             continue;
           }
 
@@ -961,9 +1062,7 @@ export const processUsageLimits = schedules.task({
           }
 
           const percentage = (usage / currentLimit) * 100;
-          const crossedThreshold = USAGE_WARNING_THRESHOLDS.find(
-            (threshold) => percentage >= threshold.percent,
-          );
+          const crossedThreshold = getCrossedUsageThreshold(percentage);
 
           if (!crossedThreshold) {
             continue;
@@ -980,63 +1079,41 @@ export const processUsageLimits = schedules.task({
             continue;
           }
 
-          // Mirror the eligibility checks the exceeded-usage pass above
-          // applies, so a team on a legacy/canceling/customer-less plan
-          // doesn't get billing-focused warning emails that don't apply.
-          if (!stripeCustomerId) {
-            logger.info("Skipping team without Stripe customer", {
-              team_id: teamId,
-            });
-            continue;
-          }
+          // Cheap dedup check first — including the floor against any
+          // higher threshold already notified this period — before the
+          // Stripe eligibility lookup below, so teams that stay above a
+          // threshold for the rest of the billing period don't cost a
+          // live Stripe API call on every 5-minute tick.
+          const alreadyNotified = await hasHigherOrEqualUsageNotification(
+            teamId,
+            crossedThreshold,
+            periodStart,
+            periodEnd,
+          );
 
-          const subscriptions = await stripe.subscriptions.list({
-            customer: stripeCustomerId,
-            status: "active",
-            limit: 1,
-            expand: ["data.items.data.price"],
-          });
-
-          const subscription = subscriptions.data[0] as Stripe.Subscription;
-
-          if (!subscription) {
-            logger.error("No active subscription for customer", {
-              stripe_customer_id: stripeCustomerId,
-              team_id: teamId,
-            });
-            continue;
-          }
-
-          const planInfo = getSubscriptionPlanInfo(subscription);
-
-          if (planInfo.isLegacy || !planInfo.postLimit) {
-            logger.info("Skipping usage-threshold warning for subscription", {
-              team_id: teamId,
-              subscription_id: subscription.id,
-              is_legacy: planInfo.isLegacy,
-              post_limit: planInfo.postLimit,
-            });
-            continue;
-          }
-
-          if (hasScheduledCancellation(subscription)) {
+          if (alreadyNotified) {
             logger.info(
-              "Skipping usage-threshold warning for subscription with scheduled cancellation",
+              "Usage notification already sent for period at this or a higher threshold",
               {
                 team_id: teamId,
-                subscription_id: subscription.id,
-                cancel_at_period_end: subscription.cancel_at_period_end,
-                cancel_at: subscription.cancel_at,
+                notification_type: crossedThreshold.notificationType,
+                period_start: periodStart,
+                period_end: periodEnd,
               },
             );
             continue;
           }
 
-          const currentTierIndex = PRICING_TIERS.findIndex(
-            (tier) => tier.productId === planInfo.productId,
-          );
-          const nextTier =
-            currentTierIndex >= 0 ? PRICING_TIERS[currentTierIndex + 1] : null;
+          const eligiblePlan = await getEligibleSubscriptionPlan({
+            teamId,
+            stripeCustomerId,
+          });
+
+          if (!eligiblePlan) {
+            continue;
+          }
+
+          const { planInfo, nextTier } = eligiblePlan;
 
           await maybeTriggerUsageNotification({
             teamId,
@@ -1054,10 +1131,10 @@ export const processUsageLimits = schedules.task({
               suggestedTier: nextTier,
               periodStart,
               transactionalEmailId: crossedThreshold.transactionalEmailId,
-              notificationTemplate: crossedThreshold.notificationType,
+              notificationTemplate: crossedThreshold.notificationTemplate,
               thresholdPercent: crossedThreshold.percent,
             }),
-            checkForDuplicates: true,
+            checkForDuplicates: false,
           });
         } catch (teamError) {
           logger.error("Error processing team usage threshold warning", {
