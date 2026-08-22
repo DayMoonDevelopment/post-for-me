@@ -176,7 +176,7 @@ These are **user-lifecycle** events: they fire from in-app route actions (not th
 | team group | `team.id` (always attached — team reporting is group-aggregated regardless of recipient) |
 | person props | `$set: { email }` — links the recipient (esp. an email-keyed, non-user contact) |
 | Flag | `system_triggered: true` |
-| properties (generic) | `channel` (`email`), `recipient_is_user` (whether the address mapped to a user), `notification_category` (`transactional`), `notification_type` (DB column, e.g. `usage_alert`), `notification_template` (`usage_limit_alert` / `usage_limit_upgrade`), `notification_id`, `usage_count`, `current_limit`, `plan_post_limit`, `suggested_plan_post_limit` |
+| properties (generic) | `channel` (`email`), `recipient_is_user` (whether the address mapped to a user), `notification_category` (`transactional`), `notification_type` (DB column, e.g. `usage_alert`), `notification_template` (e.g. `usage_limit_upgrade_notice`, `usage_threshold_alert_80`), `notification_id`, `usage_count`, `current_limit`, `plan_post_limit`, `suggested_plan_post_limit` |
 | properties (channel-namespaced) | **email**: `email_provider` (`loops`), `email_template_id`. Future channels get their own prefix (`sms_*`, `push_*`). |
 | timestamp | now (real-time send) |
 | dedupe | `notification_sent:<team_id>:<channel>:<notification_template>:<period_start>:<suggested_plan_post_limit>` |
