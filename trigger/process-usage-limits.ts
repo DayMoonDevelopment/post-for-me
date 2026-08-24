@@ -38,8 +38,6 @@ const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
 const LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID || "";
 
-type TeamUsageWindow =
-  Database["public"]["Tables"]["social_post_team_usage"]["Row"];
 type ExceededUsageWindow =
   Database["public"]["Functions"]["get_exceeded_team_usage_windows"]["Returns"][number];
 type ActiveUsageWindow =
@@ -378,32 +376,6 @@ const getActiveUsageWindows = async (): Promise<ActiveUsageWindow[]> => {
   }
 
   return data ?? [];
-};
-
-const hasExceededPreviouseLimit = async (
-  teamId: string,
-  currentWindow: TeamUsageWindow,
-): Promise<boolean> => {
-  const { data, error } = await supabaseClient
-    .from("social_post_team_usage")
-    .select("team_id, count, limit, start_at, end_at")
-    .eq("team_id", teamId)
-    .lte("end_at", currentWindow.start_at)
-    .order("end_at", { ascending: false })
-    .order("start_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    logger.error("Unable to get previouse usage window");
-    return false;
-  }
-
-  if (!data) {
-    return false;
-  }
-
-  return data.count > data.limit;
 };
 
 type NotificationDeliveryResult = { status?: string };
@@ -850,9 +822,9 @@ const trackUpgradeScheduled = async ({
 
 /**
  * Processes a single exceeded (>=100%) usage window: sends the single
- * "you will be upgraded" notice, then handles Stripe schedule creation /
- * escalation under the `hasExceededPreviouseLimit()` gate plus a confirmed-
- * delivery check for the current period's notice.
+ * "you will be upgraded" notice every period a team crosses 100%, then
+ * creates or escalates the Stripe schedule once this period's notice is
+ * confirmed delivered — no waiting for a second consecutive exceeded period.
  * Extracted from the cron `run` body so it's unit-testable in isolation —
  * trigger.dev's `schedules.task()` doesn't expose `run` for direct
  * invocation outside its own runtime.
@@ -886,10 +858,10 @@ export const processExceededUsageWindow = async (
       return;
     }
 
-    const [exceededPreviousLimit, eligiblePlan] = await Promise.all([
-      hasExceededPreviouseLimit(teamId, usageWindow),
-      getEligibleSubscriptionPlan({ teamId, stripeCustomerId }),
-    ]);
+    const eligiblePlan = await getEligibleSubscriptionPlan({
+      teamId,
+      stripeCustomerId,
+    });
 
     if (!eligiblePlan) {
       return;
@@ -907,16 +879,10 @@ export const processExceededUsageWindow = async (
     }
 
     // Single "you will be upgraded" notice, sent once per period the
-    // moment a team crosses 100% — regardless of strike count. Deduped
-    // per period so a repeat cron pass (or a later strike in the same
-    // period) doesn't re-send it. Wording is conditioned on
-    // `exceededPreviousLimit`: only when this is (at least) the second
-    // consecutive exceeded period is the schedule about to be created
-    // below, so only then does the notice promise it confidently.
-    const noticeMessage = exceededPreviousLimit
-      ? `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). You will be upgraded to the next tier.`
-      : `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). If usage remains above your plan limit next billing period, you'll be upgraded to the next tier.`;
-
+    // moment a team crosses 100%. Deduped per period so a repeat cron pass
+    // doesn't re-send it. The schedule creation below always follows this
+    // same crossing (once delivery is confirmed), so the notice can always
+    // promise the upgrade confidently.
     await sendUpgradeNotice({
       teamId,
       teamName,
@@ -925,13 +891,9 @@ export const processExceededUsageWindow = async (
       planInfo,
       usageWindow,
       suggestedTier: nextTier,
-      message: noticeMessage,
+      message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). You will be upgraded to the next tier.`,
       checkForDuplicates: true,
     });
-
-    if (!exceededPreviousLimit) {
-      return;
-    }
 
     // Delivery happens in a separate async task (process-team-notification),
     // so it can't be confirmed synchronously above — require a confirmed
