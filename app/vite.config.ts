@@ -20,6 +20,17 @@ export default defineConfig(({ mode }) => {
     resolve: {
       tsconfigPaths: true,
     },
+    ssr: {
+      // `prismjs/components/*` are stand-alone grammar files that attach to a
+      // global `Prism` — `app/ui/code-block-prism.ts` sets it, and
+      // `code-block-languages.ts` imports that first so the assignment lands
+      // before the grammars load. That ordering only survives if the grammars
+      // are BUNDLED. Left external, Rollup hoists their `import` to the top of
+      // the server chunk, so they evaluate before any of the chunk's own body
+      // and the built server dies at boot with "Prism is not defined" (dev is
+      // unaffected: Vite's SSR loader executes modules in source order).
+      noExternal: ["prismjs"],
+    },
     // Pre-bundle the deps Vite would otherwise discover mid-session, so the dev
     // server doesn't stall on dep optimization and SSR resolves them cleanly
     // (mirrors the marketing app). The failure this prevents: visiting a route
