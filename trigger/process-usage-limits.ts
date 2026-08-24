@@ -69,6 +69,7 @@ export const USAGE_WARNING_THRESHOLDS = [
 
 type UsageEmailTemplate =
   | "usage_limit_upgrade_notice"
+  | "usage_limit_upgrade_failed"
   | (typeof USAGE_WARNING_THRESHOLDS)[number]["notificationTemplate"];
 
 // Returns the highest threshold whose percent has been crossed. Does not
@@ -216,8 +217,8 @@ export const hasScheduledCancellation = (
 ): boolean => {
   return Boolean(
     subscription.cancel_at_period_end ||
-      subscription.cancel_at ||
-      subscription.cancellation_details?.reason,
+    subscription.cancel_at ||
+    subscription.cancellation_details?.reason,
   );
 };
 
@@ -343,7 +344,9 @@ export const getEligibleSubscriptionPlan = async ({
     (tier) => tier.productId === planInfo.productId,
   );
   const nextTier =
-    currentTierIndex >= 0 ? (PRICING_TIERS[currentTierIndex + 1] ?? null) : null;
+    currentTierIndex >= 0
+      ? (PRICING_TIERS[currentTierIndex + 1] ?? null)
+      : null;
 
   return {
     subscription,
@@ -390,12 +393,19 @@ const hasUsageNotificationForPeriod = async (
   notificationType: TeamNotificationType,
   periodStart: string,
   periodEnd: string,
+  notificationTemplate?: UsageEmailTemplate,
 ): Promise<boolean> => {
-  const { data, error } = await supabaseClient
+  let query = supabaseClient
     .from("team_notifications")
     .select("meta_data")
     .eq("notification_type", notificationType)
-    .eq("team_id", teamId)
+    .eq("team_id", teamId);
+
+  if (notificationTemplate) {
+    query = query.eq("meta_data->>notification_template", notificationTemplate);
+  }
+
+  const { data, error } = await query
     .gte("created_at", periodStart)
     .lt("created_at", periodEnd);
 
@@ -404,10 +414,10 @@ const hasUsageNotificationForPeriod = async (
   }
 
   return (data ?? []).some((row) => {
-    const results = (row.meta_data as NotificationRowMetadata | null)
-      ?.results;
+    const results = (row.meta_data as NotificationRowMetadata | null)?.results;
     return (
-      Array.isArray(results) && results.some((result) => result.status === "sent")
+      Array.isArray(results) &&
+      results.some((result) => result.status === "sent")
     );
   });
 };
@@ -449,7 +459,6 @@ const maybeTriggerUsageNotification = async ({
   periodEnd,
   message,
   metadata,
-  checkForDuplicates,
 }: {
   teamId: string;
   notificationType: TeamNotificationType;
@@ -457,27 +466,7 @@ const maybeTriggerUsageNotification = async ({
   periodEnd: string;
   message: string;
   metadata: Json;
-  checkForDuplicates: boolean;
-}): Promise<boolean> => {
-  if (checkForDuplicates) {
-    const alreadySent = await hasUsageNotificationForPeriod(
-      teamId,
-      notificationType,
-      periodStart,
-      periodEnd,
-    );
-
-    if (alreadySent) {
-      logger.info("Usage notification already sent for period", {
-        team_id: teamId,
-        notification_type: notificationType,
-        period_start: periodStart,
-        period_end: periodEnd,
-      });
-      return false;
-    }
-  }
-
+}): Promise<void> => {
   logger.info("Triggering usage notification", {
     team_id: teamId,
     notification_type: notificationType,
@@ -485,7 +474,6 @@ const maybeTriggerUsageNotification = async ({
     period_end: periodEnd,
   });
   await triggerTeamNotification(teamId, message, metadata, notificationType);
-  return true;
 };
 
 const getActiveScheduleForSubscription = async (
@@ -711,7 +699,6 @@ const sendUpgradeNotice = ({
   usageWindow,
   suggestedTier,
   message,
-  checkForDuplicates,
 }: {
   teamId: string;
   teamName: string | null;
@@ -721,8 +708,7 @@ const sendUpgradeNotice = ({
   usageWindow: ExceededUsageWindow;
   suggestedTier: (typeof PRICING_TIERS)[number] | null;
   message: string;
-  checkForDuplicates: boolean;
-}): Promise<boolean> =>
+}): Promise<void> =>
   maybeTriggerUsageNotification({
     teamId,
     notificationType: "usage_alert",
@@ -741,7 +727,6 @@ const sendUpgradeNotice = ({
       transactionalEmailId: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
       notificationTemplate: "usage_limit_upgrade_notice",
     }),
-    checkForDuplicates,
   });
 
 /**
@@ -784,8 +769,8 @@ const trackUpgradeScheduled = async ({
 
     const postLimitOf = (productId: string | null | undefined) =>
       productId
-        ? PRICING_TIERS.find((tier) => tier.productId === productId)?.posts ??
-          null
+        ? (PRICING_TIERS.find((tier) => tier.productId === productId)?.posts ??
+          null)
         : null;
 
     const isEscalation = previousScheduledProductId != null;
@@ -864,11 +849,70 @@ export const processExceededUsageWindow = async (
     });
 
     if (!eligiblePlan) {
+      // If we already promised this team an upgrade this period, eligibility
+      // being lost before the deferred schedule-creation tick (e.g. the
+      // customer cancels in reaction to the notice) breaks that promise —
+      // send a one-time correction so they're not left thinking it happened.
+      const wasPromisedUpgrade = await hasUsageNotificationForPeriod(
+        teamId,
+        "usage_alert",
+        usageWindow.start_at,
+        usageWindow.end_at,
+        "usage_limit_upgrade_notice",
+      );
+
+      if (!wasPromisedUpgrade) {
+        return;
+      }
+
+      const correctionAlreadySent = await hasUsageNotificationForPeriod(
+        teamId,
+        "usage_alert",
+        usageWindow.start_at,
+        usageWindow.end_at,
+        "usage_limit_upgrade_failed",
+      );
+
+      if (correctionAlreadySent) {
+        return;
+      }
+
+      await maybeTriggerUsageNotification({
+        teamId,
+        notificationType: "usage_alert",
+        periodStart: usageWindow.start_at,
+        periodEnd: usageWindow.end_at,
+        message: `We were unable to automatically upgrade your plan after usage exceeded the limit (${usage}/${currentLimit} posts used this period). Please upgrade manually from billing or contact support.`,
+        metadata: buildUsageEmailMetadata({
+          teamId,
+          teamName,
+          usage,
+          currentLimit,
+          currentPlanPostLimit: null,
+          currentPlanName: null,
+          suggestedTier: null,
+          periodStart: usageWindow.start_at,
+          transactionalEmailId:
+            LOOPS_USAGE_UPGRADE_FAILED_TRANSACTIONAL_EMAIL_ID,
+          notificationTemplate: "usage_limit_upgrade_failed",
+        }),
+      });
+
+      logger.warn(
+        "Upgrade eligibility lost after promising an upgrade; sent correction notice",
+        { team_id: teamId },
+      );
+
       return;
     }
 
-    const { subscription, planInfo, currentPlanItem, currentPeriodEnd, nextTier } =
-      eligiblePlan;
+    const {
+      subscription,
+      planInfo,
+      currentPlanItem,
+      currentPeriodEnd,
+      nextTier,
+    } = eligiblePlan;
 
     if (!nextTier) {
       logger.info("Team is already on highest pricing tier", {
@@ -878,29 +922,11 @@ export const processExceededUsageWindow = async (
       return;
     }
 
-    // Single "you will be upgraded" notice, sent once per period the
-    // moment a team crosses 100%. Deduped per period so a repeat cron pass
-    // doesn't re-send it. The schedule creation below always follows this
-    // same crossing (once delivery is confirmed), so the notice can always
-    // promise the upgrade confidently.
-    await sendUpgradeNotice({
-      teamId,
-      teamName,
-      usage,
-      currentLimit,
-      planInfo,
-      usageWindow,
-      suggestedTier: nextTier,
-      message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). You will be upgraded to the next tier.`,
-      checkForDuplicates: true,
-    });
-
-    // Delivery happens in a separate async task (process-team-notification),
-    // so it can't be confirmed synchronously above — require a confirmed
-    // send for the current period before creating/escalating the Stripe
-    // schedule. This defers schedule creation by at least one cron tick
-    // after a successful send, closing the gap where a team could be
-    // upgraded/billed without ever receiving a working notification.
+    // Single "you will be upgraded" notice, sent once per period the moment
+    // a team crosses 100%. Checked once up front and reused below for the
+    // defer decision — nothing between the two can change the answer, since
+    // delivery confirmation lands asynchronously via a separate task, not
+    // synchronously within this tick.
     const currentPeriodNotified = await hasUsageNotificationForPeriod(
       teamId,
       "usage_alert",
@@ -908,6 +934,25 @@ export const processExceededUsageWindow = async (
       usageWindow.end_at,
     );
 
+    if (!currentPeriodNotified) {
+      await sendUpgradeNotice({
+        teamId,
+        teamName,
+        usage,
+        currentLimit,
+        planInfo,
+        usageWindow,
+        suggestedTier: nextTier,
+        message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). You will be upgraded to the next tier.`,
+      });
+    }
+
+    // Delivery happens in a separate async task (process-team-notification),
+    // so it can't be confirmed synchronously above — require a confirmed
+    // send for the current period before creating/escalating the Stripe
+    // schedule. This defers schedule creation by at least one cron tick
+    // after a successful send, closing the gap where a team could be
+    // upgraded/billed without ever receiving a working notification.
     if (!currentPeriodNotified) {
       logger.info(
         "Deferring upgrade schedule until usage notice is confirmed delivered",
@@ -1010,7 +1055,6 @@ export const processExceededUsageWindow = async (
         usageWindow,
         suggestedTier: nextScheduledTier,
         message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
-        checkForDuplicates: false,
       });
 
       logger.info("Replaced scheduled upgrade with next tier", {
@@ -1159,11 +1203,11 @@ export const processUsageLimits = schedules.task({
               currentPlanName: planInfo.planName,
               suggestedTier: nextTier,
               periodStart,
-              transactionalEmailId: LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID,
+              transactionalEmailId:
+                LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID,
               notificationTemplate: crossedThreshold.notificationTemplate,
               thresholdPercent: crossedThreshold.percent,
             }),
-            checkForDuplicates: false,
           });
         } catch (teamError) {
           logger.error("Error processing team usage threshold warning", {

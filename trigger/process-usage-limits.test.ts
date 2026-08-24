@@ -135,9 +135,7 @@ describe("hasScheduledCancellation", () => {
 
   test("true when cancel_at is set", () => {
     expect(
-      mod.hasScheduledCancellation(
-        makeSubscription({ cancel_at: 1893456000 }),
-      ),
+      mod.hasScheduledCancellation(makeSubscription({ cancel_at: 1893456000 })),
     ).toBe(true);
   });
 });
@@ -329,36 +327,62 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
   // stubbed to "not found" so it no-ops rather than needing its own fixture.
   //
   // `notificationResultStatuses` models what's already recorded for the
-  // *current* period: `[]` means no attempt yet (or none confirmed), `["sent"]`
-  // means a prior attempt was confirmed delivered, `["failed"]`/`["skipped"]`
-  // models a prior attempt that didn't actually reach the team.
+  // *current* period when a query has no `meta_data->>notification_template`
+  // filter: `[]` means no attempt yet (or none confirmed), `["sent"]` means a
+  // prior attempt was confirmed delivered, `["failed"]`/`["skipped"]` models a
+  // prior attempt that didn't actually reach the team.
+  //
+  // `templateResultStatuses` overrides that per notification_template, for
+  // tests that need the "you will be upgraded" notice and the "upgrade
+  // failed" correction to report different delivery states within the same
+  // `processExceededUsageWindow` call.
+  //
+  // `teamNotificationsQueryCount` (reset in `beforeEach`) counts every
+  // `.from("team_notifications")` call so a regression reintroducing a
+  // redundant duplicate query is caught even though it wouldn't change any
+  // send/defer assertion.
+  let teamNotificationsQueryCount = 0;
+
   const fakeSupabaseFrom =
     ({
       notificationResultStatuses = [],
+      templateResultStatuses = {},
     }: {
       notificationResultStatuses?: string[];
-    }) =>
+      templateResultStatuses?: Record<string, string[]>;
+    } = {}) =>
     (table: string) => {
       if (table === "team_notifications") {
+        teamNotificationsQueryCount += 1;
+        let queriedTemplate: string | undefined;
         const builder: any = {
           select: () => builder,
-          eq: () => builder,
+          eq: (column: string, value: string) => {
+            if (column === "meta_data->>notification_template") {
+              queriedTemplate = value;
+            }
+            return builder;
+          },
           gte: () => builder,
-          lt: () => ({
-            data:
-              notificationResultStatuses.length > 0
-                ? [
-                    {
-                      meta_data: {
-                        results: notificationResultStatuses.map((status) => ({
-                          status,
-                        })),
+          lt: () => {
+            const statuses =
+              queriedTemplate && queriedTemplate in templateResultStatuses
+                ? templateResultStatuses[queriedTemplate]
+                : notificationResultStatuses;
+            return {
+              data:
+                statuses.length > 0
+                  ? [
+                      {
+                        meta_data: {
+                          results: statuses.map((status) => ({ status })),
+                        },
                       },
-                    },
-                  ]
-                : [],
-            error: null,
-          }),
+                    ]
+                  : [],
+              error: null,
+            };
+          },
         };
         return builder;
       }
@@ -408,6 +432,7 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
 
   beforeEach(() => {
     taskTriggerCalls.length = 0;
+    teamNotificationsQueryCount = 0;
   });
 
   test("first-ever exceeded window: sends the confident upgrade notice, defers the Stripe schedule", async () => {
@@ -436,6 +461,9 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     expect((payload.meta_data as any).data.loops.transactional_id).toBe(
       "loops_upgrade",
     );
+    // Regression guard: the send-decision and the defer-decision must share
+    // a single `team_notifications` query, not issue it twice.
+    expect(teamNotificationsQueryCount).toBe(1);
   });
 
   test("does not re-send when the period was already confirmed delivered", async () => {
@@ -488,6 +516,64 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
 
     expect(create).toHaveBeenCalledTimes(1);
     // Already delivered for this period, so the dedup check skips re-sending.
+    expect(taskTriggerCalls.length).toBe(0);
+  });
+
+  test("eligibility lost after promising an upgrade: sends a correction notice", async () => {
+    // The "you will be upgraded" notice was confirmed delivered on an
+    // earlier tick, but this tick's eligibility check comes back ineligible
+    // (e.g. the customer cancelled in reaction to the email) — the broken
+    // promise must be corrected, not left silent.
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      templateResultStatuses: {
+        usage_limit_upgrade_notice: ["sent"],
+        usage_limit_upgrade_failed: [],
+      },
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;
+
+    await mod.processExceededUsageWindow(makeUsageWindow() as any);
+
+    expect(taskTriggerCalls.length).toBe(1);
+    const [{ id, payload }] = taskTriggerCalls;
+    expect(id).toBe("process-team-notification");
+    expect(payload.notification_type).toBe("usage_alert");
+    expect(payload.message).toContain("unable to automatically upgrade");
+    expect((payload.meta_data as any).notification_template).toBe(
+      "usage_limit_upgrade_failed",
+    );
+    expect((payload.meta_data as any).data.loops.transactional_id).toBe(
+      "loops_upgrade_failed",
+    );
+  });
+
+  test("eligibility lost after promising an upgrade: does not re-send an already-sent correction", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      templateResultStatuses: {
+        usage_limit_upgrade_notice: ["sent"],
+        usage_limit_upgrade_failed: ["sent"],
+      },
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;
+
+    await mod.processExceededUsageWindow(makeUsageWindow() as any);
+
+    expect(taskTriggerCalls.length).toBe(0);
+  });
+
+  test("never-eligible team crossing 100%: no correction notice, since no upgrade was ever promised", async () => {
+    // The team was ineligible from the start this period (e.g. no active
+    // Stripe subscription) — nothing was promised, so no correction fires.
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      templateResultStatuses: {
+        usage_limit_upgrade_notice: [],
+        usage_limit_upgrade_failed: [],
+      },
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;
+
+    await mod.processExceededUsageWindow(makeUsageWindow() as any);
+
     expect(taskTriggerCalls.length).toBe(0);
   });
 
