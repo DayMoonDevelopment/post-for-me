@@ -406,6 +406,13 @@ const hasExceededPreviouseLimit = async (
   return data.count > data.limit;
 };
 
+type NotificationDeliveryResult = { status?: string };
+type NotificationRowMetadata = { results?: NotificationDeliveryResult[] };
+
+// "Notified" means at least one delivery attempt for the period actually
+// succeeded — a row that only recorded "skipped"/"failed" deliveries doesn't
+// count, so a failed send is retried on the next cron tick instead of being
+// silently treated as done forever.
 const hasUsageNotificationForPeriod = async (
   teamId: string,
   notificationType: TeamNotificationType,
@@ -414,19 +421,23 @@ const hasUsageNotificationForPeriod = async (
 ): Promise<boolean> => {
   const { data, error } = await supabaseClient
     .from("team_notifications")
-    .select("id")
+    .select("meta_data")
     .eq("notification_type", notificationType)
     .eq("team_id", teamId)
     .gte("created_at", periodStart)
-    .lt("created_at", periodEnd)
-    .limit(1)
-    .maybeSingle();
+    .lt("created_at", periodEnd);
 
   if (error) {
     throw error;
   }
 
-  return Boolean(data?.id);
+  return (data ?? []).some((row) => {
+    const results = (row.meta_data as NotificationRowMetadata | null)
+      ?.results;
+    return (
+      Array.isArray(results) && results.some((result) => result.status === "sent")
+    );
+  });
 };
 
 /**
@@ -715,6 +726,51 @@ const buildUsageEmailMetadata = ({
   results: [],
 });
 
+// Shared by the first "you will be upgraded" notice and the escalation
+// re-notice — same notification type, same period, same metadata shape;
+// only the message, suggested tier, and dedup behavior differ per call site.
+const sendUpgradeNotice = ({
+  teamId,
+  teamName,
+  usage,
+  currentLimit,
+  planInfo,
+  usageWindow,
+  suggestedTier,
+  message,
+  checkForDuplicates,
+}: {
+  teamId: string;
+  teamName: string | null;
+  usage: number;
+  currentLimit: number;
+  planInfo: ReturnType<typeof getSubscriptionPlanInfo>;
+  usageWindow: ExceededUsageWindow;
+  suggestedTier: (typeof PRICING_TIERS)[number] | null;
+  message: string;
+  checkForDuplicates: boolean;
+}): Promise<boolean> =>
+  maybeTriggerUsageNotification({
+    teamId,
+    notificationType: "usage_alert",
+    periodStart: usageWindow.start_at,
+    periodEnd: usageWindow.end_at,
+    message,
+    metadata: buildUsageEmailMetadata({
+      teamId,
+      teamName,
+      usage,
+      currentLimit,
+      currentPlanPostLimit: planInfo.postLimit,
+      currentPlanName: planInfo.planName,
+      suggestedTier,
+      periodStart: usageWindow.start_at,
+      transactionalEmailId: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+      notificationTemplate: "usage_limit_upgrade_notice",
+    }),
+    checkForDuplicates,
+  });
+
 /**
  * Emit `subscription_upgrade_scheduled` for the automated usage-based upgrade.
  * Attributed to the team's owner (`created_by`) as the distinct_id and the
@@ -794,7 +850,8 @@ const trackUpgradeScheduled = async ({
 /**
  * Processes a single exceeded (>=100%) usage window: sends the single
  * "you will be upgraded" notice, then handles Stripe schedule creation /
- * escalation under the unchanged `hasExceededPreviouseLimit()` gate.
+ * escalation under the `hasExceededPreviouseLimit()` gate plus a confirmed-
+ * delivery check for the current period's notice.
  * Extracted from the cron `run` body so it's unit-testable in isolation —
  * trigger.dev's `schedules.task()` doesn't expose `run` for direct
  * invocation outside its own runtime.
@@ -828,15 +885,10 @@ export const processExceededUsageWindow = async (
       return;
     }
 
-    const exceededPreviousLimit = await hasExceededPreviouseLimit(
-      teamId,
-      usageWindow,
-    );
-
-    const eligiblePlan = await getEligibleSubscriptionPlan({
-      teamId,
-      stripeCustomerId,
-    });
+    const [exceededPreviousLimit, eligiblePlan] = await Promise.all([
+      hasExceededPreviouseLimit(teamId, usageWindow),
+      getEligibleSubscriptionPlan({ teamId, stripeCustomerId }),
+    ]);
 
     if (!eligiblePlan) {
       return;
@@ -856,32 +908,48 @@ export const processExceededUsageWindow = async (
     // Single "you will be upgraded" notice, sent once per period the
     // moment a team crosses 100% — regardless of strike count. Deduped
     // per period so a repeat cron pass (or a later strike in the same
-    // period) doesn't re-send it. The actual Stripe schedule is still
-    // gated by `exceededPreviousLimit` below (unchanged for now — see
-    // PFM-1062), so this promise can precede the schedule by up to one
-    // billing period until that gate is removed.
-    await maybeTriggerUsageNotification({
+    // period) doesn't re-send it. Wording is conditioned on
+    // `exceededPreviousLimit`: only when this is (at least) the second
+    // consecutive exceeded period is the schedule about to be created
+    // below, so only then does the notice promise it confidently.
+    const noticeMessage = exceededPreviousLimit
+      ? `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). You will be upgraded to the next tier.`
+      : `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). If usage remains above your plan limit next billing period, you'll be upgraded to the next tier.`;
+
+    await sendUpgradeNotice({
       teamId,
-      notificationType: "usage_alert",
-      periodStart: usageWindow.start_at,
-      periodEnd: usageWindow.end_at,
-      message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period). You will be upgraded to the next tier.`,
-      metadata: buildUsageEmailMetadata({
-        teamId,
-        teamName,
-        usage,
-        currentLimit,
-        currentPlanPostLimit: planInfo.postLimit,
-        currentPlanName: planInfo.planName,
-        suggestedTier: nextTier,
-        periodStart: usageWindow.start_at,
-        transactionalEmailId: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-        notificationTemplate: "usage_limit_upgrade_notice",
-      }),
+      teamName,
+      usage,
+      currentLimit,
+      planInfo,
+      usageWindow,
+      suggestedTier: nextTier,
+      message: noticeMessage,
       checkForDuplicates: true,
     });
 
     if (!exceededPreviousLimit) {
+      return;
+    }
+
+    // Delivery happens in a separate async task (process-team-notification),
+    // so it can't be confirmed synchronously above — require a confirmed
+    // send for the current period before creating/escalating the Stripe
+    // schedule. This defers schedule creation by at least one cron tick
+    // after a successful send, closing the gap where a team could be
+    // upgraded/billed without ever receiving a working notification.
+    const currentPeriodNotified = await hasUsageNotificationForPeriod(
+      teamId,
+      "usage_alert",
+      usageWindow.start_at,
+      usageWindow.end_at,
+    );
+
+    if (!currentPeriodNotified) {
+      logger.info(
+        "Deferring upgrade schedule until usage notice is confirmed delivered",
+        { team_id: teamId },
+      );
       return;
     }
 
@@ -941,9 +1009,19 @@ export const processExceededUsageWindow = async (
       const scheduledTierIndex = PRICING_TIERS.findIndex(
         (tier) => tier.productId === scheduledTier.productId,
       );
-      const nextScheduledTier = PRICING_TIERS[scheduledTierIndex + 1];
+      // Jump straight to the tier that actually covers current usage
+      // instead of advancing one tier at a time — a burst that skips
+      // multiple tiers in one window would otherwise take one cron tick
+      // (and one near-duplicate email) per intermediate tier to catch up.
+      const nextScheduledTier =
+        PRICING_TIERS.slice(scheduledTierIndex + 1).find(
+          (tier) => tier.posts >= usage,
+        ) ?? PRICING_TIERS[PRICING_TIERS.length - 1];
 
-      if (!nextScheduledTier) {
+      if (
+        !nextScheduledTier ||
+        nextScheduledTier.productId === scheduledTier.productId
+      ) {
         logger.info("Scheduled upgrade already at highest pricing tier", {
           team_id: teamId,
           subscription_id: subscription.id,
@@ -960,24 +1038,15 @@ export const processExceededUsageWindow = async (
         nextTier: nextScheduledTier,
       });
 
-      await maybeTriggerUsageNotification({
+      await sendUpgradeNotice({
         teamId,
-        notificationType: "usage_alert",
-        periodStart: usageWindow.start_at,
-        periodEnd: usageWindow.end_at,
+        teamName,
+        usage,
+        currentLimit,
+        planInfo,
+        usageWindow,
+        suggestedTier: nextScheduledTier,
         message: `Usage exceeded current and previous plan limits (${usage}/${currentLimit} posts used this period).`,
-        metadata: buildUsageEmailMetadata({
-          teamId,
-          teamName,
-          usage,
-          currentLimit,
-          currentPlanPostLimit: planInfo.postLimit,
-          currentPlanName: planInfo.planName,
-          suggestedTier: nextScheduledTier,
-          periodStart: usageWindow.start_at,
-          transactionalEmailId: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
-          notificationTemplate: "usage_limit_upgrade_notice",
-        }),
         checkForDuplicates: false,
       });
 

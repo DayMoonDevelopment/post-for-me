@@ -70,8 +70,11 @@ const makeSubscription = (
   }) as unknown as Stripe.Subscription;
 
 // Fake Supabase query builder for the `team_notifications` chain used by
-// hasUsageNotificationForPeriod: reports "already sent" for whichever
-// notification_type values are in `notifiedTypes`.
+// hasUsageNotificationForPeriod: reports a confirmed "sent" delivery for
+// whichever notification_type values are in `notifiedTypes`. The chain's
+// terminal call is `lt()` (no `.limit()`/`.maybeSingle()` — the real query
+// can return multiple rows per period), so it resolves the `{ data, error }`
+// shape directly.
 const fakeNotificationsFrom = (notifiedTypes: Set<string>) => () => {
   let queriedType: string | undefined;
   const builder: any = {
@@ -83,17 +86,17 @@ const fakeNotificationsFrom = (notifiedTypes: Set<string>) => () => {
       return builder;
     },
     gte: () => builder,
-    lt: () => builder,
+    lt: () => ({
+      data:
+        queriedType && notifiedTypes.has(queriedType)
+          ? [{ meta_data: { results: [{ status: "sent" }] } }]
+          : [],
+      error: null,
+    }),
     lte: () => builder,
     order: () => builder,
     limit: () => builder,
-    maybeSingle: async () => ({
-      data:
-        queriedType && notifiedTypes.has(queriedType)
-          ? { id: "notif_1" }
-          : null,
-      error: null,
-    }),
+    maybeSingle: async () => ({ data: null, error: null }),
   };
   return builder;
 };
@@ -325,13 +328,18 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
   // `hasUsageNotificationForPeriod` (`team_notifications`) within one call to
   // `processExceededUsageWindow`. `trackUpgradeScheduled`'s `teams` lookup is
   // stubbed to "not found" so it no-ops rather than needing its own fixture.
+  //
+  // `notificationResultStatuses` models what's already recorded for the
+  // *current* period: `[]` means no attempt yet (or none confirmed), `["sent"]`
+  // means a prior attempt was confirmed delivered, `["failed"]`/`["skipped"]`
+  // models a prior attempt that didn't actually reach the team.
   const fakeSupabaseFrom =
     ({
       previousWindow = null,
-      alreadyNotified = false,
+      notificationResultStatuses = [],
     }: {
       previousWindow?: { count: number; limit: number } | null;
-      alreadyNotified?: boolean;
+      notificationResultStatuses?: string[];
     }) =>
     (table: string) => {
       if (table === "social_post_team_usage") {
@@ -362,10 +370,19 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
           select: () => builder,
           eq: () => builder,
           gte: () => builder,
-          lt: () => builder,
-          limit: () => builder,
-          maybeSingle: async () => ({
-            data: alreadyNotified ? { id: "notif_1" } : null,
+          lt: () => ({
+            data:
+              notificationResultStatuses.length > 0
+                ? [
+                    {
+                      meta_data: {
+                        results: notificationResultStatuses.map((status) => ({
+                          status,
+                        })),
+                      },
+                    },
+                  ]
+                : [],
             error: null,
           }),
         };
@@ -419,10 +436,10 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
     taskTriggerCalls.length = 0;
   });
 
-  test("first exceeded window: sends the merged notice once, creates no Stripe schedule", async () => {
+  test("first exceeded window: sends the hedged notice once, creates no Stripe schedule", async () => {
     mod.supabaseClient.from = fakeSupabaseFrom({
       previousWindow: null, // not exceeded previously → strike 1
-      alreadyNotified: false,
+      notificationResultStatuses: [],
     }) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
@@ -436,6 +453,9 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
     const [{ id, payload }] = taskTriggerCalls;
     expect(id).toBe("process-team-notification");
     expect(payload.notification_type).toBe("usage_alert");
+    // Strike 1 doesn't yet know a schedule will be created — the message
+    // must not promise the upgrade unconditionally.
+    expect(payload.message).toContain("If usage remains above your plan limit");
     expect((payload.meta_data as any).notification_template).toBe(
       "usage_limit_upgrade_notice",
     );
@@ -444,10 +464,10 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
     );
   });
 
-  test("does not re-send when the period was already notified", async () => {
+  test("does not re-send when the period was already confirmed delivered", async () => {
     mod.supabaseClient.from = fakeSupabaseFrom({
       previousWindow: null,
-      alreadyNotified: true,
+      notificationResultStatuses: ["sent"],
     }) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
@@ -458,10 +478,51 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
     expect(taskTriggerCalls.length).toBe(0);
   });
 
-  test("second consecutive exceeded window: creates the Stripe schedule with no additional email", async () => {
+  test("retries the notice when the prior attempt for this period failed to deliver", async () => {
+    // A `team_notifications` row exists for this period, but its only
+    // delivery result is "failed" — row existence alone must not count as
+    // "notified", or a team whose only send attempt fails would never be
+    // retried yet could still be auto-upgraded later.
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      previousWindow: null,
+      notificationResultStatuses: ["failed"],
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockNoActiveSchedules();
+    refuseSubscriptionScheduleWrites();
+
+    await mod.processExceededUsageWindow(makeUsageWindow() as any);
+
+    expect(taskTriggerCalls.length).toBe(1);
+  });
+
+  test("second consecutive exceeded window, notice not yet confirmed delivered: defers the Stripe schedule", async () => {
     mod.supabaseClient.from = fakeSupabaseFrom({
       previousWindow: { count: 1100, limit: 1000 }, // exceeded previous period too → strike 2
-      alreadyNotified: false, // this (new) period hasn't been notified yet
+      notificationResultStatuses: [], // this period's notice hasn't been confirmed sent yet
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    refuseSubscriptionScheduleWrites();
+
+    await mod.processExceededUsageWindow(makeUsageWindow() as any);
+
+    // The notice is fired this tick, but schedule creation waits for
+    // confirmed delivery — otherwise a team could be upgraded without ever
+    // having received a working notification.
+    expect(taskTriggerCalls.length).toBe(1);
+    expect(taskTriggerCalls[0].payload.message).toContain(
+      "You will be upgraded to the next tier.",
+    );
+  });
+
+  test("second consecutive exceeded window, notice already confirmed delivered: creates the Stripe schedule with no additional email", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      previousWindow: { count: 1100, limit: 1000 }, // exceeded previous period too → strike 2
+      notificationResultStatuses: ["sent"], // confirmed delivered on an earlier tick
     }) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
@@ -472,25 +533,13 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
     await mod.processExceededUsageWindow(makeUsageWindow() as any);
 
     expect(create).toHaveBeenCalledTimes(1);
-    // Exactly one email for this window — the strike-1-style notice above,
-    // not a second one from schedule creation.
-    expect(taskTriggerCalls.length).toBe(1);
-    expect(
-      (taskTriggerCalls[0].payload.meta_data as any).notification_template,
-    ).toBe("usage_limit_upgrade_notice");
+    // Already delivered for this period, so the dedup check skips re-sending.
+    expect(taskTriggerCalls.length).toBe(0);
   });
 
-  test("escalation: usage exceeds the scheduled tier, schedule is bumped, and a follow-up notice fires", async () => {
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      previousWindow: { count: 1100, limit: 1000 },
-      alreadyNotified: false,
-    }) as any;
-    mod.stripe.subscriptions.list = mock(async () => ({
-      data: [makeSubscription()],
-    })) as any;
-
+  const mockExistingScheduleAtTier25k = () => {
     // An active schedule already exists, mapped to the tier_2_5k phase
-    // (2,500 posts) — usage below will exceed that, forcing an escalation.
+    // (2,500 posts).
     mod.stripe.subscriptionSchedules.list = mock(async () => ({
       data: [
         {
@@ -509,6 +558,19 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
     mod.stripe.prices.retrieve = mock(async () => ({
       product: "tier_2_5k",
     })) as any;
+  };
+
+  test("escalation: usage exceeds the scheduled tier, schedule is bumped, and a follow-up notice fires", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      previousWindow: { count: 1100, limit: 1000 },
+      // An active schedule can only exist if the current period's notice
+      // was already confirmed delivered (the new gate in Fix 1).
+      notificationResultStatuses: ["sent"],
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockExistingScheduleAtTier25k();
     const { create } = mockScheduleCreation();
 
     await mod.processExceededUsageWindow(
@@ -519,13 +581,45 @@ describe("processExceededUsageWindow (PFM-1061 single-email flow)", () => {
     );
 
     expect(create).toHaveBeenCalledTimes(1); // re-scheduled to tier_5k
-    expect(taskTriggerCalls.length).toBe(2); // strike-1-style notice + escalation notice
-    const escalationPayload = taskTriggerCalls[1].payload;
+    // The strike-1-style notice is deduped (already confirmed sent above),
+    // so only the escalation notice fires.
+    expect(taskTriggerCalls.length).toBe(1);
+    const escalationPayload = taskTriggerCalls[0].payload;
     expect((escalationPayload.meta_data as any).notification_template).toBe(
       "usage_limit_upgrade_notice",
     );
     expect(
       (escalationPayload.meta_data as any).tracking.suggested_plan_post_limit,
     ).toBe(5000); // tier_5k
+  });
+
+  test("escalation: a burst that skips multiple tiers converges to the correct tier in one step", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      previousWindow: { count: 1100, limit: 1000 },
+      notificationResultStatuses: ["sent"],
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockExistingScheduleAtTier25k();
+    const { create } = mockScheduleCreation();
+
+    await mod.processExceededUsageWindow(
+      // 12,000 posts skips tier_5k (5,000) and tier_10k (10,000) — the
+      // correct landing tier is tier_20k (20,000).
+      makeUsageWindow({
+        count: 12000,
+        limit: 1000,
+      }) as any,
+    );
+
+    // One schedule replacement and one email, landing directly on tier_20k
+    // — not one per intermediate tier.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(taskTriggerCalls.length).toBe(1);
+    expect(
+      (taskTriggerCalls[0].payload.meta_data as any).tracking
+        .suggested_plan_post_limit,
+    ).toBe(20000); // tier_20k
   });
 });
