@@ -395,6 +395,13 @@ const getActiveScheduleForSubscription = async (
         return false;
       }
 
+      if (
+        entry.metadata?.[SCHEDULE_METADATA_KEY] !==
+        SCHEDULE_TYPE.USAGE_BASED_UPGRADE
+      ) {
+        return false;
+      }
+
       const hasNextPhaseInFuture = entry.phases.some(
         (phase) => phase.start_date > todayUnix,
       );
@@ -464,9 +471,32 @@ const scheduleUpgrade = async ({
   const nextTierProduct = await stripe.products.retrieve(nextTier.productId);
   const nextTierPriceId = getDefaultPriceId(nextTierProduct);
 
+  const existingSchedules = (
+    await stripe.subscriptionSchedules.list({ customer: stripeCustomerId })
+  ).data.filter((entry) => entry.status === "active");
+
+  for (const conflicting of existingSchedules.filter(
+    (entry) =>
+      entry.metadata?.[SCHEDULE_METADATA_KEY] !==
+      SCHEDULE_TYPE.USAGE_BASED_UPGRADE,
+  )) {
+    logger.warn(
+      "Releasing conflicting subscription schedule to proceed with usage-based upgrade",
+      {
+        schedule_id: conflicting.id,
+        schedule_type: conflicting.metadata?.[SCHEDULE_METADATA_KEY] ?? null,
+        subscription_id: subscription.id,
+        stripe_customer_id: stripeCustomerId,
+      },
+    );
+  }
+
+  // Stripe only allows one active schedule per subscription — release
+  // everything (not just prior upgrade schedules) so the create() below
+  // never fails due to a leftover addon-removal schedule.
   await releaseSchedulesForCustomer({
     stripeCustomerId,
-    criteria: { mode: "matching", type: SCHEDULE_TYPE.USAGE_BASED_UPGRADE },
+    criteria: { mode: "all" },
   });
 
   const schedule = await stripe.subscriptionSchedules.create({

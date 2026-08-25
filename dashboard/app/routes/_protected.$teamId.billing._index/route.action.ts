@@ -140,11 +140,19 @@ async function handleUpgradeFromLegacy({
       });
     }
 
-    const planInfo = getSubscriptionPlanInfo(subscription);
+    // Check for the legacy item directly rather than relying on
+    // planInfo.isLegacy — getSubscriptionPlanInfo checks new-pricing-tier
+    // items first, so it reports isLegacy:false even when a legacy item
+    // still exists alongside one (e.g. a partially-failed prior migration).
+    const legacyApiItem = subscription.items.data.find(
+      (item) => item.price.product === STRIPE_API_PRODUCT_ID,
+    );
 
-    if (!planInfo.isLegacy) {
+    if (!legacyApiItem) {
       return new Response("Team is not on a legacy plan", { status: 400 });
     }
+
+    const planInfo = getSubscriptionPlanInfo(subscription);
 
     const resolution = resolveTargetTier({
       tierIndexRaw: upgradeResult.data.tierIndex,
@@ -157,20 +165,9 @@ async function handleUpgradeFromLegacy({
 
     const selectedTier = resolution.tier;
 
-    // Find the legacy API product item and addon item
-    const legacyApiItem = subscription.items.data.find(
-      (item) => item.price.product === STRIPE_API_PRODUCT_ID,
-    );
-
     const addonItem = subscription.items.data.find(
       (item) => item.price.product === STRIPE_CREDS_ADDON_PRODUCT_ID,
     );
-
-    if (!legacyApiItem) {
-      return new Response("No legacy subscription item found", {
-        status: 400,
-      });
-    }
 
     // Get the new product
     const newProduct = await stripe.products.retrieve(selectedTier.productId);
@@ -270,7 +267,14 @@ async function handleCreateCheckout({
     });
   }
 
-  const planInfo = getSubscriptionPlanInfo(existingSubscription);
+  // A canceled/unpaid existingSubscription is allowed through above, but its
+  // plan info shouldn't gate this as an "upgrade" — it's a fresh checkout.
+  const planInfo = getSubscriptionPlanInfo(
+    existingSubscription &&
+      !STRIPE_CANCELLED_STATUSES.includes(existingSubscription.status)
+      ? existingSubscription
+      : null,
+  );
 
   const resolution = resolveTargetTier({
     tierIndexRaw: checkoutResult.data.tierIndex,
@@ -420,8 +424,33 @@ async function handleAddonActions({
           (s) => s.status === "active",
         );
 
+        const existingRemovalSchedule = findScheduleOfType(
+          activeSchedules,
+          SCHEDULE_TYPE.ADDON_REMOVAL,
+        );
+
+        if (!existingRemovalSchedule) {
+          // Stripe only allows one active schedule per subscription — release
+          // any other active schedule (e.g. a usage-based-upgrade schedule)
+          // so the create() below doesn't fail.
+          for (const conflicting of activeSchedules) {
+            console.warn("Releasing conflicting subscription schedule", {
+              schedule_id: conflicting.id,
+              schedule_type:
+                conflicting.metadata?.[SCHEDULE_METADATA_KEY] ?? null,
+              subscription_id: subscription.id,
+              stripe_customer_id: team.stripe_customer_id,
+            });
+          }
+
+          await releaseSchedulesForCustomer({
+            stripeCustomerId: team.stripe_customer_id,
+            criteria: { mode: "excluding", type: SCHEDULE_TYPE.ADDON_REMOVAL },
+          });
+        }
+
         const schedule =
-          findScheduleOfType(activeSchedules, SCHEDULE_TYPE.ADDON_REMOVAL) ??
+          existingRemovalSchedule ??
           (await stripe.subscriptionSchedules.create({
             from_subscription: subscription.id,
             metadata: { [SCHEDULE_METADATA_KEY]: SCHEDULE_TYPE.ADDON_REMOVAL },
