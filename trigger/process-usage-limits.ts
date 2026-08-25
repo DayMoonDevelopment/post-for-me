@@ -56,6 +56,8 @@ const triggerTeamNotification = async (
   });
 };
 
+// Keep in sync with dashboard/app/lib/.server/stripe.constants.ts — same env
+// vars, same shape, same filter.
 const PRICING_TIERS = [
   {
     productId: STRIPE_PRICING_TIER_1K_PRODUCT_ID,
@@ -105,7 +107,7 @@ const PRICING_TIERS = [
     posts: 200000,
     price: 1000,
   },
-];
+].filter((tier) => tier.productId); // Filter out tiers without product IDs
 
 // Array of all new pricing tier product IDs for easy checking
 const NEW_PRICING_TIER_PRODUCT_IDS = [
@@ -313,6 +315,71 @@ const maybeTriggerUsageNotification = async ({
   return true;
 };
 
+// Resolves "the next tier" by sorted post-count rather than array index, so
+// a tier missing its env var (dropped by the .filter above) can never cause
+// this to land on the wrong tier or desync from the dashboard's copy.
+const getNextTier = (
+  currentProductId: string | null,
+  tiers: typeof PRICING_TIERS,
+): (typeof PRICING_TIERS)[number] | null => {
+  if (!currentProductId) {
+    return null;
+  }
+
+  const sorted = [...tiers].sort((a, b) => a.posts - b.posts);
+  const currentIndex = sorted.findIndex(
+    (tier) => tier.productId === currentProductId,
+  );
+
+  if (currentIndex === -1) {
+    return null;
+  }
+
+  return sorted[currentIndex + 1] ?? null;
+};
+
+const SCHEDULE_METADATA_KEY = "schedule_type";
+// Keep in sync with dashboard/app/lib/.server/subscription-schedules.ts —
+// same key/values, so schedules created by either sibling stay mutually
+// recognizable even though there's no shared package between them.
+const SCHEDULE_TYPE = {
+  USAGE_BASED_UPGRADE: "usage_based_upgrade",
+  ADDON_REMOVAL: "addon_removal",
+} as const;
+type ScheduleType = (typeof SCHEDULE_TYPE)[keyof typeof SCHEDULE_TYPE];
+
+type ScheduleReleaseCriteria =
+  | { mode: "all" }
+  | { mode: "matching"; type: ScheduleType }
+  | { mode: "excluding"; type: ScheduleType };
+
+const releaseSchedulesForCustomer = async ({
+  stripeCustomerId,
+  criteria,
+}: {
+  stripeCustomerId: string;
+  criteria: ScheduleReleaseCriteria;
+}): Promise<void> => {
+  const activeSchedules = await stripe.subscriptionSchedules.list({
+    customer: stripeCustomerId,
+  });
+
+  for (const schedule of activeSchedules.data.filter(
+    (entry: Stripe.SubscriptionSchedule) => entry.status === "active",
+  )) {
+    const type = schedule.metadata?.[SCHEDULE_METADATA_KEY];
+    const matches = criteria.mode !== "all" && type === criteria.type;
+    const shouldRelease =
+      criteria.mode === "all" ||
+      (criteria.mode === "matching" && matches) ||
+      (criteria.mode === "excluding" && !matches);
+
+    if (shouldRelease) {
+      await stripe.subscriptionSchedules.release(schedule.id);
+    }
+  }
+};
+
 const getActiveScheduleForSubscription = async (
   stripeCustomerId: string,
   subscriptionId: string,
@@ -397,18 +464,14 @@ const scheduleUpgrade = async ({
   const nextTierProduct = await stripe.products.retrieve(nextTier.productId);
   const nextTierPriceId = getDefaultPriceId(nextTierProduct);
 
-  const activeSchedules = await stripe.subscriptionSchedules.list({
-    customer: stripeCustomerId,
+  await releaseSchedulesForCustomer({
+    stripeCustomerId,
+    criteria: { mode: "matching", type: SCHEDULE_TYPE.USAGE_BASED_UPGRADE },
   });
-
-  for (const schedule of activeSchedules.data.filter(
-    (entry: Stripe.SubscriptionSchedule) => entry.status === "active",
-  )) {
-    await stripe.subscriptionSchedules.release(schedule.id);
-  }
 
   const schedule = await stripe.subscriptionSchedules.create({
     from_subscription: subscription.id,
+    metadata: { [SCHEDULE_METADATA_KEY]: SCHEDULE_TYPE.USAGE_BASED_UPGRADE },
   });
 
   const firstPhase = schedule.phases[0];
@@ -619,10 +682,7 @@ export const processUsageLimits = schedules.task({
           }
 
           const currentPeriodEnd = currentPlanItem.current_period_end;
-          const currentTierIndex = PRICING_TIERS.findIndex(
-            (tier) => tier.productId === planInfo.productId,
-          );
-          const nextTier = PRICING_TIERS[currentTierIndex + 1];
+          const nextTier = getNextTier(planInfo.productId, PRICING_TIERS);
 
           if (!nextTier) {
             logger.info("Team is already on highest pricing tier", {
@@ -760,10 +820,10 @@ export const processUsageLimits = schedules.task({
           }
 
           if (usage > scheduledTier.posts) {
-            const scheduledTierIndex = PRICING_TIERS.findIndex(
-              (tier) => tier.productId === scheduledTier.productId,
+            const nextScheduledTier = getNextTier(
+              scheduledTier.productId,
+              PRICING_TIERS,
             );
-            const nextScheduledTier = PRICING_TIERS[scheduledTierIndex + 1];
 
             if (!nextScheduledTier) {
               logger.info("Scheduled upgrade already at highest pricing tier", {

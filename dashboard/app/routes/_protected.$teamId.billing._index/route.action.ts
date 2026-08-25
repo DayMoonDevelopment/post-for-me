@@ -7,8 +7,16 @@ import { withSupabase } from "~/lib/.server/supabase";
 import {
   STRIPE_API_PRODUCT_ID,
   STRIPE_CREDS_ADDON_PRODUCT_ID,
-  PRICING_TIERS,
+  STRIPE_CANCELLED_STATUSES,
 } from "~/lib/.server/stripe.constants";
+import { getSubscriptionPlanInfo } from "~/lib/.server/get-subscription-plan-info";
+import { resolveTargetTier } from "~/lib/.server/pricing-tiers";
+import {
+  SCHEDULE_METADATA_KEY,
+  SCHEDULE_TYPE,
+  releaseSchedulesForCustomer,
+  findScheduleOfType,
+} from "~/lib/.server/subscription-schedules";
 
 type BillingTeam = {
   id: string;
@@ -111,13 +119,6 @@ async function handleUpgradeFromLegacy({
     return new Response("Invalid upgrade action", { status: 400 });
   }
 
-  const tierIndex = parseInt(upgradeResult.data.tierIndex);
-  const selectedTier = PRICING_TIERS[tierIndex];
-
-  if (!selectedTier) {
-    return new Response("Invalid tier selected", { status: 400 });
-  }
-
   try {
     // Get the most recent subscription regardless of status
     const subscriptions = await stripe.subscriptions.list({
@@ -139,6 +140,23 @@ async function handleUpgradeFromLegacy({
       });
     }
 
+    const planInfo = getSubscriptionPlanInfo(subscription);
+
+    if (!planInfo.isLegacy) {
+      return new Response("Team is not on a legacy plan", { status: 400 });
+    }
+
+    const resolution = resolveTargetTier({
+      tierIndexRaw: upgradeResult.data.tierIndex,
+      planInfo,
+    });
+
+    if (!resolution.ok) {
+      return new Response(resolution.error, { status: 400 });
+    }
+
+    const selectedTier = resolution.tier;
+
     // Find the legacy API product item and addon item
     const legacyApiItem = subscription.items.data.find(
       (item) => item.price.product === STRIPE_API_PRODUCT_ID,
@@ -157,16 +175,13 @@ async function handleUpgradeFromLegacy({
     // Get the new product
     const newProduct = await stripe.products.retrieve(selectedTier.productId);
 
-    // Remove any active subscription schedules first
-    const schedules = await stripe.subscriptionSchedules.list({
-      customer: team.stripe_customer_id,
+    // Remove any active subscription schedules first — migrating off the
+    // legacy plan replaces the subscription's line items wholesale, so any
+    // pending schedule (of any type) is stale afterward.
+    await releaseSchedulesForCustomer({
+      stripeCustomerId: team.stripe_customer_id,
+      criteria: { mode: "all" },
     });
-
-    for (const schedule of schedules.data.filter(
-      (s) => s.status === "active",
-    )) {
-      await stripe.subscriptionSchedules.release(schedule.id);
-    }
 
     // Update the subscription: remove legacy items and add new plan
     const itemsToRemove = [legacyApiItem.id];
@@ -235,12 +250,38 @@ async function handleCreateCheckout({
     return new Response("Invalid checkout action", { status: 400 });
   }
 
-  const tierIndex = parseInt(checkoutResult.data.tierIndex);
-  const selectedTier = PRICING_TIERS[tierIndex];
+  const subscriptions = team.stripe_customer_id
+    ? await stripe.subscriptions.list({
+        customer: team.stripe_customer_id,
+        status: "all",
+        limit: 1,
+        expand: ["data.items.data.price"],
+      })
+    : null;
 
-  if (!selectedTier) {
-    return new Response("Invalid tier selected", { status: 400 });
+  const existingSubscription = subscriptions?.data[0] ?? null;
+
+  if (
+    existingSubscription &&
+    !STRIPE_CANCELLED_STATUSES.includes(existingSubscription.status)
+  ) {
+    return new Response("You already have an active subscription", {
+      status: 400,
+    });
   }
+
+  const planInfo = getSubscriptionPlanInfo(existingSubscription);
+
+  const resolution = resolveTargetTier({
+    tierIndexRaw: checkoutResult.data.tierIndex,
+    planInfo,
+  });
+
+  if (!resolution.ok) {
+    return new Response(resolution.error, { status: 400 });
+  }
+
+  const selectedTier = resolution.tier;
 
   const product = await stripe.products.retrieve(selectedTier.productId);
   const teamDashboardUrl = new URL(
@@ -345,15 +386,12 @@ async function handleAddonActions({
         );
 
         if (hasAddon) {
-          const schedules = await stripe.subscriptionSchedules.list({
-            customer: team.stripe_customer_id,
+          // Cancel a pending addon-removal schedule only — don't touch an
+          // unrelated active schedule (e.g. a usage-based auto-upgrade).
+          await releaseSchedulesForCustomer({
+            stripeCustomerId: team.stripe_customer_id,
+            criteria: { mode: "matching", type: SCHEDULE_TYPE.ADDON_REMOVAL },
           });
-
-          for (const schedule of schedules.data.filter(
-            (s) => s.status === "active",
-          )) {
-            await stripe.subscriptionSchedules.release(schedule.id);
-          }
           break;
         }
 
@@ -378,12 +416,16 @@ async function handleAddonActions({
           customer: team.stripe_customer_id,
         });
 
+        const activeSchedules = schedules.data.filter(
+          (s) => s.status === "active",
+        );
+
         const schedule =
-          schedules.data.filter((s) => s.status === "active").length > 0
-            ? schedules.data[0]
-            : await stripe.subscriptionSchedules.create({
-                from_subscription: subscription.id,
-              });
+          findScheduleOfType(activeSchedules, SCHEDULE_TYPE.ADDON_REMOVAL) ??
+          (await stripe.subscriptionSchedules.create({
+            from_subscription: subscription.id,
+            metadata: { [SCHEDULE_METADATA_KEY]: SCHEDULE_TYPE.ADDON_REMOVAL },
+          }));
 
         await stripe.subscriptionSchedules.update(schedule.id, {
           end_behavior: "release",
