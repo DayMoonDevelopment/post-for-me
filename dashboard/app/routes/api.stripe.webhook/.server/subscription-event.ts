@@ -1,6 +1,7 @@
 import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request";
 
 import { trackSubscriptionLifecycle } from "./subscription-lifecycle-tracking";
+import { syncTeamUsageLimitOnUpgrade } from "./sync-usage-limit";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Stripe } from "stripe";
@@ -33,5 +34,16 @@ export async function handleSubscriptionEvent(
     await trackSubscriptionLifecycle(event, supabaseServiceRole);
   } catch (error) {
     console.error("Failed to track subscription lifecycle in PostHog:", error);
+  }
+
+  // Apply a mid-period tier upgrade's raised cap immediately, and release any
+  // now-stale usage-based-upgrade schedule. Best-effort: never let this break
+  // the Unkey side effect above or the webhook response.
+  if (event.type === "customer.subscription.updated") {
+    try {
+      await syncTeamUsageLimitOnUpgrade(subscription, supabaseServiceRole);
+    } catch (error) {
+      console.error("Failed to sync team usage limit on upgrade:", error);
+    }
   }
 }
