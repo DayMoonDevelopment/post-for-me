@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "user-avatar-with-status-and-platform",
+  "type": "registry:example",
+  "title": "User Avatar with Status and Platform",
+  "description": "A UserAvatar with a PlatformAvatar and a StatusIndicator in badge slots.",
+  "dependencies": [],
+  "registryDependencies": [
+    "@post-for-me/user-avatar",
+    "@post-for-me/status-indicator",
+    "@post-for-me/platform-avatar"
+  ],
+  "files": [
+    {
+      "path": "registry/base-maia/examples/user-avatar-with-status-and-platform.tsx",
+      "type": "registry:example",
+      "content": "import {\n  UserAvatar,\n  UserAvatarBadge,\n  UserAvatarIconBadge,\n  UserAvatarStatusBadge,\n} from \"~/components/user-avatar\";\nimport { BrandMark } from \"~/ui/brand-mark\";\nimport { StatusIndicator } from \"~/ui/status-indicator\";\n\nexport function UserAvatarWithStatusAndPlatform() {\n  return (\n    <UserAvatar name=\"Jane Doe\" src=\"https://i.pravatar.cc/80?img=12\" size=\"lg\">\n      <UserAvatarBadge placement=\"default\">\n        <UserAvatarIconBadge>\n          <BrandMark platform=\"instagram\" />\n        </UserAvatarIconBadge>\n      </UserAvatarBadge>\n      <UserAvatarBadge placement=\"secondary\">\n        <UserAvatarStatusBadge>\n          <StatusIndicator status=\"success\" />\n        </UserAvatarStatusBadge>\n      </UserAvatarBadge>\n    </UserAvatar>\n  );\n}\n"
+    }
+  ]
+}

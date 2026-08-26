@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "status-indicator",
+  "type": "registry:ui",
+  "title": "Status Indicator",
+  "description": "A small round status dot in a semantic color (default, success, warning, destructive, info).",
+  "dependencies": [
+    "class-variance-authority"
+  ],
+  "registryDependencies": [
+    "@post-for-me/tokens"
+  ],
+  "files": [
+    {
+      "path": "registry/radix-rhea/ui/status-indicator.tsx",
+      "type": "registry:ui",
+      "content": "import type { ComponentProps } from \"react\";\nimport { cva } from \"class-variance-authority\";\n\nimport { cn } from \"~/lib/utils\";\n\n/**\n * A small round **status indicator** in a first-party semantic color. The single\n * primitive for \"a colored status dot\" — used inline, as an avatar accessory, in\n * lists, etc. Color comes from {@link StatusName}; pass a `bg-*` className for a\n * one-off hue. Size + any ring/position come from `className`.\n *\n * The semantic colors (`success`/`warning`/`info`) are registry-owned tokens\n * shipped by the `@post-for-me/tokens` item — installing this pulls them in.\n */\n\n/** A semantic status state — the color of a {@link StatusIndicator} / health dot. */\nexport type StatusName =\n  | \"default\"\n  | \"success\"\n  | \"warning\"\n  | \"destructive\"\n  | \"info\";\n\n/**\n * Class variants for the status dot. Exported so a consumer can paint their own\n * element (a table cell, a legend swatch) in the same semantic colors without\n * rebuilding the mapping.\n */\nexport const statusIndicatorVariants = cva(\n  \"inline-block size-2 shrink-0 rounded-full\",\n  {\n    variants: {\n      status: {\n        default: \"bg-muted-foreground\",\n        success: \"bg-success\",\n        warning: \"bg-warning\",\n        destructive: \"bg-destructive\",\n        info: \"bg-info\",\n      } satisfies Record<StatusName, string>,\n    },\n    defaultVariants: {\n      status: \"default\",\n    },\n  },\n);\n\nexport function StatusIndicator({\n  status = \"default\",\n  className,\n  ...props\n}: {\n  status?: StatusName;\n} & ComponentProps<\"span\">) {\n  return (\n    <span\n      data-slot=\"status-indicator\"\n      className={cn(statusIndicatorVariants({ status }), className)}\n      {...props}\n    />\n  );\n}\n"
+    }
+  ]
+}
