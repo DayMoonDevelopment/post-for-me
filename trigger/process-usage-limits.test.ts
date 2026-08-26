@@ -15,9 +15,7 @@ process.env.STRIPE_PRICING_TIER_200K_PRODUCT_ID = "tier_200k";
 process.env.STRIPE_API_PRODUCT_ID = "tier_legacy";
 process.env.LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID = "loops_limit";
 process.env.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID = "loops_upgrade";
-process.env.LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID = "loops_80";
-process.env.LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID = "loops_90";
-process.env.LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID = "loops_95";
+process.env.LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID = "loops_threshold";
 
 let mod: typeof import("./process-usage-limits");
 

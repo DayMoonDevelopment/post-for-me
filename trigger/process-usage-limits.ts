@@ -33,12 +33,12 @@ const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID || "";
 const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
-const LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID =
-  process.env?.LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID || "";
-const LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID =
-  process.env?.LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID || "";
-const LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID =
-  process.env?.LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID || "";
+// One shared template for all three thresholds — the crossed percent is sent
+// as `threshold_percent`/`usage_percent` in the Loops data payload, so the
+// template branches copy/subject on that instead of needing a template per
+// tier.
+const LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID || "";
 
 type TeamUsageWindow =
   Database["public"]["Tables"]["social_post_team_usage"]["Row"];
@@ -54,25 +54,21 @@ export const USAGE_WARNING_THRESHOLDS = [
     percent: 95,
     notificationType: "usage_alert_95",
     notificationTemplate: "usage_threshold_alert_95",
-    transactionalEmailId: LOOPS_USAGE_THRESHOLD_95_TRANSACTIONAL_EMAIL_ID,
   },
   {
     percent: 90,
     notificationType: "usage_alert_90",
     notificationTemplate: "usage_threshold_alert_90",
-    transactionalEmailId: LOOPS_USAGE_THRESHOLD_90_TRANSACTIONAL_EMAIL_ID,
   },
   {
     percent: 80,
     notificationType: "usage_alert_80",
     notificationTemplate: "usage_threshold_alert_80",
-    transactionalEmailId: LOOPS_USAGE_THRESHOLD_80_TRANSACTIONAL_EMAIL_ID,
   },
 ] as const satisfies {
   percent: number;
   notificationType: TeamNotificationType;
   notificationTemplate: string;
-  transactionalEmailId: string;
 }[];
 
 type UsageEmailTemplate =
@@ -702,12 +698,17 @@ const buildUsageEmailMetadata = ({
     loops: {
       transactional_id: transactionalEmailId,
       data: {
+        team_id: teamId,
         team_name: teamName,
+        posts_used: usage,
+        usage_percent:
+          currentLimit > 0 ? Math.round((usage / currentLimit) * 100) : 0,
         current_plan_post_limit: currentPlanPostLimit,
         current_plan_name: currentPlanName,
         suggested_plan_name: suggestedTier?.name ?? null,
         suggested_plan_post_limit: suggestedTier?.posts ?? null,
         billing_link: `https://app.postforme.dev/${teamId}/billing`,
+        team_link: `https://app.postforme.dev/${teamId}/billing`,
         ...(thresholdPercent !== undefined
           ? { threshold_percent: thresholdPercent }
           : {}),
@@ -1068,7 +1069,7 @@ export const processUsageLimits = schedules.task({
             continue;
           }
 
-          if (!crossedThreshold.transactionalEmailId) {
+          if (!LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID) {
             logger.info(
               "Usage threshold crossed but no Loops template configured",
               {
@@ -1130,7 +1131,7 @@ export const processUsageLimits = schedules.task({
               currentPlanName: planInfo.planName,
               suggestedTier: nextTier,
               periodStart,
-              transactionalEmailId: crossedThreshold.transactionalEmailId,
+              transactionalEmailId: LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID,
               notificationTemplate: crossedThreshold.notificationTemplate,
               thresholdPercent: crossedThreshold.percent,
             }),
