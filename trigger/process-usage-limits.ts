@@ -29,8 +29,8 @@ const STRIPE_PRICING_TIER_200K_PRODUCT_ID =
   process.env?.STRIPE_PRICING_TIER_200K_PRODUCT_ID || "";
 
 const STRIPE_API_PRODUCT_ID = process.env?.STRIPE_API_PRODUCT_ID || "";
-const LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID =
-  process.env?.LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID || "";
+const LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID || "";
 const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
   process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
 
@@ -746,7 +746,11 @@ export const processUsageLimits = schedules.task({
               loops: {
                 transactional_id: transactionalEmailId,
                 data: {
+                  team_id: teamId,
                   team_name: teamName,
+                  team_link: `https://app.postforme.dev/${teamId}`,
+                  posts_used: usage,
+                  usage_percent: Math.round((usage / currentLimit) * 100),
                   current_plan_post_limit: planInfo.postLimit,
                   current_plan_name: planInfo.planName,
                   suggested_plan_name: suggestedTier?.name ?? null,
@@ -765,7 +769,7 @@ export const processUsageLimits = schedules.task({
               periodEnd: usageWindow.end_at,
               message: `Usage exceeded current plan limit (${usage}/${currentLimit} posts used this period).`,
               metadata: buildUsageMetadata(
-                LOOPS_USAGE_LIMIT_TRANSACTIONAL_EMAIL_ID,
+                LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID,
                 nextTier,
                 "usage_limit_alert",
               ),
