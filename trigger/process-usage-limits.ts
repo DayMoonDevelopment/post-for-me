@@ -715,6 +715,7 @@ const buildUsageEmailMetadata = ({
         current_plan_name: currentPlanName,
         suggested_plan_name: suggestedTier?.name ?? null,
         suggested_plan_post_limit: suggestedTier?.posts ?? null,
+        suggested_plan_price: suggestedTier?.price ?? null,
         billing_link: `https://app.postforme.dev/${teamId}/billing`,
         team_link: `https://app.postforme.dev/${teamId}/billing`,
         ...(thresholdPercent !== undefined
