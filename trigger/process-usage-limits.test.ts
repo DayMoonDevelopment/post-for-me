@@ -333,9 +333,8 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
   // prior attempt that didn't actually reach the team.
   //
   // `templateResultStatuses` overrides that per notification_template, for
-  // tests that need the "you will be upgraded" notice and the "upgrade
-  // failed" correction to report different delivery states within the same
-  // `processExceededUsageWindow` call.
+  // tests that need a specific template's delivery state distinguished from
+  // the current period's general `notificationResultStatuses` default.
   //
   // `teamNotificationsQueryCount` (reset in `beforeEach`) counts every
   // `.from("team_notifications")` call so a regression reintroducing a
@@ -519,39 +518,14 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     expect(taskTriggerCalls.length).toBe(0);
   });
 
-  test("eligibility lost after promising an upgrade: sends a correction notice", async () => {
+  test("eligibility lost after promising an upgrade: no notification is sent", async () => {
     // The "you will be upgraded" notice was confirmed delivered on an
     // earlier tick, but this tick's eligibility check comes back ineligible
-    // (e.g. the customer cancelled in reaction to the email) — the broken
-    // promise must be corrected, not left silent.
+    // (e.g. the customer cancelled in reaction to the email) — this is
+    // logged internally but no customer-facing email fires.
     mod.supabaseClient.from = fakeSupabaseFrom({
       templateResultStatuses: {
         usage_limit_upgrade_notice: ["sent"],
-        usage_limit_upgrade_failed: [],
-      },
-    }) as any;
-    mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;
-
-    await mod.processExceededUsageWindow(makeUsageWindow() as any);
-
-    expect(taskTriggerCalls.length).toBe(1);
-    const [{ id, payload }] = taskTriggerCalls;
-    expect(id).toBe("process-team-notification");
-    expect(payload.notification_type).toBe("usage_alert");
-    expect(payload.message).toContain("unable to automatically upgrade");
-    expect((payload.meta_data as any).notification_template).toBe(
-      "usage_limit_upgrade_failed",
-    );
-    expect((payload.meta_data as any).data.loops.transactional_id).toBe(
-      "loops_upgrade_failed",
-    );
-  });
-
-  test("eligibility lost after promising an upgrade: does not re-send an already-sent correction", async () => {
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      templateResultStatuses: {
-        usage_limit_upgrade_notice: ["sent"],
-        usage_limit_upgrade_failed: ["sent"],
       },
     }) as any;
     mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;
@@ -561,13 +535,12 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     expect(taskTriggerCalls.length).toBe(0);
   });
 
-  test("never-eligible team crossing 100%: no correction notice, since no upgrade was ever promised", async () => {
+  test("never-eligible team crossing 100%: no notification, since no upgrade was ever promised", async () => {
     // The team was ineligible from the start this period (e.g. no active
-    // Stripe subscription) — nothing was promised, so no correction fires.
+    // Stripe subscription) — nothing was promised, so nothing fires or logs.
     mod.supabaseClient.from = fakeSupabaseFrom({
       templateResultStatuses: {
         usage_limit_upgrade_notice: [],
-        usage_limit_upgrade_failed: [],
       },
     }) as any;
     mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;

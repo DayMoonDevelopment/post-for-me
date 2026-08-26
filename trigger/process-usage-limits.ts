@@ -69,7 +69,6 @@ export const USAGE_WARNING_THRESHOLDS = [
 
 type UsageEmailTemplate =
   | "usage_limit_upgrade_notice"
-  | "usage_limit_upgrade_failed"
   | (typeof USAGE_WARNING_THRESHOLDS)[number]["notificationTemplate"];
 
 // Returns the highest threshold whose percent has been crossed. Does not
@@ -851,8 +850,9 @@ export const processExceededUsageWindow = async (
     if (!eligiblePlan) {
       // If we already promised this team an upgrade this period, eligibility
       // being lost before the deferred schedule-creation tick (e.g. the
-      // customer cancels in reaction to the notice) breaks that promise —
-      // send a one-time correction so they're not left thinking it happened.
+      // customer cancels in reaction to the notice) breaks that promise.
+      // No customer-facing correction is sent for this — logged for internal
+      // visibility only.
       const wasPromisedUpgrade = await hasUsageNotificationForPeriod(
         teamId,
         "usage_alert",
@@ -861,47 +861,11 @@ export const processExceededUsageWindow = async (
         "usage_limit_upgrade_notice",
       );
 
-      if (!wasPromisedUpgrade) {
-        return;
+      if (wasPromisedUpgrade) {
+        logger.warn("Upgrade eligibility lost after promising an upgrade", {
+          team_id: teamId,
+        });
       }
-
-      const correctionAlreadySent = await hasUsageNotificationForPeriod(
-        teamId,
-        "usage_alert",
-        usageWindow.start_at,
-        usageWindow.end_at,
-        "usage_limit_upgrade_failed",
-      );
-
-      if (correctionAlreadySent) {
-        return;
-      }
-
-      await maybeTriggerUsageNotification({
-        teamId,
-        notificationType: "usage_alert",
-        periodStart: usageWindow.start_at,
-        periodEnd: usageWindow.end_at,
-        message: `We were unable to automatically upgrade your plan after usage exceeded the limit (${usage}/${currentLimit} posts used this period). Please upgrade manually from billing or contact support.`,
-        metadata: buildUsageEmailMetadata({
-          teamId,
-          teamName,
-          usage,
-          currentLimit,
-          currentPlanPostLimit: null,
-          currentPlanName: null,
-          suggestedTier: null,
-          periodStart: usageWindow.start_at,
-          transactionalEmailId:
-            LOOPS_USAGE_UPGRADE_FAILED_TRANSACTIONAL_EMAIL_ID,
-          notificationTemplate: "usage_limit_upgrade_failed",
-        }),
-      });
-
-      logger.warn(
-        "Upgrade eligibility lost after promising an upgrade; sent correction notice",
-        { team_id: teamId },
-      );
 
       return;
     }
