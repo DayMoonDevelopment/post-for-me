@@ -5,6 +5,7 @@ import { BrandMarkDemo } from "./brand-mark-demo";
 import { ButtonDemo } from "./button-demo";
 import { CardDemo } from "./card-demo";
 import { CarouselDemo } from "./carousel-demo";
+import { CascaderDemo } from "./cascader-demo";
 import { ChoiceboxDemo } from "./choicebox-demo";
 import { CodeBlockDemo } from "./code-block-demo";
 import { CodePanelDemo } from "./code-panel-demo";
@@ -16,6 +17,7 @@ import { DateTimeDemo } from "./date-time-demo";
 import { DialogDemo } from "./dialog-demo";
 import { FactDemo } from "./fact-demo";
 import { FieldDemo } from "./field-demo";
+import { FiltersDemo } from "./filters-demo";
 import { HintDemo } from "./hint-demo";
 import { IconsDemo } from "./icons-demo";
 import { InputDemo } from "./input-demo";
@@ -89,6 +91,12 @@ export const demos: Record<
     description: "Embla-based carousel with controls and multi-item views.",
     element: <CarouselDemo />,
   },
+  cascader: {
+    title: "Cascader",
+    description:
+      "The nested picker under Filters (ui/cascader) — one level at a time (drill), the open trail side by side (columns), or expand-in-place (tree). Search at one level or across every level, chips or a path trigger, cascading multi-select, async levels via getChildren, and pinned footer actions.",
+    element: <CascaderDemo />,
+  },
   choicebox: {
     title: "Choicebox",
     description:
@@ -152,6 +160,12 @@ export const demos: Record<
     title: "Field",
     description: "Form layout primitives: sets, groups, labels, errors.",
     element: <FieldDemo />,
+  },
+  filters: {
+    title: "Filters",
+    description:
+      "The Cascader-based ReUI filter bar (ui/filters) — one query model in two chromes: the flat chip row for a table toolbar, and the condition builder (popover or inline) that can express a AND (b OR c). Nested attributes, per-type operators and editors, async options, collapsed paths, and a single veto point for every write.",
+    element: <FiltersDemo />,
   },
   hint: {
     title: "Hint",
