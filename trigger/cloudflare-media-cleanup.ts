@@ -1,7 +1,10 @@
 import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, schedules, wait } from "@trigger.dev/sdk";
-import { createStorageProvider } from "./storage/r2-storage.provider";
+import {
+  abortStaleMultipartUploads,
+  createStorageProvider,
+} from "./storage/r2-storage.provider";
 import { MEDIA_BUCKET } from "./constants";
 
 const supabaseClient = createClient<Database>(
@@ -132,5 +135,17 @@ export const cloudflareMediaCleanup = schedules.task({
       successfullyDeleted: deletedCount,
       errors: errorCount,
     });
+
+    try {
+      const abortedUploads = await abortStaleMultipartUploads(
+        MEDIA_BUCKET,
+        oneDayAgo,
+      );
+      logger.info("Aborted stale incomplete multipart uploads", {
+        abortedUploads,
+      });
+    } catch (error) {
+      logger.error("Error aborting stale multipart uploads", { error });
+    }
   },
 });

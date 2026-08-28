@@ -6,6 +6,7 @@ import os from "os";
 import path from "path";
 import fetch from "node-fetch";
 import { getStorageProvider } from "./storage/storage.provider";
+import { getFileKeyFromPublicUrl } from "./storage/get-file-key-from-public-url";
 import type { UserTag } from "./posting/post.types";
 
 // Constants
@@ -29,15 +30,6 @@ const detectAspectRatio = (width: number, height: number) => {
       (ar) => Math.abs(ratio - ar.ratio) <= tolerance,
     ) || ASPECT_RATIOS.LANDSCAPE
   ); // Default to landscape if no match
-};
-
-const getFileKeyFromPublicUrl = (
-  publicUrl: string,
-  bucket: string,
-): string | null => {
-  const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-  const match = publicUrl.match(pattern);
-  return match ? match[1] : null;
 };
 
 const getProcessedFileKey = (key: string): string => {

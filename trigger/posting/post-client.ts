@@ -62,6 +62,7 @@ export class PostClient {
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
+    teamId?: string;
     platformConfig:
       | PinterestConfiguration
       | InstagramConfiguration

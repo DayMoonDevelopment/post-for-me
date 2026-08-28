@@ -13,6 +13,7 @@ import type {
   StorageUploadOptions,
 } from "./storage.provider";
 import {
+  assertR2Config,
   R2_ACCESS_KEY_ID,
   R2_ENDPOINT,
   R2_PUBLIC_URL,
@@ -20,14 +21,19 @@ import {
 } from "~/lib/.server/r2.constants";
 
 class R2StorageProvider implements IStorageProvider {
-  private readonly client = new S3Client({
-    region: "auto",
-    endpoint: R2_ENDPOINT,
-    credentials: {
-      accessKeyId: R2_ACCESS_KEY_ID,
-      secretAccessKey: R2_SECRET_ACCESS_KEY,
-    },
-  });
+  private readonly client: S3Client;
+
+  constructor() {
+    assertR2Config();
+    this.client = new S3Client({
+      region: "auto",
+      endpoint: R2_ENDPOINT,
+      credentials: {
+        accessKeyId: R2_ACCESS_KEY_ID,
+        secretAccessKey: R2_SECRET_ACCESS_KEY,
+      },
+    });
+  }
 
   async upload(
     bucket: string,
@@ -95,8 +101,8 @@ class R2StorageProvider implements IStorageProvider {
     }));
   }
 
-  getPublicUrl(_bucket: string, key: string): string {
-    return `${R2_PUBLIC_URL}/${key}`;
+  getPublicUrl(bucket: string, key: string): string {
+    return `${R2_PUBLIC_URL}/${bucket}/${key}`;
   }
 
   async createSignedUploadUrl(bucket: string, key: string): Promise<string> {

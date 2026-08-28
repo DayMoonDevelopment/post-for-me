@@ -81,11 +81,13 @@ export class BlueskyPostClient extends PostClient {
     account,
     caption,
     media,
+    teamId,
   }: {
     postId: string;
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
+    teamId?: string;
   }): Promise<PostResult> {
     try {
       const trimmedCaption = caption.slice(0, this.#charLimit);
@@ -102,6 +104,7 @@ export class BlueskyPostClient extends PostClient {
           if (medium.type == "video") {
             const processVideo = await this.#processVideo({
               medium,
+              teamId,
             });
 
             embed = {
@@ -224,7 +227,13 @@ export class BlueskyPostClient extends PostClient {
     }
   }
 
-  async #processVideo({ medium }: { medium: PostMedia }): Promise<{
+  async #processVideo({
+    medium,
+    teamId,
+  }: {
+    medium: PostMedia;
+    teamId?: string;
+  }): Promise<{
     video: BlobRef;
     aspectRatio: {
       width: number | undefined;
@@ -243,6 +252,7 @@ export class BlueskyPostClient extends PostClient {
     const processedFile = await tasks.triggerAndWait("ffmpeg-compress-video", {
       url: medium.url,
       maxSizeBytes: this.#maxVideoFileSize,
+      teamId,
     });
 
     let fileUrl = medium.url;

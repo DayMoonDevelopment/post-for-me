@@ -94,8 +94,8 @@ export class R2StorageProvider implements IStorageProvider {
     }));
   }
 
-  getPublicUrl(_bucket: string, key: string): string {
-    return `${process.env.R2_PUBLIC_URL}/${key}`;
+  getPublicUrl(bucket: string, key: string): string {
+    return `${process.env.R2_PUBLIC_URL}/${bucket}/${key}`;
   }
 
   async createSignedUploadUrl(bucket: string, key: string): Promise<string> {

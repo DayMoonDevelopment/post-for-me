@@ -10,7 +10,8 @@
     "typegen": "bun run supabase:typegen",
     "supabase:typegen": "supabase gen types typescript --local > supabase.types.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext ts --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts --report-unused-disable-directives --max-warnings 0",
+    "test": "bun test"
   },
   "dependencies": {
     "@atproto/api": "^0.14.20",

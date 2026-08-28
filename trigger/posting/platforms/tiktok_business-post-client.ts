@@ -1,5 +1,7 @@
 import type { IStorageProvider } from "../../storage/storage.provider";
+import { getFileKeyFromPublicUrl } from "../../storage/get-file-key-from-public-url";
 import { MEDIA_BUCKET } from "../../constants";
+import { randomUUID } from "crypto";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -822,7 +824,8 @@ export class TikTokBusinessPostClient extends PostClient {
     }
 
     const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
+      getFileKeyFromPublicUrl(signedUrl, this.#bucket) ||
+      `fileupload_${randomUUID()}`;
     const processedKey = `${key.split(".")[0]}_tiktok`;
 
     await this.#storageProvider.upload(
@@ -842,11 +845,5 @@ export class TikTokBusinessPostClient extends PostClient {
     });
 
     return this.#storageProvider.getPublicUrl(this.#bucket, processedKey);
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
   }
 }

@@ -208,6 +208,7 @@ export const postToPlatform = task({
         caption,
         media,
         platformConfig,
+        teamId,
       });
 
       if (postResult.success) {

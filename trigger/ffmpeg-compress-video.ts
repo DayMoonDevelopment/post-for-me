@@ -5,15 +5,7 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { getStorageProvider } from "./storage/storage.provider";
-
-const getFileKeyFromPublicUrl = (
-  publicUrl: string,
-  bucket: string
-): string | null => {
-  const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-  const match = publicUrl.match(pattern);
-  return match ? match[1] : null;
-};
+import { getFileKeyFromPublicUrl } from "./storage/get-file-key-from-public-url";
 
 export const ffmpegCompressVideo = task({
   id: "ffmpeg-compress-video",
