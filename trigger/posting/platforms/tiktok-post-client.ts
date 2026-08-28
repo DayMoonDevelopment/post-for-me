@@ -415,27 +415,56 @@ export class TikTokPostClient extends PostClient {
     chunkSize: number;
     totalChunkCount: number;
   } {
-    // TikTok Media Transfer Guide: chunks must be 5MB-64MB, except the final
-    // chunk which may exceed 64MB (up to ~128MB) to absorb the remainder.
-    const maxChunkSize = 64 * 1024 * 1024;
-    const totalChunkCount = Math.max(1, Math.floor(size / maxChunkSize));
+    if (size <= 0) {
+      throw new Error(`Invalid TikTok video size: ${size}`);
+    }
 
-    // When there's only a single chunk, it is simultaneously the first and
-    // final chunk, so it must cover the whole file (chunk_size == video_size)
-    // even if that's larger than maxChunkSize (e.g. a 100MB video).
-    if (totalChunkCount === 1) {
+    const minChunkSize = 5 * 1024 * 1024;
+    const maxChunkSize = 64 * 1024 * 1024;
+
+    // Files smaller than 5MB must be uploaded as a whole.
+    if (size < minChunkSize) {
       return { chunkSize: size, totalChunkCount: 1 };
     }
 
-    return { chunkSize: maxChunkSize, totalChunkCount };
+    // Files up to 64MB can be uploaded as a single chunk.
+    if (size <= maxChunkSize) {
+      return { chunkSize: size, totalChunkCount: 1 };
+    }
+
+    // Files over 64MB must use multiple chunks. Choose a chunk size that keeps
+    // chunks within bounds, then compute total_chunk_count as floor(size/chunk).
+    const minChunkCount = Math.ceil(size / maxChunkSize);
+
+    if (minChunkCount > 1000) {
+      throw new Error(
+        `TikTok upload requires too many chunks (${minChunkCount}). Max is 1000.`,
+      );
+    }
+
+    const chunkSize = Math.max(
+      minChunkSize,
+      Math.min(maxChunkSize, Math.floor(size / minChunkCount)),
+    );
+    const totalChunkCount = Math.floor(size / chunkSize);
+
+    if (totalChunkCount < 2) {
+      throw new Error(
+        `TikTok upload requires multiple chunks for files over 64MB (size=${size}, chunk_size=${chunkSize}, total_chunk_count=${totalChunkCount})`,
+      );
+    }
+
+    if (totalChunkCount > 1000) {
+      throw new Error(
+        `TikTok upload exceeds maximum chunk count (total_chunk_count=${totalChunkCount}). Max is 1000.`,
+      );
+    }
+
+    return { chunkSize, totalChunkCount };
   }
 
   #resolveVideoContentType(mimeType: string): string {
-    const allowedContentTypes = [
-      "video/mp4",
-      "video/quicktime",
-      "video/webm",
-    ];
+    const allowedContentTypes = ["video/mp4", "video/quicktime", "video/webm"];
     const baseMimeType = mimeType.split(";")[0].trim().toLowerCase();
     return allowedContentTypes.includes(baseMimeType)
       ? baseMimeType
@@ -511,8 +540,7 @@ export class TikTokPostClient extends PostClient {
     );
 
     try {
-      const { chunkSize, totalChunkCount } =
-        this.#planVideoUploadChunks(size);
+      const { chunkSize, totalChunkCount } = this.#planVideoUploadChunks(size);
 
       const sourceInfo = {
         source: "FILE_UPLOAD",

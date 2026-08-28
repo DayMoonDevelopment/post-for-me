@@ -85,7 +85,10 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ refreshResponse: refreshResponse.data, attempt });
+        this.#responses.push({
+          refreshResponse: refreshResponse.data,
+          attempt,
+        });
 
         if (refreshResponse.data.code !== 0) {
           const refreshError = new Error(
@@ -202,7 +205,8 @@ export class TikTokBusinessPostClient extends PostClient {
           provider_connection_id: account.id,
           details: {
             status: "Processing",
-            message: "Still Proccessing, check TikTok account to confirm status",
+            message:
+              "Still Proccessing, check TikTok account to confirm status",
             addedMedia: this.#addedMedia,
             requests: this.#requests,
             responses: this.#responses,
@@ -274,10 +278,12 @@ export class TikTokBusinessPostClient extends PostClient {
           const creatorInfoError = new Error(
             `Failed to fetch business creator info: ${response.data.message}`,
           );
-          (creatorInfoError as any).retryable = this.#isRetryableTikTokApiError({
-            code: response.data.code,
-            message: response.data.message,
-          });
+          (creatorInfoError as any).retryable = this.#isRetryableTikTokApiError(
+            {
+              code: response.data.code,
+              message: response.data.message,
+            },
+          );
           throw creatorInfoError;
         }
 
@@ -539,9 +545,13 @@ export class TikTokBusinessPostClient extends PostClient {
 
     const axiosCode = error?.code;
     if (
-      ["ECONNABORTED", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND"].includes(
-        axiosCode,
-      )
+      [
+        "ECONNABORTED",
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "EAI_AGAIN",
+        "ENOTFOUND",
+      ].includes(axiosCode)
     ) {
       return true;
     }
@@ -577,7 +587,9 @@ export class TikTokBusinessPostClient extends PostClient {
     const hasAxiosCode = typeof error?.code === "string";
     const hasTikTokApiCode = typeof error?.response?.data?.code === "number";
 
-    return !hasRetryableFlag && !hasHttpStatus && !hasAxiosCode && !hasTikTokApiCode;
+    return (
+      !hasRetryableFlag && !hasHttpStatus && !hasAxiosCode && !hasTikTokApiCode
+    );
   }
 
   #isRetryableTikTokApiError({
@@ -660,6 +672,10 @@ export class TikTokBusinessPostClient extends PostClient {
             platformData.disclose_your_brand === undefined
               ? false
               : platformData.disclose_your_brand,
+          is_ai_generated:
+            platformData.is_ai_generated === undefined
+              ? false
+              : platformData.is_ai_generated,
         },
       },
       account,
