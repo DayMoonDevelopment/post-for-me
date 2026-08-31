@@ -36,6 +36,7 @@ type S3StoreOptions = {
   partSize: number;
   minPartSize: number;
   expirationPeriodInMilliseconds: number;
+  useTags: boolean;
 };
 
 const ServerMock = Server as unknown as jest.Mock<unknown, [ServerOptions]>;
@@ -93,6 +94,17 @@ describe('createTusServer', () => {
     expect(s3StoreOptions.expirationPeriodInMilliseconds).toBe(
       TUS_UPLOAD_EXPIRATION_MS,
     );
+  });
+
+  it('disables S3 object tagging, since R2 rejects x-amz-tagging', () => {
+    const configService = {
+      get: jest.fn().mockReturnValue('test-bucket'),
+    } as unknown as ConfigService;
+
+    createTusServer(configService);
+
+    const s3StoreOptions = S3StoreMock.mock.calls[0][0];
+    expect(s3StoreOptions.useTags).toBe(false);
   });
 
   describe('getFileIdFromRequest', () => {

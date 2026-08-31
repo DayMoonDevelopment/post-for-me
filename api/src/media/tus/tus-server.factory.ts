@@ -53,6 +53,14 @@ export function createTusServer(configService: ConfigService): Server {
     partSize: TUS_PART_SIZE_BYTES,
     minPartSize: TUS_PART_SIZE_BYTES,
     expirationPeriodInMilliseconds: TUS_UPLOAD_EXPIRATION_MS,
+    // R2 doesn't support S3 object tagging (`x-amz-tagging`), which
+    // @tus/s3-store sends by default to mark its `.info` metadata objects
+    // Tus-Completed=true/false whenever expiration is configured. That 500s
+    // on every request against R2. deleteExpired() (used by the
+    // tus-upload-cleanup job) determines expiry via listMultipartUploads'
+    // `Initiated` timestamp, not these tags, so disabling them doesn't
+    // affect cleanup.
+    useTags: false,
     s3ClientConfig: {
       bucket,
       region: 'auto',
