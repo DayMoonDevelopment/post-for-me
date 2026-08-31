@@ -5,12 +5,9 @@ import type { Request as ExpressRequest } from 'express';
 
 import { getMediaBucket } from '../../constants/media.constants';
 import type { RequestUser } from '../../auth/user.interface';
+import { TUS_UPLOAD_PATH } from './tus-upload-path';
 
-// Must match the final path Nest resolves for MediaTusController once the
-// global URI versioning prefix (VersioningType.URI, defaultVersion: '1') is
-// applied — @tus/server uses this to strip the prefix off incoming request
-// paths and recover the upload id.
-export const TUS_UPLOAD_PATH = '/v1/media/tus';
+export { TUS_UPLOAD_PATH };
 
 // R2 requires all non-final multipart parts to be exactly the same size;
 // setting partSize === minPartSize is @tus/s3-store's documented way to
@@ -18,6 +15,12 @@ export const TUS_UPLOAD_PATH = '/v1/media/tus';
 const TUS_PART_SIZE_BYTES = 8 * 1024 * 1024;
 
 const TUS_MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
+
+// Abandoned uploads (client never resumes) are reclaimed by the
+// `tus-upload-cleanup` trigger.dev job, which calls S3Store#deleteExpired()
+// on a cron. That method aborts the underlying R2 multipart upload, not
+// just this store's bookkeeping.
+const TUS_UPLOAD_EXPIRATION_MS = 24 * 60 * 60 * 1000;
 
 type RequestWithNodeRuntime = {
   runtime?: { node?: { req: ExpressRequest & { user?: RequestUser } } };
@@ -49,6 +52,7 @@ export function createTusServer(configService: ConfigService): Server {
   const s3Store = new S3Store({
     partSize: TUS_PART_SIZE_BYTES,
     minPartSize: TUS_PART_SIZE_BYTES,
+    expirationPeriodInMilliseconds: TUS_UPLOAD_EXPIRATION_MS,
     s3ClientConfig: {
       bucket,
       region: 'auto',
@@ -60,6 +64,13 @@ export function createTusServer(configService: ConfigService): Server {
     },
   });
 
+  // Uses @tus/server's default in-process MemoryLocker — safe only because
+  // this service is assumed to run as a single replica. api/railway.json
+  // pins numReplicas: 1, but the primary prod deploy target is Unkey, whose
+  // replica count isn't visible in this repo. CONFIRM Unkey runs this
+  // service at 1 replica before merging; if that ever changes, this needs
+  // a real distributed locker (e.g. a Redis-backed one) or concurrent
+  // PATCH/HEAD/DELETE on the same upload id can corrupt offset tracking.
   return new Server({
     path: TUS_UPLOAD_PATH,
     datastore: s3Store,
@@ -93,12 +104,30 @@ export function createTusServer(configService: ConfigService): Server {
     // client-supplied key actually belongs to the caller's project, and
     // (b) prevents one team from resuming/inspecting/deleting another
     // team's in-progress upload by guessing/observing an upload id.
-    onIncomingRequest: (req, id) => {
+    onIncomingRequest: async (req, id) => {
       const user = getRequestUser(req as RequestWithNodeRuntime);
       if (!user?.projectId || !id.startsWith(`${user.projectId}/`)) {
         throw new TusRequestError(403, 'Forbidden\n');
       }
-      return Promise.resolve();
+
+      // R2 requires all non-final multipart parts to be exactly
+      // TUS_PART_SIZE_BYTES. Without this check a client using the wrong
+      // chunk size would have every PATCH succeed individually and only
+      // fail on R2's CompleteMultipartUpload at the very end, discarding
+      // the whole transferred upload.
+      if (req.method === 'PATCH') {
+        const upload = await s3Store.getUpload(id);
+        const contentLength = Number(req.headers.get('content-length'));
+        const remaining = (upload.size ?? 0) - upload.offset;
+        const isFinalChunk = remaining <= TUS_PART_SIZE_BYTES;
+
+        if (!isFinalChunk && contentLength !== TUS_PART_SIZE_BYTES) {
+          throw new TusRequestError(
+            400,
+            `Chunk size must be exactly ${TUS_PART_SIZE_BYTES} bytes for all non-final chunks (R2 multipart requirement). Got ${contentLength}.\n`,
+          );
+        }
+      }
     },
   });
 }

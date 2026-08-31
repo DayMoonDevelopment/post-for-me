@@ -20,6 +20,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1079.0",
     "@supabase/supabase-js": "^2.49.4",
     "@trigger.dev/sdk": "4.4.4",
+    "@tus/s3-store": "^2.0.4",
     "@unkey/api": "^2.2.0",
     "axios": "^1.8.4",
     "date-fns": "^4.1.0",
