@@ -23,17 +23,34 @@ function getClient(): PostHog | null {
   return client;
 }
 
+const R2_FLAG_CACHE_TTL_MS = 60_000;
+const r2FlagCache = new Map<string, { value: boolean; expiresAt: number }>();
+
 /**
  * Evaluate the `r2-storage` PostHog feature flag for a team (and, when known,
  * project) group. Returns `false` when PostHog is unconfigured or the flag
  * evaluation fails — the Supabase provider is always the safe fallback.
+ *
+ * Cached per team/project for R2_FLAG_CACHE_TTL_MS — callers on a hot path
+ * (e.g. one check per TUS chunk request) would otherwise do a live PostHog
+ * round-trip on every call.
  */
 export async function isR2StorageEnabled(
   teamId: string,
   projectId?: string,
 ): Promise<boolean> {
+  if (!teamId) return false;
+
+  const cacheKey = `${teamId}:${projectId ?? ''}`;
+  const cached = r2FlagCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.value;
+  }
+
   const posthog = getClient();
-  if (!posthog || !teamId) return false;
+  if (!posthog) return false;
+
+  let value: boolean;
   try {
     const result = await posthog.isFeatureEnabled('r2-storage', teamId, {
       groups: {
@@ -41,8 +58,14 @@ export async function isR2StorageEnabled(
         ...(projectId && { project: projectId }),
       },
     });
-    return result ?? false;
+    value = result ?? false;
   } catch {
-    return false;
+    value = false;
   }
+
+  r2FlagCache.set(cacheKey, {
+    value,
+    expiresAt: Date.now() + R2_FLAG_CACHE_TTL_MS,
+  });
+  return value;
 }

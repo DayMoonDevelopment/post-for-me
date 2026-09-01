@@ -40,6 +40,15 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Request object not available.');
     }
 
+    // Browsers never attach Authorization to a CORS preflight request, so
+    // guarding OPTIONS would 401 every preflight before it reaches the
+    // route handler (and before @tus/server's own preflight handling, on
+    // routes that have it). CORS headers for the preflight are set by
+    // app.enableCors() in main.ts.
+    if (request.method === 'OPTIONS') {
+      return true;
+    }
+
     return this.validateRequest(request);
   }
 

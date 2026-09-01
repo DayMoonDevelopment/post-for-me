@@ -8,6 +8,8 @@ import { apiReference } from '@scalar/nestjs-api-reference';
 import { AppModule } from './app.module';
 
 import { MediaModule } from './media/media.module';
+import { MediaTusModule } from './media/tus/media-tus.module';
+import { verifyTusRoute } from './media/tus/verify-tus-route';
 import { SocialPostsModule } from './social-posts/social-posts.module';
 import { SocialPostResultsModule } from './social-post-results/social-post-results.module';
 import { SocialAccountsModule } from './social-provider-connections/social-provider-connections.module';
@@ -41,6 +43,10 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
+  // Auth here is Bearer-token based (not cookie/credentialed), so
+  // reflecting the request origin is safe without an allowlist.
+  app.enableCors({ origin: true });
+
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: '1',
@@ -64,6 +70,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config, {
     include: [
       MediaModule,
+      MediaTusModule,
       SocialPostsModule,
       SocialPostResultsModule,
       SocialAccountsModule,
@@ -106,6 +113,8 @@ async function bootstrap() {
   await app.listen(port);
 
   console.log(`🚀 API listening on port ${port}`);
+
+  await verifyTusRoute(Number(port));
 }
 
 void bootstrap();

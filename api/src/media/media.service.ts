@@ -30,6 +30,7 @@ export class MediaService {
     return {
       upload_url: signedUrl,
       media_url: storageProvider.getPublicUrl(bucket, key),
+      key,
     };
   }
 }
