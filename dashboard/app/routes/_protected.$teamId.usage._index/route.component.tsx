@@ -47,12 +47,12 @@ export function Component() {
       return {
         title: "Usage Limit Exceeded",
         description:
-          "You've exceeded your plan's post limit. Upgrade to continue posting without interruption.",
+          "You've exceeded your plan's post limit. Posting continues without interruption — upgrade anytime to raise your limit.",
       };
     } else if (usagePercentage >= 80) {
       return {
         title: "Approaching Usage Limit",
-        description: `You've used ${Math.round(usagePercentage)}% of your plan's post limit. Consider upgrading to avoid hitting your limit.`,
+        description: `You've used ${Math.round(usagePercentage)}% of your plan's post limit. Upgrade anytime to raise your limit.`,
       };
     }
     return { title: "", description: "" };

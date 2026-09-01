@@ -13,7 +13,6 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { KyselyModule } from './kysely/kysely.module';
 import { AuthGuard } from './auth/auth.guard';
 import { VerifyKeyGuard } from './auth/verify-key.guard';
-import { UnkeyModule } from './unkey/unkey.module';
 import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
@@ -32,7 +31,6 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
     }),
     SupabaseModule,
     KyselyModule,
-    UnkeyModule,
     SocialAccountsModule,
     SocialPostPreviewsModule,
     WebhooksModule,
