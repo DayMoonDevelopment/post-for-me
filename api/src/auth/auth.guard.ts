@@ -49,7 +49,7 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    return this.validateRequest(request, response); // Pass request and response directly
+    return this.validateRequest(request);
   }
 
   private validateRequest(request: Request): boolean {
