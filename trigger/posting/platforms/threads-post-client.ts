@@ -198,7 +198,10 @@ export class ThreadsPostClient extends PostClient {
         success: false,
         provider_connection_id: account.id,
         post_id: postId,
-        error_message: error.response ? "Failed to post to Threads" : error.message,
+        error_message:
+          error.isAxiosError && !error.response
+            ? "Failed to post to Threads"
+            : error.message,
         details: {
           error: error.response?.data || error.message,
           requests: this.#requests,
@@ -466,8 +469,11 @@ export class ThreadsPostClient extends PostClient {
 
     const carouselContainerId = carouselResponse.data.id;
 
-    // Wait for carousel processing
-    await wait.for({ seconds: 5 });
+    await this.#waitForContainerStatus({
+      account,
+      containerId: carouselContainerId,
+      mediaLabel: "carousel container",
+    });
 
     return carouselContainerId;
   }
