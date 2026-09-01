@@ -559,6 +559,7 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
           id: "sched_existing",
           status: "active",
           subscription: "sub_1",
+          metadata: { schedule_type: "usage_based_upgrade" },
           phases: [
             {
               start_date: 1893456000,
