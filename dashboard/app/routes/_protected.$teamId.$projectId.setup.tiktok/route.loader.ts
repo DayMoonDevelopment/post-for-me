@@ -3,6 +3,8 @@ import { data } from "react-router";
 import { withSupabase } from "~/lib/.server/supabase";
 
 import type { Database } from "~/lib/.server/database.types";
+import { MEDIA_BUCKET } from "~/lib/.server/media.constants";
+import { getStorageProvider } from "~/lib/.server/storage/storage.provider";
 
 type SocialProviderEnum = Database["public"]["Enums"]["social_provider"];
 
@@ -18,7 +20,7 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     throw new Error("Project ID is required");
   }
 
-  const [credential, verificationFiles] = await Promise.all([
+  const [credential, verificationFiles, storageProvider] = await Promise.all([
     supabase
       .from("social_provider_app_credentials")
       .select("provider, project_id, app_id, app_secret")
@@ -26,9 +28,10 @@ export const loader = withSupabase(async ({ supabase, params }) => {
       .eq("provider", provider as SocialProviderEnum)
       .maybeSingle(),
     supabase
-      .from("v_tiktok_verification_files")
+      .from("tiktok_verification_files")
       .select("*")
       .eq("project_id", projectId),
+    getStorageProvider(teamId, projectId),
   ]);
 
   // If there's an error other than no rows found, throw it
@@ -41,13 +44,19 @@ export const loader = withSupabase(async ({ supabase, params }) => {
     appSecret: credential?.data?.app_secret || "",
   };
 
+  const dataUrl = `${storageProvider
+    .getPublicUrl(MEDIA_BUCKET, "")
+    .replace(/\/$/, "")}/`;
+
   return data({
     provider,
     credential: providerCredential,
     setupGuideUrl: `https://www.postforme.dev/resources/getting-started-with-the-tiktok-api`,
     redirectUrl: `https://app.postforme.dev/callback/${projectId}/tiktok/account`,
     callbackUrl: `https://app.postforme.dev/callback/`,
-    dataUrl: `https://data.postforme.dev/storage/v1/object/public/post-media/`,
-    verificationFiles: verificationFiles.data || [],
+    dataUrl,
+    verificationFiles: (verificationFiles.data || []).map((file) => ({
+      name: file.file_name,
+    })),
   });
 });

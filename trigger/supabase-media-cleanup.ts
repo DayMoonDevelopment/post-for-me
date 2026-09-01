@@ -1,11 +1,15 @@
 import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
 import { logger, schedules, wait } from "@trigger.dev/sdk";
+import { createStorageProvider } from "./storage/supabase-storage.provider";
+import { MEDIA_BUCKET } from "./constants";
 
 const supabaseClient = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
+
+const storageProvider = createStorageProvider();
 
 const storageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/post-media`;
 
@@ -22,45 +26,21 @@ export const supabaseMediaCleanup = schedules.task({
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-    const allOldFiles: any[] = [];
-    let offset = 0;
-    const limit = 1000; // Process in larger batches
+    const allOldFiles: Awaited<ReturnType<typeof storageProvider.list>> = [];
 
-    // Fetch all old files from storage
-    for (;;) {
-      const { data: files, error } = await supabaseClient.storage
-        .from("post-media")
-        .list(undefined, {
-          limit,
-          offset,
-          sortBy: { column: "created_at", order: "asc" },
-        });
-
-      if (error) {
-        logger.error("Error fetching files", { error });
-        return;
+    try {
+      for await (const file of storageProvider.listAll(MEDIA_BUCKET)) {
+        if (
+          file.createdAt != null &&
+          new Date(file.createdAt) < oneDayAgo &&
+          file.metadata?.["mimetype"] !== "text/plain"
+        ) {
+          allOldFiles.push(file);
+        }
       }
-
-      if (!files?.length) break;
-
-      // Filter files older than 1 day
-      const oldFiles = files.filter(
-        (file) =>
-          file.created_at !== null &&
-          new Date(file.created_at) < oneDayAgo &&
-          file.metadata?.mimetype !== "text/plain",
-      );
-
-      if (oldFiles.length === 0) {
-        //No files older than a day exiting loop
-        break;
-      }
-
-      allOldFiles.push(...oldFiles);
-      offset += limit;
-
-      // If we got less than the limit, we've reached the end
-      if (files.length < limit) break;
+    } catch (error) {
+      logger.error("Error fetching files", { error });
+      return;
     }
 
     if (allOldFiles.length === 0) {
@@ -121,21 +101,18 @@ export const supabaseMediaCleanup = schedules.task({
     for (let i = 0; i < filesToDelete.length; i += batchSize) {
       const batch = filesToDelete.slice(i, i + batchSize);
 
-      const { error: deleteError } = await supabaseClient.storage
-        .from("post-media")
-        .remove(batch.map((file) => file.name));
-
-      if (deleteError) {
+      try {
+        await storageProvider.remove(MEDIA_BUCKET, batch.map((file) => file.name));
+        logger.info(`Successfully deleted batch ${i / batchSize + 1}`, {
+          filesDeleted: batch.length,
+        });
+        deletedCount += batch.length;
+      } catch (deleteError) {
         logger.error(`Error deleting batch ${i / batchSize + 1}`, {
           error: deleteError,
           batch,
         });
         errorCount += batch.length;
-      } else {
-        logger.info(`Successfully deleted batch ${i / batchSize + 1}`, {
-          filesDeleted: batch.length,
-        });
-        deletedCount += batch.length;
       }
 
       // Add a small delay between batches to be nice to the API

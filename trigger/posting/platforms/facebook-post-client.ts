@@ -1,4 +1,4 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import fetch from "node-fetch";
@@ -26,10 +26,10 @@ export class FacebookPostClient extends PostClient {
   ];
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
     this.#appCredentials = appCredentials;
   }
 

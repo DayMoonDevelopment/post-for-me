@@ -1,5 +1,8 @@
 import { createReadStream } from "fs";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
+import { getFileKeyFromPublicUrl } from "../../storage/get-file-key-from-public-url";
+import { MEDIA_BUCKET } from "../../constants";
+import { randomUUID } from "crypto";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -29,7 +32,7 @@ export class TikTokPostClient extends PostClient {
   #titleLength = 85;
   #clientKey: string;
   #clientSecret: string;
-  #localSupabaseClient;
+  #storageProvider: IStorageProvider;
   #maxFileSize = 20 * 1024 * 1024;
   #allowedAspectRatios = [
     { ratio: 9 / 16, width: 1080, height: 1920 },
@@ -40,18 +43,18 @@ export class TikTokPostClient extends PostClient {
   #addedMedia: any[] = [];
   #requests: any[] = [];
   #responses: any[] = [];
-  #bucket: string = "post-media";
+  #bucket: string = MEDIA_BUCKET;
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
 
     this.#clientKey = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
 
-    this.#localSupabaseClient = supabaseClient;
+    this.#storageProvider = storageProvider;
   }
 
   async refreshAccessToken(
@@ -772,40 +775,26 @@ export class TikTokPostClient extends PostClient {
     }
 
     const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
+      getFileKeyFromPublicUrl(signedUrl, this.#bucket) ||
+      `fileupload_${randomUUID()}`;
     const processedKey = `${key.split(".")[0]}_tiktok`;
 
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
-    }
+    await this.#storageProvider.upload(
+      this.#bucket,
+      processedKey,
+      processedImage,
+      {
+        contentType: "image/jpeg",
+        cacheControl: "public, max-age=31536000",
+        upsert: true,
+      },
+    );
 
     this.#addedMedia.push({
       key: processedKey,
       bucket: this.#bucket,
     });
 
-    const { data: processedImageUpload } = this.#localSupabaseClient.storage
-      .from(this.#bucket)
-      .getPublicUrl(processedKey);
-
-    return processedImageUpload!.publicUrl;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
+    return this.#storageProvider.getPublicUrl(this.#bucket, processedKey);
   }
 }

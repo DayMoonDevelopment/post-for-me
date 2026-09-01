@@ -48,6 +48,31 @@ export function deterministicUuid(key: string): string {
 }
 
 /**
+ * Evaluate the `r2-storage` PostHog feature flag for a team (and, when known,
+ * project) group. Returns `false` when PostHog is unconfigured or the flag
+ * evaluation fails — the Supabase provider is always the safe fallback.
+ */
+export async function isR2StorageEnabled(
+  teamId: string,
+  projectId?: string,
+): Promise<boolean> {
+  const posthog = getClient();
+  if (!posthog || !teamId) return false;
+  try {
+    return (
+      (await posthog.isFeatureEnabled("r2-storage", teamId, {
+        groups: {
+          team: teamId,
+          ...(projectId && { project: projectId }),
+        },
+      })) ?? false
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Capture a server-side event. `teamId` / `projectId`, when provided, attach the
  * PostHog `team` / `project` groups so the event rolls up to the billing entity
  * and (for project-scoped actions) the project the user was acting on. Best-effort:

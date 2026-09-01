@@ -1,4 +1,4 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { IStorageProvider } from "../../storage/storage.provider";
 import { PostClient } from "../post-client";
 import {
   LinkedinConfiguration,
@@ -17,10 +17,10 @@ export class LinkedInPostClient extends PostClient {
   #responses: any[] = [];
 
   constructor(
-    supabaseClient: SupabaseClient,
+    storageProvider: IStorageProvider,
     appCredentials: PlatformAppCredentials,
   ) {
-    super(supabaseClient, appCredentials);
+    super(storageProvider, appCredentials);
     this.#clientId = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
   }

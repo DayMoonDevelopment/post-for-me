@@ -850,6 +850,44 @@ export type Database = {
           },
         ]
       }
+      tiktok_verification_files: {
+        Row: {
+          bucket: string
+          created_at: string
+          file_name: string
+          id: string
+          key: string
+          project_id: string
+          provider: string
+        }
+        Insert: {
+          bucket: string
+          created_at?: string
+          file_name: string
+          id?: string
+          key: string
+          project_id: string
+          provider: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          file_name?: string
+          id?: string
+          key?: string
+          project_id?: string
+          provider?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_verification_files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           email: string
@@ -975,24 +1013,7 @@ export type Database = {
       }
     }
     Views: {
-      v_tiktok_verification_files: {
-        Row: {
-          bucket_id: string | null
-          name: string | null
-          project_id: string | null
-        }
-        Insert: {
-          bucket_id?: string | null
-          name?: string | null
-          project_id?: never
-        }
-        Update: {
-          bucket_id?: string | null
-          name?: string | null
-          project_id?: never
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       get_exceeded_team_usage_windows: {
