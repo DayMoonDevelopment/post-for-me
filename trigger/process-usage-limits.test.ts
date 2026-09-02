@@ -43,6 +43,10 @@ process.env.STRIPE_PRICING_TIER_200K_PRODUCT_ID = "tier_200k";
 process.env.STRIPE_API_PRODUCT_ID = "tier_legacy";
 process.env.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID = "loops_upgrade";
 process.env.LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID = "loops_threshold";
+// Exercised by the escape-hatch flow tests below; team_1 (used by every
+// other test) is deliberately absent so the hatch stays out of their way.
+process.env.USAGE_UPGRADE_EXEMPTIONS =
+  "team_exempt:2099-01-01, team_expired:2020-01-01";
 
 let mod: typeof import("./process-usage-limits");
 
@@ -442,6 +446,51 @@ describe("usage notification records", () => {
   });
 });
 
+describe("upgrade exemptions (temporary escape hatch)", () => {
+  test("parses comma-separated team:date entries, tolerating whitespace", () => {
+    const exemptions = mod.parseUpgradeExemptions(
+      "team_a:2026-12-01, team_b:2027-01-15",
+    );
+
+    expect(exemptions.get("team_a")?.toISOString()).toBe(
+      "2026-12-01T00:00:00.000Z",
+    );
+    expect(exemptions.get("team_b")?.toISOString()).toBe(
+      "2027-01-15T00:00:00.000Z",
+    );
+    expect(exemptions.has("team_c")).toBe(false);
+  });
+
+  test("an empty or unset env var exempts nobody", () => {
+    expect(mod.parseUpgradeExemptions(undefined).size).toBe(0);
+    expect(mod.parseUpgradeExemptions("").size).toBe(0);
+  });
+
+  test("a malformed date fails safe: exempt indefinitely", () => {
+    // Breaking the "you will not be upgraded" promise is the worse failure,
+    // so a bad entry keeps the team exempt (and logs) instead of silently
+    // upgrading them.
+    const exemptions = mod.parseUpgradeExemptions("team_a:not-a-date,team_b");
+
+    expect(mod.isUpgradeExempt("team_a", exemptions)).toBe(true);
+    expect(mod.isUpgradeExempt("team_b", exemptions)).toBe(true);
+  });
+
+  test("exemption holds strictly before the date and expires on it", () => {
+    const exemptions = mod.parseUpgradeExemptions("team_a:2026-12-01");
+
+    expect(
+      mod.isUpgradeExempt("team_a", exemptions, new Date("2026-11-30")),
+    ).toBe(true);
+    expect(
+      mod.isUpgradeExempt("team_a", exemptions, new Date("2026-12-01")),
+    ).toBe(false);
+    expect(
+      mod.isUpgradeExempt("team_b", exemptions, new Date("2026-11-30")),
+    ).toBe(false);
+  });
+});
+
 describe("processWarningWindow (usage_alert path)", () => {
   const makeUsageWindow = (overrides: Record<string, unknown> = {}) => ({
     team_id: "team_1",
@@ -800,5 +849,43 @@ describe("processExceededUsageWindow (subscription_alert path)", () => {
     await mod.processExceededUsageWindow(makeUsageWindow() as any);
 
     expect(taskTriggerCalls.length).toBe(0);
+  });
+
+  test("exempt team over 100%: no Stripe calls, no update, no email", async () => {
+    // team_exempt is in USAGE_UPGRADE_EXEMPTIONS (set at the top of this
+    // file) with a far-future date — the old system promised them no
+    // auto-upgrade, so the whole action path short-circuits.
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
+    mod.stripe.subscriptions.list = mock(() => {
+      throw new Error("exempt team must not hit Stripe");
+    }) as any;
+    refuseSubscriptionScheduleWrites();
+
+    await mod.processExceededUsageWindow(
+      makeUsageWindow({ team_id: "team_exempt" }) as any,
+    );
+
+    expect(taskTriggerCalls.length).toBe(0);
+  });
+
+  test("an expired exemption no longer blocks the upgrade", async () => {
+    // team_expired's date is in the past — the promise window is over, so
+    // the normal first-crossing flow runs: schedule + email.
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockNoActiveSchedules();
+    const { create } = mockScheduleCreation();
+
+    await mod.processExceededUsageWindow(
+      makeUsageWindow({ team_id: "team_expired" }) as any,
+    );
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(taskTriggerCalls.length).toBe(1);
+    expect(taskTriggerCalls[0].payload.notification_type).toBe(
+      "subscription_alert",
+    );
   });
 });

@@ -61,6 +61,72 @@ const USAGE_ALERT_TYPE = "usage_alert" satisfies TeamNotificationType;
 const SUBSCRIPTION_ALERT_TYPE =
   "subscription_alert" satisfies TeamNotificationType;
 
+// TEMPORARY escape hatch — delete this block (and the env var) once every
+// exemption date has passed. A couple of customers were told under the OLD
+// two-strike upgrade system that they would not be auto-upgraded; honor
+// that through their remaining billing periods. Exempt teams still receive
+// the informational 80/90/95% warnings — only the automatic subscription
+// update (and its side-effect email) is suppressed.
+//
+// Syntax: USAGE_UPGRADE_EXEMPTIONS="<team_id>:<YYYY-MM-DD>[,<team_id>:<YYYY-MM-DD>,...]"
+// The team is exempt from auto-upgrades strictly BEFORE that date. A
+// malformed or missing date fails safe toward honoring the promise: the
+// team is treated as exempt indefinitely and an error is logged so the
+// entry gets fixed rather than silently upgrading them.
+export const parseUpgradeExemptions = (
+  raw: string | undefined | null,
+): Map<string, Date | null> => {
+  const exemptions = new Map<string, Date | null>();
+
+  for (const entry of (raw ?? "").split(",")) {
+    const trimmed = entry.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const separatorIndex = trimmed.lastIndexOf(":");
+    const teamId = (
+      separatorIndex === -1 ? trimmed : trimmed.slice(0, separatorIndex)
+    ).trim();
+    const dateRaw =
+      separatorIndex === -1 ? "" : trimmed.slice(separatorIndex + 1).trim();
+
+    if (!teamId) {
+      continue;
+    }
+
+    const parsedDate = new Date(dateRaw);
+    if (dateRaw && !Number.isNaN(parsedDate.getTime())) {
+      exemptions.set(teamId, parsedDate);
+    } else {
+      exemptions.set(teamId, null);
+      logger.error(
+        "Invalid USAGE_UPGRADE_EXEMPTIONS entry; treating team as exempt indefinitely",
+        { entry: trimmed },
+      );
+    }
+  }
+
+  return exemptions;
+};
+
+const UPGRADE_EXEMPTIONS = parseUpgradeExemptions(
+  process.env?.USAGE_UPGRADE_EXEMPTIONS,
+);
+
+export const isUpgradeExempt = (
+  teamId: string,
+  exemptions: Map<string, Date | null> = UPGRADE_EXEMPTIONS,
+  now: Date = new Date(),
+): boolean => {
+  if (!exemptions.has(teamId)) {
+    return false;
+  }
+
+  const exemptBefore = exemptions.get(teamId) ?? null;
+  return exemptBefore === null || now < exemptBefore;
+};
+
 // Warning thresholds, in percent. The DB just returns every in-window team
 // at/over the lowest of these (get_team_usage_windows_over_threshold);
 // bucketing is pure JS business logic, so changing thresholds needs no
@@ -1007,6 +1073,19 @@ export const processExceededUsageWindow = async (
   });
 
   try {
+    // TEMPORARY: honor pre-existing "you will not be auto-upgraded"
+    // promises from the old upgrade system — see USAGE_UPGRADE_EXEMPTIONS
+    // above. Checked before any Stripe call so exempt teams cost nothing
+    // per tick.
+    if (isUpgradeExempt(teamId)) {
+      logger.info("Skipping auto-upgrade for exempt team", {
+        team_id: teamId,
+        exempt_before:
+          UPGRADE_EXEMPTIONS.get(teamId)?.toISOString() ?? "indefinite",
+      });
+      return;
+    }
+
     if (!stripeCustomerId) {
       logger.info("Skipping team without Stripe customer", {
         team_id: teamId,
