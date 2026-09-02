@@ -68,11 +68,13 @@ const SUBSCRIPTION_ALERT_TYPE =
 // the informational 80/90/95% warnings — only the automatic subscription
 // update (and its side-effect email) is suppressed.
 //
-// Syntax: USAGE_UPGRADE_EXEMPTIONS="<team_id>:<YYYY-MM-DD>[,<team_id>:<YYYY-MM-DD>,...]"
-// The team is exempt from auto-upgrades strictly BEFORE that date. A
-// malformed or missing date fails safe toward honoring the promise: the
-// team is treated as exempt indefinitely and an error is logged so the
-// entry gets fixed rather than silently upgrading them.
+// Syntax: USAGE_UPGRADE_EXEMPTIONS="<team_id>:<date>[,<team_id>:<date>,...]"
+// where <date> is YYYY-MM-DD (parsed as UTC midnight) or a full ISO
+// timestamp with offset for boundary precision. The team is exempt from
+// auto-upgrades strictly BEFORE that instant. A malformed or missing date
+// fails safe toward honoring the promise: the team is treated as exempt
+// indefinitely and an error is logged so the entry gets fixed rather than
+// silently upgrading them.
 export const parseUpgradeExemptions = (
   raw: string | undefined | null,
 ): Map<string, Date | null> => {
@@ -84,7 +86,10 @@ export const parseUpgradeExemptions = (
       continue;
     }
 
-    const separatorIndex = trimmed.lastIndexOf(":");
+    // Split on the FIRST colon: team ids don't contain colons, but a full
+    // ISO timestamp date does — everything after the first colon is the
+    // date.
+    const separatorIndex = trimmed.indexOf(":");
     const teamId = (
       separatorIndex === -1 ? trimmed : trimmed.slice(0, separatorIndex)
     ).trim();

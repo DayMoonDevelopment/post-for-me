@@ -466,6 +466,19 @@ describe("upgrade exemptions (temporary escape hatch)", () => {
     expect(mod.parseUpgradeExemptions("").size).toBe(0);
   });
 
+  test("a full ISO timestamp with offset parses under the correct team id", () => {
+    // Regression test: the entry splits on the FIRST colon, so a
+    // timezone-precise timestamp (which contains colons) can't mangle the
+    // team id and silently drop the exemption.
+    const exemptions = mod.parseUpgradeExemptions(
+      "team_a:2026-12-01T00:00:00-05:00",
+    );
+
+    expect(exemptions.get("team_a")?.toISOString()).toBe(
+      "2026-12-01T05:00:00.000Z",
+    );
+  });
+
   test("a malformed date fails safe: exempt indefinitely", () => {
     // Breaking the "you will not be upgraded" promise is the worse failure,
     // so a bad entry keeps the team exempt (and logs) instead of silently
