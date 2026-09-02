@@ -64,9 +64,10 @@ const SUBSCRIPTION_ALERT_TYPE =
 // TEMPORARY escape hatch — delete this block (and the env var) once every
 // exemption date has passed. A couple of customers were told under the OLD
 // two-strike upgrade system that they would not be auto-upgraded; honor
-// that through their remaining billing periods. Exempt teams still receive
-// the informational 80/90/95% warnings — only the automatic subscription
-// update (and its side-effect email) is suppressed.
+// that through their remaining billing periods. Exempt teams are outside
+// the entire usage-limits system until their date passes: no 80/90/95%
+// warnings, no automatic subscription update, no emails of any kind (they
+// already received alerts under the old system).
 //
 // Syntax: USAGE_UPGRADE_EXEMPTIONS="<team_id>:<date>[,<team_id>:<date>,...]"
 // where <date> is YYYY-MM-DD (parsed as UTC midnight) or a full ISO
@@ -1324,6 +1325,18 @@ export const processWarningWindow = async (
   } = usageWindow;
 
   try {
+    // TEMPORARY: exempt teams sit outside the whole usage-limits system —
+    // they already got alerts under the old system, so no warnings either.
+    // See USAGE_UPGRADE_EXEMPTIONS above.
+    if (isUpgradeExempt(teamId)) {
+      logger.info("Skipping usage warnings for exempt team", {
+        team_id: teamId,
+        exempt_before:
+          UPGRADE_EXEMPTIONS.get(teamId)?.toISOString() ?? "indefinite",
+      });
+      return;
+    }
+
     if (currentLimit <= 0) {
       return;
     }

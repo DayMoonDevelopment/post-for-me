@@ -603,6 +603,35 @@ describe("processWarningWindow (usage_alert path)", () => {
     expect(metadata.tracking.current_limit).toBe(2500);
   });
 
+  test("exempt team crossing a threshold: no warning email, no Stripe calls", async () => {
+    // The escape hatch lifts exempt teams out of the ENTIRE usage-limits
+    // system — they already received alerts under the old system.
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
+    mod.stripe.subscriptions.list = mock(() => {
+      throw new Error("exempt team must not hit Stripe");
+    }) as any;
+
+    await mod.processWarningWindow(
+      makeUsageWindow({ team_id: "team_exempt" }) as any,
+    );
+
+    expect(taskTriggerCalls.length).toBe(0);
+  });
+
+  test("an expired exemption no longer blocks warnings", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+
+    await mod.processWarningWindow(
+      makeUsageWindow({ team_id: "team_expired" }) as any,
+    );
+
+    expect(taskTriggerCalls.length).toBe(1);
+    expect(taskTriggerCalls[0].payload.notification_type).toBe("usage_alert");
+  });
+
   test("an undelivered attempt at the same warning retries on the same record", async () => {
     mod.supabaseClient.from = fakeSupabaseFrom([
       alertRow({
