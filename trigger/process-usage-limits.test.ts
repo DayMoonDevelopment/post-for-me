@@ -69,37 +69,63 @@ const makeSubscription = (
     ...overrides,
   }) as unknown as Stripe.Subscription;
 
-// Fake Supabase query builder for the `team_notifications` chain used by
-// hasUsageNotificationForPeriod: reports a confirmed "sent" delivery for
-// whichever notification_type values are in `notifiedTypes`. The chain's
-// terminal call is `lt()` (no `.limit()`/`.maybeSingle()` — the real query
-// can return multiple rows per period), so it resolves the `{ data, error }`
-// shape directly.
-const fakeNotificationsFrom = (notifiedTypes: Set<string>) => () => {
-  let queriedType: string | undefined;
-  const builder: any = {
-    select: () => builder,
-    eq: (column: string, value: string) => {
-      if (column === "notification_type") {
-        queriedType = value;
-      }
+// A raw `team_notifications` row fixture as stored by the two email flows:
+// the communication bucket is the row's own notification_type
+// ('usage_alert' = threshold warning, 'usage_limit_upgrade_notice' = the
+// upgrade notice), with optional `threshold` context and delivery `results`
+// in meta_data. A 'usage_alert' row without a threshold models a row written
+// by the pre-split system (the old usage_limit_alert/usage_limit_upgrade
+// flow, which shared 'usage_alert').
+const alertRow = ({
+  type,
+  threshold,
+  statuses = [],
+}: {
+  type: "usage_alert" | "usage_limit_upgrade_notice";
+  threshold?: number;
+  statuses?: string[];
+}) => ({
+  notification_type: type,
+  meta_data: {
+    ...(threshold !== undefined ? { threshold } : {}),
+    results: statuses.map((status) => ({ status })),
+  },
+});
+
+// Fake Supabase query builder for the single `team_notifications` chain used
+// by getUsageAlertsForPeriod (select → in → eq → gte → lt, resolving the
+// `{ data, error }` shape at the terminal `lt()`). `teams`
+// (trackUpgradeScheduled) and anything else resolves "no row found" so those
+// callers short-circuit rather than needing their own fixture.
+//
+// `teamNotificationsQueryCount` (reset in `beforeEach`) counts every
+// `.from("team_notifications")` call so a regression reintroducing a
+// redundant duplicate dedup query is caught even though it wouldn't change
+// any send/defer assertion.
+let teamNotificationsQueryCount = 0;
+
+const fakeSupabaseFrom =
+  (alertRows: ReturnType<typeof alertRow>[] = []) =>
+  (table: string) => {
+    if (table === "team_notifications") {
+      teamNotificationsQueryCount += 1;
+      const builder: any = {
+        select: () => builder,
+        in: () => builder,
+        eq: () => builder,
+        gte: () => builder,
+        lt: () => ({ data: alertRows, error: null }),
+      };
       return builder;
-    },
-    gte: () => builder,
-    lt: () => ({
-      data:
-        queriedType && notifiedTypes.has(queriedType)
-          ? [{ meta_data: { results: [{ status: "sent" }] } }]
-          : [],
-      error: null,
-    }),
-    lte: () => builder,
-    order: () => builder,
-    limit: () => builder,
-    maybeSingle: async () => ({ data: null, error: null }),
+    }
+
+    const builder: any = {
+      select: () => builder,
+      eq: () => builder,
+      maybeSingle: async () => ({ data: null, error: null }),
+    };
+    return builder;
   };
-  return builder;
-};
 
 describe("getCrossedUsageThreshold", () => {
   test("returns null below the lowest threshold", () => {
@@ -107,16 +133,60 @@ describe("getCrossedUsageThreshold", () => {
   });
 
   test("returns the 80% threshold between 80 and 90", () => {
-    expect(mod.getCrossedUsageThreshold(85)?.percent).toBe(80);
+    expect(mod.getCrossedUsageThreshold(85)).toBe(80);
+  });
+
+  test("warnings fire AT the threshold, not only after it", () => {
+    expect(mod.getCrossedUsageThreshold(80)).toBe(80);
+    expect(mod.getCrossedUsageThreshold(95)).toBe(95);
   });
 
   test("returns the highest threshold crossed, not the first in the array", () => {
     // Regression test: USAGE_WARNING_THRESHOLDS is declared highest-first,
     // but getCrossedUsageThreshold must not depend on that ordering to pick
     // the highest match.
-    expect(mod.getCrossedUsageThreshold(96)?.percent).toBe(95);
-    expect(mod.getCrossedUsageThreshold(91)?.percent).toBe(90);
-    expect(mod.getCrossedUsageThreshold(80)?.percent).toBe(80);
+    expect(mod.getCrossedUsageThreshold(96)).toBe(95);
+    expect(mod.getCrossedUsageThreshold(91)).toBe(90);
+  });
+});
+
+describe("bucketUsageWindows", () => {
+  const window = (count: number, limit: number) =>
+    ({
+      team_id: "team_1",
+      count,
+      limit,
+      start_at: "2026-02-01T00:00:00Z",
+      end_at: "2026-03-01T00:00:00Z",
+      team_name: "Team One",
+      stripe_customer_id: "cus_1",
+    }) as any;
+
+  test("strictly over the limit lands in the upgrade bucket", () => {
+    const { overLimitWindows, warningWindows } = mod.bucketUsageWindows([
+      window(1001, 1000),
+    ]);
+    expect(overLimitWindows.length).toBe(1);
+    expect(warningWindows.length).toBe(0);
+  });
+
+  test("exactly at the limit is a warning, not an upgrade", () => {
+    // Business rule: there is no "at 100%" email — the upgrade notice fires
+    // only strictly AFTER the limit, so a team at exactly 100% gets the 95%
+    // warning instead.
+    const { overLimitWindows, warningWindows } = mod.bucketUsageWindows([
+      window(1000, 1000),
+    ]);
+    expect(overLimitWindows.length).toBe(0);
+    expect(warningWindows.length).toBe(1);
+  });
+
+  test("under the limit is a warning candidate", () => {
+    const { overLimitWindows, warningWindows } = mod.bucketUsageWindows([
+      window(850, 1000),
+    ]);
+    expect(overLimitWindows.length).toBe(0);
+    expect(warningWindows.length).toBe(1);
   });
 });
 
@@ -221,8 +291,8 @@ describe("getEligibleSubscriptionPlan", () => {
 
   test("returns null for a subscription with a scheduled cancellation", async () => {
     // Regression test: this eligibility gate must apply identically to the
-    // exceeded-usage (100%) email path and the active-usage threshold
-    // warning path — previously only the warning path checked it.
+    // over-limit email path and the threshold warning path — previously only
+    // the warning path checked it.
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription({ cancel_at_period_end: true })],
     })) as any;
@@ -250,66 +320,108 @@ describe("getEligibleSubscriptionPlan", () => {
   });
 });
 
-describe("hasHigherOrEqualUsageNotification", () => {
-  test("returns true when a higher threshold already fired this period", async () => {
+describe("usage alert records and dedup", () => {
+  test("getUsageAlertsForPeriod parses type, threshold, and delivery", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({
+        type: "usage_alert",
+        threshold: 80,
+        statuses: ["sent"],
+      }),
+      alertRow({
+        type: "usage_limit_upgrade_notice",
+        statuses: ["failed"],
+      }),
+    ]) as any;
+
+    const alerts = await mod.getUsageAlertsForPeriod(
+      "team_1",
+      "2026-02-01T00:00:00Z",
+      "2026-03-01T00:00:00Z",
+    );
+
+    expect(alerts).toEqual([
+      {
+        type: "usage_alert",
+        threshold: 80,
+        delivered: true,
+      },
+      {
+        type: "usage_limit_upgrade_notice",
+        threshold: null,
+        delivered: false,
+      },
+    ]);
+  });
+
+  test("a legacy usage_alert row without a threshold counts as the upgrade notice", async () => {
+    // Deploy-transition rule: rows written by the old
+    // usage_limit_alert/usage_limit_upgrade flow used 'usage_alert' with no
+    // threshold metadata — they must suppress a notice re-send, not read as
+    // a threshold warning. New warnings always stamp their threshold.
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({ type: "usage_alert", statuses: ["sent"] }),
+    ]) as any;
+
+    const alerts = await mod.getUsageAlertsForPeriod(
+      "team_1",
+      "2026-02-01T00:00:00Z",
+      "2026-03-01T00:00:00Z",
+    );
+
+    expect(mod.hasDeliveredUpgradeNotice(alerts)).toBe(true);
+  });
+
+  test("a delivered threshold warning is not an upgrade notice", () => {
+    expect(
+      mod.hasDeliveredUpgradeNotice([
+        { type: "usage_alert", threshold: 95, delivered: true },
+      ]),
+    ).toBe(false);
+  });
+
+  test("an undelivered upgrade notice does not count as notified", () => {
+    expect(
+      mod.hasDeliveredUpgradeNotice([
+        { type: "usage_limit_upgrade_notice", threshold: null, delivered: false },
+      ]),
+    ).toBe(false);
+  });
+
+  test("a higher delivered warning floors a lower one", () => {
     // Regression test: a team warned at 95% must not later receive an 80%
     // warning after usage is recalculated downward mid-period.
-    mod.supabaseClient.from = fakeNotificationsFrom(
-      new Set(["usage_alert_95"]),
-    ) as any;
-
-    const eightyThreshold = mod.USAGE_WARNING_THRESHOLDS.find(
-      (t) => t.percent === 80,
-    )!;
-
-    const result = await mod.hasHigherOrEqualUsageNotification(
-      "team_1",
-      eightyThreshold,
-      "2026-01-01T00:00:00Z",
-      "2026-02-01T00:00:00Z",
-    );
-
-    expect(result).toBe(true);
+    const alerts = [{ type: "usage_alert", threshold: 95, delivered: true }];
+    expect(mod.hasDeliveredWarningAtOrAbove(alerts as any, 80)).toBe(true);
   });
 
-  test("returns false when only a lower threshold has fired", async () => {
-    mod.supabaseClient.from = fakeNotificationsFrom(
-      new Set(["usage_alert_80"]),
-    ) as any;
-
-    const ninetyFiveThreshold = mod.USAGE_WARNING_THRESHOLDS.find(
-      (t) => t.percent === 95,
-    )!;
-
-    const result = await mod.hasHigherOrEqualUsageNotification(
-      "team_1",
-      ninetyFiveThreshold,
-      "2026-01-01T00:00:00Z",
-      "2026-02-01T00:00:00Z",
-    );
-
-    expect(result).toBe(false);
+  test("a lower delivered warning does not block a higher one", () => {
+    const alerts = [{ type: "usage_alert", threshold: 80, delivered: true }];
+    expect(mod.hasDeliveredWarningAtOrAbove(alerts as any, 95)).toBe(false);
   });
 
-  test("returns false when nothing has fired this period", async () => {
-    mod.supabaseClient.from = fakeNotificationsFrom(new Set()) as any;
+  test("a delivered upgrade notice floors every warning", () => {
+    // A team already told "you will be upgraded" must not get an 80% warning
+    // after a mid-period limit raise drops them back under a threshold.
+    const alerts = [
+      { type: "usage_limit_upgrade_notice", threshold: null, delivered: true },
+    ];
+    expect(mod.hasDeliveredWarningAtOrAbove(alerts as any, 80)).toBe(true);
+    expect(mod.hasDeliveredWarningAtOrAbove(alerts as any, 95)).toBe(true);
+  });
 
-    const eightyThreshold = mod.USAGE_WARNING_THRESHOLDS.find(
-      (t) => t.percent === 80,
-    )!;
-
-    const result = await mod.hasHigherOrEqualUsageNotification(
-      "team_1",
-      eightyThreshold,
-      "2026-01-01T00:00:00Z",
-      "2026-02-01T00:00:00Z",
-    );
-
-    expect(result).toBe(false);
+  test("nothing delivered means nothing is floored", () => {
+    expect(mod.hasDeliveredWarningAtOrAbove([], 80)).toBe(false);
+    expect(
+      mod.hasDeliveredWarningAtOrAbove(
+        [{ type: "usage_alert", threshold: 95, delivered: false }] as any,
+        80,
+      ),
+    ).toBe(false);
   });
 });
 
-describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade flow)", () => {
+describe("processExceededUsageWindow (single-strike upgrade flow)", () => {
   const makeUsageWindow = (overrides: Record<string, unknown> = {}) => ({
     team_id: "team_1",
     count: 1200,
@@ -320,81 +432,6 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     stripe_customer_id: "cus_1",
     ...overrides,
   });
-
-  // Routes `supabaseClient.from(table)` per-table so a single fake can back
-  // `hasUsageNotificationForPeriod` (`team_notifications`) for
-  // `processExceededUsageWindow`. `trackUpgradeScheduled`'s `teams` lookup is
-  // stubbed to "not found" so it no-ops rather than needing its own fixture.
-  //
-  // `notificationResultStatuses` models what's already recorded for the
-  // *current* period when a query has no `meta_data->>notification_template`
-  // filter: `[]` means no attempt yet (or none confirmed), `["sent"]` means a
-  // prior attempt was confirmed delivered, `["failed"]`/`["skipped"]` models a
-  // prior attempt that didn't actually reach the team.
-  //
-  // `templateResultStatuses` overrides that per notification_template, for
-  // tests that need a specific template's delivery state distinguished from
-  // the current period's general `notificationResultStatuses` default.
-  //
-  // `teamNotificationsQueryCount` (reset in `beforeEach`) counts every
-  // `.from("team_notifications")` call so a regression reintroducing a
-  // redundant duplicate query is caught even though it wouldn't change any
-  // send/defer assertion.
-  let teamNotificationsQueryCount = 0;
-
-  const fakeSupabaseFrom =
-    ({
-      notificationResultStatuses = [],
-      templateResultStatuses = {},
-    }: {
-      notificationResultStatuses?: string[];
-      templateResultStatuses?: Record<string, string[]>;
-    } = {}) =>
-    (table: string) => {
-      if (table === "team_notifications") {
-        teamNotificationsQueryCount += 1;
-        let queriedTemplate: string | undefined;
-        const builder: any = {
-          select: () => builder,
-          eq: (column: string, value: string) => {
-            if (column === "meta_data->>notification_template") {
-              queriedTemplate = value;
-            }
-            return builder;
-          },
-          gte: () => builder,
-          lt: () => {
-            const statuses =
-              queriedTemplate && queriedTemplate in templateResultStatuses
-                ? templateResultStatuses[queriedTemplate]
-                : notificationResultStatuses;
-            return {
-              data:
-                statuses.length > 0
-                  ? [
-                      {
-                        meta_data: {
-                          results: statuses.map((status) => ({ status })),
-                        },
-                      },
-                    ]
-                  : [],
-              error: null,
-            };
-          },
-        };
-        return builder;
-      }
-
-      // `teams` (trackUpgradeScheduled) and anything else: no row found, so
-      // the caller short-circuits rather than needing a dedicated fixture.
-      const builder: any = {
-        select: () => builder,
-        eq: () => builder,
-        maybeSingle: async () => ({ data: null, error: null }),
-      };
-      return builder;
-    };
 
   const mockNoActiveSchedules = () => {
     mod.stripe.subscriptionSchedules.list = mock(async () => ({
@@ -435,12 +472,10 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
   });
 
   test("first-ever exceeded window: sends the confident upgrade notice, defers the Stripe schedule", async () => {
-    // No prior exceeded period is modeled anywhere — PFM-1062 removed the
-    // two-strike gate, so a single crossing is enough to promise the
-    // upgrade. The schedule itself still waits for confirmed delivery.
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      notificationResultStatuses: [],
-    }) as any;
+    // No prior exceeded period is modeled anywhere — a single crossing is
+    // enough to promise the upgrade (no two-strike gate). The schedule
+    // itself still waits for confirmed delivery.
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
     })) as any;
@@ -452,30 +487,63 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     expect(taskTriggerCalls.length).toBe(1);
     const [{ id, payload }] = taskTriggerCalls;
     expect(id).toBe("process-team-notification");
-    expect(payload.notification_type).toBe("usage_alert");
+    // Distinct notification type: an action (the upgrade) is being taken on
+    // the team's behalf, unlike the informational usage_alert warnings.
+    expect(payload.notification_type).toBe("usage_limit_upgrade_notice");
     expect(payload.message).toContain("You will be upgraded to the next tier.");
-    expect((payload.meta_data as any).notification_template).toBe(
-      "usage_limit_upgrade_notice",
-    );
-    expect((payload.meta_data as any).data.loops.transactional_id).toBe(
-      "loops_upgrade",
-    );
-    // Regression guard: the send-decision and the defer-decision must share
-    // a single `team_notifications` query, not issue it twice.
+    const metadata = payload.meta_data as any;
+    // The notice fires strictly after 100%, not at a warning threshold — it
+    // carries no `threshold`; the audit trail is the type + tracking.
+    expect(metadata.threshold).toBeUndefined();
+    expect(metadata.tracking.usage_count).toBe(1200);
+    expect(metadata.tracking.current_limit).toBe(1000);
+    expect(metadata.data.loops.transactional_id).toBe("loops_upgrade");
+    // Regression guard: the send-decision, defer-decision, and
+    // promised-upgrade check must share a single `team_notifications` query.
     expect(teamNotificationsQueryCount).toBe(1);
   });
 
-  test("does not re-send when the period was already confirmed delivered", async () => {
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      notificationResultStatuses: ["sent"],
-    }) as any;
+  test("does not re-send when the period's notice was already confirmed delivered", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({
+        type: "usage_limit_upgrade_notice",
+        statuses: ["sent"],
+      }),
+    ]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
     })) as any;
+    mockNoActiveSchedules();
+    mockScheduleCreation();
 
     await mod.processExceededUsageWindow(makeUsageWindow() as any);
 
     expect(taskTriggerCalls.length).toBe(0);
+  });
+
+  test("a delivered threshold warning does not satisfy the upgrade-notice dedup", async () => {
+    // Separation of concerns: a delivered 95% warning (usage_alert, with a
+    // threshold stamped) is informational only — it must not suppress the
+    // "you will be upgraded" notice once the limit is actually exceeded.
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({
+        type: "usage_alert",
+        threshold: 95,
+        statuses: ["sent"],
+      }),
+    ]) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockNoActiveSchedules();
+    refuseSubscriptionScheduleWrites();
+
+    await mod.processExceededUsageWindow(makeUsageWindow() as any);
+
+    expect(taskTriggerCalls.length).toBe(1);
+    expect(taskTriggerCalls[0].payload.notification_type).toBe(
+      "usage_limit_upgrade_notice",
+    );
   });
 
   test("retries the notice when the prior attempt for this period failed to deliver", async () => {
@@ -483,9 +551,12 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     // delivery result is "failed" — row existence alone must not count as
     // "notified", or a team whose only send attempt fails would never be
     // retried yet could still be auto-upgraded later.
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      notificationResultStatuses: ["failed"],
-    }) as any;
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({
+        type: "usage_limit_upgrade_notice",
+        statuses: ["failed"],
+      }),
+    ]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
     })) as any;
@@ -498,13 +569,16 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
   });
 
   test("first-ever exceeded window, notice already confirmed delivered: creates the Stripe schedule with no additional email", async () => {
-    // Core PFM-1062 regression test: no prior exceeded period at all, yet a
-    // single confirmed-delivered crossing is enough to create the schedule —
-    // the old two-strike gate required this to be the *second* consecutive
-    // exceeded period before scheduling anything.
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      notificationResultStatuses: ["sent"], // confirmed delivered on an earlier tick
-    }) as any;
+    // Core single-strike regression test: no prior exceeded period at all,
+    // yet a single confirmed-delivered crossing is enough to create the
+    // schedule — the old two-strike gate required this to be the *second*
+    // consecutive exceeded period before scheduling anything.
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({
+        type: "usage_limit_upgrade_notice",
+        statuses: ["sent"], // confirmed delivered on an earlier tick
+      }),
+    ]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
     })) as any;
@@ -523,11 +597,12 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     // earlier tick, but this tick's eligibility check comes back ineligible
     // (e.g. the customer cancelled in reaction to the email) — this is
     // logged internally but no customer-facing email fires.
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      templateResultStatuses: {
-        usage_limit_upgrade_notice: ["sent"],
-      },
-    }) as any;
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({
+        type: "usage_limit_upgrade_notice",
+        statuses: ["sent"],
+      }),
+    ]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;
 
     await mod.processExceededUsageWindow(makeUsageWindow() as any);
@@ -538,11 +613,7 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
   test("never-eligible team crossing 100%: no notification, since no upgrade was ever promised", async () => {
     // The team was ineligible from the start this period (e.g. no active
     // Stripe subscription) — nothing was promised, so nothing fires or logs.
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      templateResultStatuses: {
-        usage_limit_upgrade_notice: [],
-      },
-    }) as any;
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({ data: [] })) as any;
 
     await mod.processExceededUsageWindow(makeUsageWindow() as any);
@@ -575,11 +646,14 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
   };
 
   test("escalation: usage exceeds the scheduled tier, schedule is bumped, and a follow-up notice fires", async () => {
-    mod.supabaseClient.from = fakeSupabaseFrom({
+    mod.supabaseClient.from = fakeSupabaseFrom([
       // An active schedule can only exist if the current period's notice
-      // was already confirmed delivered (the PFM-1061 delivery-confirmation gate).
-      notificationResultStatuses: ["sent"],
-    }) as any;
+      // was already confirmed delivered (the delivery-confirmation gate).
+      alertRow({
+        type: "usage_limit_upgrade_notice",
+        statuses: ["sent"],
+      }),
+    ]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
     })) as any;
@@ -598,7 +672,7 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     // so only the escalation notice fires.
     expect(taskTriggerCalls.length).toBe(1);
     const escalationPayload = taskTriggerCalls[0].payload;
-    expect((escalationPayload.meta_data as any).notification_template).toBe(
+    expect(escalationPayload.notification_type).toBe(
       "usage_limit_upgrade_notice",
     );
     expect(
@@ -607,9 +681,12 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
   });
 
   test("escalation: a burst that skips multiple tiers converges to the correct tier in one step", async () => {
-    mod.supabaseClient.from = fakeSupabaseFrom({
-      notificationResultStatuses: ["sent"],
-    }) as any;
+    mod.supabaseClient.from = fakeSupabaseFrom([
+      alertRow({
+        type: "usage_limit_upgrade_notice",
+        statuses: ["sent"],
+      }),
+    ]) as any;
     mod.stripe.subscriptions.list = mock(async () => ({
       data: [makeSubscription()],
     })) as any;

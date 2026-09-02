@@ -995,8 +995,8 @@ export type Database = {
       }
     }
     Functions: {
-      get_exceeded_team_usage_windows: {
-        Args: never
+      get_team_usage_windows_over_threshold: {
+        Args: { threshold_percent: number }
         Returns: {
           count: number
           end_at: string
@@ -1053,7 +1053,10 @@ export type Database = {
     }
     Enums: {
       delivery_type: "email"
-      notification_type: "usage_alert" | "general"
+      notification_type:
+        | "usage_alert"
+        | "general"
+        | "usage_limit_upgrade_notice"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1213,7 +1216,11 @@ export const Constants = {
   public: {
     Enums: {
       delivery_type: ["email"],
-      notification_type: ["usage_alert", "general"],
+      notification_type: [
+        "usage_alert",
+        "general",
+        "usage_limit_upgrade_notice",
+      ],
       social_post_status: [
         "draft",
         "scheduled",
