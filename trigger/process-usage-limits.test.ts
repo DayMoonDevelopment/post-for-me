@@ -70,10 +70,11 @@ const makeSubscription = (
   }) as unknown as Stripe.Subscription;
 
 // A raw `team_notifications` row fixture as stored by the two email paths.
-// The domain is the row's notification_type; the meta_data carries the
-// read-only audit context (`threshold` + tracking.current_limit for
-// warnings, tracking.new_plan_post_limit for subscription updates) and the
-// per-attempt delivery `results`.
+// The domain is the row's notification_type; the meta_data root is sacred
+// (category/tracking/data/results only), with the read-only audit context
+// under tracking (threshold + current_limit for warnings,
+// new_plan_post_limit for subscription updates) and the per-attempt
+// delivery `results`.
 const alertRow = ({
   id = "tn_existing",
   type,
@@ -98,8 +99,8 @@ const alertRow = ({
   created_at: "2026-02-02T00:00:00Z",
   meta_data: {
     notification_category: "transactional",
-    ...(threshold !== undefined ? { threshold } : {}),
     tracking: {
+      ...(threshold !== undefined ? { threshold } : {}),
       ...(currentLimit !== undefined ? { current_limit: currentLimit } : {}),
       ...(newPlanPostLimit !== undefined
         ? { new_plan_post_limit: newPlanPostLimit }
@@ -470,7 +471,7 @@ describe("processWarningWindow (usage_alert path)", () => {
     const [{ payload }] = taskTriggerCalls;
     expect(payload.notification_type).toBe("usage_alert");
     const metadata = payload.meta_data as any;
-    expect(metadata.threshold).toBe(80);
+    expect(metadata.tracking.threshold).toBe(80);
     expect(metadata.tracking.usage_count).toBe(820);
     expect(metadata.tracking.current_limit).toBe(1000);
     expect(metadata.tracking.suggested_plan_post_limit).toBe(2500);
@@ -486,7 +487,7 @@ describe("processWarningWindow (usage_alert path)", () => {
     await mod.processWarningWindow(makeUsageWindow({ count: 960 }) as any);
 
     expect(taskTriggerCalls.length).toBe(1);
-    expect((taskTriggerCalls[0].payload.meta_data as any).threshold).toBe(95);
+    expect((taskTriggerCalls[0].payload.meta_data as any).tracking.threshold).toBe(95);
   });
 
   test("a delivered warning at a higher threshold for the same limit suppresses re-sends without touching Stripe", async () => {
@@ -536,7 +537,7 @@ describe("processWarningWindow (usage_alert path)", () => {
 
     expect(taskTriggerCalls.length).toBe(1);
     const metadata = taskTriggerCalls[0].payload.meta_data as any;
-    expect(metadata.threshold).toBe(80);
+    expect(metadata.tracking.threshold).toBe(80);
     expect(metadata.tracking.current_limit).toBe(2500);
   });
 
@@ -657,7 +658,7 @@ describe("processExceededUsageWindow (subscription_alert path)", () => {
     const metadata = payload.meta_data as any;
     // No threshold on a subscription update — the facts are posts delivered,
     // posts allowed now, posts allowed next cycle.
-    expect(metadata.threshold).toBeUndefined();
+    expect(metadata.tracking.threshold).toBeUndefined();
     expect(metadata.tracking.usage_count).toBe(1200);
     expect(metadata.tracking.current_limit).toBe(1000);
     expect(metadata.tracking.new_plan_post_limit).toBe(2500);

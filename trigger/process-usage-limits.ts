@@ -50,8 +50,8 @@ type TeamNotificationRow =
 // Trigger-cost convenience, not a statement that they're one entity):
 // - "usage_alert": informational 80/90/95% threshold warning. No action is
 //   required or taken; the crossed threshold and limits ride along in
-//   meta_data as read-only context ("the 80% warning fired at 802 of a
-//   1000-post limit" — threshold + tracking.usage_count +
+//   meta_data.tracking as read-only context ("the 80% warning fired at 802
+//   of a 1000-post limit" — tracking.threshold + tracking.usage_count +
 //   tracking.current_limit).
 // - "subscription_alert": the team's subscription was actually changed (an
 //   auto-upgrade was scheduled for the next billing period after they
@@ -397,8 +397,8 @@ export const bucketUsageWindows = (
 
 type NotificationDeliveryResult = { status?: string };
 type UsageNotificationRowMetadata = {
-  threshold?: number;
   tracking?: {
+    threshold?: number;
     current_limit?: number;
     new_plan_post_limit?: number;
   };
@@ -422,7 +422,10 @@ export const parseUsageNotificationRow = (
   const meta = row.meta_data as UsageNotificationRowMetadata | null;
   return {
     row,
-    threshold: typeof meta?.threshold === "number" ? meta.threshold : null,
+    threshold:
+      typeof meta?.tracking?.threshold === "number"
+        ? meta.tracking.threshold
+        : null,
     currentLimit:
       typeof meta?.tracking?.current_limit === "number"
         ? meta.tracking.current_limit
@@ -774,11 +777,12 @@ const scheduleUpgrade = async ({
 
 /**
  * Shared metadata builder for both email paths, so the Loops/PostHog payload
- * shape can't drift between them. The domain lives on the row's
- * notification_type; the metadata adds the read-only context needed to
- * audit a send from its own row:
- * - usage_alert: `threshold` + tracking.suggested_plan_post_limit (the
- *   informational "next plan you might want").
+ * shape can't drift between them. The root level is sacred — only
+ * `notification_category`, `tracking`, `data`, and `results` live there;
+ * the domain lives on the row's notification_type, and all read-only audit
+ * context goes under `tracking`:
+ * - usage_alert: tracking.threshold + tracking.suggested_plan_post_limit
+ *   (the informational "next plan you might want").
  * - subscription_alert: tracking.new_plan_post_limit (the plan the
  *   subscription was actually updated to for the next billing cycle) — no
  *   threshold, since no threshold comparison drives that action; the facts
@@ -817,8 +821,8 @@ const buildUsageEmailMetadata = ({
   // consumer. Kept out of `data.loops.data` so these analytics-only fields
   // aren't forwarded to Loops as email variables.
   notification_category: "transactional",
-  ...(thresholdPercent !== undefined ? { threshold: thresholdPercent } : {}),
   tracking: {
+    ...(thresholdPercent !== undefined ? { threshold: thresholdPercent } : {}),
     usage_count: usage,
     current_limit: currentLimit,
     plan_post_limit: currentPlanPostLimit,

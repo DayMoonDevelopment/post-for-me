@@ -17,14 +17,15 @@ type TeamNotificationMetadata = {
   // `notification_sent` analytics event can be fired on delivery without
   // reverse-mapping the Loops template id. The communication bucket is the
   // row's own notification_type (usage_alert = informational threshold
-  // warning, subscription_alert = the subscription was actually updated);
-  // `threshold` carries the crossed percent on warnings as read-only
-  // context, `tracking.new_plan_post_limit` the plan a subscription_alert's
-  // update landed on. The channel + provider are added by this consumer.
-  // Absent for untracked notifications.
+  // warning, subscription_alert = the subscription was actually updated).
+  // The root level is sacred — all read-only audit context lives under
+  // `tracking`: `threshold` carries the crossed percent on warnings,
+  // `new_plan_post_limit` the plan a subscription_alert's update landed on.
+  // The channel + provider are added by this consumer. Absent for untracked
+  // notifications.
   notification_category?: string;
-  threshold?: number;
   tracking?: {
+    threshold?: number;
     usage_count?: number;
     current_limit?: number;
     plan_post_limit?: number | null;
@@ -310,7 +311,7 @@ async function trackNotificationSent({
         notification_id: notification.id,
         notification_type: notification.notification_type,
         notification_category: metadata.notification_category,
-        threshold: metadata.threshold ?? null,
+        threshold: tracking.threshold ?? null,
         system_triggered: true,
         usage_count: tracking.usage_count ?? null,
         current_limit: tracking.current_limit ?? null,
@@ -320,7 +321,7 @@ async function trackNotificationSent({
         ...channelProperties,
       },
       dedupeKey: deterministicUuid(
-        `notification_sent:${notification.team_id}:${channel}:${notification.notification_type}:${metadata.threshold ?? ""}:${periodStart}:${tracking.new_plan_post_limit ?? tracking.suggested_plan_post_limit ?? ""}`,
+        `notification_sent:${notification.team_id}:${channel}:${notification.notification_type}:${tracking.threshold ?? ""}:${periodStart}:${tracking.new_plan_post_limit ?? tracking.suggested_plan_post_limit ?? ""}`,
       ),
     });
   } catch (error) {
