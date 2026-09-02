@@ -35,6 +35,11 @@ export async function getPinterestSocialProviderConnection({
   });
   const tokenData = await tokenResponse.json();
 
+  if (!tokenData?.access_token) {
+    console.error("Error fetching access token", tokenData);
+    throw Error(`Error fetching access token ${tokenData?.message || ""}`);
+  }
+
   const { access_token, refresh_token, expires_in } = tokenData;
 
   const userResponse = await fetch(
