@@ -19,10 +19,10 @@ import type {
 } from './facebook.types';
 import { FacebookPostMetricsDto } from './dto/facebook-post-metrics.dto';
 import { mapWithConcurrency } from '../lib/async.utils';
+import { getFacebookApiVersion } from '../lib/graph-api-version.util';
 
 const FACEBOOK_METRICS_POST_CONCURRENCY = 3;
 const FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY = 2;
-const DEFAULT_FACEBOOK_API_VERSION = 'v25.0';
 
 type FacebookInsightsInterval = { since: string; until: string };
 
@@ -36,11 +36,7 @@ export class FacebookService implements SocialPlatformService {
   ) {}
 
   private get graphApiBaseUrl(): string {
-    const facebookApiVersion =
-      this.configService.get<string>('FACEBOOK_API_VERSION') ||
-      DEFAULT_FACEBOOK_API_VERSION;
-
-    return `https://graph.facebook.com/${facebookApiVersion}`;
+    return `https://graph.facebook.com/${getFacebookApiVersion(this.configService)}`;
   }
 
   private logFacebookInsightsError(error: unknown, groupName?: string): void {

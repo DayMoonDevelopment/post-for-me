@@ -25,11 +25,13 @@ export class FacebookPostClient extends PostClient {
     "upload_complete",
   ];
 
-  #graphApiUrl =
-    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com";
-  #graphVideoApiUrl =
+  #graphApiUrl = (
+    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com"
+  ).replace(/\/+$/, "");
+  #graphVideoApiUrl = (
     process.env.FACEBOOK_GRAPH_VIDEO_API_URL ||
-    "https://graph-video.facebook.com";
+    "https://graph-video.facebook.com"
+  ).replace(/\/+$/, "");
   #apiVersion = process.env.FACEBOOK_API_VERSION || "v25.0";
   #oauthApiVersion = process.env.FACEBOOK_OAUTH_API_VERSION || "v20.0";
 
