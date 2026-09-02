@@ -1308,12 +1308,7 @@ export type Database = {
     }
     Enums: {
       delivery_type: "email"
-      notification_type:
-        | "usage_alert"
-        | "general"
-        | "usage_alert_80"
-        | "usage_alert_90"
-        | "usage_alert_95"
+      notification_type: "usage_alert" | "general"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1476,13 +1471,7 @@ export const Constants = {
   public: {
     Enums: {
       delivery_type: ["email"],
-      notification_type: [
-        "usage_alert",
-        "general",
-        "usage_alert_80",
-        "usage_alert_90",
-        "usage_alert_95",
-      ],
+      notification_type: ["usage_alert", "general"],
       social_post_status: [
         "draft",
         "scheduled",

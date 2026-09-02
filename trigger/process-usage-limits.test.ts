@@ -71,24 +71,26 @@ const makeSubscription = (
 
 // Fake Supabase query builder for the `team_notifications` chain used by
 // hasUsageNotificationForPeriod: reports a confirmed "sent" delivery for
-// whichever notification_type values are in `notifiedTypes`. The chain's
-// terminal call is `lt()` (no `.limit()`/`.maybeSingle()` — the real query
-// can return multiple rows per period), so it resolves the `{ data, error }`
-// shape directly.
-const fakeNotificationsFrom = (notifiedTypes: Set<string>) => () => {
-  let queriedType: string | undefined;
+// whichever notification_template values are in `notifiedTemplates`.
+// `notification_type` is constant (`usage_alert`) for every usage-alert row,
+// so the template is the only real discriminator between thresholds now.
+// The chain's terminal call is `lt()` (no `.limit()`/`.maybeSingle()` — the
+// real query can return multiple rows per period), so it resolves the
+// `{ data, error }` shape directly.
+const fakeNotificationsFrom = (notifiedTemplates: Set<string>) => () => {
+  let queriedTemplate: string | undefined;
   const builder: any = {
     select: () => builder,
     eq: (column: string, value: string) => {
-      if (column === "notification_type") {
-        queriedType = value;
+      if (column === "meta_data->>notification_template") {
+        queriedTemplate = value;
       }
       return builder;
     },
     gte: () => builder,
     lt: () => ({
       data:
-        queriedType && notifiedTypes.has(queriedType)
+        queriedTemplate && notifiedTemplates.has(queriedTemplate)
           ? [{ meta_data: { results: [{ status: "sent" }] } }]
           : [],
       error: null,
@@ -255,7 +257,7 @@ describe("hasHigherOrEqualUsageNotification", () => {
     // Regression test: a team warned at 95% must not later receive an 80%
     // warning after usage is recalculated downward mid-period.
     mod.supabaseClient.from = fakeNotificationsFrom(
-      new Set(["usage_alert_95"]),
+      new Set(["usage_threshold_alert_95"]),
     ) as any;
 
     const eightyThreshold = mod.USAGE_WARNING_THRESHOLDS.find(
@@ -274,7 +276,7 @@ describe("hasHigherOrEqualUsageNotification", () => {
 
   test("returns false when only a lower threshold has fired", async () => {
     mod.supabaseClient.from = fakeNotificationsFrom(
-      new Set(["usage_alert_80"]),
+      new Set(["usage_threshold_alert_80"]),
     ) as any;
 
     const ninetyFiveThreshold = mod.USAGE_WARNING_THRESHOLDS.find(
@@ -463,6 +465,31 @@ describe("processExceededUsageWindow (PFM-1061/PFM-1062 single-strike upgrade fl
     // Regression guard: the send-decision and the defer-decision must share
     // a single `team_notifications` query, not issue it twice.
     expect(teamNotificationsQueryCount).toBe(1);
+  });
+
+  test("regression: an earlier threshold-warning email does not suppress the 100% upgrade notice", async () => {
+    // `notification_type` is now a constant "usage_alert" for every
+    // usage-alert row (warnings and the upgrade notice alike), so an 80%
+    // warning already sent this period must not be mistaken for the
+    // upgrade notice itself — only `usage_limit_upgrade_notice` counts.
+    mod.supabaseClient.from = fakeSupabaseFrom({
+      templateResultStatuses: {
+        usage_threshold_alert_80: ["sent"],
+      },
+    }) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockNoActiveSchedules();
+    refuseSubscriptionScheduleWrites();
+
+    await mod.processExceededUsageWindow(makeUsageWindow() as any);
+
+    expect(taskTriggerCalls.length).toBe(1);
+    const [{ payload }] = taskTriggerCalls;
+    expect((payload.meta_data as any).notification_template).toBe(
+      "usage_limit_upgrade_notice",
+    );
   });
 
   test("does not re-send when the period was already confirmed delivered", async () => {

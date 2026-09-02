@@ -42,28 +42,22 @@ type ExceededUsageWindow =
   Database["public"]["Functions"]["get_exceeded_team_usage_windows"]["Returns"][number];
 type ActiveUsageWindow =
   Database["public"]["Functions"]["get_active_team_usage_windows"]["Returns"][number];
-type TeamNotificationType =
-  Database["public"]["Tables"]["team_notifications"]["Row"]["notification_type"];
 
 export const USAGE_WARNING_THRESHOLDS = [
   {
     percent: 95,
-    notificationType: "usage_alert_95",
     notificationTemplate: "usage_threshold_alert_95",
   },
   {
     percent: 90,
-    notificationType: "usage_alert_90",
     notificationTemplate: "usage_threshold_alert_90",
   },
   {
     percent: 80,
-    notificationType: "usage_alert_80",
     notificationTemplate: "usage_threshold_alert_80",
   },
 ] as const satisfies {
   percent: number;
-  notificationType: TeamNotificationType;
   notificationTemplate: string;
 }[];
 
@@ -87,13 +81,12 @@ const triggerTeamNotification = async (
   teamId: string,
   message: string,
   metadata: Json,
-  notificationType: TeamNotificationType = "usage_alert",
 ): Promise<void> => {
   await tasks.trigger("process-team-notification", {
     id: `tn_${randomUUID()}`,
     team_id: teamId,
     project_id: null,
-    notification_type: notificationType,
+    notification_type: "usage_alert",
     delivery_types: ["email"],
     message,
     meta_data: metadata,
@@ -385,7 +378,6 @@ type NotificationRowMetadata = { results?: NotificationDeliveryResult[] };
 // silently treated as done forever.
 const hasUsageNotificationForPeriod = async (
   teamId: string,
-  notificationType: TeamNotificationType,
   periodStart: string,
   periodEnd: string,
   notificationTemplate?: UsageEmailTemplate,
@@ -393,7 +385,7 @@ const hasUsageNotificationForPeriod = async (
   let query = supabaseClient
     .from("team_notifications")
     .select("meta_data")
-    .eq("notification_type", notificationType)
+    .eq("notification_type", "usage_alert")
     .eq("team_id", teamId);
 
   if (notificationTemplate) {
@@ -437,9 +429,9 @@ export const hasHigherOrEqualUsageNotification = async (
     thresholdsAtOrAbove.map((candidate) =>
       hasUsageNotificationForPeriod(
         teamId,
-        candidate.notificationType,
         periodStart,
         periodEnd,
+        candidate.notificationTemplate,
       ),
     ),
   );
@@ -449,14 +441,12 @@ export const hasHigherOrEqualUsageNotification = async (
 
 const maybeTriggerUsageNotification = async ({
   teamId,
-  notificationType,
   periodStart,
   periodEnd,
   message,
   metadata,
 }: {
   teamId: string;
-  notificationType: TeamNotificationType;
   periodStart: string;
   periodEnd: string;
   message: string;
@@ -464,11 +454,10 @@ const maybeTriggerUsageNotification = async ({
 }): Promise<void> => {
   logger.info("Triggering usage notification", {
     team_id: teamId,
-    notification_type: notificationType,
     period_start: periodStart,
     period_end: periodEnd,
   });
-  await triggerTeamNotification(teamId, message, metadata, notificationType);
+  await triggerTeamNotification(teamId, message, metadata);
 };
 
 // Resolves "the next tier" by sorted post-count rather than array index, so
@@ -797,7 +786,6 @@ const sendUpgradeNotice = ({
 }): Promise<void> =>
   maybeTriggerUsageNotification({
     teamId,
-    notificationType: "usage_alert",
     periodStart: usageWindow.start_at,
     periodEnd: usageWindow.end_at,
     message,
@@ -942,7 +930,6 @@ export const processExceededUsageWindow = async (
       // visibility only.
       const wasPromisedUpgrade = await hasUsageNotificationForPeriod(
         teamId,
-        "usage_alert",
         usageWindow.start_at,
         usageWindow.end_at,
         "usage_limit_upgrade_notice",
@@ -980,9 +967,9 @@ export const processExceededUsageWindow = async (
     // synchronously within this tick.
     const currentPeriodNotified = await hasUsageNotificationForPeriod(
       teamId,
-      "usage_alert",
       usageWindow.start_at,
       usageWindow.end_at,
+      "usage_limit_upgrade_notice",
     );
 
     if (!currentPeriodNotified) {
@@ -1220,7 +1207,7 @@ export const processUsageLimits = schedules.task({
               "Usage notification already sent for period at this or a higher threshold",
               {
                 team_id: teamId,
-                notification_type: crossedThreshold.notificationType,
+                notification_template: crossedThreshold.notificationTemplate,
                 period_start: periodStart,
                 period_end: periodEnd,
               },
@@ -1241,7 +1228,6 @@ export const processUsageLimits = schedules.task({
 
           await maybeTriggerUsageNotification({
             teamId,
-            notificationType: crossedThreshold.notificationType,
             periodStart,
             periodEnd,
             message: `Usage at ${Math.round(percentage)}% of plan limit (${usage}/${currentLimit} posts used this period).`,
