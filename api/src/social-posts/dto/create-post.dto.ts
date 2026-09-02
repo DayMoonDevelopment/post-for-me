@@ -12,7 +12,7 @@ export class CreateSocialPostDto {
 
   @ApiProperty({
     description:
-      'Scheduled date and time for the post, setting to null or undefined will post instantly',
+      'Scheduled date and time for the post in UTC (ISO 8601), setting to null or undefined will post instantly',
     nullable: true,
     required: false,
     type: Date,

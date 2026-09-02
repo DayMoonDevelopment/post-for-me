@@ -58,7 +58,9 @@ The below example shows how to create a media post from start to finish.
  \`\`\`js
    // Step 2: Create the post using the social account ids
 
-   // We are scheduling the post one hour from now
+   // We are scheduling the post one hour from now.
+   // All dates are in UTC (ISO 8601) - JSON.stringify() below serializes
+   // this Date to a UTC string automatically.
    const scheduledAt = new Date();
    scheduledAt.setHours(scheduledAt.getHours() + 1);
 
