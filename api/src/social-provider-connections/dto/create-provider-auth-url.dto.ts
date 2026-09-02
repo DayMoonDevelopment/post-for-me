@@ -207,7 +207,8 @@ export class CreateSocialAccountProviderAuthUrlDto {
   platform_data?: AuthUrlProviderData | null;
 
   @ApiProperty({
-    description: 'Your unique identifier for the social account',
+    description:
+      'Your unique identifier for the social account. If this account already has a connection with a different external_id set, the reconnect attempt will fail for that account - see "Reconnecting an Account" above.',
     required: false,
   })
   external_id?: string;
