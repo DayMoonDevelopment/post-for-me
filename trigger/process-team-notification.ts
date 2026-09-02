@@ -17,10 +17,11 @@ type TeamNotificationMetadata = {
   // `notification_sent` analytics event can be fired on delivery without
   // reverse-mapping the Loops template id. The communication bucket is the
   // row's own notification_type (usage_alert = informational threshold
-  // warning, usage_limit_upgrade_notice = an upgrade was scheduled);
+  // warning, subscription_alert = the subscription was actually updated);
   // `threshold` carries the crossed percent on warnings as read-only
-  // context. The channel + provider are added by this consumer. Absent for
-  // untracked notifications.
+  // context, `tracking.new_plan_post_limit` the plan a subscription_alert's
+  // update landed on. The channel + provider are added by this consumer.
+  // Absent for untracked notifications.
   notification_category?: string;
   threshold?: number;
   tracking?: {
@@ -28,6 +29,7 @@ type TeamNotificationMetadata = {
     current_limit?: number;
     plan_post_limit?: number | null;
     suggested_plan_post_limit?: number | null;
+    new_plan_post_limit?: number | null;
     period_start?: string;
   };
   data?: {
@@ -314,10 +316,11 @@ async function trackNotificationSent({
         current_limit: tracking.current_limit ?? null,
         plan_post_limit: tracking.plan_post_limit ?? null,
         suggested_plan_post_limit: tracking.suggested_plan_post_limit ?? null,
+        new_plan_post_limit: tracking.new_plan_post_limit ?? null,
         ...channelProperties,
       },
       dedupeKey: deterministicUuid(
-        `notification_sent:${notification.team_id}:${channel}:${notification.notification_type}:${metadata.threshold ?? ""}:${periodStart}:${tracking.suggested_plan_post_limit ?? ""}`,
+        `notification_sent:${notification.team_id}:${channel}:${notification.notification_type}:${metadata.threshold ?? ""}:${periodStart}:${tracking.new_plan_post_limit ?? tracking.suggested_plan_post_limit ?? ""}`,
       ),
     });
   } catch (error) {
@@ -418,9 +421,13 @@ export const processTeamNotification = task({
         totalResultCount: results.length + deliveryResults.length,
       });
 
+      // Upsert on the notification id: a first attempt inserts the row, and
+      // a retried attempt (the producer re-dispatches the same row when a
+      // prior delivery never succeeded) appends its results to that same
+      // record instead of minting a duplicate row per attempt.
       const { data: insertedNotification, error } = await supabaseClient
         .from("team_notifications")
-        .insert(payloadToInsert)
+        .upsert(payloadToInsert)
         .select()
         .single();
 

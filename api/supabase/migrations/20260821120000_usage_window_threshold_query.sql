@@ -1,11 +1,13 @@
 --
--- Distinct notification type for the "you will be upgraded" communication.
+-- Distinct notification type for subscription-change communications.
 -- 'usage_alert' is the informational 80/90/95% threshold-warning group (no
--- action taken; the crossed threshold rides along in meta_data as read-only
--- context), while 'usage_limit_upgrade_notice' records that an upgrade was
--- automatically scheduled on the team's behalf — a billing impact, so it is
--- a separate concern at the type level, not a metadata variant.
-ALTER TYPE notification_type ADD VALUE 'usage_limit_upgrade_notice';
+-- action taken; the crossed threshold and limits ride along in meta_data as
+-- read-only context), while 'subscription_alert' records that the team's
+-- subscription was actually changed (e.g. auto-upgraded for the next billing
+-- period after exceeding their plan limit) — the email is a side effect of
+-- that action, so it is a separate domain at the type level, not a metadata
+-- variant of the informational alerts.
+ALTER TYPE notification_type ADD VALUE 'subscription_alert';
 
 
 --
