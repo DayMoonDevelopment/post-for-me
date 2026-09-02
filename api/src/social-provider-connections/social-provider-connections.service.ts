@@ -257,24 +257,21 @@ export class SocialAccountsService {
   }: {
     id: string;
     projectId: string;
-  }): Promise<DeleteEntityResponseDto> {
-    const { data, error } = await this.supabaseService.supabaseClient
-      .from('social_provider_connections')
-      .delete()
-      .eq('id', id)
-      .eq('project_id', projectId)
-      .select('id')
-      .maybeSingle();
+  }): Promise<
+    DeleteEntityResponseDto & {
+      deletedPosts: Database['public']['Functions']['delete_social_account']['Returns'];
+    }
+  > {
+    const { data, error } = await this.supabaseService.supabaseServiceRole.rpc(
+      'delete_social_account',
+      { p_id: id, p_project_id: projectId },
+    );
 
     if (error) {
       throw new Error(error.message);
     }
 
-    if (!data) {
-      throw new Error('Social account not found');
-    }
-
-    return { success: true };
+    return { success: true, deletedPosts: data ?? [] };
   }
 
   async createSocialAccount({
