@@ -226,6 +226,21 @@ export class FacebookPostClient extends PostClient {
         "Error posting to Facebook:",
         error.response?.data || error,
       );
+
+      if (error.response?.status === 401 || this.isTerminalAuthError(error)) {
+        return {
+          success: false,
+          post_id: postId,
+          provider_connection_id: account.id,
+          error_message: this.buildAuthErrorMessage(error),
+          details: {
+            error,
+            requests: this.#requests,
+            responses: this.#responses,
+          },
+        };
+      }
+
       return {
         success: false,
         post_id: postId,
@@ -678,6 +693,10 @@ export class FacebookPostClient extends PostClient {
         logger.error("Error getting video status", {
           err,
         });
+
+        if (this.isTerminalAuthError(err)) {
+          throw err;
+        }
       } finally {
         attempts++;
       }
@@ -958,6 +977,10 @@ export class FacebookPostClient extends PostClient {
         logger.error("Error getting video status", {
           err,
         });
+
+        if (this.isTerminalAuthError(err)) {
+          throw err;
+        }
       } finally {
         attempts++;
       }

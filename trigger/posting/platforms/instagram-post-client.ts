@@ -225,7 +225,7 @@ export class InstagramPostClient extends PostClient {
 
           platformId = publishResponse.data.id;
         } catch (error) {
-          if (this.#isNonRetryableError(error)) {
+          if (this.isTerminalAuthError(error)) {
             throw error;
           }
 
@@ -278,13 +278,12 @@ export class InstagramPostClient extends PostClient {
     } catch (error) {
       console.error("Error posting to Instagram:", error);
 
-      if (error.response?.status === 401) {
+      if (error.response?.status === 401 || this.isTerminalAuthError(error)) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message:
-            "Account needs to be reconnected, Access token has expired",
+          error_message: this.buildAuthErrorMessage(error),
           details: {
             error,
             requests: this.#requests,
@@ -635,15 +634,16 @@ export class InstagramPostClient extends PostClient {
           });
         }
 
-        const errorMessage = this.#getErrorMessage(error);
+        const errorMessage = this.getErrorMessage(error);
         console.error(
           `Failed to process ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}: ${errorMessage}`,
         );
 
-        if (this.#isNonRetryableError(error)) {
-          throw new Error(
-            `Failed to process ${mediaLabel} without retry: ${errorMessage}`,
+        if (this.isTerminalAuthError(error)) {
+          console.error(
+            `Failed to process ${mediaLabel} - terminal auth error, not retrying: ${errorMessage}`,
           );
+          throw error;
         }
 
         if (attempt === this.#mediaRetryAttempts) {
@@ -736,22 +736,6 @@ export class InstagramPostClient extends PostClient {
       `Max attempts reached. Failed to process media. Last status: ${JSON.stringify(
         statusData,
       )}`,
-    );
-  }
-
-  #getErrorMessage(error: any): string {
-    return (
-      error?.response?.data?.error?.message || error?.message || "Unknown error"
-    );
-  }
-
-  #isNonRetryableError(error: any): boolean {
-    const errorMessage = this.#getErrorMessage(error).toLowerCase();
-
-    return (
-      errorMessage.includes(
-        "error validating access token: sessions for the user are not allowed because the user is not a confirmed user",
-      ) || errorMessage.includes("user access is restricted")
     );
   }
 
@@ -853,9 +837,9 @@ export class InstagramPostClient extends PostClient {
 
         return permalink;
       } catch (error) {
-        const errorMessage = this.#getErrorMessage(error);
+        const errorMessage = this.getErrorMessage(error);
 
-        if (this.#isNonRetryableError(error)) {
+        if (this.isTerminalAuthError(error)) {
           throw error;
         }
 

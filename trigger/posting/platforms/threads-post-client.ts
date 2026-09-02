@@ -144,6 +144,10 @@ export class ThreadsPostClient extends PostClient {
           platformId = publishResponse.data.id;
         } catch (error: any) {
           if (error.response?.status === 400) {
+            if (this.isTerminalAuthError(error)) {
+              throw error;
+            }
+
             console.log(
               `Bad Request With Error: ${error.response?.data?.error?.message || "Unknown error"}`,
             );
@@ -180,12 +184,12 @@ export class ThreadsPostClient extends PostClient {
       console.error("Error posting to Threads:", error.response?.data || error);
 
       // Handle specific error cases
-      if (error.response?.status === 401) {
+      if (error.response?.status === 401 || this.isTerminalAuthError(error)) {
         return {
           success: false,
           provider_connection_id: account.id,
           post_id: postId,
-          error_message: "Account needs to be reconnected",
+          error_message: this.buildAuthErrorMessage(error),
           details: {
             error,
             requests: this.#requests,
@@ -350,6 +354,10 @@ export class ThreadsPostClient extends PostClient {
         attempts++;
       } catch (error: any) {
         if (error.response?.status === 400) {
+          if (this.isTerminalAuthError(error)) {
+            throw error;
+          }
+
           // If we get a 400 error, the media might be ready
           break;
         }
