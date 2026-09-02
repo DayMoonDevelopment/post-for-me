@@ -20,6 +20,7 @@ export class PostResultsService {
   ): Promise<{
     data: {
       success: boolean;
+      is_processing: boolean;
       provider_post_id?: string;
       provider_post_url?: string;
       id: string;
@@ -34,7 +35,7 @@ export class PostResultsService {
       await this.supabaseService.supabaseClient
         .from('social_post_results')
         .select(
-          'id, success, provider_post_id, provider_post_url, details, post_id, provider_connection_id, error_message, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+          'id, success, is_processing, provider_post_id, provider_post_url, details, post_id, provider_connection_id, error_message, social_provider_connections(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
         )
         .eq('id', id)
         .eq('social_provider_connections.project_id', projectId)
@@ -47,6 +48,7 @@ export class PostResultsService {
     return {
       data: {
         success: postResult.success,
+        is_processing: postResult.is_processing,
         provider_post_id: postResult?.provider_post_id || undefined,
         provider_post_url: postResult?.provider_post_url || undefined,
         id: postResult?.id,
@@ -125,7 +127,7 @@ export class PostResultsService {
     const query = this.supabaseService.supabaseClient
       .from('social_post_results')
       .select(
-        'id, provider_connection_id, post_id, success, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
+        'id, provider_connection_id, post_id, success, is_processing, error_message, details, provider_post_id, provider_post_url, created_at, social_provider_connections!inner(provider, project_id), social_post_result_post_media(social_post_media(url, thumbnail_url, thumbnail_timestamp_ms, tags, skip_processing))',
       )
       .eq('social_provider_connections.project_id', projectId)
       .in(
@@ -197,6 +199,7 @@ export class PostResultsService {
         social_account_id: raw.provider_connection_id,
         post_id: raw.post_id,
         success: raw.success,
+        is_processing: raw.is_processing,
         error: raw.error_message,
         details: raw.details,
         platform_data,
@@ -242,6 +245,7 @@ export class PostResultsService {
       social_account_id: postResults.data.provider_connection_id,
       post_id: postResults.data.post_id,
       success: postResults.data.success,
+      is_processing: postResults.data.is_processing,
       error: postResults.data.error_message || null,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       details: postResults.data.details,

@@ -35,7 +35,7 @@ export function PostContentProcessed() {
   const { results } = useLoaderData<LoaderData>();
 
   const succeeded = results.filter((r) => r.success).length;
-  const failed = results.length - succeeded;
+  const failed = results.filter((r) => !r.success && !r.is_processing).length;
 
   return (
     <div className="space-y-3">
@@ -88,11 +88,12 @@ function ResultRow({ result }: { result: PostResult }) {
     result.platform_data?.username ??
     result.social_account_id;
 
-  const showError = !result.success && Boolean(result.error);
+  const showError = !result.success && !result.is_processing && Boolean(result.error);
+  const showProcessing = !result.success && result.is_processing;
 
   return (
     <>
-      <TableRow className={cn(showError && "border-0")}>
+      <TableRow className={cn((showError || showProcessing) && "border-0")}>
         <TableCell>
           <div className="flex min-w-0 flex-row items-center gap-2">
             <div className="relative shrink-0">
@@ -122,10 +123,14 @@ function ResultRow({ result }: { result: PostResult }) {
             title={!result.success && result.error ? result.error : undefined}
             className={cn(
               "text-sm",
-              result.success ? "text-affirmative" : "text-destructive",
+              result.success
+                ? "text-affirmative"
+                : showProcessing
+                  ? "text-muted-foreground"
+                  : "text-destructive",
             )}
           >
-            {result.success ? "Posted" : "Failed"}
+            {result.success ? "Posted" : showProcessing ? "Processing" : "Failed"}
           </span>
         </TableCell>
 
@@ -150,11 +155,26 @@ function ResultRow({ result }: { result: PostResult }) {
         </TableCell>
       </TableRow>
 
-      {showError ? (
-        <TableRow className="border-destructive/8 bg-destructive/5 hover:bg-destructive/5">
+      {showError || showProcessing ? (
+        <TableRow
+          className={cn(
+            showError && "border-destructive/8 bg-destructive/5 hover:bg-destructive/5",
+            showProcessing && "border-muted bg-muted/40 hover:bg-muted/40",
+          )}
+        >
           <TableCell colSpan={7} className="py-2">
-            <div className="flex flex-row items-start gap-2 text-sm text-destructive pl-2">
-              <ArrowCornerDownRightIcon className="size-4 shrink-0 text-destructive" />
+            <div
+              className={cn(
+                "flex flex-row items-start gap-2 pl-2 text-sm",
+                showError ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              <ArrowCornerDownRightIcon
+                className={cn(
+                  "size-4 shrink-0",
+                  showError ? "text-destructive" : "text-muted-foreground",
+                )}
+              />
               <span className="wrap-break-word">{result.error}</span>
             </div>
           </TableCell>
@@ -226,6 +246,9 @@ function RawDataDialog({ result }: { result: PostResult }) {
   const provider = result.account?.provider?.split("_")[0] ?? "";
   const handle = result.account?.username ?? result.social_account_id;
 
+  const showError = !result.success && !result.is_processing && Boolean(result.error);
+  const showProcessing = !result.success && result.is_processing;
+
   const json =
     result.details != null
       ? JSON.stringify(result.details, null, 2)
@@ -256,16 +279,27 @@ function RawDataDialog({ result }: { result: PostResult }) {
             <span
               className={cn(
                 "text-xs font-normal",
-                result.success ? "text-affirmative" : "text-destructive",
+                result.success
+                  ? "text-affirmative"
+                  : showProcessing
+                    ? "text-muted-foreground"
+                    : "text-destructive",
               )}
             >
-              {result.success ? "Posted" : "Failed"}
+              {result.success ? "Posted" : showProcessing ? "Processing" : "Failed"}
             </span>
           </DialogTitle>
         </DialogHeader>
 
-        {!result.success && result.error ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        {showError || showProcessing ? (
+          <div
+            className={cn(
+              "rounded-md border px-3 py-2 text-sm",
+              showError
+                ? "border-destructive/30 bg-destructive/5 text-destructive"
+                : "border-muted bg-muted/40 text-muted-foreground",
+            )}
+          >
             {result.error}
           </div>
         ) : null}
