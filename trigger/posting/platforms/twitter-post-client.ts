@@ -9,6 +9,8 @@ import sharp from "sharp";
 import { readFile } from "fs/promises";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import * as twitterText from "twitter-text";
+import type { ParseTweetOptions } from "twitter-text";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -16,6 +18,63 @@ import {
   SocialAccount,
   TwitterConfiguration,
 } from "../post.types";
+
+const { parseTweet } = twitterText;
+
+// `configs` isn't part of twitter-text's typed public API
+// (@types/twitter-text doesn't declare it), but the package does export it
+// at runtime alongside `parseTweet`. Sourcing the v3 weighting config
+// directly from the installed package - instead of hand-copying its ranges -
+// keeps our weighting in sync with whatever version of twitter-text we ship.
+const TWITTER_TEXT_V3_CONFIG = (
+  twitterText as unknown as {
+    configs: { version3: ParseTweetOptions };
+  }
+).configs.version3;
+
+export function getAllowedCaption(
+  caption: string,
+  characterLimit: number,
+): { allowedCaption: string; trimmed: boolean } {
+  if (!caption) return { allowedCaption: caption, trimmed: false };
+
+  const parseOptions = {
+    ...TWITTER_TEXT_V3_CONFIG,
+    maxWeightedTweetLength: characterLimit,
+  };
+
+  const parsed = parseTweet(caption, parseOptions);
+
+  if (parsed.weightedLength <= characterLimit) {
+    return { allowedCaption: caption, trimmed: false };
+  }
+
+  // Binary search for the longest prefix (by Unicode code point, so we
+  // never split a surrogate pair) whose weighted length fits the limit.
+  // We can't use `validRangeEnd` here: twitter-text freezes it at the first
+  // character it considers "invalid" (e.g. a stray BOM) and never advances
+  // it again even as weightedLength keeps growing past the limit, which
+  // can collapse a caption down to just a few characters.
+  const codePoints = Array.from(caption);
+  let low = 0;
+  let high = codePoints.length;
+
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = codePoints.slice(0, mid).join("");
+
+    if (parseTweet(candidate, parseOptions).weightedLength <= characterLimit) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return {
+    allowedCaption: codePoints.slice(0, low).join(""),
+    trimmed: true,
+  };
+}
 
 export class TwitterPostClient extends PostClient {
   #IMAGE_LIMIT = 4;
@@ -102,11 +161,13 @@ export class TwitterPostClient extends PostClient {
         isOAuth2,
       });
 
-      const allowedCaption = caption.slice(
-        0,
-        account.social_provider_metadata?.has_platform_premium
-          ? this.#PREMIUM_CHARACTER_LIMIT
-          : this.#CHARACTER_LIMIT,
+      const characterLimit = account.social_provider_metadata?.has_platform_premium
+        ? this.#PREMIUM_CHARACTER_LIMIT
+        : this.#CHARACTER_LIMIT;
+
+      const { allowedCaption, trimmed } = getAllowedCaption(
+        caption,
+        characterLimit,
       );
 
       const postPayload: SendTweetV2Params = {
@@ -159,7 +220,7 @@ export class TwitterPostClient extends PostClient {
         provider_post_id: tweet.data.id,
         provider_post_url: `https://twitter.com/user/status/${tweet.data.id}`,
         details: {
-          trimmed: caption.length > allowedCaption.length,
+          trimmed,
           requests: this.#requests,
           responses: this.#responses,
         },
