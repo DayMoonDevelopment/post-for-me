@@ -66,6 +66,20 @@ export class LinkedInService implements SocialPlatformService {
     };
   }
 
+  private resolvePostedAt(post: {
+    publishedAt?: unknown;
+    createdAt?: unknown;
+  }): string | undefined {
+    let epochMs: number | undefined;
+    if (typeof post.publishedAt === 'number') {
+      epochMs = post.publishedAt;
+    } else if (typeof post.createdAt === 'number') {
+      epochMs = post.createdAt;
+    }
+
+    return epochMs === undefined ? undefined : new Date(epochMs).toISOString();
+  }
+
   private getMediaTypeFromUrn(mediaUrn: string): 'image' | 'video' | undefined {
     const urn = mediaUrn.toLowerCase();
     if (urn.includes(':image:')) {
@@ -475,7 +489,6 @@ export class LinkedInService implements SocialPlatformService {
         async (post) => {
           const postUrn: string = post.id || post.urn;
           const content = post.content;
-          const createdObj = post.created;
 
           const metrics = includeMetrics
             ? await this.getPostMetrics(
@@ -522,7 +535,9 @@ export class LinkedInService implements SocialPlatformService {
             account_id: account.id,
             caption: post.commentary || '',
             url: `https://www.linkedin.com/posts/${postUrn.split(':').pop()}`,
-            posted_at: createdObj?.time,
+            posted_at: this.resolvePostedAt(
+              post as { publishedAt?: unknown; createdAt?: unknown },
+            ),
             media,
             metrics,
           };
