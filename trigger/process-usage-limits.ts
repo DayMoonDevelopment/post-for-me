@@ -29,8 +29,8 @@ const STRIPE_PRICING_TIER_200K_PRODUCT_ID =
   process.env?.STRIPE_PRICING_TIER_200K_PRODUCT_ID || "";
 
 const STRIPE_API_PRODUCT_ID = process.env?.STRIPE_API_PRODUCT_ID || "";
-const LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID =
-  process.env?.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID || "";
+const LOOPS_SUBSCRIPTION_ALERT_TRANSACTIONAL_EMAIL_ID =
+  process.env?.LOOPS_SUBSCRIPTION_ALERT_TRANSACTIONAL_EMAIL_ID || "";
 // One shared template for all three thresholds — the crossed percent is sent
 // as `threshold_percent`/`usage_percent` in the Loops data payload, so the
 // template branches copy/subject on that instead of needing a template per
@@ -966,7 +966,7 @@ const sendSubscriptionAlert = ({
       tier: newTier,
       tierRole: "updated",
       periodStart: usageWindow.start_at,
-      transactionalEmailId: LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID,
+      transactionalEmailId: LOOPS_SUBSCRIPTION_ALERT_TRANSACTIONAL_EMAIL_ID,
     }),
   });
 

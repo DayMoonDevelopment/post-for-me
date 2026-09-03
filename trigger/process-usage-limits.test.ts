@@ -41,7 +41,7 @@ process.env.STRIPE_PRICING_TIER_40K_PRODUCT_ID = "tier_40k";
 process.env.STRIPE_PRICING_TIER_100K_PRODUCT_ID = "tier_100k";
 process.env.STRIPE_PRICING_TIER_200K_PRODUCT_ID = "tier_200k";
 process.env.STRIPE_API_PRODUCT_ID = "tier_legacy";
-process.env.LOOPS_USAGE_UPGRADE_TRANSACTIONAL_EMAIL_ID = "loops_upgrade";
+process.env.LOOPS_SUBSCRIPTION_ALERT_TRANSACTIONAL_EMAIL_ID = "loops_subscription_alert";
 process.env.LOOPS_USAGE_THRESHOLD_TRANSACTIONAL_EMAIL_ID = "loops_threshold";
 // Exercised by the escape-hatch flow tests below; team_1 (used by every
 // other test) is deliberately absent so the hatch stays out of their way.
@@ -753,7 +753,7 @@ describe("processExceededUsageWindow (subscription_alert path)", () => {
     expect(metadata.tracking.usage_count).toBe(1200);
     expect(metadata.tracking.current_limit).toBe(1000);
     expect(metadata.tracking.new_plan_post_limit).toBe(2500);
-    expect(metadata.data.loops.transactional_id).toBe("loops_upgrade");
+    expect(metadata.data.loops.transactional_id).toBe("loops_subscription_alert");
     // The action path needs no team_notifications lookup at all.
     expect(teamNotificationsQueryCount).toBe(0);
   });
