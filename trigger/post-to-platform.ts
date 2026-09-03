@@ -154,6 +154,7 @@ export const postToPlatform = task({
       teamId,
       appCredentials,
       projectId,
+      chainItemId,
     } = payload;
     let postResult: PostResult | null = null;
     try {
@@ -246,6 +247,8 @@ export const postToPlatform = task({
       }
     }
 
+    postResult.chain_item_id = chainItemId ?? null;
+
     await tags.add(`result_${postResult.success ? "success" : "error"}`);
 
     logger.info("Saving Post Result", { postResult });
@@ -299,24 +302,47 @@ export const postToPlatform = task({
             url: insertedPostResult.provider_post_url,
           },
           post_id: insertedPostResult.post_id,
+          chain_item_id: insertedPostResult.chain_item_id,
           social_account_id: insertedPostResult.provider_connection_id,
           success: insertedPostResult.success,
         },
       });
 
-      const { error: postResultMediaError } = await supabaseClient
-        .from("social_post_result_post_media")
-        .insert(
-          media.map((m) => ({
-            social_post_result_id: insertedPostResult.id,
-            social_post_media_id: m.id,
-          })),
-        );
+      // Root-post media lives in social_post_media, chain-item media lives in
+      // social_post_chain_item_media — each links to the result through its
+      // own join table since the FKs point at different source tables.
+      if (media.length > 0) {
+        if (chainItemId) {
+          const { error: postResultChainItemMediaError } = await supabaseClient
+            .from("social_post_result_chain_item_media")
+            .insert(
+              media.map((m) => ({
+                social_post_result_id: insertedPostResult.id,
+                social_post_chain_item_media_id: m.id,
+              })),
+            );
 
-      if (postResultMediaError) {
-        logger.error("Failed to insert post result media", {
-          postResultMediaError,
-        });
+          if (postResultChainItemMediaError) {
+            logger.error("Failed to insert post result chain item media", {
+              postResultChainItemMediaError,
+            });
+          }
+        } else {
+          const { error: postResultMediaError } = await supabaseClient
+            .from("social_post_result_post_media")
+            .insert(
+              media.map((m) => ({
+                social_post_result_id: insertedPostResult.id,
+                social_post_media_id: m.id,
+              })),
+            );
+
+          if (postResultMediaError) {
+            logger.error("Failed to insert post result media", {
+              postResultMediaError,
+            });
+          }
+        }
       }
     }
 
