@@ -27,12 +27,24 @@ interface PinterestMedia {
   media_type?: 'image' | 'video';
 }
 
+interface PinterestCarouselSlot {
+  media?: PinterestMedia;
+  image_metadata?: {
+    images?: PinterestMedia['images'];
+  };
+}
+
+interface PinterestCarouselData {
+  carousel_slots?: PinterestCarouselSlot[];
+}
+
 interface PinterestPin {
   id: string;
   title?: string;
   description?: string;
   link?: string;
   media?: PinterestMedia;
+  carousel_data?: PinterestCarouselData;
   board_id?: string;
   created_at?: string;
   note?: string;
@@ -119,6 +131,66 @@ export class PinterestService implements SocialPlatformService {
     return account;
   }
 
+  private getImageFromVariants(
+    images: PinterestMedia['images'] | undefined,
+  ): { url: string; thumbnail_url?: string } | null {
+    const url =
+      images?.['1200x']?.url ||
+      images?.['600x']?.url ||
+      images?.['400x300']?.url ||
+      images?.['150x150']?.url;
+
+    if (!url) {
+      return null;
+    }
+
+    const thumbnailUrl = images?.['400x300']?.url || images?.['150x150']?.url;
+
+    return thumbnailUrl && thumbnailUrl !== url
+      ? { url, thumbnail_url: thumbnailUrl }
+      : { url };
+  }
+
+  private getPinMedia(pin: PinterestPin): {
+    url: string;
+    thumbnail_url?: string;
+  }[] {
+    const carouselMedia =
+      pin.carousel_data?.carousel_slots
+        ?.map((slot) =>
+          this.getImageFromVariants(
+            slot.media?.images || slot.image_metadata?.images,
+          ),
+        )
+        .filter(
+          (slot): slot is { url: string; thumbnail_url?: string } =>
+            slot !== null,
+        ) || [];
+
+    if (carouselMedia.length > 0) {
+      return carouselMedia;
+    }
+
+    const mainMedia = this.getImageFromVariants(pin.media?.images);
+    return mainMedia ? [mainMedia] : [];
+  }
+
+  private mapPinToPlatformPost(
+    pin: PinterestPin,
+    account: SocialAccount,
+    includeMetrics: boolean,
+  ): PlatformPost {
+    return {
+      provider: 'pinterest',
+      id: pin.id,
+      account_id: account.social_provider_user_id,
+      caption: pin.description || pin.title || '',
+      url: pin.link || `https://pinterest.com/pin/${pin.id}`,
+      media: this.getPinMedia(pin),
+      metrics: includeMetrics ? pin.pin_metrics : undefined,
+    };
+  }
+
   async getAccountPosts({
     account,
     platformIds,
@@ -160,23 +232,9 @@ export class PinterestService implements SocialPlatformService {
         );
 
         const responses = await Promise.all(pinPromises);
-        const posts: PlatformPost[] = responses.map((response) => {
-          const pin = response.data;
-          return {
-            provider: 'pinterest',
-            id: pin.id,
-            account_id: account.social_provider_user_id,
-            caption: pin.description || pin.title || '',
-            url: pin.link || `https://pinterest.com/pin/${pin.id}`,
-            media: [
-              {
-                url: pin.media?.images?.['600x']?.url || '',
-                thumbnail_url: pin.media?.images?.['400x300']?.url || '',
-              },
-            ],
-            metrics: includeMetrics ? pin.pin_metrics : undefined,
-          };
-        });
+        const posts: PlatformPost[] = responses.map((response) =>
+          this.mapPinToPlatformPost(response.data, account, includeMetrics),
+        );
 
         return {
           posts,
@@ -197,21 +255,8 @@ export class PinterestService implements SocialPlatformService {
         },
       });
 
-      const posts: PlatformPost[] = (response.data.items || []).map(
-        (pin: PinterestPin) => ({
-          provider: 'pinterest',
-          id: pin.id,
-          account_id: account.social_provider_user_id,
-          caption: pin.description || pin.title || '',
-          url: pin.link || `https://pinterest.com/pin/${pin.id}`,
-          media: [
-            {
-              url: pin.media?.images?.['600x']?.url || '',
-              thumbnail_url: pin.media?.images?.['400x300']?.url || '',
-            },
-          ],
-          metrics: includeMetrics ? pin.pin_metrics : undefined,
-        }),
+      const posts: PlatformPost[] = (response.data.items || []).map((pin) =>
+        this.mapPinToPlatformPost(pin, account, includeMetrics),
       );
 
       return {

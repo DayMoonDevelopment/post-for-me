@@ -9,6 +9,7 @@ import type {
 import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import type {
+  InstagramMediaChild,
   InstagramMediaItem,
   InstagramMediaListResponse,
   InstagramRefreshTokenResponse,
@@ -219,6 +220,20 @@ export class InstagramService implements SocialPlatformService {
     includeMetrics: boolean = false,
   ): PlatformPost {
     const insights = this.extractInsightsFromResponse(item.insights);
+    const children: InstagramMediaChild[] = item.children?.data ?? [];
+    const childMedia = children.map((child) => ({
+      url: child.media_url || '',
+      thumbnail_url: child.thumbnail_url || child.media_url || '',
+    }));
+    const media =
+      childMedia.length > 0
+        ? childMedia
+        : [
+            {
+              url: item.media_url || '',
+              thumbnail_url: item.thumbnail_url || item.media_url || '',
+            },
+          ];
 
     const post: PlatformPost = {
       provider: 'instagram',
@@ -227,12 +242,7 @@ export class InstagramService implements SocialPlatformService {
       caption: item.caption || '',
       url: item.permalink || '',
       posted_at: item.timestamp,
-      media: [
-        {
-          url: item.media_url || '',
-          thumbnail_url: item.thumbnail_url || item.media_url || '',
-        },
-      ],
+      media,
       metrics: includeMetrics
         ? {
             likes: insights.likes,
@@ -372,7 +382,7 @@ export class InstagramService implements SocialPlatformService {
 
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
       const baseFields =
-        'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp';
+        'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,children{id,media_type,media_url,thumbnail_url}';
 
       if (platformIds && platformIds.length > 0) {
         const mediaItems = await mapWithConcurrency(

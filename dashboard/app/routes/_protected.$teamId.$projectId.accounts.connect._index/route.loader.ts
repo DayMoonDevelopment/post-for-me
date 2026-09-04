@@ -31,6 +31,9 @@ export const loader = withSupabase(async function loader({
         if (cred.provider === "instagram_w_facebook") {
           return "instagram";
         }
+        if (cred.provider === "x_oauth2") {
+          return "x";
+        }
         return cred.provider;
       }) || []
   );

@@ -19,13 +19,21 @@ export default interface PricesTable {
 
   recurring_interval: ColumnType<string | null, string | null, string | null>;
 
-  recurring_interval_count: ColumnType<number | null, number | null, number | null>;
+  recurring_interval_count: ColumnType<
+    number | null,
+    number | null,
+    number | null
+  >;
 
   nickname: ColumnType<string | null, string | null, string | null>;
 
   metadata: ColumnType<unknown | null, unknown | null, unknown | null>;
 
-  stripe_created: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  stripe_created: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   livemode: ColumnType<boolean | null, boolean | null, boolean | null>;
 
@@ -33,7 +41,11 @@ export default interface PricesTable {
 
   synced_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  deleted_at: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 }
 
 export type Prices = Selectable<PricesTable>;

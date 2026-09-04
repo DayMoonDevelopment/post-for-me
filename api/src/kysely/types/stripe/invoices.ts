@@ -35,15 +35,27 @@ export default interface InvoicesTable {
 
   paid_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
 
-  period_start: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  period_start: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
-  period_end: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  period_end: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   collection_method: ColumnType<string | null, string | null, string | null>;
 
   metadata: ColumnType<unknown | null, unknown | null, unknown | null>;
 
-  stripe_created: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  stripe_created: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   livemode: ColumnType<boolean | null, boolean | null, boolean | null>;
 
@@ -51,7 +63,11 @@ export default interface InvoicesTable {
 
   synced_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  deleted_at: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 }
 
 export type Invoices = Selectable<InvoicesTable>;

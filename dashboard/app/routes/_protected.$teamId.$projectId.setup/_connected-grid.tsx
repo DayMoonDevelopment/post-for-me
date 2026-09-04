@@ -5,14 +5,13 @@ import {
   CircleInfoIcon,
 } from "~/components/icons";
 
-import { getProviderLabel } from "~/lib/utils";
-
 import { BrandIcon } from "~/components/brand-icon";
 
 import { Badge } from "~/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/ui/tooltip";
 
 import { RedirectUrlCard } from "./_redirect-url-card";
+import { getSetupProviderLabel } from "./_provider-label";
 
 import type { Route } from "./+types/route";
 
@@ -45,7 +44,7 @@ export function ConnectedGrid() {
             />
 
             <h3 className="font-semibold text-base leading-tight">
-              {getProviderLabel(provider)}
+              {getSetupProviderLabel(provider)}
             </h3>
 
             {status === "complete" ? (
