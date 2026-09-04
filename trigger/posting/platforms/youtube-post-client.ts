@@ -17,6 +17,43 @@ import {
   YoutubeConfiguration,
 } from "../post.types";
 
+const ACCESS_TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
+
+const TRANSIENT_NETWORK_ERROR_CODES = new Set([
+  "ECONNABORTED",
+  "ECONNRESET",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "ERR_STREAM_PREMATURE_CLOSE",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
+
+interface YouTubeRefreshErrorMetadata {
+  provider: "youtube";
+  code?: string;
+  status?: number;
+  retryable: boolean;
+  authFailure: boolean;
+}
+
+export class YouTubeRefreshError extends Error {
+  readonly metadata: YouTubeRefreshErrorMetadata;
+  readonly cause?: unknown;
+
+  constructor(
+    message: string,
+    metadata: YouTubeRefreshErrorMetadata,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "YouTubeRefreshError";
+    this.metadata = metadata;
+    this.cause = cause;
+  }
+}
+
 export class YouTubePostClient extends PostClient {
   #oauth2Client: any;
   #googleClientId: string;
@@ -43,6 +80,103 @@ export class YouTubePostClient extends PostClient {
     this.#googleClientSecret = appCredentials.app_secret;
   }
 
+  #getErrorCode(error: unknown): string | undefined {
+    if (!error || typeof error !== "object") {
+      return undefined;
+    }
+
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+
+  #getErrorStatus(error: unknown): number | undefined {
+    if (!error || typeof error !== "object") {
+      return undefined;
+    }
+
+    const status =
+      (error as { status?: unknown; response?: { status?: unknown } })
+        .status ??
+      (error as { response?: { status?: unknown } }).response?.status;
+    return typeof status === "number" ? status : undefined;
+  }
+
+  #getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  #isAuthFailure(error: unknown): boolean {
+    const status = this.#getErrorStatus(error);
+
+    if (status === 400 || status === 401 || status === 403) {
+      return true;
+    }
+
+    const message = this.#getErrorMessage(error).toLowerCase();
+
+    return (
+      message.includes("invalid_grant") ||
+      message.includes("invalid_client") ||
+      message.includes("unauthorized_client") ||
+      message.includes("invalid token")
+    );
+  }
+
+  #isRetryableError(error: unknown): boolean {
+    const status = this.#getErrorStatus(error);
+    const code = this.#getErrorCode(error);
+
+    if (code && TRANSIENT_NETWORK_ERROR_CODES.has(code)) {
+      return true;
+    }
+
+    if (status === undefined) {
+      return false;
+    }
+
+    return status === 408 || status === 429 || (status >= 500 && status <= 599);
+  }
+
+  #hasUsableAccessToken(account: SocialAccount): boolean {
+    if (!account.access_token) {
+      return false;
+    }
+
+    if (!account.access_token_expires_at) {
+      return true;
+    }
+
+    return (
+      new Date(account.access_token_expires_at).getTime() - Date.now() >
+      ACCESS_TOKEN_EXPIRY_SKEW_MS
+    );
+  }
+
+  #existingAccessTokenExpiresAtIso(account: SocialAccount): string {
+    return account.access_token_expires_at
+      ? new Date(account.access_token_expires_at).toISOString()
+      : new Date(Date.now() + ACCESS_TOKEN_EXPIRY_SKEW_MS).toISOString();
+  }
+
+  #toYouTubeRefreshError(
+    message: string,
+    error: unknown,
+    authFailureOverride?: boolean,
+    retryableOverride?: boolean,
+  ): YouTubeRefreshError {
+    return new YouTubeRefreshError(
+      message,
+      {
+        provider: "youtube",
+        code: this.#getErrorCode(error),
+        status: this.#getErrorStatus(error),
+        authFailure: authFailureOverride ?? this.#isAuthFailure(error),
+        retryable: retryableOverride ?? this.#isRetryableError(error),
+      },
+      error,
+    );
+  }
+
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
@@ -56,26 +190,99 @@ export class YouTubePostClient extends PostClient {
     this.#oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
-      expiry_date: new Date(account.refresh_token_expires_at!).getTime(),
+      expiry_date: account.access_token_expires_at
+        ? new Date(account.access_token_expires_at).getTime()
+        : undefined,
     });
 
-    const { credentials } = await this.#oauth2Client.refreshAccessToken();
+    if (!account.refresh_token) {
+      if (this.#hasUsableAccessToken(account)) {
+        this.#responses.push({
+          refreshResponse: "missing_refresh_token_using_existing_access_token",
+        });
+        return {
+          access_token: account.access_token,
+          refresh_token: account.refresh_token,
+          expires_at: this.#existingAccessTokenExpiresAtIso(account),
+        };
+      }
 
-    this.#responses.push({
-      refreshResponse: {
-        scope: credentials.scope,
-        token_type: credentials.token_type,
-        expiry_date: credentials.expiry_date,
-        access_token: credentials.access_token ? "[redacted]" : undefined,
-        refresh_token: credentials.refresh_token ? "[redacted]" : undefined,
-        id_token: credentials.id_token ? "[redacted]" : undefined,
-      },
-    });
-    return {
-      access_token: credentials.access_token,
-      refresh_token: credentials.refresh_token || account.refresh_token,
-      expires_at: new Date(credentials.expiry_date).toISOString(),
-    };
+      throw this.#toYouTubeRefreshError(
+        "Missing YouTube refresh token and access token is expired.",
+        new Error("missing_refresh_token"),
+        true,
+        false,
+      );
+    }
+
+    try {
+      const { credentials } = await this.#oauth2Client.refreshAccessToken();
+
+      this.#responses.push({
+        refreshResponse: {
+          scope: credentials.scope,
+          token_type: credentials.token_type,
+          expiry_date: credentials.expiry_date,
+          access_token: credentials.access_token ? "[redacted]" : undefined,
+          refresh_token: credentials.refresh_token ? "[redacted]" : undefined,
+          id_token: credentials.id_token ? "[redacted]" : undefined,
+        },
+      });
+
+      if (!credentials.access_token) {
+        throw this.#toYouTubeRefreshError(
+          "YouTube token refresh succeeded without access token.",
+          new Error("missing_access_token"),
+          true,
+          false,
+        );
+      }
+
+      return {
+        access_token: credentials.access_token,
+        refresh_token: credentials.refresh_token || account.refresh_token,
+        expires_at: new Date(credentials.expiry_date).toISOString(),
+      };
+    } catch (error) {
+      if (error instanceof YouTubeRefreshError) {
+        throw error;
+      }
+
+      const wrappedError = this.#toYouTubeRefreshError(
+        `Failed to refresh YouTube access token: ${this.#getErrorMessage(error)}`,
+        error,
+      );
+
+      if (
+        wrappedError.metadata.retryable &&
+        this.#hasUsableAccessToken(account)
+      ) {
+        logger.warn(
+          "Using existing YouTube access token after retryable refresh failure",
+          {
+            code: wrappedError.metadata.code,
+            status: wrappedError.metadata.status,
+            message: wrappedError.message,
+          },
+        );
+
+        this.#responses.push({
+          refreshFallback: {
+            code: wrappedError.metadata.code,
+            status: wrappedError.metadata.status,
+            message: wrappedError.message,
+          },
+        });
+
+        return {
+          access_token: account.access_token,
+          refresh_token: account.refresh_token,
+          expires_at: this.#existingAccessTokenExpiresAtIso(account),
+        };
+      }
+
+      throw wrappedError;
+    }
   }
 
   async post({

@@ -246,9 +246,35 @@ export const refreshAccountTokens = schedules.task({
       );
     }
 
+    // YouTube access tokens are short-lived (~1h), so nearly every connected
+    // account matches the 7-day threshold on every run. Giving it an
+    // independent batch budget prevents it from crowding out the
+    // threshold-based providers above, whose tokens are long-lived and
+    // refresh far less often.
+    const { data: youtubeAccounts, error: youtubeAccountsError } =
+      await supabaseClient
+        .from("social_provider_connections")
+        .select("*")
+        .eq("provider", "youtube")
+        .not("access_token", "is", null)
+        .not("refresh_token", "is", null)
+        .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
+        .order("access_token_expires_at", { ascending: true })
+        .limit(100);
+
+    if (youtubeAccountsError) {
+      logger.error("Failed to fetch youtube accounts:", {
+        error: youtubeAccountsError,
+      });
+      throw new Error(
+        `Failed to fetch youtube accounts: ${youtubeAccountsError.message}`,
+      );
+    }
+
     const accounts = [
       ...(standardAccounts || []),
       ...(xOAuth2Accounts || []),
+      ...(youtubeAccounts || []),
     ];
 
     if (!accounts || accounts.length === 0) {
