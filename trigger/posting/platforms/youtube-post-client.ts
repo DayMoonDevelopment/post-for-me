@@ -22,12 +22,16 @@ const ACCESS_TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
 const TRANSIENT_NETWORK_ERROR_CODES = new Set([
   "ECONNABORTED",
   "ECONNRESET",
+  "ECONNREFUSED",
+  "EPIPE",
   "EAI_AGAIN",
   "ENOTFOUND",
   "ETIMEDOUT",
   "ERR_STREAM_PREMATURE_CLOSE",
   "UND_ERR_CONNECT_TIMEOUT",
   "UND_ERR_SOCKET",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
 ]);
 
 interface YouTubeRefreshErrorMetadata {
@@ -241,7 +245,9 @@ export class YouTubePostClient extends PostClient {
       return {
         access_token: credentials.access_token,
         refresh_token: credentials.refresh_token || account.refresh_token,
-        expires_at: new Date(credentials.expiry_date).toISOString(),
+        expires_at: credentials.expiry_date
+          ? new Date(credentials.expiry_date).toISOString()
+          : this.#existingAccessTokenExpiresAtIso(account),
       };
     } catch (error) {
       if (error instanceof YouTubeRefreshError) {
