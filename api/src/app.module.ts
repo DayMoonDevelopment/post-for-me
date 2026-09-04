@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 
 import { ConfigModule } from '@nestjs/config';
@@ -13,6 +13,7 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { KyselyModule } from './kysely/kysely.module';
 import { AuthGuard } from './auth/auth.guard';
 import { VerifyKeyGuard } from './auth/verify-key.guard';
+import { LocalUnkeyPrincipalMiddleware } from './auth/local-unkey-principal.middleware';
 import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
@@ -45,4 +46,13 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
     VerifyKeyGuard,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      process.env.LOCAL_UNKEY_PRINCIPAL === 'true'
+    ) {
+      consumer.apply(LocalUnkeyPrincipalMiddleware).forRoutes('*');
+    }
+  }
+}
