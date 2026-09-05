@@ -11,13 +11,16 @@ jest.mock('googleapis', () => ({
 
 const mockedYoutube = google.youtube as jest.Mock;
 
+interface FakeGoogleApiSubError {
+  message?: string;
+  domain?: string;
+  reason?: string;
+}
+
 interface FakeGoogleApiErrorResponse {
   status: number;
   data: {
-    error: {
-      message?: string;
-      errors?: { message: string }[];
-    };
+    error: FakeGoogleApiSubError & { errors?: FakeGoogleApiSubError[] };
   };
 }
 
@@ -35,6 +38,24 @@ const SUSPENDED_ACCOUNT_MESSAGE =
   'The YouTube account of the authenticated user is suspended. In case the ' +
   'authenticated user is acting on behalf of another Google account, then ' +
   'this error refers to the latter.';
+
+// Documented YouTube Data API v3 403 errors for an inaccessible account/
+// channel: https://developers.google.com/youtube/v3/docs/errors
+function makeDocumentedSuspensionError(
+  reason: 'authenticatedUserAccountSuspended' | 'channelSuspended',
+): FakeGoogleApiError {
+  return new FakeGoogleApiError(SUSPENDED_ACCOUNT_MESSAGE, {
+    status: 403,
+    data: {
+      error: {
+        message: SUSPENDED_ACCOUNT_MESSAGE,
+        errors: [
+          { message: SUSPENDED_ACCOUNT_MESSAGE, domain: 'forbidden', reason },
+        ],
+      },
+    },
+  });
+}
 
 interface YouTubeServiceTestAccess {
   isSuspendedAccountError(error: unknown): boolean;
@@ -68,7 +89,63 @@ describe('YouTubeService', () => {
   });
 
   describe('isSuspendedAccountError', () => {
-    it('detects the exact known suspended-account message', () => {
+    it('detects the documented authenticatedUserAccountSuspended reason', () => {
+      const error = makeDocumentedSuspensionError(
+        'authenticatedUserAccountSuspended',
+      );
+
+      expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(true);
+    });
+
+    it('detects the documented channelSuspended reason', () => {
+      const error = makeDocumentedSuspensionError('channelSuspended');
+
+      expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(true);
+    });
+
+    it('detects the reason even when the message text is unrelated', () => {
+      const error = new FakeGoogleApiError('Forbidden', {
+        status: 403,
+        data: {
+          error: {
+            message: 'Forbidden',
+            errors: [
+              {
+                message: 'Forbidden',
+                domain: 'forbidden',
+                reason: 'authenticatedUserAccountSuspended',
+              },
+            ],
+          },
+        },
+      });
+
+      expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(true);
+    });
+
+    it('does not match a documented reason for a different, unrelated forbidden error', () => {
+      const error = new FakeGoogleApiError('Forbidden', {
+        status: 403,
+        data: {
+          error: {
+            message: 'Forbidden',
+            errors: [
+              {
+                message: 'Forbidden',
+                domain: 'forbidden',
+                reason: 'forbidden',
+              },
+            ],
+          },
+        },
+      });
+
+      expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(false);
+    });
+
+    // Fallback path: no structured `reason` present (e.g. a wrapped/proxied
+    // error), so detection falls back to matching the documented message.
+    it('falls back to the exact known suspended-account message when no reason is present', () => {
       const error = new FakeGoogleApiError(SUSPENDED_ACCOUNT_MESSAGE, {
         status: 403,
         data: { error: { message: SUSPENDED_ACCOUNT_MESSAGE } },
@@ -77,7 +154,7 @@ describe('YouTubeService', () => {
       expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(true);
     });
 
-    it('detects a reworded suspension message that still names the account and suspension', () => {
+    it('falls back to a reworded suspension message that still names the account and suspension', () => {
       const error = new FakeGoogleApiError(
         "This authenticated user's YouTube Account is currently suspended and cannot be accessed.",
         { status: 403, data: { error: {} } },
@@ -86,7 +163,7 @@ describe('YouTubeService', () => {
       expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(true);
     });
 
-    it('detects suspension when the message is only present in the nested API error body', () => {
+    it('falls back to a message only present in the nested API error body', () => {
       const error = new FakeGoogleApiError('The request failed', {
         status: 403,
         data: {
@@ -109,10 +186,20 @@ describe('YouTubeService', () => {
       expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(false);
     });
 
-    it('does not match a non-403 error even with suspension-like wording', () => {
+    it('does not match a non-403 error even with suspension-like wording or reason', () => {
       const error = new FakeGoogleApiError(SUSPENDED_ACCOUNT_MESSAGE, {
         status: 429,
-        data: { error: { message: 'quotaExceeded' } },
+        data: {
+          error: {
+            message: SUSPENDED_ACCOUNT_MESSAGE,
+            errors: [
+              {
+                message: SUSPENDED_ACCOUNT_MESSAGE,
+                reason: 'authenticatedUserAccountSuspended',
+              },
+            ],
+          },
+        },
       });
 
       expect(asTestAccess(service).isSuspendedAccountError(error)).toBe(false);
@@ -132,10 +219,9 @@ describe('YouTubeService', () => {
     });
 
     it('throws a suspended-account YouTubeError when the channel is suspended', async () => {
-      const error = new FakeGoogleApiError(SUSPENDED_ACCOUNT_MESSAGE, {
-        status: 403,
-        data: { error: { message: SUSPENDED_ACCOUNT_MESSAGE } },
-      });
+      const error = makeDocumentedSuspensionError(
+        'authenticatedUserAccountSuspended',
+      );
 
       mockedYoutube.mockReturnValue({
         channels: { list: jest.fn().mockRejectedValue(error) },

@@ -214,9 +214,17 @@ export class YouTubeService implements SocialPlatformService {
     return new YouTubeError(message, metadata, error);
   }
 
-  private getGoogleApiErrorMessages(error: unknown): string[] {
-    const messages = [this.getErrorMessage(error)];
+  // The YouTube Data API returns structured `errors[].reason` values for
+  // 403s. Suspended-account/channel responses use domain `forbidden` with
+  // one of these reasons: https://developers.google.com/youtube/v3/docs/errors
+  private static readonly SUSPENDED_ACCOUNT_REASONS = new Set([
+    'authenticatedUserAccountSuspended',
+    'channelSuspended',
+  ]);
 
+  private getGoogleApiSubErrors(
+    error: unknown,
+  ): { message?: string; reason?: string }[] {
     if (
       !error ||
       typeof error !== 'object' ||
@@ -230,29 +238,38 @@ export class YouTubeService implements SocialPlatformService {
       !error.response.data.error ||
       typeof error.response.data.error !== 'object'
     ) {
-      return messages;
+      return [];
     }
 
     const apiError = error.response.data.error;
+    const subErrors: { message?: string; reason?: string }[] = [];
 
-    if ('message' in apiError && typeof apiError.message === 'string') {
-      messages.push(apiError.message);
-    }
+    const readSubError = (value: unknown): void => {
+      if (!value || typeof value !== 'object') {
+        return;
+      }
+
+      subErrors.push({
+        message:
+          'message' in value && typeof value.message === 'string'
+            ? value.message
+            : undefined,
+        reason:
+          'reason' in value && typeof value.reason === 'string'
+            ? value.reason
+            : undefined,
+      });
+    };
+
+    readSubError(apiError);
 
     if ('errors' in apiError && Array.isArray(apiError.errors)) {
       for (const subError of apiError.errors as unknown[]) {
-        if (
-          subError &&
-          typeof subError === 'object' &&
-          'message' in subError &&
-          typeof subError.message === 'string'
-        ) {
-          messages.push(subError.message);
-        }
+        readSubError(subError);
       }
     }
 
-    return messages;
+    return subErrors;
   }
 
   private isSuspendedAccountError(error: unknown): boolean {
@@ -260,7 +277,30 @@ export class YouTubeService implements SocialPlatformService {
       return false;
     }
 
-    return this.getGoogleApiErrorMessages(error).some((message) => {
+    const subErrors = this.getGoogleApiSubErrors(error);
+
+    // Primary signal: the documented, stable error reason.
+    if (
+      subErrors.some(
+        (subError) =>
+          subError.reason !== undefined &&
+          YouTubeService.SUSPENDED_ACCOUNT_REASONS.has(subError.reason),
+      )
+    ) {
+      return true;
+    }
+
+    // Fallback for responses that don't carry a structured `reason` (e.g.
+    // wrapped/proxied errors): match on the documented message text, not
+    // one rigid exact phrase, so minor rewording still matches.
+    const messages = [
+      this.getErrorMessage(error),
+      ...subErrors
+        .map((subError) => subError.message)
+        .filter((message): message is string => typeof message === 'string'),
+    ];
+
+    return messages.some((message) => {
       const normalized = message.toLowerCase().replace(/\s+/g, ' ');
 
       return (
