@@ -214,14 +214,60 @@ export class YouTubeService implements SocialPlatformService {
     return new YouTubeError(message, metadata, error);
   }
 
+  private getGoogleApiErrorMessages(error: unknown): string[] {
+    const messages = [this.getErrorMessage(error)];
+
+    if (
+      !error ||
+      typeof error !== 'object' ||
+      !('response' in error) ||
+      !error.response ||
+      typeof error.response !== 'object' ||
+      !('data' in error.response) ||
+      !error.response.data ||
+      typeof error.response.data !== 'object' ||
+      !('error' in error.response.data) ||
+      !error.response.data.error ||
+      typeof error.response.data.error !== 'object'
+    ) {
+      return messages;
+    }
+
+    const apiError = error.response.data.error;
+
+    if ('message' in apiError && typeof apiError.message === 'string') {
+      messages.push(apiError.message);
+    }
+
+    if ('errors' in apiError && Array.isArray(apiError.errors)) {
+      for (const subError of apiError.errors as unknown[]) {
+        if (
+          subError &&
+          typeof subError === 'object' &&
+          'message' in subError &&
+          typeof subError.message === 'string'
+        ) {
+          messages.push(subError.message);
+        }
+      }
+    }
+
+    return messages;
+  }
+
   private isSuspendedAccountError(error: unknown): boolean {
     if (this.getErrorStatus(error) !== 403) {
       return false;
     }
 
-    return this.getErrorMessage(error)
-      .toLowerCase()
-      .includes('youtube account of the authenticated user is suspended');
+    return this.getGoogleApiErrorMessages(error).some((message) => {
+      const normalized = message.toLowerCase().replace(/\s+/g, ' ');
+
+      return (
+        normalized.includes('youtube account') &&
+        normalized.includes('suspended')
+      );
+    });
   }
 
   async initService(projectId: string): Promise<void> {
