@@ -104,6 +104,10 @@ export class SocialAccountFeedsController {
     },
   })
   @ApiResponse({
+    status: 401,
+    description: `The connected social account could not be authenticated and needs to be reconnected.`,
+  })
+  @ApiResponse({
     status: 403,
     description: `The connected social account is suspended and its content cannot be retrieved.`,
   })
@@ -140,6 +144,14 @@ export class SocialAccountFeedsController {
         throw new HttpException(e.message, HttpStatus.FORBIDDEN, {
           cause: e,
         });
+      }
+
+      if (e instanceof YouTubeError && e.metadata.authFailure) {
+        throw new HttpException(
+          'The connected YouTube account could not be authenticated. Please reconnect the account.',
+          HttpStatus.UNAUTHORIZED,
+          { cause: e },
+        );
       }
 
       console.error(e);
