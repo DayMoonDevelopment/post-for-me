@@ -212,7 +212,13 @@ export const refreshAccountTokens = schedules.task({
         .from("social_provider_connections")
         .select("*")
         .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
-        .in("provider", ["facebook", "instagram", "threads", "pinterest"])
+        .in("provider", [
+          "facebook",
+          "instagram",
+          "threads",
+          "pinterest",
+          "youtube",
+        ])
         .order("access_token_expires_at", { ascending: true })
         .limit(50);
 
