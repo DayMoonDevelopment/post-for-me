@@ -630,11 +630,11 @@ export class YouTubeService implements SocialPlatformService {
         );
       }
 
-      throw this.toYouTubeError(
-        `Failed to fetch YouTube posts: ${this.getErrorMessage(error)}`,
-        'getAccountPosts',
-        error,
-      );
+      return {
+        posts: [],
+        count: 0,
+        has_more: false,
+      };
     }
   }
 }
