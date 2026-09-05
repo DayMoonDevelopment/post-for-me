@@ -200,17 +200,114 @@ export class YouTubeService implements SocialPlatformService {
     error: unknown,
     authFailureOverride?: boolean,
     retryableOverride?: boolean,
+    codeOverride?: string,
   ): YouTubeError {
     const metadata: YouTubeErrorMetadata = {
       provider: 'youtube',
       operation,
-      code: this.getErrorCode(error),
+      code: codeOverride ?? this.getErrorCode(error),
       status: this.getErrorStatus(error),
       authFailure: authFailureOverride ?? this.isAuthFailure(error),
       retryable: retryableOverride ?? this.isRetryableError(error),
     };
 
     return new YouTubeError(message, metadata, error);
+  }
+
+  // The YouTube Data API returns structured `errors[].reason` values for
+  // 403s. Suspended-account/channel responses use domain `forbidden` with
+  // one of these reasons: https://developers.google.com/youtube/v3/docs/errors
+  private static readonly SUSPENDED_ACCOUNT_REASONS = new Set([
+    'authenticatedUserAccountSuspended',
+    'channelSuspended',
+  ]);
+
+  private getGoogleApiSubErrors(
+    error: unknown,
+  ): { message?: string; reason?: string }[] {
+    if (
+      !error ||
+      typeof error !== 'object' ||
+      !('response' in error) ||
+      !error.response ||
+      typeof error.response !== 'object' ||
+      !('data' in error.response) ||
+      !error.response.data ||
+      typeof error.response.data !== 'object' ||
+      !('error' in error.response.data) ||
+      !error.response.data.error ||
+      typeof error.response.data.error !== 'object'
+    ) {
+      return [];
+    }
+
+    const apiError = error.response.data.error;
+    const subErrors: { message?: string; reason?: string }[] = [];
+
+    const readSubError = (value: unknown): void => {
+      if (!value || typeof value !== 'object') {
+        return;
+      }
+
+      subErrors.push({
+        message:
+          'message' in value && typeof value.message === 'string'
+            ? value.message
+            : undefined,
+        reason:
+          'reason' in value && typeof value.reason === 'string'
+            ? value.reason
+            : undefined,
+      });
+    };
+
+    readSubError(apiError);
+
+    if ('errors' in apiError && Array.isArray(apiError.errors)) {
+      for (const subError of apiError.errors as unknown[]) {
+        readSubError(subError);
+      }
+    }
+
+    return subErrors;
+  }
+
+  private isSuspendedAccountError(error: unknown): boolean {
+    if (this.getErrorStatus(error) !== 403) {
+      return false;
+    }
+
+    const subErrors = this.getGoogleApiSubErrors(error);
+
+    // Primary signal: the documented, stable error reason.
+    if (
+      subErrors.some(
+        (subError) =>
+          subError.reason !== undefined &&
+          YouTubeService.SUSPENDED_ACCOUNT_REASONS.has(subError.reason),
+      )
+    ) {
+      return true;
+    }
+
+    // Fallback for responses that don't carry a structured `reason` (e.g.
+    // wrapped/proxied errors): match on the documented message text, not
+    // one rigid exact phrase, so minor rewording still matches.
+    const messages = [
+      this.getErrorMessage(error),
+      ...subErrors
+        .map((subError) => subError.message)
+        .filter((message): message is string => typeof message === 'string'),
+    ];
+
+    return messages.some((message) => {
+      const normalized = message.toLowerCase().replace(/\s+/g, ' ');
+
+      return (
+        normalized.includes('youtube account') &&
+        normalized.includes('suspended')
+      );
+    });
   }
 
   async initService(projectId: string): Promise<void> {
@@ -608,7 +705,22 @@ export class YouTubeService implements SocialPlatformService {
         });
       }
 
-      throw error;
+      if (this.isSuspendedAccountError(error)) {
+        throw this.toYouTubeError(
+          'The connected YouTube account is suspended and its videos cannot be retrieved.',
+          'getAccountPosts',
+          error,
+          true,
+          false,
+          'account_suspended',
+        );
+      }
+
+      return {
+        posts: [],
+        count: 0,
+        has_more: false,
+      };
     }
   }
 }
