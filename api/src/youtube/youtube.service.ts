@@ -8,10 +8,12 @@ import type {
 } from '../lib/dto/global.dto';
 import { google } from 'googleapis';
 import { SupabaseService } from '../supabase/supabase.service';
-import { mapWithConcurrency } from '../lib/async.utils';
 
-const YOUTUBE_METRICS_CONCURRENCY = 3;
 const ACCESS_TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
+const YOUTUBE_ANALYTICS_FILTER_IDS_PER_REQUEST = 450;
+
+const YOUTUBE_ANALYTICS_METRICS =
+  'engagedViews,views,redViews,comments,likes,dislikes,videosAddedToPlaylists,videosRemovedFromPlaylists,shares,estimatedMinutesWatched,estimatedRedMinutesWatched,averageViewDuration,averageViewPercentage,annotationClickThroughRate,annotationCloseRate,annotationImpressions,annotationClickableImpressions,annotationClosableImpressions,annotationClicks,annotationCloses,cardClickRate,cardTeaserClickRate,cardImpressions,cardTeaserImpressions,cardClicks,cardTeaserClicks,subscribersGained,subscribersLost';
 
 const TRANSIENT_NETWORK_ERROR_CODES = new Set([
   'ECONNABORTED',
@@ -335,15 +337,19 @@ export class YouTubeService implements SocialPlatformService {
   }
 
   /**
-   * Fetches analytics metrics for a specific video using YouTube Analytics API
+   * Fetches analytics metrics for videos in bulk using YouTube Analytics API.
+   * Google supports up to 500 video IDs in a single query filter.
+   * We stay slightly below that limit for buffer.
    */
-  private async getVideoAnalytics(
-    videoId: string,
-    publishedAt: string,
-    channelId: string,
-  ): Promise<YouTubeAnalyticsMetrics> {
+  private async getVideoAnalyticsBulk(
+    videos: Pick<YouTubeVideo, 'id' | 'snippet'>[],
+  ): Promise<Record<string, YouTubeAnalyticsMetrics>> {
     if (!this.oauth2Client) {
       throw new Error('OAuth2 client not initialized.');
+    }
+
+    if (videos.length === 0) {
+      return {};
     }
 
     // Google API returns any type, which is unavoidable
@@ -354,46 +360,88 @@ export class YouTubeService implements SocialPlatformService {
     });
 
     try {
-      // Format dates for all-time analytics
-      const startDate = new Date(publishedAt).toISOString().split('T')[0];
+      const publishedDates = videos
+        .map((video) => new Date(video.snippet.publishedAt).getTime())
+        .filter((value) => Number.isFinite(value));
+
+      const earliestPublishedAt =
+        publishedDates.length > 0 ? Math.min(...publishedDates) : Date.now();
+
+      // Format dates for all-time analytics across the selected videos
+      const startDate = new Date(earliestPublishedAt)
+        .toISOString()
+        .split('T')[0];
       const endDate = new Date().toISOString().split('T')[0];
 
-      const response = await youtubeAnalytics.reports.query({
-        ids: `channel==${channelId}`,
-        startDate,
-        endDate,
-        metrics:
-          'engagedViews,views,redViews,comments,likes,dislikes,videosAddedToPlaylists,videosRemovedFromPlaylists,shares,estimatedMinutesWatched,estimatedRedMinutesWatched,averageViewDuration,averageViewPercentage,annotationClickThroughRate,annotationCloseRate,annotationImpressions,annotationClickableImpressions,annotationClosableImpressions,annotationClicks,annotationCloses,cardClickRate,cardTeaserClickRate,cardImpressions,cardTeaserImpressions,cardClicks,cardTeaserClicks,subscribersGained,subscribersLost',
-        filters: `video==${videoId}`,
-      });
+      const analyticsByVideoId: Record<string, YouTubeAnalyticsMetrics> = {};
+      const videosByChannelId = videos.reduce<Record<string, string[]>>(
+        (accumulator, video) => {
+          const channelId = video.snippet.channelId;
+          accumulator[channelId] ??= [];
+          accumulator[channelId].push(video.id);
+          return accumulator;
+        },
+        {},
+      );
 
-      // Parse the response data
+      for (const [channelId, videoIds] of Object.entries(videosByChannelId)) {
+        for (
+          let index = 0;
+          index < videoIds.length;
+          index += YOUTUBE_ANALYTICS_FILTER_IDS_PER_REQUEST
+        ) {
+          const chunkVideoIds = videoIds.slice(
+            index,
+            index + YOUTUBE_ANALYTICS_FILTER_IDS_PER_REQUEST,
+          );
 
-      if (response.data.rows && response.data.rows.length > 0) {
-        const row = response.data.rows[0];
-        const headers = response.data.columnHeaders || [];
+          const response = await youtubeAnalytics.reports.query({
+            ids: `channel==${channelId}`,
+            startDate,
+            endDate,
+            metrics: YOUTUBE_ANALYTICS_METRICS,
+            dimensions: 'video',
+            filters: `video==${chunkVideoIds.join(',')}`,
+          });
 
-        const metrics: YouTubeAnalyticsMetrics = {};
+          const rows = response.data.rows || [];
+          const headers = response.data.columnHeaders || [];
 
-        headers.forEach((header, index) => {
-          const name = header.name as string;
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const value = row[index];
+          rows.forEach((row) => {
+            let videoId: string | undefined;
+            const metrics: YouTubeAnalyticsMetrics = {};
 
-          if (typeof value === 'number' || typeof value === 'string') {
-            metrics[name as keyof YouTubeAnalyticsMetrics] =
-              typeof value === 'string' ? parseFloat(value) : value;
-          }
-        });
+            headers.forEach((header, headerIndex) => {
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+              const value = row[headerIndex];
+              const name = header.name as string;
 
-        return metrics;
+              if (name === 'video') {
+                if (typeof value === 'string') {
+                  videoId = value;
+                }
+
+                return;
+              }
+
+              if (typeof value === 'number' || typeof value === 'string') {
+                metrics[name as keyof YouTubeAnalyticsMetrics] =
+                  typeof value === 'string' ? parseFloat(value) : value;
+              }
+            });
+
+            if (videoId) {
+              analyticsByVideoId[videoId] = metrics;
+            }
+          });
+        }
       }
 
-      return {};
+      return analyticsByVideoId;
     } catch (error) {
       // Analytics API might fail due to permissions or video being too new
       console.warn(
-        `Failed to fetch analytics for video ${videoId}:`,
+        `Failed to fetch analytics for ${videos.length} YouTube videos:`,
         error instanceof Error ? error.message : 'Unknown error',
       );
       return {};
@@ -501,89 +549,81 @@ export class YouTubeService implements SocialPlatformService {
         videos = (videosResponse.data.items || []) as YouTubeVideo[];
       }
 
-      // Fetch analytics for each video and combine with basic stats
-      const posts = await mapWithConcurrency(
-        videos,
-        async (video): Promise<PlatformPost> => {
-          const analyticsMetrics = includeMetrics
-            ? await this.getVideoAnalytics(
-                video.id,
-                video.snippet.publishedAt,
-                video.snippet.channelId,
-              )
-            : {};
+      const analyticsByVideoId = includeMetrics
+        ? await this.getVideoAnalyticsBulk(videos)
+        : {};
 
-          return {
-            provider: 'youtube',
-            id: video.id,
-            account_id: account.social_provider_user_id,
-            caption: video.snippet.description || video.snippet.title || '',
-            platform_data: {
-              title: video.snippet.title,
+      const posts = videos.map((video): PlatformPost => {
+        const analyticsMetrics = analyticsByVideoId[video.id] || {};
+
+        return {
+          provider: 'youtube',
+          id: video.id,
+          account_id: account.social_provider_user_id,
+          caption: video.snippet.description || video.snippet.title || '',
+          platform_data: {
+            title: video.snippet.title,
+          },
+          url: `https://www.youtube.com/watch?v=${video.id}`,
+          posted_at: video.snippet.publishedAt,
+          media: [
+            {
+              url: `https://www.youtube.com/embed/${video.id}`,
+              thumbnail_url:
+                video.snippet.thumbnails.high?.url ||
+                video.snippet.thumbnails.medium?.url ||
+                video.snippet.thumbnails.default?.url ||
+                '',
             },
-            url: `https://www.youtube.com/watch?v=${video.id}`,
-            posted_at: video.snippet.publishedAt,
-            media: [
-              {
-                url: `https://www.youtube.com/embed/${video.id}`,
-                thumbnail_url:
-                  video.snippet.thumbnails.high?.url ||
-                  video.snippet.thumbnails.medium?.url ||
-                  video.snippet.thumbnails.default?.url ||
-                  '',
-              },
-            ],
-            metrics: includeMetrics
-              ? {
-                  views:
-                    analyticsMetrics.views ||
-                    parseInt(video.statistics.viewCount || '0', 10),
-                  likes:
-                    analyticsMetrics.likes ||
-                    parseInt(video.statistics.likeCount || '0', 10),
-                  comments:
-                    analyticsMetrics.comments ||
-                    parseInt(video.statistics.commentCount || '0', 10),
-                  dislikes:
-                    analyticsMetrics.dislikes ||
-                    parseInt(video.statistics.dislikeCount || '0', 10),
-                  engagedViews: analyticsMetrics.engagedViews,
-                  redViews: analyticsMetrics.redViews,
-                  videosAddedToPlaylists:
-                    analyticsMetrics.videosAddedToPlaylists,
-                  videosRemovedFromPlaylists:
-                    analyticsMetrics.videosRemovedFromPlaylists,
-                  shares: analyticsMetrics.shares,
-                  estimatedMinutesWatched:
-                    analyticsMetrics.estimatedMinutesWatched,
-                  estimatedRedMinutesWatched:
-                    analyticsMetrics.estimatedRedMinutesWatched,
-                  averageViewDuration: analyticsMetrics.averageViewDuration,
-                  averageViewPercentage: analyticsMetrics.averageViewPercentage,
-                  annotationClickThroughRate:
-                    analyticsMetrics.annotationClickThroughRate,
-                  annotationCloseRate: analyticsMetrics.annotationCloseRate,
-                  annotationImpressions: analyticsMetrics.annotationImpressions,
-                  annotationClickableImpressions:
-                    analyticsMetrics.annotationClickableImpressions,
-                  annotationClosableImpressions:
-                    analyticsMetrics.annotationClosableImpressions,
-                  annotationClicks: analyticsMetrics.annotationClicks,
-                  annotationCloses: analyticsMetrics.annotationCloses,
-                  cardClickRate: analyticsMetrics.cardClickRate,
-                  cardTeaserClickRate: analyticsMetrics.cardTeaserClickRate,
-                  cardImpressions: analyticsMetrics.cardImpressions,
-                  cardTeaserImpressions: analyticsMetrics.cardTeaserImpressions,
-                  cardClicks: analyticsMetrics.cardClicks,
-                  cardTeaserClicks: analyticsMetrics.cardTeaserClicks,
-                  subscribersGained: analyticsMetrics.subscribersGained,
-                  subscribersLost: analyticsMetrics.subscribersLost,
-                }
-              : undefined,
-          };
-        },
-        includeMetrics ? YOUTUBE_METRICS_CONCURRENCY : 8,
-      );
+          ],
+          metrics: includeMetrics
+            ? {
+                views:
+                  analyticsMetrics.views ??
+                  parseInt(video.statistics.viewCount || '0', 10),
+                likes:
+                  analyticsMetrics.likes ??
+                  parseInt(video.statistics.likeCount || '0', 10),
+                comments:
+                  analyticsMetrics.comments ??
+                  parseInt(video.statistics.commentCount || '0', 10),
+                dislikes:
+                  analyticsMetrics.dislikes ??
+                  parseInt(video.statistics.dislikeCount || '0', 10),
+                engagedViews: analyticsMetrics.engagedViews,
+                redViews: analyticsMetrics.redViews,
+                videosAddedToPlaylists: analyticsMetrics.videosAddedToPlaylists,
+                videosRemovedFromPlaylists:
+                  analyticsMetrics.videosRemovedFromPlaylists,
+                shares: analyticsMetrics.shares,
+                estimatedMinutesWatched:
+                  analyticsMetrics.estimatedMinutesWatched,
+                estimatedRedMinutesWatched:
+                  analyticsMetrics.estimatedRedMinutesWatched,
+                averageViewDuration: analyticsMetrics.averageViewDuration,
+                averageViewPercentage: analyticsMetrics.averageViewPercentage,
+                annotationClickThroughRate:
+                  analyticsMetrics.annotationClickThroughRate,
+                annotationCloseRate: analyticsMetrics.annotationCloseRate,
+                annotationImpressions: analyticsMetrics.annotationImpressions,
+                annotationClickableImpressions:
+                  analyticsMetrics.annotationClickableImpressions,
+                annotationClosableImpressions:
+                  analyticsMetrics.annotationClosableImpressions,
+                annotationClicks: analyticsMetrics.annotationClicks,
+                annotationCloses: analyticsMetrics.annotationCloses,
+                cardClickRate: analyticsMetrics.cardClickRate,
+                cardTeaserClickRate: analyticsMetrics.cardTeaserClickRate,
+                cardImpressions: analyticsMetrics.cardImpressions,
+                cardTeaserImpressions: analyticsMetrics.cardTeaserImpressions,
+                cardClicks: analyticsMetrics.cardClicks,
+                cardTeaserClicks: analyticsMetrics.cardTeaserClicks,
+                subscribersGained: analyticsMetrics.subscribersGained,
+                subscribersLost: analyticsMetrics.subscribersLost,
+              }
+            : undefined,
+        };
+      });
 
       return {
         posts,
