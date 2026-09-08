@@ -27,7 +27,10 @@ export class FacebookPostClient extends PostClient {
 
   static readonly READ_BACK_MAX_ATTEMPTS = 4; // 1 initial try + 3 retries
   static readonly READ_BACK_INITIAL_DELAY_MS = 1_000;
-  static readonly READ_BACK_MAX_DELAY_MS = 8_000;
+  // With 3 retries and doubling from the initial delay, the backoff only ever
+  // reaches 1s, 2s, 4s before the loop exhausts its attempts — this cap is
+  // set to that real ceiling rather than a higher value that's never used.
+  static readonly READ_BACK_MAX_DELAY_MS = 4_000;
   static readonly RETRYABLE_RATE_LIMIT_CODES = new Set([4, 17, 32, 613]); // Meta Graph API rate-limit error codes
 
   constructor(
@@ -481,6 +484,13 @@ export class FacebookPostClient extends PostClient {
       ""
     ).toLowerCase();
 
+    // Facebook returns this exact code/message shape both for a video that
+    // isn't replicated yet (transient) and for a genuinely invalid/deleted
+    // object id (permanent) — Graph API gives no field to tell them apart.
+    // Treating it as retryable is a deliberate trade-off: a permanent case
+    // pays for READ_BACK_MAX_ATTEMPTS - 1 wasted retries (a few seconds)
+    // before failing, which is cheap next to silently failing a real
+    // eventual-consistency race on the first read-back (PFM-1057).
     const isNotYetVisible =
       graphError?.code === 100 && message.includes("does not exist");
     const isRateLimited =
@@ -726,32 +736,22 @@ export class FacebookPostClient extends PostClient {
       !["error", "completed", "complete"].includes(status) &&
       attempts < maxAttempts
     ) {
-      try {
-        statusResponse = await axios.get(
-          `https://graph.facebook.com/${createdMediaId}?fields=status`,
-          {
-            headers: {
-              Authorization: `OAuth ${account.access_token}`,
-              "Content-Type": "application/json; charset=UTF-8",
-            },
-          },
-        );
+      statusResponse = await this.#getObjectStatusWithRetry({
+        url: `https://graph.facebook.com/${createdMediaId}?fields=status`,
+        accessToken: account.access_token,
+        objectId: createdMediaId,
+        label: "video_story_finish",
+      });
 
-        status = statusResponse.data?.status?.processing_phase?.status;
+      status = statusResponse.data?.status?.processing_phase?.status;
+      attempts++;
 
-        logger.info("Video processing wating", {
-          data: statusResponse.data,
-          status,
-          delay,
-          attempts,
-        });
-      } catch (err) {
-        logger.error("Error getting video status", {
-          err,
-        });
-      } finally {
-        attempts++;
-      }
+      logger.info("Video processing wating", {
+        data: statusResponse.data,
+        status,
+        delay,
+        attempts,
+      });
 
       await wait.for({ seconds: delay / 1000 });
     }
@@ -1003,32 +1003,22 @@ export class FacebookPostClient extends PostClient {
       !["error", "completed", "complete"].includes(status) &&
       attempts < maxAttempts
     ) {
-      try {
-        statusResponse = await axios.get(
-          `https://graph.facebook.com/${createdMediaId}?fields=status`,
-          {
-            headers: {
-              Authorization: `OAuth ${account.access_token}`,
-              "Content-Type": "application/json; charset=UTF-8",
-            },
-          },
-        );
+      statusResponse = await this.#getObjectStatusWithRetry({
+        url: `https://graph.facebook.com/${createdMediaId}?fields=status`,
+        accessToken: account.access_token,
+        objectId: createdMediaId,
+        label: "reel_finish",
+      });
 
-        status = statusResponse.data?.status?.processing_phase?.status;
+      status = statusResponse.data?.status?.processing_phase?.status;
+      attempts++;
 
-        logger.info("Video processing wating", {
-          data: statusResponse.data,
-          status,
-          delay,
-          attempts,
-        });
-      } catch (err) {
-        logger.error("Error getting video status", {
-          err,
-        });
-      } finally {
-        attempts++;
-      }
+      logger.info("Video processing wating", {
+        data: statusResponse.data,
+        status,
+        delay,
+        attempts,
+      });
 
       await wait.for({ seconds: delay / 1000 });
     }

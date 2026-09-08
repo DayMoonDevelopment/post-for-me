@@ -19,9 +19,9 @@ import type {
 // own "start" call), so one shared, call-count-driven mock handles every
 // placement: the first calls are scripted per test to exercise the retry
 // path, and every call after that falls back to an immediate "done" status
-// so the rest of each flow (including the pre-existing second polling loop
-// in the story/reel flows, which this change does not touch) completes
-// without extra setup.
+// so the rest of each flow (including the story/reel "finish" status loop,
+// which also goes through the same retry wrapper) completes without extra
+// setup.
 
 const DEFAULT_VIDEO_ID = "video_123";
 
