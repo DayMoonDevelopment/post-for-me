@@ -100,6 +100,19 @@ export class FacebookService implements SocialPlatformService {
     }
   }
 
+  private getVideoTargetId(post: FacebookPost): string | undefined {
+    const attachments = post.attachments?.data || [];
+    const allAttachments = attachments.flatMap((attachment) => [
+      attachment,
+      ...(attachment.subattachments?.data || []),
+    ]);
+
+    return allAttachments.find(
+      (attachment) =>
+        attachment.media_type === 'video' && attachment.target?.id,
+    )?.target?.id;
+  }
+
   private mapAttachmentToMedia(
     attachment: FacebookAttachment,
   ): { url: string; thumbnail_url?: string } | null {
@@ -214,7 +227,6 @@ export class FacebookService implements SocialPlatformService {
   }: {
     account: SocialAccount;
     platformIds?: string[];
-    platformPostsMetadata?: any;
     limit: number;
     cursor?: string;
     includeMetrics?: boolean;
@@ -227,7 +239,7 @@ export class FacebookService implements SocialPlatformService {
             const response = await axios.get(`${this.graphApiBaseUrl}/${id}`, {
               params: {
                 fields:
-                  'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,subattachments{media_type,media,url}},likes.summary(true),comments.summary(true),shares',
+                  'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,target,subattachments{media_type,media,url,target}},likes.summary(true),comments.summary(true),shares',
                 access_token: account.access_token,
               },
             });
@@ -675,6 +687,7 @@ export class FacebookService implements SocialPlatformService {
       url: post.permalink_url || '',
       posted_at: post.created_time,
       media: this.getPostMedia(post),
+      video_target_id: this.getVideoTargetId(post),
       metrics: includeMetrics
         ? {
             ...insights,
