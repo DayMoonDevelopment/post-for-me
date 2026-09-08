@@ -23,6 +23,8 @@ import { mapWithConcurrency } from '../lib/async.utils';
 const FACEBOOK_METRICS_POST_CONCURRENCY = 3;
 const FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY = 2;
 const DEFAULT_FACEBOOK_API_VERSION = 'v25.0';
+const FACEBOOK_POST_FIELDS =
+  'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,target,subattachments{media_type,media,url,target}},likes.summary(true),comments.summary(true),shares';
 
 type FacebookInsightsInterval = { since: string; until: string };
 
@@ -238,8 +240,7 @@ export class FacebookService implements SocialPlatformService {
           async (id) => {
             const response = await axios.get(`${this.graphApiBaseUrl}/${id}`, {
               params: {
-                fields:
-                  'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,target,subattachments{media_type,media,url,target}},likes.summary(true),comments.summary(true),shares',
+                fields: FACEBOOK_POST_FIELDS,
                 access_token: account.access_token,
               },
             });
@@ -266,8 +267,7 @@ export class FacebookService implements SocialPlatformService {
         `${this.graphApiBaseUrl}/${account.social_provider_user_id}/feed`,
         {
           params: {
-            fields:
-              'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,subattachments{media_type,media,url}},likes.summary(true),comments.summary(true),shares',
+            fields: FACEBOOK_POST_FIELDS,
             access_token: account.access_token,
             limit: limit,
             after: cursor,
