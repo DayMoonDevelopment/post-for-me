@@ -202,19 +202,82 @@ export const refreshAccountTokens = schedules.task({
     const sevenDaysFromNow = new Date();
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
+    // YouTube access tokens are short-lived (~1h), so nearly every connected
+    // account matches the 7-day threshold on every run. Rather than cap this
+    // batch and silently skip accounts beyond the cap on every cron run, page
+    // through all matching accounts.
+    type SocialProviderConnectionRow =
+      Database["public"]["Tables"]["social_provider_connections"]["Row"];
+
+    const fetchAllYoutubeAccounts = async (): Promise<
+      SocialProviderConnectionRow[]
+    > => {
+      const PAGE_SIZE = 500;
+      const allAccounts: SocialProviderConnectionRow[] = [];
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabaseClient
+          .from("social_provider_connections")
+          .select("*")
+          .eq("provider", "youtube")
+          .not("access_token", "is", null)
+          .not("refresh_token", "is", null)
+          .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
+          .order("access_token_expires_at", { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) {
+          logger.error("Failed to fetch youtube accounts:", { error });
+          throw new Error(`Failed to fetch youtube accounts: ${error.message}`);
+        }
+
+        allAccounts.push(...(data || []));
+
+        if (!data || data.length < PAGE_SIZE) {
+          break;
+        }
+        from += PAGE_SIZE;
+      }
+
+      return allAccounts;
+    };
+
     // Get accounts that need token refresh. X OAuth1 accounts are
     // deliberately excluded here (queried separately below) - their tokens
     // never expire, so letting them compete for this shared, limited batch
     // would risk starving providers whose tokens actually break if not
     // refreshed in time.
+    //
+    // Each provider group gets its own independent batch budget (queried
+    // concurrently, since the reads are independent) so none can crowd out
+    // or be crowded out by another.
+    const [standardAccountsResult, xOAuth2AccountsResult, youtubeAccounts] =
+      await Promise.all([
+        (async () =>
+          supabaseClient
+            .from("social_provider_connections")
+            .select("*")
+            .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
+            .in("provider", ["facebook", "instagram", "threads", "pinterest"])
+            .order("access_token_expires_at", { ascending: true })
+            .limit(50))(),
+        (async () =>
+          supabaseClient
+            .from("social_provider_connections")
+            .select("*")
+            .eq("provider", "x")
+            .contains("social_provider_metadata", {
+              connection_type: "oauth2",
+            })
+            .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
+            .order("access_token_expires_at", { ascending: true })
+            .limit(50))(),
+        fetchAllYoutubeAccounts(),
+      ]);
+
     const { data: standardAccounts, error: standardAccountsError } =
-      await supabaseClient
-        .from("social_provider_connections")
-        .select("*")
-        .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
-        .in("provider", ["facebook", "instagram", "threads", "pinterest"])
-        .order("access_token_expires_at", { ascending: true })
-        .limit(50);
+      standardAccountsResult;
 
     if (standardAccountsError) {
       logger.error("Failed to fetch accounts:", {
@@ -225,17 +288,8 @@ export const refreshAccountTokens = schedules.task({
       );
     }
 
-    // X OAuth2 accounts get their own independent batch budget so they
-    // can't be crowded out by (or crowd out) the providers above.
     const { data: xOAuth2Accounts, error: xOAuth2AccountsError } =
-      await supabaseClient
-        .from("social_provider_connections")
-        .select("*")
-        .eq("provider", "x")
-        .contains("social_provider_metadata", { connection_type: "oauth2" })
-        .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
-        .order("access_token_expires_at", { ascending: true })
-        .limit(50);
+      xOAuth2AccountsResult;
 
     if (xOAuth2AccountsError) {
       logger.error("Failed to fetch x accounts:", {
@@ -249,6 +303,7 @@ export const refreshAccountTokens = schedules.task({
     const accounts = [
       ...(standardAccounts || []),
       ...(xOAuth2Accounts || []),
+      ...youtubeAccounts,
     ];
 
     if (!accounts || accounts.length === 0) {
