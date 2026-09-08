@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
+  BlueskyConfiguration,
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -81,11 +82,13 @@ export class BlueskyPostClient extends PostClient {
     account,
     caption,
     media,
+    platformConfig,
   }: {
     postId: string;
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
+    platformConfig?: BlueskyConfiguration;
   }): Promise<PostResult> {
     try {
       const trimmedCaption = caption.slice(0, this.#charLimit);
@@ -151,6 +154,10 @@ export class BlueskyPostClient extends PostClient {
       const postPayload: {
         text: string;
         facets: Main[] | undefined;
+        reply?: {
+          root: { uri: string; cid: string };
+          parent: { uri: string; cid: string };
+        };
         embed?:
           | {
               $type: string;
@@ -189,6 +196,10 @@ export class BlueskyPostClient extends PostClient {
         postPayload.embed = embed;
       }
 
+      if (platformConfig?.reply) {
+        postPayload.reply = platformConfig.reply;
+      }
+
       this.#requests.push({ postRequest: postPayload });
 
       const response = await this.#agent.post(postPayload);
@@ -204,6 +215,7 @@ export class BlueskyPostClient extends PostClient {
         }/post/${response.uri.split("/").pop()}`,
         details: {
           trimmed: caption.length > trimmedCaption.length,
+          cid: response.cid,
           requests: this.#requests,
           responses: this.#responses,
         },

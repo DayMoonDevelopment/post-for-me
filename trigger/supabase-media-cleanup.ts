@@ -102,6 +102,41 @@ export const supabaseMediaCleanup = schedules.task({
       if (scheduledPostUrls.length < scheduledPostLimit) break;
     }
 
+    // social_post_chain_item_media has no direct post_id — it links via
+    // chain_item_id -> social_post_chain_items.id -> post_id, so it needs
+    // its own two-hop query rather than fitting in the loop above.
+    let scheduledChainMediaOffset = 0;
+
+    for (;;) {
+      const { data: scheduledChainMediaUrls, error: scheduledChainMediaError } =
+        await supabaseClient
+          .from("social_post_chain_item_media")
+          .select("url, social_post_chain_items!inner(social_posts!inner(status))")
+          .eq("social_post_chain_items.social_posts.status", "scheduled")
+          .like("url", `%${storageUrl}%`)
+          .range(
+            scheduledChainMediaOffset,
+            scheduledChainMediaOffset + scheduledPostLimit - 1,
+          );
+
+      if (scheduledChainMediaError) {
+        logger.error("Error fetching scheduled chain item media", {
+          error: scheduledChainMediaError,
+        });
+        return;
+      }
+
+      if (!scheduledChainMediaUrls || scheduledChainMediaUrls.length === 0)
+        break;
+
+      allScheduledPostUrls.push(
+        ...scheduledChainMediaUrls.map((media) => media.url),
+      );
+      scheduledChainMediaOffset += scheduledPostLimit;
+
+      if (scheduledChainMediaUrls.length < scheduledPostLimit) break;
+    }
+
     logger.info("Completed fetching scheduled post urls", {
       scheduledPostUrls: allScheduledPostUrls.length,
     });

@@ -5,10 +5,16 @@ import type {
   PlatformAppCredentials,
   PlatformConfiguration,
   Post,
+  PostMedia,
   PostResult,
+  Provider,
+  SocialAccount,
   UserTag,
 } from "./posting/post.types";
+import { CHAIN_SELECT } from "./posting/chain-select";
 import { Unkey } from "@unkey/api";
+
+const CHAIN_CAPABLE_PROVIDERS: Provider[] = ["x", "threads", "bluesky"];
 
 import { Database, Json } from "./supabase.types";
 
@@ -52,6 +58,17 @@ const transformPostData = (data: {
     provider: string | null;
     provider_connection_id: string | null;
     provider_data: any;
+  }[];
+  social_post_chain_items?: {
+    sequence: number;
+    caption: string;
+    social_post_chain_item_media: {
+      url: string;
+      thumbnail_url: string | null;
+      thumbnail_timestamp_ms: number | null;
+      tags: Json;
+      skip_processing: boolean | null;
+    }[];
   }[];
 }) => {
   const postMedia = data.social_post_media
@@ -123,6 +140,19 @@ const transformPostData = (data: {
     }),
   );
 
+  const chain = [...(data.social_post_chain_items ?? [])]
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((item) => ({
+      caption: item.caption,
+      media: item.social_post_chain_item_media.map((media) => ({
+        url: media.url,
+        thumbnail_url: media.thumbnail_url,
+        thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+        tags: media.tags as any[],
+        skip_processing: media.skip_processing,
+      })),
+    }));
+
   return {
     id: data.id,
     external_id: data.external_id,
@@ -132,10 +162,127 @@ const transformPostData = (data: {
     platform_configurations: platformConfigurations,
     account_configurations: accountConfigurations,
     social_accounts: socialAccounts,
+    chain: chain.length > 0 ? chain : null,
     scheduled_at: data.post_at,
     created_at: data.created_at,
     updated_at: data.updated_at,
   };
+};
+
+interface LocalizedMedia extends PostMedia {
+  provider?: string | null;
+  provider_connection_id?: string | null;
+}
+
+const localizeMedia = async (
+  media: {
+    id: string;
+    provider?: string | null;
+    provider_connection_id?: string | null;
+    url: string;
+    thumbnail_url: string | null;
+    thumbnail_timestamp_ms: number | null;
+    tags?: UserTag[] | null;
+    skip_processing?: boolean | null;
+  }[],
+): Promise<LocalizedMedia[]> => {
+  const postMedia: LocalizedMedia[] = [];
+
+  if (!media || media.length === 0) {
+    return postMedia;
+  }
+
+  logger.info("Localizing Media", { media });
+
+  const localizedMedia = await tasks.batchTriggerAndWait(
+    "process-post-medium",
+    media.map((medium) => ({
+      payload: {
+        medium: {
+          id: medium.id,
+          provider: medium.provider,
+          provider_connection_id: medium.provider_connection_id,
+          url: medium.url,
+          thumbnail_url: medium.thumbnail_url,
+          thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
+          tags: medium.tags,
+          skip_processing: medium.skip_processing,
+        },
+      },
+    })),
+  );
+
+  logger.info("Localizing Media Complete", { localizedMedia });
+
+  const succesfulMedia = localizedMedia.runs
+    .filter((run) => run.ok)
+    .map((run) => run.output);
+
+  const postImages = succesfulMedia.filter(
+    (medium) => medium.type !== "video",
+  );
+  const postVideos = succesfulMedia.filter(
+    (medium) => medium.type === "video",
+  );
+
+  postMedia.push(...postImages);
+  postMedia.push(...postVideos.filter((m) => m.skip_processing));
+
+  const videosToProcess = postVideos.filter((m) => !m.skip_processing);
+
+  if (videosToProcess.length > 0) {
+    logger.info("Processing Videos");
+    const processVideosResult = await tasks.batchTriggerAndWait(
+      "ffmpeg-process-video",
+      videosToProcess.map((video) => ({
+        payload: {
+          medium: video,
+        },
+      })),
+    );
+
+    logger.info("Processing Videos Complete", { processVideosResult });
+
+    postMedia.push(
+      ...processVideosResult.runs
+        .filter((run) => run.ok)
+        .map((run) => run.output),
+    );
+
+    logger.info("Updated post media with processed video URLs", {
+      postMedia,
+    });
+  }
+
+  return postMedia;
+};
+
+const buildReplyPlatformConfig = (
+  provider: string,
+  previousResult: PostResult,
+  rootResult: PostResult,
+): PlatformConfiguration => {
+  switch (provider) {
+    case "x":
+      return { in_reply_to_tweet_id: previousResult.provider_post_id };
+    case "threads":
+      return { reply_to_id: previousResult.provider_post_id };
+    case "bluesky":
+      return {
+        reply: {
+          root: {
+            uri: rootResult.provider_post_id!,
+            cid: rootResult.details?.cid,
+          },
+          parent: {
+            uri: previousResult.provider_post_id!,
+            cid: previousResult.details?.cid,
+          },
+        },
+      };
+    default:
+      return {};
+  }
 };
 
 const unkey = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
@@ -241,92 +388,23 @@ export const processPost = task({
       }
 
       await tags.add(`${project.team_id}`);
-      const postMedia: {
-        id: string;
-        provider?: string | null;
-        provider_connection_id?: string | null;
-        url: string;
-        thumbnail_url: string;
-        thumbnail_timestamp_ms?: number | null;
-        type: string;
-        tags?: UserTag[] | null;
-        skip_processing?: boolean | null;
-      }[] = [];
-      if (post.social_post_media && post.social_post_media.length > 0) {
-        logger.info("Localizing Media", { media: post.social_post_media });
+      const postMedia = await localizeMedia(post.social_post_media ?? []);
 
-        const localizedMedia = await tasks.batchTriggerAndWait(
-          "process-post-medium",
-          post.social_post_media.map((medium) => ({
-            payload: {
-              medium: {
-                id: medium.id,
-                provider: medium.provider,
-                provider_connection_id: medium.provider_connection_id,
-                url: medium.url,
-                thumbnail_url: medium.thumbnail_url,
-                thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
-                tags: medium.tags,
-                skip_processing: medium.skip_processing,
-              },
-            },
+      if (
+        post.social_post_media &&
+        post.social_post_media.length > 0 &&
+        postMedia.length === 0
+      ) {
+        logger.error("All Media Failed");
+        errorResults.push(
+          ...accounts.map((connection) => ({
+            success: false,
+            provider_connection_id: connection.id,
+            post_id: post.id,
+            error_message: `All media failed to process, please check media URLS`,
           })),
         );
-
-        logger.info("Localizing Media Complete", { localizedMedia });
-
-        const succesfulMedia = localizedMedia.runs
-          .filter((run) => run.ok)
-          .map((run) => run.output);
-
-        const postImages = succesfulMedia.filter(
-          (medium) => medium.type !== "video",
-        );
-        const postVideos = succesfulMedia.filter(
-          (medium) => medium.type === "video",
-        );
-
-        postMedia.push(...postImages);
-        postMedia.push(...postVideos.filter((m) => m.skip_processing));
-
-        const videosToProcess = postVideos.filter((m) => !m.skip_processing);
-
-        if (videosToProcess.length > 0) {
-          logger.info("Processing Videos");
-          const processVideosResult = await tasks.batchTriggerAndWait(
-            "ffmpeg-process-video",
-            videosToProcess.map((video) => ({
-              payload: {
-                medium: video,
-              },
-            })),
-          );
-
-          logger.info("Processing Videos Complete", { processVideosResult });
-
-          postMedia.push(
-            ...processVideosResult.runs
-              .filter((run) => run.ok)
-              .map((run) => run.output),
-          );
-
-          logger.info("Updated post media with processed video URLs", {
-            postMedia,
-          });
-        }
-
-        if (postMedia.length == 0) {
-          logger.error("All Media Failed");
-          errorResults.push(
-            ...accounts.map((connection) => ({
-              success: false,
-              provider_connection_id: connection.id,
-              post_id: post.id,
-              error_message: `All media failed to process, please check media URLS`,
-            })),
-          );
-          throw new Error("All media failed to process");
-        }
+        throw new Error("All media failed to process");
       }
 
       logger.info("Constructing Post Data");
@@ -343,8 +421,16 @@ export const processPost = task({
 
       logger.info("Constructed Post Data", { postData });
 
+      const chainItems = [...(post.social_post_chain_items ?? [])].sort(
+        (a, b) => a.sequence - b.sequence,
+      );
+
       const bulkPostData: IndividualPostData[] = [];
       const storyBulkPostData: IndividualPostData[] = [];
+      const chainAccounts: {
+        account: SocialAccount;
+        appCredentials: PlatformAppCredentials;
+      }[] = [];
       for (const account of postData.accounts) {
         try {
           logger.info("Getting App Credentials");
@@ -411,6 +497,13 @@ export const processPost = task({
           }
 
           logger.info("Got App Credentials");
+
+          if (
+            chainItems.length > 0 &&
+            CHAIN_CAPABLE_PROVIDERS.includes(account.provider)
+          ) {
+            chainAccounts.push({ account, appCredentials });
+          }
 
           logger.info("Creating Individual Post Configuration");
           const platformConfig = postData.configurations.filter(
@@ -504,6 +597,8 @@ export const processPost = task({
         }
       }
 
+      const rootResultsByAccountId = new Map<string, PostResult>();
+
       if (bulkPostData.length > 0) {
         logger.info("Posting To Accounts", { bulkPostData });
         const batchPostResult = await tasks.batchTriggerAndWait(
@@ -512,6 +607,13 @@ export const processPost = task({
         );
 
         logger.info("Posting To Accounts Complete", { batchPostResult });
+
+        bulkPostData.forEach((data, index) => {
+          const run = batchPostResult.runs[index];
+          if (run?.ok) {
+            rootResultsByAccountId.set(data.account.id, run.output);
+          }
+        });
       }
 
       if (storyBulkPostData.length > 0) {
@@ -541,6 +643,192 @@ export const processPost = task({
           });
         }
       }
+
+      if (chainAccounts.length > 0) {
+        logger.info("Posting Chain Items Per Account In Parallel", {
+          totalChainAccounts: chainAccounts.length,
+          chainLength: chainItems.length,
+        });
+
+        // Localize every chain item's media once up front (it doesn't vary
+        // by account, unlike root-post media), instead of re-localizing it
+        // once per chain-capable account.
+        const localizedChainMedia = await localizeMedia(
+          chainItems.flatMap((item) => item.social_post_chain_item_media),
+        );
+        const localizedChainMediaById = new Map(
+          localizedChainMedia.map((medium) => [medium.id, medium]),
+        );
+        const itemMediaById = new Map(
+          chainItems.map((item) => [
+            item.id,
+            item.social_post_chain_item_media
+              .map((medium) => localizedChainMediaById.get(medium.id))
+              .filter(
+                (medium): medium is LocalizedMedia => medium !== undefined,
+              ),
+          ]),
+        );
+        const failedMediaItemIds = new Set(
+          chainItems
+            .filter(
+              (item) =>
+                item.social_post_chain_item_media.length > 0 &&
+                (itemMediaById.get(item.id)?.length ?? 0) === 0,
+            )
+            .map((item) => item.id),
+        );
+
+        await Promise.allSettled(
+          chainAccounts.map(async ({ account, appCredentials }) => {
+            const rootResult = rootResultsByAccountId.get(account.id);
+
+            if (!rootResult?.success) {
+              logger.warn("Skipping chain: root post did not succeed", {
+                provider: account.provider,
+                provider_connection_id: account.id,
+              });
+              errorResults.push(
+                ...chainItems.map((item) => ({
+                  success: false,
+                  provider_connection_id: account.id,
+                  post_id: postData.id,
+                  chain_item_id: item.id,
+                  error_message: `Skipped chain item: root post did not succeed for ${account.provider}`,
+                })),
+              );
+              return;
+            }
+
+            let previousResult: PostResult = rootResult;
+            const rootRef: PostResult = rootResult;
+            let chainBroken = false;
+
+            for (const item of chainItems) {
+              if (chainBroken) {
+                errorResults.push({
+                  success: false,
+                  provider_connection_id: account.id,
+                  post_id: postData.id,
+                  chain_item_id: item.id,
+                  error_message: `Skipped chain item: an earlier item in the chain failed for ${account.provider}`,
+                });
+                continue;
+              }
+
+              try {
+                if (failedMediaItemIds.has(item.id)) {
+                  logger.error("All Chain Item Media Failed", {
+                    provider_connection_id: account.id,
+                    chain_item_id: item.id,
+                  });
+                  errorResults.push({
+                    success: false,
+                    provider_connection_id: account.id,
+                    post_id: postData.id,
+                    chain_item_id: item.id,
+                    error_message: `All media failed to process for chain item, please check media URLS`,
+                  });
+                  chainBroken = true;
+                  continue;
+                }
+
+                // Re-fetch the account on every chain item: an earlier item
+                // (or the root post) may have refreshed and persisted a new
+                // access/refresh token, and platforms like X rotate the OAuth2
+                // refresh_token on every use, so a stale in-memory `account`
+                // would fail to refresh again.
+                const { data: freshAccountRow, error: freshAccountError } =
+                  await supabaseClient
+                    .from("social_provider_connections")
+                    .select("*")
+                    .eq("id", account.id)
+                    .single();
+
+                if (freshAccountError || !freshAccountRow) {
+                  logger.warn(
+                    "Failed to refresh account before chain item, reusing last known token",
+                    {
+                      provider_connection_id: account.id,
+                      error: freshAccountError,
+                    },
+                  );
+                }
+
+                const currentAccount: SocialAccount = freshAccountRow
+                  ? (freshAccountRow as unknown as SocialAccount)
+                  : account;
+
+                const itemMedia = itemMediaById.get(item.id) ?? [];
+
+                const platformConfig = buildReplyPlatformConfig(
+                  account.provider,
+                  previousResult,
+                  rootRef,
+                );
+
+                logger.info("Posting Chain Item", {
+                  provider: account.provider,
+                  provider_connection_id: account.id,
+                  sequence: item.sequence,
+                });
+
+                const result = await tasks.triggerAndWait("post-to-platform", {
+                  stripeCustomerId: postData.stripe_customer_id,
+                  teamId: project.team_id,
+                  platform: account.provider,
+                  postId: postData.id,
+                  account: currentAccount,
+                  media: itemMedia,
+                  caption: item.caption,
+                  platformConfig,
+                  appCredentials,
+                  projectId: post.project_id,
+                  chainItemId: item.id,
+                });
+
+                logger.info("Posting Chain Item Complete", {
+                  provider: account.provider,
+                  provider_connection_id: account.id,
+                  sequence: item.sequence,
+                  success: result.ok && result.output.success,
+                });
+
+                if (result.ok && result.output.success) {
+                  previousResult = result.output;
+                } else {
+                  chainBroken = true;
+                  if (!result.ok) {
+                    errorResults.push({
+                      success: false,
+                      provider_connection_id: account.id,
+                      post_id: postData.id,
+                      chain_item_id: item.id,
+                      error_message:
+                        "post-to-platform run failed unexpectedly for chain item",
+                    });
+                  }
+                }
+              } catch (error: any) {
+                logger.error("Failed Posting Chain Item", {
+                  account,
+                  item,
+                  error,
+                });
+                errorResults.push({
+                  success: false,
+                  provider_connection_id: account.id,
+                  post_id: postData.id,
+                  chain_item_id: item.id,
+                  error_message: error?.message || "Unknown error",
+                  details: { error },
+                });
+                chainBroken = true;
+              }
+            }
+          }),
+        );
+      }
     } catch (error) {
       logger.error("Unexpected Error", { error });
     } finally {
@@ -568,6 +856,7 @@ export const processPost = task({
                   url: r.provider_post_url,
                 },
                 post_id: r.post_id,
+                chain_item_id: r.chain_item_id,
                 social_account_id: r.provider_connection_id,
                 success: r.success,
               },
@@ -605,7 +894,8 @@ export const processPost = task({
          provider,
          provider_connection_id,
          provider_data
-        )
+        ),
+        ${CHAIN_SELECT}
         `,
         )
         .single();

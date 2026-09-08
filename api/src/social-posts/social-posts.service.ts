@@ -21,6 +21,23 @@ type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
 
 type PostStatusEnum = Database['public']['Enums']['social_post_status'];
 
+const MAX_CHAIN_LENGTH = 25;
+
+const CHAIN_SELECT = `
+        social_post_chain_items (
+          id,
+          sequence,
+          caption,
+          social_post_chain_item_media (
+            id,
+            url,
+            thumbnail_url,
+            thumbnail_timestamp_ms,
+            tags,
+            skip_processing
+          )
+        )`;
+
 @Injectable()
 export class SocialPostsService {
   constructor(
@@ -127,6 +144,35 @@ export class SocialPostsService {
           }
         }
       }
+    }
+
+    // Validate chain items
+    if (Array.isArray(post.chain)) {
+      if (post.chain.length > MAX_CHAIN_LENGTH) {
+        errors.push(`chain cannot contain more than ${MAX_CHAIN_LENGTH} items`);
+      }
+
+      post.chain.forEach((item, index) => {
+        if (!item.caption) {
+          errors.push(`chain[${index}]: caption is required`);
+        }
+
+        if (item.media) {
+          for (const media of item.media) {
+            const urlValidation = this.validateMediaUrl(media.url);
+            errors.push(...urlValidation.map((e) => `chain[${index}]: ${e}`));
+
+            if (media.thumbnail_url) {
+              const thumbnailValidation = this.validateMediaUrl(
+                media.thumbnail_url,
+              );
+              errors.push(
+                ...thumbnailValidation.map((e) => `chain[${index}]: ${e}`),
+              );
+            }
+          }
+        }
+      });
     }
 
     // Validate account configuration media URLs
@@ -452,6 +498,54 @@ export class SocialPostsService {
       console.error(insertPostConfigurationsError);
     }
 
+    if (post.chain && post.chain.length > 0) {
+      const { data: insertedChainItems, error: insertChainItemsError } =
+        await this.supabaseService.supabaseClient
+          .from('social_post_chain_items')
+          .insert(
+            post.chain.map((item, index) => ({
+              post_id: data.id,
+              sequence: index + 1,
+              caption: item.caption,
+            })),
+          )
+          .select('id, sequence');
+
+      if (insertChainItemsError) {
+        throw new Error(insertChainItemsError.message);
+      } else if (insertedChainItems) {
+        const chainItemMedia = post.chain.flatMap((item, index) => {
+          const chainItem = insertedChainItems.find(
+            (c) => c.sequence === index + 1,
+          );
+
+          if (!chainItem || !item.media) {
+            return [];
+          }
+
+          return item.media.map((media) => ({
+            chain_item_id: chainItem.id,
+            url: media.url,
+            thumbnail_url: media.thumbnail_url,
+            thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+            tags: media.tags as any[],
+            skip_processing: media.skip_processing,
+          }));
+        });
+
+        if (chainItemMedia.length > 0) {
+          const { error: insertChainItemMediaError } =
+            await this.supabaseService.supabaseClient
+              .from('social_post_chain_item_media')
+              .insert(chainItemMedia);
+
+          if (insertChainItemMediaError) {
+            throw new Error(insertChainItemMediaError.message);
+          }
+        }
+      }
+    }
+
     if (data.status === 'processing') {
       await this.triggerPost(data.id);
     }
@@ -515,7 +609,8 @@ export class SocialPostsService {
          provider,
          provider_connection_id,
          provider_data
-        )
+        ),
+        ${CHAIN_SELECT}
         `,
       )
       .eq('id', postId)
@@ -581,7 +676,8 @@ export class SocialPostsService {
          provider,
          provider_connection_id,
          provider_data
-        )
+        ),
+        ${CHAIN_SELECT}
         `,
         { count: 'estimated', head: false },
       )
@@ -810,7 +906,8 @@ export class SocialPostsService {
               provider,
               provider_connection_id,
               provider_data
-            )
+            ),
+            ${CHAIN_SELECT}
         `,
         )
         .eq('id', postId)
@@ -869,6 +966,19 @@ export class SocialPostsService {
       provider_connection_id: string | null;
       provider_data: Json;
     }>;
+    social_post_chain_items?: Array<{
+      id: string;
+      sequence: number;
+      caption: string;
+      social_post_chain_item_media: Array<{
+        id: string;
+        url: string;
+        thumbnail_url: string | null;
+        thumbnail_timestamp_ms: number | null;
+        tags: Json;
+        skip_processing: boolean | null;
+      }>;
+    }> | null;
   }): SocialPostDto {
     const postMedia = data.social_post_media
       .filter((media) => !media.provider && !media.provider_connection_id)
@@ -954,6 +1064,21 @@ export class SocialPostsService {
       }),
     );
 
+    const chain = [...(data.social_post_chain_items ?? [])]
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((item) => ({
+        id: item.id,
+        sequence: item.sequence,
+        caption: item.caption,
+        media: item.social_post_chain_item_media.map((media) => ({
+          url: media.url,
+          thumbnail_url: media.thumbnail_url,
+          thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+          tags: media.tags as any[],
+          skip_processing: media.skip_processing,
+        })),
+      }));
+
     const postData: SocialPostDto = {
       id: data.id,
       external_id: data.external_id,
@@ -963,6 +1088,7 @@ export class SocialPostsService {
       platform_configurations: platformConfigurations,
       account_configurations: accountConfigurations,
       social_accounts: socialAccounts,
+      chain: chain.length > 0 ? chain : null,
       scheduled_at: data.post_at,
       created_at: data.created_at,
       updated_at: data.updated_at,
