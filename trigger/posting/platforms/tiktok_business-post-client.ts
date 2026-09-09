@@ -3,6 +3,7 @@ import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -765,6 +766,10 @@ export class TikTokBusinessPostClient extends PostClient {
 
   async #transformImage(medium: PostMedia): Promise<string> {
     const signedUrl = await this.getSignedUrlForFile(medium);
+
+    if (shouldSkipProcessing(medium)) {
+      return signedUrl;
+    }
 
     const response = await axios({
       url: signedUrl,

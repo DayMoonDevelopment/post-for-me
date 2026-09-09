@@ -4,6 +4,11 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  computeCropDimensions,
+  resolveInstagramMinAspectRatio,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
+import {
   InstagramConfiguration,
   PlatformAppCredentials,
   PostMedia,
@@ -15,7 +20,7 @@ import {
 export class InstagramPostClient extends PostClient {
   #maxItems = 10;
   #maxFileSize = 8 * 1024 * 1024;
-  #minAspectRatio = 4 / 5;
+  #minAspectRatio = 3 / 4;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
   #reelsMinAspectRatio = 9 / 16;
@@ -473,6 +478,8 @@ export class InstagramPostClient extends PostClient {
           medium,
           options: {
             firstImage: { width: firstImageWidth, height: firstImageHeight },
+            placement: platformConfig?.placement,
+            is_feed: true,
           },
         });
 
@@ -926,16 +933,21 @@ export class InstagramPostClient extends PostClient {
     const width = metadata.width || 0;
     const height = metadata.height || 0;
 
+    if (shouldSkipProcessing(medium)) {
+      return { signedUrl, width, height };
+    }
+
     const aspectRatio = width / height;
     let targetWidth = metadata.width;
     let targetHeight = metadata.height;
 
-    const minAspectRatio =
-      options?.placement === "stories"
-        ? this.#storiesMinAspectRatio
-        : !options?.is_feed
-          ? this.#reelsMinAspectRatio
-          : this.#minAspectRatio;
+    const minAspectRatio = resolveInstagramMinAspectRatio({
+      placement: options?.placement,
+      isFeed: options?.is_feed,
+      feedMinAspectRatio: this.#minAspectRatio,
+      storiesMinAspectRatio: this.#storiesMinAspectRatio,
+      reelsMinAspectRatio: this.#reelsMinAspectRatio,
+    });
 
     if (options?.firstImage?.width && options?.firstImage?.height) {
       const firstImageRatio =
@@ -946,13 +958,12 @@ export class InstagramPostClient extends PostClient {
         targetHeight = options?.firstImage?.height;
       }
     } else {
-      if (aspectRatio > this.#maxAspectRatio) {
-        // Too wide → crop width to fit 1.91:1
-        targetWidth = Math.round(height * this.#maxAspectRatio);
-      } else if (aspectRatio < minAspectRatio) {
-        // Too tall → crop height to fit min aspect ratio
-        targetHeight = Math.round(width / minAspectRatio);
-      }
+      ({ width: targetWidth, height: targetHeight } = computeCropDimensions({
+        width,
+        height,
+        minAspectRatio,
+        maxAspectRatio: this.#maxAspectRatio,
+      }));
     }
 
     // Process image with Sharp (resize & compress)

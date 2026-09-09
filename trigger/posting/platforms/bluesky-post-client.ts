@@ -1,6 +1,7 @@
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
 import { SupabaseClient } from "@supabase/supabase-js";
@@ -451,32 +452,36 @@ export class BlueskyPostClient extends PostClient {
       const file = await this.getFile(medium);
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      let sharpBuffer = await sharp(buffer).toBuffer();
-      const metadata = await sharp(sharpBuffer).metadata();
+      const metadata = await sharp(buffer).metadata();
       const { width, height } = metadata;
-      // Resize image if needed
-      if (buffer.length > this.#maxFileSize) {
-        sharpBuffer = await sharp(sharpBuffer)
-          .rotate() // Add this to automatically rotate based on EXIF data
-          .resize(2000, 2000, {
-            fit: "inside",
-            withoutEnlargement: true,
-          })
-          .jpeg({
-            quality: 80,
-          })
-          .toBuffer();
 
-        console.log(`Resized to ${sharpBuffer.length} bytes`);
-
-        // If still too large, reduce quality further
+      let sharpBuffer: Buffer = buffer;
+      if (!shouldSkipProcessing(medium)) {
+        sharpBuffer = await sharp(buffer).toBuffer();
+        // Resize image if needed
         if (sharpBuffer.length > this.#maxFileSize) {
           sharpBuffer = await sharp(sharpBuffer)
+            .rotate() // Add this to automatically rotate based on EXIF data
+            .resize(2000, 2000, {
+              fit: "inside",
+              withoutEnlargement: true,
+            })
             .jpeg({
-              quality: 60,
+              quality: 80,
             })
             .toBuffer();
-          console.log(`Further compressed to ${sharpBuffer.length} bytes`);
+
+          console.log(`Resized to ${sharpBuffer.length} bytes`);
+
+          // If still too large, reduce quality further
+          if (sharpBuffer.length > this.#maxFileSize) {
+            sharpBuffer = await sharp(sharpBuffer)
+              .jpeg({
+                quality: 60,
+              })
+              .toBuffer();
+            console.log(`Further compressed to ${sharpBuffer.length} bytes`);
+          }
         }
       }
 
