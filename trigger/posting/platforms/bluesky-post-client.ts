@@ -456,10 +456,11 @@ export class BlueskyPostClient extends PostClient {
       const { width, height } = metadata;
 
       let sharpBuffer: Buffer = buffer;
+      let encoding = file.type || "image/jpeg";
       if (!shouldSkipProcessing(medium)) {
         sharpBuffer = await sharp(buffer).toBuffer();
         // Resize image if needed
-        if (sharpBuffer.length > this.#maxFileSize) {
+        if (buffer.length > this.#maxFileSize) {
           sharpBuffer = await sharp(sharpBuffer)
             .rotate() // Add this to automatically rotate based on EXIF data
             .resize(2000, 2000, {
@@ -470,6 +471,7 @@ export class BlueskyPostClient extends PostClient {
               quality: 80,
             })
             .toBuffer();
+          encoding = "image/jpeg";
 
           console.log(`Resized to ${sharpBuffer.length} bytes`);
 
@@ -486,7 +488,7 @@ export class BlueskyPostClient extends PostClient {
       }
 
       const uploadResult = await this.#agent.uploadBlob(sharpBuffer, {
-        encoding: "image/jpeg",
+        encoding,
       });
 
       images.push({

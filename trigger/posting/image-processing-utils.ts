@@ -5,6 +5,8 @@
  * platform's entire API request sequence).
  */
 
+import sharp from "sharp";
+
 export function shouldSkipProcessing(medium: {
   skip_processing?: boolean | null;
 }): boolean {
@@ -68,4 +70,27 @@ export function resolveInstagramMinAspectRatio({
   }
 
   return feedMinAspectRatio;
+}
+
+/**
+ * Progressively re-encodes a JPEG buffer at quality 80, then quality 60 if
+ * still too large, mirroring the compression ladder shared by the platform
+ * clients' image transform methods. Returns the input unchanged if it
+ * already fits within maxFileSize.
+ */
+export async function compressJpegToLimit(
+  buffer: Buffer,
+  maxFileSize: number,
+): Promise<Buffer> {
+  if (buffer.length <= maxFileSize) {
+    return buffer;
+  }
+
+  let compressed = await sharp(buffer).jpeg({ quality: 80 }).toBuffer();
+
+  if (compressed.length > maxFileSize) {
+    compressed = await sharp(compressed).jpeg({ quality: 60 }).toBuffer();
+  }
+
+  return compressed;
 }

@@ -4,7 +4,10 @@ import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
-import { shouldSkipProcessing } from "../image-processing-utils";
+import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -764,17 +767,10 @@ export class TikTokPostClient extends PostClient {
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";

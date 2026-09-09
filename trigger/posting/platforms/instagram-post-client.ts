@@ -4,6 +4,7 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  compressJpegToLimit,
   computeCropDimensions,
   resolveInstagramMinAspectRatio,
   shouldSkipProcessing,
@@ -345,7 +346,12 @@ export class InstagramPostClient extends PostClient {
       signedUrl = await this.getSignedUrlForFile(medium);
       if (medium.thumbnail_url) {
         const transformedThumbnail = await this.#transformImage({
-          medium: { id: medium.id, url: medium.thumbnail_url, type: "image" },
+          medium: {
+            id: medium.id,
+            url: medium.thumbnail_url,
+            type: "image",
+            skip_processing: medium.skip_processing,
+          },
           options: {
             placement: platformConfig?.placement,
             is_feed: platformConfig?.share_to_feed ?? false,
@@ -919,6 +925,10 @@ export class InstagramPostClient extends PostClient {
   }> {
     const signedUrl = await this.getSignedUrlForFile(medium);
 
+    if (shouldSkipProcessing(medium)) {
+      return { signedUrl, width: undefined, height: undefined };
+    }
+
     const response = await axios({
       url: signedUrl,
       method: "GET",
@@ -932,10 +942,6 @@ export class InstagramPostClient extends PostClient {
 
     const width = metadata.width || 0;
     const height = metadata.height || 0;
-
-    if (shouldSkipProcessing(medium)) {
-      return { signedUrl, width, height };
-    }
 
     const aspectRatio = width / height;
     let targetWidth = metadata.width;
@@ -974,17 +980,10 @@ export class InstagramPostClient extends PostClient {
       .toBuffer();
 
     // Ensure size is within Instagram limits
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
