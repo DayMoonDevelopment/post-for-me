@@ -348,6 +348,7 @@ export const processPostMedium = task({
       thumbnail_timestamp_ms,
       tags,
       skip_processing,
+      position,
     },
   }: {
     medium: {
@@ -359,6 +360,7 @@ export const processPostMedium = task({
       thumbnail_timestamp_ms?: number | null;
       tags?: UserTag[] | null;
       skip_processing?: boolean | null;
+      position: number;
     };
   }): Promise<{
     provider?: string | null;
@@ -370,6 +372,7 @@ export const processPostMedium = task({
     type: string;
     tags?: UserTag[] | null;
     skip_processing?: boolean | null;
+    position: number;
   }> => {
     logger.info("Starting media processing", { url, thumbnail_url });
 
@@ -411,6 +414,7 @@ export const processPostMedium = task({
         thumbnail_timestamp_ms: thumbnail_timestamp_ms,
         tags,
         skip_processing: skip_processing,
+        position,
       };
 
       logger.info("Media processing completed successfully", result);
