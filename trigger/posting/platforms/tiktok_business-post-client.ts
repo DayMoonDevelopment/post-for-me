@@ -4,6 +4,10 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
+import {
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -766,6 +770,10 @@ export class TikTokBusinessPostClient extends PostClient {
   async #transformImage(medium: PostMedia): Promise<string> {
     const signedUrl = await this.getSignedUrlForFile(medium);
 
+    if (shouldSkipProcessing(medium)) {
+      return signedUrl;
+    }
+
     const response = await axios({
       url: signedUrl,
       method: "GET",
@@ -808,17 +816,10 @@ export class TikTokBusinessPostClient extends PostClient {
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
