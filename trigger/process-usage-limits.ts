@@ -804,7 +804,6 @@ const scheduleUpgrade = async ({
 
   const schedule = await stripe.subscriptionSchedules.create({
     from_subscription: subscription.id,
-    metadata: { [SCHEDULE_METADATA_KEY]: SCHEDULE_TYPE.USAGE_BASED_UPGRADE },
   });
 
   const firstPhase = schedule.phases[0];
@@ -830,6 +829,7 @@ const scheduleUpgrade = async ({
   ];
 
   await stripe.subscriptionSchedules.update(schedule.id, {
+    metadata: { [SCHEDULE_METADATA_KEY]: SCHEDULE_TYPE.USAGE_BASED_UPGRADE },
     end_behavior: "release",
     phases: [
       {
