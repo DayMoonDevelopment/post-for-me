@@ -91,6 +91,7 @@ export class FacebookPostClient extends PostClient {
     try {
       let platformId;
       let platformUrl: string | undefined | null = undefined;
+      let feedPostId: string | undefined;
 
       switch (true) {
         case media.length === 0: {
@@ -113,22 +114,28 @@ export class FacebookPostClient extends PostClient {
                 break;
               }
               case "reels": {
-                platformId = await this.#publishReel({
+                const reelResult = await this.#publishReel({
                   account,
                   caption,
                   medium,
                   platformConfig,
                 });
 
+                platformId = reelResult.id;
+                feedPostId = reelResult.feedPostId;
+
                 platformUrl = `https://www.facebook.com/reel/${platformId}/`;
                 break;
               }
               default: {
-                platformId = await this.#publishVideo({
+                const videoResult = await this.#publishVideo({
                   account,
                   caption,
                   medium,
                 });
+
+                platformId = videoResult.id;
+                feedPostId = videoResult.feedPostId;
 
                 if (medium.thumbnail_url) {
                   await this.#uploadThumbnail({
@@ -214,11 +221,12 @@ export class FacebookPostClient extends PostClient {
         success: true,
         post_id: postId,
         provider_connection_id: account.id,
-        provider_post_id: platformId,
+        provider_post_id: feedPostId ?? platformId,
         provider_post_url: platformUrl ?? "https://www.facebook.com/profile",
         details: {
           requests: this.#requests,
           responses: this.#responses,
+          raw_media_id: platformId,
         },
       };
     } catch (error) {
@@ -350,6 +358,12 @@ export class FacebookPostClient extends PostClient {
       );
     }
 
+    if (!photoResponse.data.post_id) {
+      logger.error("Facebook photo publish response missing post_id", {
+        photoResponse: photoResponse.data,
+      });
+    }
+
     return photoResponse.data.post_id || photoResponse.data.id;
   }
 
@@ -464,6 +478,57 @@ export class FacebookPostClient extends PostClient {
     return response.data.id;
   }
 
+  async #resolveFeedPostId({
+    mediaId,
+    accessToken,
+    attempts = 3,
+    delayMs = 2000,
+  }: {
+    mediaId: string;
+    accessToken: string;
+    attempts?: number;
+    delayMs?: number;
+  }): Promise<string | undefined> {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      this.#requests.push({
+        resolveFeedPostIdRequest: {
+          url: `https://graph.facebook.com/${mediaId}`,
+          params: { fields: "post_id" },
+        },
+      });
+
+      try {
+        const response = await axios.get(
+          `https://graph.facebook.com/${mediaId}`,
+          {
+            params: { fields: "post_id", access_token: accessToken },
+          },
+        );
+
+        this.#responses.push({ resolveFeedPostIdResponse: response.data });
+
+        if (response.data?.post_id) {
+          return response.data.post_id;
+        }
+      } catch (err) {
+        logger.error("Error resolving Facebook feed post id", {
+          err,
+          mediaId,
+        });
+      }
+
+      if (attempt < attempts - 1) {
+        await wait.for({ seconds: delayMs / 1000 });
+      }
+    }
+
+    logger.error(
+      "Unable to resolve Facebook feed post id; provider_post_id will fall back to the raw media id",
+      { mediaId },
+    );
+    return undefined;
+  }
+
   async #publishVideo({
     account,
     caption,
@@ -472,7 +537,7 @@ export class FacebookPostClient extends PostClient {
     account: SocialAccount;
     caption: string;
     medium: PostMedia;
-  }): Promise<string> {
+  }): Promise<{ id: string; feedPostId?: string }> {
     const fileUrl = await this.getSignedUrlForFile(medium);
     this.#requests.push({
       videoRequest: {
@@ -538,7 +603,12 @@ export class FacebookPostClient extends PostClient {
       throw new Error(`Failed to process video`);
     }
 
-    return videoResponseData.id;
+    const feedPostId = await this.#resolveFeedPostId({
+      mediaId: videoResponseData.id,
+      accessToken: account.access_token,
+    });
+
+    return { id: videoResponseData.id, feedPostId };
   }
 
   async #publishVideoStory({
@@ -804,7 +874,7 @@ export class FacebookPostClient extends PostClient {
     medium: PostMedia;
     caption: string;
     platformConfig: FacebookConfiguration;
-  }) {
+  }): Promise<{ id: string; feedPostId?: string }> {
     const uploadSessionResponse = await axios.post(
       `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_reels`,
       {
@@ -993,7 +1063,12 @@ export class FacebookPostClient extends PostClient {
       }
     }
 
-    return createdMediaId;
+    const feedPostId = await this.#resolveFeedPostId({
+      mediaId: createdMediaId,
+      accessToken: account.access_token,
+    });
+
+    return { id: createdMediaId, feedPostId };
   }
 
   async #uploadThumbnail({

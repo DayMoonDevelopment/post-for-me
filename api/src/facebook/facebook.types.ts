@@ -33,6 +33,9 @@ export interface FacebookAttachment {
   media_type?: string;
   media?: FacebookAttachmentMedia;
   url?: string;
+  target?: {
+    id: string;
+  };
   subattachments?: {
     data: FacebookAttachment[];
   };
