@@ -736,11 +736,18 @@ describe("processExceededUsageWindow (subscription_alert path)", () => {
       data: [makeSubscription()],
     })) as any;
     mockNoActiveSchedules();
-    const { create } = mockScheduleCreation();
+    const { create, update } = mockScheduleCreation();
 
     await mod.processExceededUsageWindow(makeUsageWindow() as any);
 
     expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({ from_subscription: "sub_1" });
+    expect(update).toHaveBeenCalledWith(
+      "sched_1",
+      expect.objectContaining({
+        metadata: { schedule_type: "usage_based_upgrade" },
+      }),
+    );
     expect(taskTriggerCalls.length).toBe(1);
     const [{ id, payload }] = taskTriggerCalls;
     expect(id).toBe("process-team-notification");
