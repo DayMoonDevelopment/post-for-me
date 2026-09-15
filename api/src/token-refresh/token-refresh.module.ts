@@ -1,8 +1,5 @@
 import { Module } from '@nestjs/common';
-
-import { PaginationModule } from '../pagination/pagination.module';
-import { SocialAccountFeedsController } from './social-account-feeds.controller';
-import { SocialAccountFeedsService } from './social-account-feeds.service';
+import { TokenRefreshService } from './token-refresh.service';
 import { TikTokBusinessModule } from '../tiktok-business/tiktok-business.module';
 import { YouTubeModule } from '../youtube/youtube.module';
 import { TikTokModule } from '../tiktok/tiktok.module';
@@ -13,11 +10,9 @@ import { PinterestModule } from '../pinterest/pinterest.module';
 import { ThreadsModule } from '../threads/threads.module';
 import { TwitterModule } from '../twitter/twitter.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
-import { TokenRefreshModule } from '../token-refresh/token-refresh.module';
 
 @Module({
   imports: [
-    PaginationModule,
     TikTokBusinessModule,
     YouTubeModule,
     TikTokModule,
@@ -28,9 +23,8 @@ import { TokenRefreshModule } from '../token-refresh/token-refresh.module';
     ThreadsModule,
     TwitterModule,
     BlueskyModule,
-    TokenRefreshModule,
   ],
-  controllers: [SocialAccountFeedsController],
-  providers: [SocialAccountFeedsService],
+  providers: [TokenRefreshService],
+  exports: [TokenRefreshService],
 })
-export class SocialAccountFeedsModule {}
+export class TokenRefreshModule {}
