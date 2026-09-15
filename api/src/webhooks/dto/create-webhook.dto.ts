@@ -8,6 +8,7 @@ export const eventValues: EventType[] = [
   'social.post.updated',
   'social.post.deleted',
   'social.post.result.created',
+  'social.post.result.updated',
   'social.account.created',
   'social.account.updated',
 ];

@@ -26,6 +26,7 @@ export type PostResult = {
   post_id: string;
   social_account_id: string;
   success: boolean;
+  is_processing: boolean;
   error: string | null;
   /** Raw provider request/response logs + platform-specific metadata. */
   details: unknown;

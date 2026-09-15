@@ -1,16 +1,7 @@
 import { logger, schedules } from "@trigger.dev/sdk";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { PostClient } from "./posting/post-client";
-import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
-import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
-import { FacebookPostClient } from "./posting/platforms/facebook-post-client";
-import { LinkedInPostClient } from "./posting/platforms/linkedin-post-client";
-import { TikTokPostClient } from "./posting/platforms/tiktok-post-client";
-import { BlueskyPostClient } from "./posting/platforms/bluesky-post-client";
-import { ThreadsPostClient } from "./posting/platforms/threads-post-client";
-import { PinterestPostClient } from "./posting/platforms/pinterest-post-client";
-import { YouTubePostClient } from "./posting/platforms/youtube-post-client";
-import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
+import { createClient } from "@supabase/supabase-js";
+import { createPostClient } from "./posting/create-post-client";
+import { handleTokenRefresh as sharedHandleTokenRefresh } from "./posting/token-refresh";
 import { PlatformAppCredentials, SocialAccount } from "./posting/post.types";
 
 import { Database } from "./supabase.types";
@@ -20,113 +11,34 @@ const supabaseClient = createClient<Database>(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-const createPostClient = ({
-  supabaseClient,
-  platformName,
-  appCredentials,
-}: {
-  supabaseClient: SupabaseClient;
-  platformName: string;
-  appCredentials: PlatformAppCredentials;
-}): PostClient => {
-  switch (platformName) {
-    case "x":
-      return new TwitterPostClient(supabaseClient, appCredentials);
-    case "instagram":
-      return new InstagramPostClient(supabaseClient, appCredentials);
-    case "facebook":
-      return new FacebookPostClient(supabaseClient, appCredentials);
-    case "linkedin":
-      return new LinkedInPostClient(supabaseClient, appCredentials);
-    case "tiktok":
-      return new TikTokPostClient(supabaseClient, appCredentials);
-    case "bluesky":
-      return new BlueskyPostClient(supabaseClient, appCredentials);
-    case "threads":
-      return new ThreadsPostClient(supabaseClient, appCredentials);
-    case "pinterest":
-      return new PinterestPostClient(supabaseClient, appCredentials);
-    case "youtube":
-      return new YouTubePostClient(supabaseClient, appCredentials);
-    case "tiktok_business":
-      return new TikTokBusinessPostClient(supabaseClient, appCredentials);
-    default:
-      throw Error("Invalid Platform");
-  }
-};
-
 const handleTokenRefresh = async ({
   postClient,
   account,
 }: {
-  postClient: PostClient;
+  postClient: ReturnType<typeof createPostClient>;
   account: SocialAccount;
 }): Promise<{ success: boolean; error?: string; accountId: string }> => {
-  try {
-    logger.info(
-      `Refreshing token for ${account.provider} account ${account.id}`,
-    );
+  logger.info(
+    `Refreshing token for ${account.provider} account ${account.id}`,
+  );
 
-    const { access_token, expires_at, refresh_token } =
-      await postClient.refreshAccessToken(account);
+  const result = await sharedHandleTokenRefresh({
+    supabaseClient,
+    postClient,
+    account,
+  });
 
-    if (!access_token) {
-      const error = `Failed to refresh ${account.provider} token for account ${account.id}`;
-      logger.error(error);
-      return {
-        success: false,
-        error,
-        accountId: account.id,
-      };
-    }
-
-    const updateData: {
-      access_token?: string;
-      access_token_expires_at?: string;
-      refresh_token?: string;
-    } = {
-      access_token,
-      access_token_expires_at: expires_at,
-    };
-
-    if (refresh_token) {
-      updateData.refresh_token = refresh_token;
-    }
-
-    const { error: updateError } = await supabaseClient
-      .from("social_provider_connections")
-      .update(updateData)
-      .eq("id", account.id);
-
-    if (updateError) {
-      logger.error(`Database update error for account ${account.id}:`, {
-        error: updateError,
-      });
-      return {
-        success: false,
-        error: updateError.message,
-        accountId: account.id,
-      };
-    }
-
+  if (!result.success) {
+    logger.error(`Token refresh failed for account ${account.id}:`, {
+      error: result.error,
+    });
+  } else {
     logger.info(
       `Successfully refreshed token for ${account.provider} account ${account.id}`,
     );
-    return {
-      success: true,
-      accountId: account.id,
-    };
-  } catch (refreshError) {
-    logger.error(
-      `Token refresh error for account ${account.id}:`,
-      refreshError,
-    );
-    return {
-      success: false,
-      error: refreshError.message,
-      accountId: account.id,
-    };
   }
+
+  return { ...result, accountId: account.id };
 };
 
 const refreshAccountsByProviderAndProject = async ({
