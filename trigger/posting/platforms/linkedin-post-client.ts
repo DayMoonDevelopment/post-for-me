@@ -78,7 +78,7 @@ export class LinkedInPostClient extends PostClient {
     try {
       const authorUrn =
         account.social_provider_metadata?.connection_type === "page"
-          ? `urn:li:company:${account.social_provider_user_id}`
+          ? `urn:li:organization:${account.social_provider_user_id}`
           : `urn:li:person:${account.social_provider_user_id}`;
 
       const postBody: Record<string, any> = {
@@ -261,6 +261,12 @@ export class LinkedInPostClient extends PostClient {
     const registerData = await registerResponse.json();
 
     this.#responses.push({ registerResponse: registerData });
+
+    if (!registerResponse.ok || !registerData.value) {
+      throw new Error(
+        `Failed to register LinkedIn media upload: ${registerResponse.status} ${JSON.stringify(registerData)}`,
+      );
+    }
 
     const uploadUrl =
       registerData.value.uploadMechanism[
