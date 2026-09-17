@@ -25,6 +25,14 @@ export class FacebookPostClient extends PostClient {
     "upload_complete",
   ];
 
+  static readonly READ_BACK_MAX_ATTEMPTS = 4; // 1 initial try + 3 retries
+  static readonly READ_BACK_INITIAL_DELAY_MS = 1_000;
+  // With 3 retries and doubling from the initial delay, the backoff only ever
+  // reaches 1s, 2s, 4s before the loop exhausts its attempts — this cap is
+  // set to that real ceiling rather than a higher value that's never used.
+  static readonly READ_BACK_MAX_DELAY_MS = 4_000;
+  static readonly RETRYABLE_RATE_LIMIT_CODES = new Set([4, 17, 32, 613]); // Meta Graph API rate-limit error codes
+
   constructor(
     supabaseClient: SupabaseClient,
     appCredentials: PlatformAppCredentials,
@@ -464,6 +472,85 @@ export class FacebookPostClient extends PostClient {
     return response.data.id;
   }
 
+  #isRetryableReadBackError(error: any): boolean {
+    // TODO(PFM-1057): once feat/loop-auth-errors merges, short-circuit here:
+    // if (this.isTerminalAuthError(error)) return false;
+
+    const graphError = error?.response?.data?.error;
+    const status = error?.response?.status;
+    const message: string = (
+      graphError?.message ||
+      error?.message ||
+      ""
+    ).toLowerCase();
+
+    // Facebook returns this exact code/message shape both for a video that
+    // isn't replicated yet (transient) and for a genuinely invalid/deleted
+    // object id (permanent) — Graph API gives no field to tell them apart.
+    // Treating it as retryable is a deliberate trade-off: a permanent case
+    // pays for READ_BACK_MAX_ATTEMPTS - 1 wasted retries (a few seconds)
+    // before failing, which is cheap next to silently failing a real
+    // eventual-consistency race on the first read-back (PFM-1057).
+    const isNotYetVisible =
+      graphError?.code === 100 && message.includes("does not exist");
+    const isRateLimited =
+      (graphError?.code !== undefined &&
+        FacebookPostClient.RETRYABLE_RATE_LIMIT_CODES.has(graphError.code)) ||
+      status === 429;
+    const isServerOrNetworkError = !error?.response || status >= 500;
+
+    return isNotYetVisible || isRateLimited || isServerOrNetworkError;
+  }
+
+  async #getObjectStatusWithRetry({
+    url,
+    accessToken,
+    objectId,
+    label,
+  }: {
+    url: string;
+    accessToken: string;
+    objectId: string;
+    label: string;
+  }) {
+    let attempt = 0;
+    let delay = FacebookPostClient.READ_BACK_INITIAL_DELAY_MS;
+    let lastErr: any;
+
+    while (attempt < FacebookPostClient.READ_BACK_MAX_ATTEMPTS) {
+      attempt++;
+      try {
+        return await axios.get(url, {
+          headers: {
+            Authorization: `OAuth ${accessToken}`,
+            "Content-Type": "application/json; charset=UTF-8",
+          },
+        });
+      } catch (err) {
+        lastErr = err;
+        if (
+          attempt >= FacebookPostClient.READ_BACK_MAX_ATTEMPTS ||
+          !this.#isRetryableReadBackError(err)
+        ) {
+          throw err;
+        }
+
+        logger.warn(`Retrying Facebook ${label} status read-back`, {
+          objectId,
+          attempt,
+          maxAttempts: FacebookPostClient.READ_BACK_MAX_ATTEMPTS,
+          delayMs: delay,
+          error: (err as any)?.response?.data || (err as any)?.message,
+        });
+
+        await wait.for({ seconds: delay / 1000 });
+        delay = Math.min(delay * 2, FacebookPostClient.READ_BACK_MAX_DELAY_MS);
+      }
+    }
+
+    throw lastErr;
+  }
+
   async #publishVideo({
     account,
     caption,
@@ -516,15 +603,12 @@ export class FacebookPostClient extends PostClient {
           url: `https://graph.facebook.com/${videoResponseData.id}?fields=status`,
         },
       });
-      statusResponse = await axios.get(
-        `https://graph.facebook.com/${videoResponseData.id}?fields=status`,
-        {
-          headers: {
-            Authorization: `OAuth ${account.access_token}`,
-            "Content-Type": "application/json; charset=UTF-8",
-          },
-        },
-      );
+      statusResponse = await this.#getObjectStatusWithRetry({
+        url: `https://graph.facebook.com/${videoResponseData.id}?fields=status`,
+        accessToken: account.access_token,
+        objectId: videoResponseData.id,
+        label: "video",
+      });
 
       this.#responses.push({ statusResponse: statusResponse.data });
 
@@ -598,15 +682,12 @@ export class FacebookPostClient extends PostClient {
       !this.#completeStatuses.includes(videoStatus) &&
       vidoeAttempts < videoMaxAttempts
     ) {
-      videoStatusResponse = await axios.get(
-        `https://graph.facebook.com/${uploadSessionResponseData.video_id}?fields=status`,
-        {
-          headers: {
-            Authorization: `OAuth ${account.access_token}`,
-            "Content-Type": "application/json; charset=UTF-8",
-          },
-        },
-      );
+      videoStatusResponse = await this.#getObjectStatusWithRetry({
+        url: `https://graph.facebook.com/${uploadSessionResponseData.video_id}?fields=status`,
+        accessToken: account.access_token,
+        objectId: uploadSessionResponseData.video_id,
+        label: "video_story",
+      });
 
       videoStatus = videoStatusResponse.data?.status?.video_status;
       vidoeAttempts++;
@@ -655,32 +736,22 @@ export class FacebookPostClient extends PostClient {
       !["error", "completed", "complete"].includes(status) &&
       attempts < maxAttempts
     ) {
-      try {
-        statusResponse = await axios.get(
-          `https://graph.facebook.com/${createdMediaId}?fields=status`,
-          {
-            headers: {
-              Authorization: `OAuth ${account.access_token}`,
-              "Content-Type": "application/json; charset=UTF-8",
-            },
-          },
-        );
+      statusResponse = await this.#getObjectStatusWithRetry({
+        url: `https://graph.facebook.com/${createdMediaId}?fields=status`,
+        accessToken: account.access_token,
+        objectId: createdMediaId,
+        label: "video_story_finish",
+      });
 
-        status = statusResponse.data?.status?.processing_phase?.status;
+      status = statusResponse.data?.status?.processing_phase?.status;
+      attempts++;
 
-        logger.info("Video processing wating", {
-          data: statusResponse.data,
-          status,
-          delay,
-          attempts,
-        });
-      } catch (err) {
-        logger.error("Error getting video status", {
-          err,
-        });
-      } finally {
-        attempts++;
-      }
+      logger.info("Video processing wating", {
+        data: statusResponse.data,
+        status,
+        delay,
+        attempts,
+      });
 
       await wait.for({ seconds: delay / 1000 });
     }
@@ -855,15 +926,12 @@ export class FacebookPostClient extends PostClient {
       !this.#completeStatuses.includes(videoStatus) &&
       vidoeAttempts < videoMaxAttempts
     ) {
-      videoStatusResponse = await axios.get(
-        `https://graph.facebook.com/${uploadSessionResponseData.video_id}?fields=status`,
-        {
-          headers: {
-            Authorization: `OAuth ${account.access_token}`,
-            "Content-Type": "application/json; charset=UTF-8",
-          },
-        },
-      );
+      videoStatusResponse = await this.#getObjectStatusWithRetry({
+        url: `https://graph.facebook.com/${uploadSessionResponseData.video_id}?fields=status`,
+        accessToken: account.access_token,
+        objectId: uploadSessionResponseData.video_id,
+        label: "reel",
+      });
 
       videoStatus = videoStatusResponse.data?.status?.video_status;
       vidoeAttempts++;
@@ -935,32 +1003,22 @@ export class FacebookPostClient extends PostClient {
       !["error", "completed", "complete"].includes(status) &&
       attempts < maxAttempts
     ) {
-      try {
-        statusResponse = await axios.get(
-          `https://graph.facebook.com/${createdMediaId}?fields=status`,
-          {
-            headers: {
-              Authorization: `OAuth ${account.access_token}`,
-              "Content-Type": "application/json; charset=UTF-8",
-            },
-          },
-        );
+      statusResponse = await this.#getObjectStatusWithRetry({
+        url: `https://graph.facebook.com/${createdMediaId}?fields=status`,
+        accessToken: account.access_token,
+        objectId: createdMediaId,
+        label: "reel_finish",
+      });
 
-        status = statusResponse.data?.status?.processing_phase?.status;
+      status = statusResponse.data?.status?.processing_phase?.status;
+      attempts++;
 
-        logger.info("Video processing wating", {
-          data: statusResponse.data,
-          status,
-          delay,
-          attempts,
-        });
-      } catch (err) {
-        logger.error("Error getting video status", {
-          err,
-        });
-      } finally {
-        attempts++;
-      }
+      logger.info("Video processing wating", {
+        data: statusResponse.data,
+        status,
+        delay,
+        attempts,
+      });
 
       await wait.for({ seconds: delay / 1000 });
     }
