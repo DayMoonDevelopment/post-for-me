@@ -9,7 +9,13 @@ import {
   SocialAccount,
 } from "../post.types";
 
+// https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/documents-api
+// "The file size can't exceed 100MB and 300 pages."
+const LINKEDIN_MAX_DOCUMENT_BYTES = 100 * 1024 * 1024;
+
 export class LinkedInPostClient extends PostClient {
+  supportedMediaTypes = ["image", "video", "document"];
+
   #clientId: string;
   #clientSecret: string;
   #maxImages = 20;
@@ -245,6 +251,36 @@ export class LinkedInPostClient extends PostClient {
     }
   }
 
+  // Shared by #createDocumentMedia and #createMedia: streams a downloaded
+  // file's body to a LinkedIn upload URL without buffering it into memory.
+  async #streamUploadFile({
+    uploadUrl,
+    method,
+    fileRes,
+    accessToken,
+    contentType,
+  }: {
+    uploadUrl: string;
+    method: "PUT" | "POST";
+    fileRes: Response;
+    accessToken: string;
+    contentType: string;
+  }): Promise<Response> {
+    const contentLength = fileRes.headers.get("content-length");
+
+    return fetch(uploadUrl, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": contentType,
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
+      },
+      body: fileRes.body,
+      // Required by Node/undici fetch for streaming request bodies.
+      duplex: "half",
+    });
+  }
+
   // LinkedIn document (PDF) posts have no representation in the legacy
   // /v2/ugcPosts share model, so they're published through LinkedIn's
   // versioned Documents + Posts API instead, independent of the legacy
@@ -282,6 +318,9 @@ export class LinkedInPostClient extends PostClient {
     const documentUrn = initializeData?.value?.document;
 
     if (!initializeResponse.ok || !uploadUrl || !documentUrn) {
+      // The download raced initializeUpload and may have already resolved;
+      // release it rather than leaving the connection/socket open.
+      await fileRes.body?.cancel().catch(() => undefined);
       throw new Error(
         `Failed to initialize LinkedIn document upload: ${initializeResponse.status} ${initializeResponse.statusText}`,
       );
@@ -293,17 +332,25 @@ export class LinkedInPostClient extends PostClient {
       );
     }
 
+    // LinkedIn's Documents API rejects files over 100MB. `fileRes` already
+    // has headers (fetch resolves once headers arrive, before the body is
+    // read), so this check needs no extra round trip.
     const contentLength = fileRes.headers.get("content-length");
+    if (contentLength && Number(contentLength) > LINKEDIN_MAX_DOCUMENT_BYTES) {
+      await fileRes.body.cancel().catch(() => undefined);
+      throw new Error(
+        `Document exceeds LinkedIn's 100MB upload limit (${contentLength} bytes)`,
+      );
+    }
 
-    const uploadResponse = await fetch(uploadUrl, {
+    const contentType = fileRes.headers.get("content-type") || "application/pdf";
+
+    const uploadResponse = await this.#streamUploadFile({
+      uploadUrl,
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        ...(contentLength ? { "Content-Length": contentLength } : {}),
-      },
-      body: fileRes.body,
-      // Required by Node/undici fetch for streaming request bodies.
-      duplex: "half",
+      fileRes,
+      accessToken: account.access_token,
+      contentType,
     });
 
     if (!uploadResponse.ok) {
@@ -336,9 +383,16 @@ export class LinkedInPostClient extends PostClient {
       account,
     });
 
+    // LinkedIn's Posts API rejects a blank `commentary` (INVALID_VALUE_BLANK_FIELD),
+    // so a document posted with no caption needs a non-empty fallback.
+    const trimmedCaption = caption?.trim();
+    const documentTitle = trimmedCaption
+      ? trimmedCaption.slice(0, 200)
+      : "Document";
+
     const postBody = {
       author: authorUrn,
-      commentary: caption,
+      commentary: trimmedCaption || documentTitle,
       visibility: "PUBLIC",
       distribution: {
         feedDistribution: "MAIN_FEED",
@@ -348,6 +402,9 @@ export class LinkedInPostClient extends PostClient {
       content: {
         media: {
           id: documentUrn,
+          // Without an explicit title, LinkedIn falls back to the storage
+          // filename (an opaque UUID) as the document card's display name.
+          title: documentTitle,
         },
       },
       lifecycleState: "PUBLISHED",
@@ -466,18 +523,13 @@ export class LinkedInPostClient extends PostClient {
     const contentType =
       fileRes.headers.get("content-type") ||
       (isVideo ? "video/mp4" : "image/jpeg");
-    const contentLength = fileRes.headers.get("content-length");
 
-    const uploadResponse = await fetch(uploadUrl, {
+    const uploadResponse = await this.#streamUploadFile({
+      uploadUrl,
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        "Content-Type": contentType,
-        ...(contentLength ? { "Content-Length": contentLength } : {}),
-      },
-      body: fileRes.body,
-      // Required by Node/undici fetch for streaming request bodies.
-      duplex: "half",
+      fileRes,
+      accessToken: account.access_token,
+      contentType,
     });
 
     if (!uploadResponse.ok) {

@@ -186,7 +186,7 @@ export const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => 
 const isSupportedMediaContentType = (contentType: string): boolean =>
   contentType.startsWith("image/") ||
   contentType.startsWith("video/") ||
-  contentType === "application/pdf";
+  contentType.startsWith("application/pdf");
 
 // Helper function to stream download and upload file
 const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
