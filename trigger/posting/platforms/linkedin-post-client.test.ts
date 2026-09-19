@@ -76,7 +76,10 @@ function defaultHandler(url: string, init?: RequestInit): Response {
   if (/^https:\/\/example\.com\/file\./.test(url)) {
     return new Response("binary-bytes", {
       status: 200,
-      headers: { "content-type": "application/octet-stream" },
+      headers: {
+        "content-type": "application/octet-stream",
+        "content-length": "13",
+      },
     });
   }
 
@@ -220,6 +223,40 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
     ).toBe("2.0.0");
     const postsBody = JSON.parse(postsCall!.init!.body as string);
     expect(postsBody.content.media.id).toBe("urn:li:document:doc-1");
+
+    const uploadCall = calls.find(
+      (c) => c.url === "https://upload.example.com/document",
+    );
+    expect(
+      (uploadCall!.init!.headers as Record<string, string>)["Content-Length"],
+    ).toBe("13");
+  });
+
+  test("a non-JSON initializeUpload error body is guarded instead of throwing unhandled", async () => {
+    handler = (url, init) => {
+      if (url.includes("/rest/documents?action=initializeUpload")) {
+        return new Response("Internal Server Error", {
+          status: 500,
+          statusText: "Internal Server Error",
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-doc-5",
+      account: personAccount,
+      caption: "server hiccup",
+      media: [documentMedium],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toContain(
+      "Failed to initialize LinkedIn document upload: 500",
+    );
+    expect(callUrls().some((u) => u.includes("/rest/posts"))).toBe(false);
   });
 
   test("a malformed initializeUpload response is guarded instead of throwing unhandled", async () => {

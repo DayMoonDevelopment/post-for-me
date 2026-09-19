@@ -223,6 +223,28 @@ export class LinkedInPostClient extends PostClient {
       : `urn:li:ugcPost:${ugcPostId}`;
   }
 
+  #versionedHeaders(accessToken: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Linkedin-Version": this.#apiVersion,
+      "X-Restli-Protocol-Version": "2.0.0",
+    };
+  }
+
+  // Safely parses a LinkedIn response body as JSON without throwing on a
+  // non-JSON (e.g. plain-text or empty) error body, so callers can still
+  // inspect `response.ok`/status and raise their own descriptive error.
+  async #parseJsonSafe(response: Response): Promise<any> {
+    const text = await response.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {};
+    }
+  }
+
   // LinkedIn document (PDF) posts have no representation in the legacy
   // /v2/ugcPosts share model, so they're published through LinkedIn's
   // versioned Documents + Posts API instead, independent of the legacy
@@ -240,23 +262,20 @@ export class LinkedInPostClient extends PostClient {
       initializeDocumentUploadRequest: { owner: authorUrn },
     });
 
-    const initializeResponse = await fetch(
-      "https://api.linkedin.com/rest/documents?action=initializeUpload",
-      {
+    // The file download doesn't depend on the initializeUpload result, so
+    // run them concurrently rather than paying both round trips serially.
+    const [initializeResponse, fileRes] = await Promise.all([
+      fetch("https://api.linkedin.com/rest/documents?action=initializeUpload", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          "Content-Type": "application/json",
-          "Linkedin-Version": this.#apiVersion,
-          "X-Restli-Protocol-Version": "2.0.0",
-        },
+        headers: this.#versionedHeaders(account.access_token),
         body: JSON.stringify({
           initializeUploadRequest: { owner: authorUrn },
         }),
-      },
-    );
+      }),
+      fetch(medium.url),
+    ]);
 
-    const initializeData = await initializeResponse.json();
+    const initializeData = await this.#parseJsonSafe(initializeResponse);
     this.#responses.push({ initializeDocumentUploadResponse: initializeData });
 
     const uploadUrl = initializeData?.value?.uploadUrl;
@@ -268,17 +287,19 @@ export class LinkedInPostClient extends PostClient {
       );
     }
 
-    const fileRes = await fetch(medium.url);
     if (!fileRes.ok || !fileRes.body) {
       throw new Error(
         `Failed to download document for upload: ${fileRes.status} ${fileRes.statusText}`,
       );
     }
 
+    const contentLength = fileRes.headers.get("content-length");
+
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${account.access_token}`,
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
       },
       body: fileRes.body,
       // Required by Node/undici fetch for streaming request bodies.
@@ -337,12 +358,7 @@ export class LinkedInPostClient extends PostClient {
 
     const response = await fetch("https://api.linkedin.com/rest/posts", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        "Content-Type": "application/json",
-        "Linkedin-Version": this.#apiVersion,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
+      headers: this.#versionedHeaders(account.access_token),
       body: JSON.stringify(postBody),
     });
 

@@ -161,6 +161,22 @@ export const postToPlatform = task({
 
       logger.info("Starting post processing", { ...payload });
 
+      // Document (PDF) media has no representation on any platform other
+      // than LinkedIn (e.g. Facebook/Twitter clients only special-case
+      // "video" and would otherwise silently submit a PDF as an image).
+      if (platform !== "linkedin" && media.some((m) => m.type === "document")) {
+        const error_message =
+          "Document (PDF) media is only supported on LinkedIn and was not published to this account";
+        logger.error(error_message, { platform, account: account.id });
+        postResult = {
+          provider_connection_id: account.id,
+          post_id: postId,
+          success: false,
+          error_message,
+        };
+        throw new Error(error_message);
+      }
+
       logger.info("Creating Post Client");
       const postClient = createPostClient({
         supabaseClient: supabaseClient,
