@@ -3,6 +3,7 @@ import {
   detectContentTypeFromBytes,
   getFileExtension,
   getMediaType,
+  isSupportedMediaContentType,
 } from "./process-post-medium";
 
 describe("getMediaType", () => {
@@ -74,5 +75,26 @@ describe("getFileExtension", () => {
   test("returns empty string for unknown or missing content type", () => {
     expect(getFileExtension("application/octet-stream")).toBe("");
     expect(getFileExtension(undefined)).toBe("");
+  });
+});
+
+describe("isSupportedMediaContentType", () => {
+  test("accepts image and video content types with parameters, like PDF", () => {
+    expect(isSupportedMediaContentType("image/jpeg; charset=binary")).toBe(
+      true,
+    );
+    expect(isSupportedMediaContentType("video/mp4; codecs=avc1")).toBe(true);
+  });
+
+  test("accepts application/pdf with parameters, consistent with image/video", () => {
+    expect(isSupportedMediaContentType("application/pdf; charset=binary")).toBe(
+      true,
+    );
+    expect(isSupportedMediaContentType("application/pdf")).toBe(true);
+  });
+
+  test("rejects unrelated content types", () => {
+    expect(isSupportedMediaContentType("text/html")).toBe(false);
+    expect(isSupportedMediaContentType("application/json")).toBe(false);
   });
 });

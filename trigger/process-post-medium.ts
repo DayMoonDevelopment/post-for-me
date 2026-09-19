@@ -183,7 +183,7 @@ export const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => 
 };
 
 // Helper function to check whether a detected content type is one we localize
-const isSupportedMediaContentType = (contentType: string): boolean =>
+export const isSupportedMediaContentType = (contentType: string): boolean =>
   contentType.startsWith("image/") ||
   contentType.startsWith("video/") ||
   contentType.startsWith("application/pdf");

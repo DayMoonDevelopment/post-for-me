@@ -314,4 +314,169 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
     );
     expect(calls.length).toBe(0);
   });
+
+  test("sets content.media.title from the caption", async () => {
+    const client = makeClient();
+    await client.post({
+      postId: "post-doc-6",
+      account: personAccount,
+      caption: "  A great quarterly report  ",
+      media: [documentMedium],
+    });
+
+    const postsCall = calls.find((c) => c.url.includes("/rest/posts"));
+    const postsBody = JSON.parse(postsCall!.init!.body as string);
+    expect(postsBody.content.media.title).toBe("A great quarterly report");
+    expect(postsBody.commentary).toBe("A great quarterly report");
+  });
+
+  test("falls back commentary and title to a default when the caption is blank", async () => {
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-doc-7",
+      account: personAccount,
+      caption: "   ",
+      media: [documentMedium],
+    });
+
+    expect(result.success).toBe(true);
+    const postsCall = calls.find((c) => c.url.includes("/rest/posts"));
+    const postsBody = JSON.parse(postsCall!.init!.body as string);
+    expect(postsBody.commentary).toBe("Document");
+    expect(postsBody.content.media.title).toBe("Document");
+  });
+
+  test("forwards the downloaded file's Content-Type to the document upload PUT", async () => {
+    handler = (url, init) => {
+      if (url === documentMedium.url) {
+        return new Response("%PDF-bytes", {
+          status: 200,
+          headers: {
+            "content-type": "application/pdf",
+            "content-length": "10",
+          },
+        });
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    await client.post({
+      postId: "post-doc-8",
+      account: personAccount,
+      caption: "content type check",
+      media: [documentMedium],
+    });
+
+    const uploadCall = calls.find(
+      (c) => c.url === "https://upload.example.com/document",
+    );
+    expect(
+      (uploadCall!.init!.headers as Record<string, string>)["Content-Type"],
+    ).toBe("application/pdf");
+  });
+
+  test("falls back to application/pdf on the upload PUT when the download has no Content-Type", async () => {
+    handler = (url, init) => {
+      if (url === documentMedium.url) {
+        return new Response("%PDF-bytes", {
+          status: 200,
+          headers: { "content-length": "10" },
+        });
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    await client.post({
+      postId: "post-doc-9",
+      account: personAccount,
+      caption: "no content type",
+      media: [documentMedium],
+    });
+
+    const uploadCall = calls.find(
+      (c) => c.url === "https://upload.example.com/document",
+    );
+    expect(
+      (uploadCall!.init!.headers as Record<string, string>)["Content-Type"],
+    ).toBe("application/pdf");
+  });
+
+  test("rejects documents over LinkedIn's 100MB limit without downloading the body or posting", async () => {
+    handler = (url, init) => {
+      if (url === documentMedium.url) {
+        return new Response("oversized-file-stand-in", {
+          status: 200,
+          headers: {
+            "content-type": "application/pdf",
+            // Just over LinkedIn's documented 100MB limit.
+            "content-length": String(100 * 1024 * 1024 + 1),
+          },
+        });
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-doc-10",
+      account: personAccount,
+      caption: "huge file",
+      media: [documentMedium],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toContain("100MB");
+    expect(
+      calls.some((c) => c.url === "https://upload.example.com/document"),
+    ).toBe(false);
+    expect(callUrls().some((u) => u.includes("/rest/posts"))).toBe(false);
+  });
+
+  test("cancels the in-flight download when initializeUpload fails", async () => {
+    let cancelCalled = false;
+
+    handler = (url, init) => {
+      if (url.includes("/rest/documents?action=initializeUpload")) {
+        return new Response("Internal Server Error", {
+          status: 500,
+          statusText: "Internal Server Error",
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      if (url === documentMedium.url) {
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("%PDF-bytes"));
+            controller.close();
+          },
+        });
+        const realCancel = stream.cancel.bind(stream);
+        (stream as any).cancel = (...args: unknown[]) => {
+          cancelCalled = true;
+          return realCancel(...(args as []));
+        };
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "content-type": "application/pdf",
+            "content-length": "10",
+          },
+        });
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-doc-11",
+      account: personAccount,
+      caption: "init failure",
+      media: [documentMedium],
+    });
+
+    expect(result.success).toBe(false);
+    expect(cancelCalled).toBe(true);
+  });
 });
