@@ -168,6 +168,24 @@ export const postToPlatform = task({
         appCredentials,
       });
 
+      // Each PostClient declares which media types it can publish (e.g.
+      // Facebook/Twitter clients only special-case "video" and would
+      // otherwise silently submit a PDF as an image).
+      const unsupportedMediaType = media.find(
+        (m) => !postClient.supportedMediaTypes.includes(m.type),
+      );
+      if (unsupportedMediaType) {
+        const error_message = `${unsupportedMediaType.type} media is not supported on ${platform} and was not published to this account`;
+        logger.error(error_message, { platform, account: account.id });
+        postResult = {
+          provider_connection_id: account.id,
+          post_id: postId,
+          success: false,
+          error_message,
+        };
+        throw new Error(error_message);
+      }
+
       if (
         platformsToAlwaysRefresh.includes(account.provider) ||
         differenceInDays(

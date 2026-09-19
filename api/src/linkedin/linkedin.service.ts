@@ -55,8 +55,11 @@ export class LinkedInService implements SocialPlatformService {
     private readonly supabaseService: SupabaseService,
     private readonly configService: ConfigService,
   ) {
+    // Kept in sync manually with trigger/'s LINKEDIN_API_VERSION — the two
+    // siblings can't share config, so bumping this when LinkedIn deprecates
+    // a version means updating both.
     this.apiVersion =
-      this.configService.get<string>('LinkedInVersion') || '202601';
+      this.configService.get<string>('LINKEDIN_API_VERSION') || '202601';
   }
 
   private getRestHeaders(accessToken: string): Record<string, string> {
