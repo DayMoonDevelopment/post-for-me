@@ -17,10 +17,10 @@ const supabaseClient = createClient<Database>(
 );
 
 // Helper function to determine media type
-const getMediaType = (
+export const getMediaType = (
   contentType: string,
   fileExtension: string,
-): "image" | "video" => {
+): "image" | "video" | "document" => {
   const imageTypes = [
     "image/jpeg",
     "image/png",
@@ -35,8 +35,10 @@ const getMediaType = (
     "video/avi",
     "video/quicktime",
   ];
+  const documentTypes = ["application/pdf"];
   const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
   const videoExtensions = [".mp4", ".webm", ".mov", ".avi", ".qt"];
+  const documentExtensions = [".pdf"];
 
   const normalizedFileExtension = fileExtension.toLowerCase();
 
@@ -44,10 +46,14 @@ const getMediaType = (
     return "image";
   } else if (videoTypes.includes(contentType)) {
     return "video";
+  } else if (documentTypes.includes(contentType)) {
+    return "document";
   } else if (imageExtensions.includes(normalizedFileExtension)) {
     return "image";
   } else if (videoExtensions.includes(normalizedFileExtension)) {
     return "video";
+  } else if (documentExtensions.includes(normalizedFileExtension)) {
+    return "document";
   }
 
   return "image"; // Default to image if uncertain
@@ -58,7 +64,7 @@ const normalizeContentType = (contentType: string): string => {
 };
 
 // Helper function to get file extension from URL or content type
-const getFileExtension = (contentType?: string): string => {
+export const getFileExtension = (contentType?: string): string => {
   if (contentType) {
     const mimeToExt: Record<string, string> = {
       "image/jpeg": ".jpg",
@@ -69,6 +75,7 @@ const getFileExtension = (contentType?: string): string => {
       "video/webm": ".webm",
       "video/mov": ".mov",
       "video/avi": ".avi",
+      "application/pdf": ".pdf",
     };
     return mimeToExt[contentType] || "";
   }
@@ -77,7 +84,7 @@ const getFileExtension = (contentType?: string): string => {
 };
 
 // Helper function to detect content type from file signature
-const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => {
+export const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => {
   if (bytes.length < 12) return null;
 
   // JPEG
@@ -162,8 +169,24 @@ const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => {
     return "video/quicktime";
   }
 
+  // PDF
+  if (
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46
+  ) {
+    return "application/pdf";
+  }
+
   return null;
 };
+
+// Helper function to check whether a detected content type is one we localize
+const isSupportedMediaContentType = (contentType: string): boolean =>
+  contentType.startsWith("image/") ||
+  contentType.startsWith("video/") ||
+  contentType === "application/pdf";
 
 // Helper function to stream download and upload file
 const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
@@ -179,12 +202,8 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
     const headerContentType = headResponse.headers.get("content-type");
     logger.info(`Got content type from HEAD request: ${headerContentType}`);
 
-    // If we have a valid image/video content type from headers, use it
-    if (
-      headerContentType &&
-      (headerContentType.startsWith("image/") ||
-        headerContentType.startsWith("video/"))
-    ) {
+    // If we have a valid image/video/document content type from headers, use it
+    if (headerContentType && isSupportedMediaContentType(headerContentType)) {
       contentType = headerContentType;
       logger.info(
         "Using valid content type from headers, skipping byte detection",
@@ -215,8 +234,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
 
       if (
         detectedContentType &&
-        (detectedContentType.startsWith("image/") ||
-          detectedContentType.startsWith("video/"))
+        isSupportedMediaContentType(detectedContentType)
       ) {
         contentType = detectedContentType;
         logger.info("Detected content type from file signature", {
@@ -380,7 +398,7 @@ export const processPostMedium = task({
       // Stream download and upload main media file
       let mediaResult: {
         publicUrl: string;
-        mediaType: "image" | "video";
+        mediaType: "image" | "video" | "document";
       } | null = null;
       let thumbnailResult: { publicUrl: string } | null = null;
 

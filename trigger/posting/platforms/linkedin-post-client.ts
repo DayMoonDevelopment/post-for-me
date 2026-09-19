@@ -13,6 +13,7 @@ export class LinkedInPostClient extends PostClient {
   #clientId: string;
   #clientSecret: string;
   #maxImages = 20;
+  #apiVersion = process.env.LINKEDIN_API_VERSION || "202601";
   #requests: any[] = [];
   #responses: any[] = [];
 
@@ -78,8 +79,31 @@ export class LinkedInPostClient extends PostClient {
     try {
       const authorUrn =
         account.social_provider_metadata?.connection_type === "page"
-          ? `urn:li:company:${account.social_provider_user_id}`
+          ? `urn:li:organization:${account.social_provider_user_id}`
           : `urn:li:person:${account.social_provider_user_id}`;
+
+      if (!platformConfig?.reshare_post_id) {
+        const documentMedium =
+          media.length === 1 && media[0].type === "document"
+            ? media[0]
+            : null;
+
+        if (!documentMedium && media.some((m) => m.type === "document")) {
+          throw new Error(
+            "LinkedIn document posts support exactly one PDF and no other media",
+          );
+        }
+
+        if (documentMedium) {
+          return await this.#postDocument({
+            postId,
+            account,
+            caption,
+            medium: documentMedium,
+            authorUrn,
+          });
+        }
+      }
 
       const postBody: Record<string, any> = {
         author: authorUrn,
@@ -197,6 +221,153 @@ export class LinkedInPostClient extends PostClient {
     return ugcPostId.startsWith("urn:")
       ? ugcPostId
       : `urn:li:ugcPost:${ugcPostId}`;
+  }
+
+  // LinkedIn document (PDF) posts have no representation in the legacy
+  // /v2/ugcPosts share model, so they're published through LinkedIn's
+  // versioned Documents + Posts API instead, independent of the legacy
+  // image/video/article flow below.
+  async #createDocumentMedia({
+    medium,
+    authorUrn,
+    account,
+  }: {
+    medium: PostMedia;
+    authorUrn: string;
+    account: SocialAccount;
+  }): Promise<string> {
+    this.#requests.push({
+      initializeDocumentUploadRequest: { owner: authorUrn },
+    });
+
+    const initializeResponse = await fetch(
+      "https://api.linkedin.com/rest/documents?action=initializeUpload",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+          "Content-Type": "application/json",
+          "Linkedin-Version": this.#apiVersion,
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+        body: JSON.stringify({
+          initializeUploadRequest: { owner: authorUrn },
+        }),
+      },
+    );
+
+    const initializeData = await initializeResponse.json();
+    this.#responses.push({ initializeDocumentUploadResponse: initializeData });
+
+    const uploadUrl = initializeData?.value?.uploadUrl;
+    const documentUrn = initializeData?.value?.document;
+
+    if (!initializeResponse.ok || !uploadUrl || !documentUrn) {
+      throw new Error(
+        `Failed to initialize LinkedIn document upload: ${initializeResponse.status} ${initializeResponse.statusText}`,
+      );
+    }
+
+    const fileRes = await fetch(medium.url);
+    if (!fileRes.ok || !fileRes.body) {
+      throw new Error(
+        `Failed to download document for upload: ${fileRes.status} ${fileRes.statusText}`,
+      );
+    }
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${account.access_token}`,
+      },
+      body: fileRes.body,
+      // Required by Node/undici fetch for streaming request bodies.
+      duplex: "half",
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(
+        `Failed to upload document: ${uploadResponse.status} ${uploadResponse.statusText}`,
+      );
+    }
+
+    this.#responses.push({ uploadDocumentResponse: uploadResponse.status });
+
+    return documentUrn;
+  }
+
+  async #postDocument({
+    postId,
+    account,
+    caption,
+    medium,
+    authorUrn,
+  }: {
+    postId: string;
+    account: SocialAccount;
+    caption: string;
+    medium: PostMedia;
+    authorUrn: string;
+  }): Promise<PostResult> {
+    const documentUrn = await this.#createDocumentMedia({
+      medium,
+      authorUrn,
+      account,
+    });
+
+    const postBody = {
+      author: authorUrn,
+      commentary: caption,
+      visibility: "PUBLIC",
+      distribution: {
+        feedDistribution: "MAIN_FEED",
+        targetEntities: [],
+        thirdPartyDistributionChannels: [],
+      },
+      content: {
+        media: {
+          id: documentUrn,
+        },
+      },
+      lifecycleState: "PUBLISHED",
+      isReshareDisabledByAuthor: false,
+    };
+
+    this.#requests.push({ postRequest: postBody });
+
+    const response = await fetch("https://api.linkedin.com/rest/posts", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${account.access_token}`,
+        "Content-Type": "application/json",
+        "Linkedin-Version": this.#apiVersion,
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify(postBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `LinkedIn API error: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const providerPostId = response.headers.get("x-restli-id") || undefined;
+    this.#responses.push({ postResponse: { status: response.status } });
+
+    return {
+      success: true,
+      provider_connection_id: account.id,
+      post_id: postId,
+      provider_post_id: providerPostId,
+      provider_post_url: providerPostId
+        ? `https://www.linkedin.com/feed/update/${providerPostId}`
+        : undefined,
+      details: {
+        requests: this.#requests,
+        responses: this.#responses,
+      },
+    };
   }
 
   async #createMedia({
