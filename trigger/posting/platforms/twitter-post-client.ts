@@ -5,10 +5,13 @@ import {
   TwitterApi,
   TwitterApiTokens,
 } from "twitter-api-v2";
-import sharp from "sharp";
 import { readFile } from "fs/promises";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -228,6 +231,7 @@ export class TwitterPostClient extends PostClient {
           file,
           buffer,
           isOAuth2,
+          skipProcessing: shouldSkipProcessing(medium),
         });
       }
 
@@ -248,6 +252,7 @@ export class TwitterPostClient extends PostClient {
           file,
           buffer,
           isOAuth2,
+          skipProcessing: shouldSkipProcessing(medium),
         });
 
         this.#responses.push({ uploadResponse: { mediaId } });
@@ -325,23 +330,20 @@ export class TwitterPostClient extends PostClient {
     file,
     buffer,
     isOAuth2,
+    skipProcessing,
   }: {
     twitterClient: TwitterApi;
     file: File;
     buffer: Buffer;
     isOAuth2: boolean;
+    skipProcessing: boolean;
   }): Promise<string> {
     let processedImage = buffer;
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
+    if (!skipProcessing) {
+      processedImage = await compressJpegToLimit(
+        processedImage,
+        this.#maxFileSize,
+      );
     }
 
     if (isOAuth2) {
