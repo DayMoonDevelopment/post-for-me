@@ -1,4 +1,4 @@
-import { Injectable, Scope } from '@nestjs/common';
+import { Injectable, Logger, Scope } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
@@ -51,6 +51,8 @@ export class LinkedInService implements SocialPlatformService {
 
   apiVersion: string;
 
+  private readonly logger = new Logger(LinkedInService.name);
+
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly configService: ConfigService,
@@ -58,8 +60,18 @@ export class LinkedInService implements SocialPlatformService {
     // Kept in sync manually with trigger/'s LINKEDIN_API_VERSION — the two
     // siblings can't share config, so bumping this when LinkedIn deprecates
     // a version means updating both.
-    this.apiVersion =
-      this.configService.get<string>('LINKEDIN_API_VERSION') || '202601';
+    const configuredVersion = this.configService.get<string>(
+      'LINKEDIN_API_VERSION',
+    );
+    const legacyVersion = this.configService.get<string>('LinkedInVersion');
+
+    if (!configuredVersion && legacyVersion) {
+      this.logger.warn(
+        'LinkedInVersion is deprecated; rename it to LINKEDIN_API_VERSION. Falling back to the legacy value for now.',
+      );
+    }
+
+    this.apiVersion = configuredVersion || legacyVersion || '202601';
   }
 
   private getRestHeaders(accessToken: string): Record<string, string> {

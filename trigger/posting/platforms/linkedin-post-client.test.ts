@@ -230,6 +230,17 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
     expect(
       (uploadCall!.init!.headers as Record<string, string>)["Content-Length"],
     ).toBe("13");
+
+    expect(
+      (result.details as any).requests.some(
+        (r: Record<string, unknown>) => "initializeUploadRequest" in r,
+      ),
+    ).toBe(true);
+    expect(
+      (result.details as any).requests.some(
+        (r: Record<string, unknown>) => "initializeDocumentUploadRequest" in r,
+      ),
+    ).toBe(false);
   });
 
   test("a non-JSON initializeUpload error body is guarded instead of throwing unhandled", async () => {
@@ -477,6 +488,45 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
     });
 
     expect(result.success).toBe(false);
+    expect(cancelCalled).toBe(true);
+  });
+
+  test("cancels the file stream when the document download itself fails", async () => {
+    let cancelCalled = false;
+
+    handler = (url, init) => {
+      if (url === documentMedium.url) {
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("error body"));
+            controller.close();
+          },
+        });
+        const realCancel = stream.cancel.bind(stream);
+        (stream as any).cancel = (...args: unknown[]) => {
+          cancelCalled = true;
+          return realCancel(...(args as []));
+        };
+        return new Response(stream, {
+          status: 403,
+          statusText: "Forbidden",
+        });
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-doc-12",
+      account: personAccount,
+      caption: "download failure",
+      media: [documentMedium],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toContain(
+      "Failed to download document for upload: 403",
+    );
     expect(cancelCalled).toBe(true);
   });
 });

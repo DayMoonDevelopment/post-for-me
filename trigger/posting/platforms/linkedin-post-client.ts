@@ -295,7 +295,7 @@ export class LinkedInPostClient extends PostClient {
     account: SocialAccount;
   }): Promise<string> {
     this.#requests.push({
-      initializeDocumentUploadRequest: { owner: authorUrn },
+      initializeUploadRequest: { owner: authorUrn },
     });
 
     // The file download doesn't depend on the initializeUpload result, so
@@ -327,6 +327,7 @@ export class LinkedInPostClient extends PostClient {
     }
 
     if (!fileRes.ok || !fileRes.body) {
+      await fileRes.body?.cancel().catch(() => undefined);
       throw new Error(
         `Failed to download document for upload: ${fileRes.status} ${fileRes.statusText}`,
       );
