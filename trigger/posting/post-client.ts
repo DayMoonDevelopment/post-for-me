@@ -25,6 +25,11 @@ import type {
 } from "./post.types";
 
 export class PostClient {
+  // Platforms declare which PostMedia["type"] values they can publish.
+  // Default excludes "document" (PDF) — most platforms have no
+  // representation for it and would otherwise silently mishandle it.
+  supportedMediaTypes: string[] = ["image", "video"];
+
   constructor(
     _supabaseClient: SupabaseClient,
     _appCredentials: PlatformAppCredentials,
