@@ -507,6 +507,12 @@ export class LinkedInPostClient extends PostClient {
 
     this.#responses.push({ registerResponse: registerData });
 
+    if (!registerResponse.ok || !registerData.value) {
+      throw new Error(
+        `Failed to register LinkedIn media upload: ${registerResponse.status} ${JSON.stringify(registerData)}`,
+      );
+    }
+
     const uploadUrl =
       registerData.value.uploadMechanism[
         "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"

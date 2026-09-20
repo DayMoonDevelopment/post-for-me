@@ -191,6 +191,34 @@ describe("LinkedInPostClient#post — existing image/video flow (unchanged)", ()
     const ugcBody = JSON.parse(ugcCall!.init!.body as string);
     expect(ugcBody.author).toBe("urn:li:organization:67890");
   });
+
+  test("returns a descriptive error when registerUpload is rejected", async () => {
+    handler = (url, init) => {
+      if (url.includes("/v2/assets?action=registerUpload")) {
+        return jsonResponse(
+          { status: 403, message: "ACCESS_DENIED" },
+          { status: 403 },
+        );
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-4",
+      account: orgAccount,
+      caption: "hello world",
+      media: [imageMedium],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toContain(
+      "Failed to register LinkedIn media upload: 403",
+    );
+    expect(result.error_message).not.toContain(
+      "Cannot read properties of undefined",
+    );
+  });
 });
 
 describe("LinkedInPostClient#post — document (PDF) posts", () => {
