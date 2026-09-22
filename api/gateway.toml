@@ -1,0 +1,13 @@
+[local-dev]
+http_port = 3000
+api_url = "${UNKEY_API_URL}"
+root_key = "${UNKEY_ROOT_KEY}"
+
+[[local-dev.routes]]
+hostname = "localhost"
+upstream = "api:3000"
+
+[[local-dev.routes.policies]]
+id = "authenticate"
+enabled = true
+keyauth = { key_space_ids = ["${UNKEY_KEYSPACE_ID}"], credits = 0 }
