@@ -106,6 +106,24 @@ export const loader = withSupabase(async function ({
     });
   }
 
+  const oauthError = url.searchParams.get("error");
+
+  if (oauthError) {
+    return createResponse({
+      isSuccess: false,
+      errors: [
+        url.searchParams.get("error_description") ||
+          url.searchParams.get("error_reason") ||
+          `Authorization was denied (${oauthError})`,
+      ],
+      projectId,
+      provider: normalizedProvider,
+      teamId: project.team_id,
+      callbackUrl: project.auth_callback_url,
+      isLoggedIn,
+    });
+  }
+
   const providerAppCredentials = project.social_provider_app_credentials.find(
     (appCredential) => appCredential.provider === provider,
   );

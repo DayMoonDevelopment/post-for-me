@@ -283,6 +283,7 @@ export class SocialAccountsController {
       externalId: createAuthUrlInput.external_id,
       redirectUrlOverride: createAuthUrlInput.redirect_url_override || null,
       permissions: createAuthUrlInput.permissions || ['posts'],
+      forceReauth: createAuthUrlInput.force_reauth,
       isSystem,
     });
 

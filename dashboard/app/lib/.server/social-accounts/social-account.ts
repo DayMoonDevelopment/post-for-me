@@ -176,6 +176,89 @@ export async function addSocialAccountConnections({
   if (connectionsError) {
     console.error(connectionsError);
   }
+
+  const multiAssetProviders = new Set(["facebook", "instagram_w_facebook"]);
+
+  // The Facebook login that produced this grant. Reconciliation is scoped to
+  // it so re-linking one Facebook/Instagram login never touches Pages or IG
+  // accounts that belong to a different login (or a different external_id
+  // sub-account) connected to the same project.
+  const facebookUserId = connectionsToInsert[0]?.social_provider_metadata
+    ?.facebook_user_id as string | undefined;
+
+  // Only reconcile once the new grant is confirmed persisted — otherwise a
+  // failed upsert above would leave the user with the old Pages disconnected
+  // and none of the newly-granted ones saved.
+  if (
+    multiAssetProviders.has(provider) &&
+    insertedConnections &&
+    insertedConnections.length > 0 &&
+    facebookUserId
+  ) {
+    const newSocialProviderUserIds = connectionsToInsert.map(
+      (c) => c.social_provider_user_id,
+    );
+
+    let staleConnectionsQuery = supabaseServiceRole
+      .from("social_provider_connections")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("provider", normalizedProvider as Provider)
+      .eq("social_provider_metadata->>facebook_user_id", facebookUserId)
+      .not("access_token", "is", null)
+      .not(
+        "social_provider_user_id",
+        "in",
+        `(${newSocialProviderUserIds.map((id) => `"${id}"`).join(",")})`,
+      );
+
+    staleConnectionsQuery = externalId
+      ? staleConnectionsQuery.eq("external_id", externalId)
+      : staleConnectionsQuery.is("external_id", null);
+
+    const { data: staleConnections, error: staleLookupError } =
+      await staleConnectionsQuery;
+
+    if (staleLookupError) {
+      console.error(staleLookupError);
+    } else if (staleConnections && staleConnections.length > 0) {
+      const { error: reconcileError } = await supabaseServiceRole
+        .from("social_provider_connections")
+        .update({ access_token: null, refresh_token: null })
+        .in(
+          "id",
+          staleConnections.map((c) => c.id),
+        );
+
+      if (reconcileError) {
+        console.error(reconcileError);
+      } else {
+        const disconnectEvents = staleConnections.map((c) => ({
+          payload: {
+            projectId,
+            eventType: "social.account.updated",
+            eventData: {
+              id: c.id,
+              platform: c.provider || "",
+              username: c.social_provider_user_name || "",
+              user_id: c.social_provider_user_id || "",
+              profile_photo_url: c.social_provider_profile_photo_url,
+              status: "disconnected",
+              external_id: c.external_id,
+              access_token: "",
+              refresh_token: "",
+              access_token_expires_at:
+                c.access_token_expires_at || new Date().toISOString(),
+              refresh_token_expires_at: c.refresh_token_expires_at,
+              metadata: c.social_provider_metadata,
+            },
+          },
+        }));
+        await tasks.batchTrigger("process-webhooks", disconnectEvents);
+      }
+    }
+  }
+
   return {
     successConnections: insertedConnections?.map((i) => i.id) || [],
     failedConnections,

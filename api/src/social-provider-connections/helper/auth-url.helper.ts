@@ -19,6 +19,7 @@ export async function generateAuthUrl({
   externalId,
   redirectUrlOverride,
   permissions,
+  forceReauth,
 }: {
   projectId: string;
   isSystem: boolean;
@@ -29,6 +30,7 @@ export async function generateAuthUrl({
   externalId: string | undefined;
   redirectUrlOverride: string | undefined | null;
   permissions: string[];
+  forceReauth: boolean | undefined;
 }): Promise<string | undefined> {
   const { appId, appSecret } = appCredentials;
 
@@ -123,6 +125,10 @@ export async function generateAuthUrl({
         ['state', authState],
       ]);
 
+      if (forceReauth !== false) {
+        authParams.append('auth_type', 'rerequest');
+      }
+
       authUrl = `https://www.facebook.com/${facebookVersion}/dialog/oauth?${authParams.toString()}`;
 
       break;
@@ -171,6 +177,10 @@ export async function generateAuthUrl({
         ['state', authState],
       ]);
 
+      if (forceReauth !== false) {
+        authParams.append('auth_type', 'rerequest');
+      }
+
       authUrl = `https://www.facebook.com/${facebookVersion}/dialog/oauth?${authParams.toString()}`;
       break;
     }
@@ -198,7 +208,7 @@ export async function generateAuthUrl({
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
         ['state', authState],
-        ['force_reauth', 'false'],
+        ['force_reauth', forceReauth === true ? 'true' : 'false'],
       ]);
 
       authUrl = `https://www.instagram.com/oauth/authorize?${authParams.toString()}`;
@@ -213,6 +223,7 @@ export async function generateAuthUrl({
 
       const authLink = await client.generateAuthLink(callbackUrl, {
         linkMode: 'authorize',
+        forceLogin: forceReauth === true ? true : undefined,
       });
 
       authUrl = authLink.url;
@@ -314,8 +325,11 @@ export async function generateAuthUrl({
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
         ['state', authState],
-        ['disable_auto_auth', '1'],
       ]);
+
+      if (forceReauth !== false) {
+        authParams.append('disable_auto_auth', '1');
+      }
 
       const tikTokVersion =
         configService.get<string>('TIKTOK_API_VERSION') || 'v2';
@@ -358,9 +372,12 @@ export async function generateAuthUrl({
         ['redirect_uri', callbackUrl],
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
-        ['disable_auto_auth', '1'],
         ['state', authState],
       ]);
+
+      if (forceReauth !== false) {
+        authParams.append('disable_auto_auth', '1');
+      }
 
       const tikTokVersion =
         configService.get<string>('TIKTOK_API_VERSION') || 'v2';
@@ -400,8 +417,8 @@ export async function generateAuthUrl({
         access_type: 'offline',
         scope: scopes,
         include_granted_scopes: true,
-        prompt: 'consent',
         state: authState,
+        ...(forceReauth !== false ? { prompt: 'consent' } : {}),
       });
 
       break;

@@ -226,6 +226,7 @@ export class SocialAccountsService {
     externalId,
     redirectUrlOverride,
     permissions,
+    forceReauth,
     isSystem,
   }: {
     projectId: string;
@@ -234,6 +235,7 @@ export class SocialAccountsService {
     externalId: string | undefined;
     redirectUrlOverride: string | undefined | null;
     permissions: string[];
+    forceReauth: boolean | undefined;
     isSystem: boolean;
   }): Promise<string | undefined> {
     const authUrl = await generateAuthUrl({
@@ -246,6 +248,7 @@ export class SocialAccountsService {
       externalId,
       redirectUrlOverride,
       permissions,
+      forceReauth,
     });
 
     return authUrl;

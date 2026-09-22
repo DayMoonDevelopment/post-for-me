@@ -26,18 +26,6 @@ export const loader = withSupabase(async function ({
     });
   }
 
-  const key =
-    (url.searchParams.get("oauth_token") as string) ||
-    (url.searchParams.get("state") as string);
-
-  if (!key) {
-    return createResponse({
-      isSuccess: false,
-      errors: ["Auth state not set"],
-      isLoggedIn,
-    });
-  }
-
   const { data: project, error: projectError } = await supabaseServiceRole
     .from("projects")
     .select(
@@ -62,6 +50,36 @@ export const loader = withSupabase(async function ({
       errors: ["Project not found"],
       projectId,
       provider,
+      isLoggedIn,
+    });
+  }
+
+  const oauthError = url.searchParams.get("error");
+
+  if (oauthError) {
+    return createResponse({
+      isSuccess: false,
+      errors: [
+        url.searchParams.get("error_description") ||
+          url.searchParams.get("error_reason") ||
+          `Authorization was denied (${oauthError})`,
+      ],
+      projectId,
+      provider,
+      teamId: project.team_id,
+      callbackUrl: project.auth_callback_url,
+      isLoggedIn,
+    });
+  }
+
+  const key =
+    (url.searchParams.get("oauth_token") as string) ||
+    (url.searchParams.get("state") as string);
+
+  if (!key) {
+    return createResponse({
+      isSuccess: false,
+      errors: ["Auth state not set"],
       isLoggedIn,
     });
   }
