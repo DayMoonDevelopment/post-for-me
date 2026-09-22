@@ -1,0 +1,35 @@
+services:
+  frontline:
+    image: ghcr.io/unkeyed/frontline:v1.0.26-rc.1
+    command: ["--config", "/etc/unkey/gateway.toml"]
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      UNKEY_ROOT_KEY: ${UNKEY_ROOT_KEY:-}
+      UNKEY_KEYSPACE_ID: ${UNKEY_KEYSPACE_ID:-}
+      UNKEY_API_URL: ${UNKEY_API_URL:-https://api.unkey.com}
+    volumes:
+      - ./gateway.toml:/etc/unkey/gateway.toml:ro
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DASHBOARD_APP_URL: ${DASHBOARD_APP_URL:-}
+      TRIGGER_SECRET_KEY: ${TRIGGER_SECRET_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
