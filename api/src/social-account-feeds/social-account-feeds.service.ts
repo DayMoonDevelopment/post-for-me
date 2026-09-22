@@ -13,7 +13,7 @@ import {
 } from '../lib/dto/global.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
-import { YouTubeError, YouTubeService } from '../youtube/youtube.service';
+import { YouTubeService } from '../youtube/youtube.service';
 import { TikTokService } from '../tiktok/tiktok.service';
 import { InstagramService } from '../instagram/instagram.service';
 import { FacebookService } from '../facebook/facebook.service';
@@ -22,8 +22,8 @@ import { PinterestService } from '../pinterest/pinterest.service';
 import { ThreadsService } from '../threads/threads.service';
 import { TwitterService } from '../twitter/twitter.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
-import { differenceInDays } from 'date-fns';
 import { PlatformPostDto } from './dto/platform-post.dto';
+import { TokenRefreshService } from '../token-refresh/token-refresh.service';
 
 type TikTokPostResultCandidateSocialPost = {
   external_id: string | null;
@@ -44,7 +44,6 @@ type TikTokPostResultCandidate = {
 
 @Injectable()
 export class SocialAccountFeedsService {
-  platformsToAlwaysRefresh = ['youtube', 'bluesky'];
   facebookMetricsLimitCap: number;
   constructor(
     private readonly configService: ConfigService,
@@ -60,6 +59,7 @@ export class SocialAccountFeedsService {
     private readonly threadsService: ThreadsService,
     private readonly twitterService: TwitterService,
     private readonly blueskyService: BlueskyService,
+    private readonly tokenRefreshService: TokenRefreshService,
   ) {
     const configuredCap = Number(
       this.configService.get<string>('FacebookFeedMetricsLimitCap') ?? 10,
@@ -211,7 +211,7 @@ export class SocialAccountFeedsService {
       projectId,
     });
 
-    const socialAccount: SocialAccount = {
+    let socialAccount: SocialAccount = {
       provider: account.provider,
       id: account.id,
       social_provider_user_name: account.social_provider_user_name,
@@ -227,49 +227,10 @@ export class SocialAccountFeedsService {
       social_provider_metadata: account.social_provider_metadata,
     };
 
-    if (
-      this.platformsToAlwaysRefresh.includes(account.provider) ||
-      differenceInDays(
-        new Date(account.access_token_expires_at || new Date()),
-        new Date(),
-      ) <= 7
-    ) {
-      try {
-        const updatedAccount =
-          await platformService.refreshAccessToken(socialAccount);
-
-        if (updatedAccount) {
-          await this.supabaseService.supabaseClient
-            .from('social_provider_connections')
-            .update({
-              access_token: updatedAccount.access_token,
-              refresh_token: updatedAccount.refresh_token,
-              access_token_expires_at:
-                updatedAccount.access_token_expires_at?.toISOString(),
-              refresh_token_expires_at:
-                updatedAccount.refresh_token_expires_at?.toISOString(),
-            })
-            .eq('id', account.id);
-        }
-      } catch (error) {
-        if (
-          account.provider === 'youtube' &&
-          error instanceof YouTubeError &&
-          !error.metadata.authFailure &&
-          error.metadata.retryable
-        ) {
-          console.warn('Proceeding with existing YouTube access token', {
-            provider: error.metadata.provider,
-            operation: error.metadata.operation,
-            code: error.metadata.code,
-            status: error.metadata.status,
-            message: error.message,
-          });
-        } else {
-          throw error;
-        }
-      }
-    }
+    socialAccount = await this.tokenRefreshService.refreshIfNeeded({
+      account: socialAccount,
+      projectId,
+    });
 
     // Determine if metrics should be included
     let includeMetrics = false;
