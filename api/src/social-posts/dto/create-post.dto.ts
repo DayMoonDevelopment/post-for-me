@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { ValidateNested } from 'class-validator';
 import { SocialPostMediaDto } from './post-media.dto';
 import {
   AccountConfigurationDto,
@@ -26,6 +27,8 @@ export class CreateSocialPostDto {
     required: false,
     type: PlatformConfigurationsDto,
   })
+  @ValidateNested()
+  @Type(() => PlatformConfigurationsDto)
   platform_configurations?: PlatformConfigurationsDto | null;
 
   @ApiProperty({
@@ -35,6 +38,8 @@ export class CreateSocialPostDto {
     isArray: true,
     type: AccountConfigurationDto,
   })
+  @ValidateNested({ each: true })
+  @Type(() => AccountConfigurationDto)
   account_configurations?: AccountConfigurationDto[] | null;
 
   @ApiProperty({
@@ -45,6 +50,8 @@ export class CreateSocialPostDto {
     type: SocialPostMediaDto,
     isArray: true,
   })
+  @ValidateNested({ each: true })
+  @Type(() => SocialPostMediaDto)
   media: SocialPostMediaDto[] | null;
 
   @ApiProperty({ description: 'Array of social account IDs for posting' })

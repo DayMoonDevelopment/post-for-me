@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsInt, IsOptional, Min } from 'class-validator';
 
 export class UserTagDto {
   @ApiProperty({
@@ -83,5 +84,8 @@ export class SocialPostMediaDto {
     required: false,
     type: Number,
   })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
   index?: number | null;
 }

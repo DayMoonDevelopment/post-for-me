@@ -10,9 +10,39 @@ import { Database } from '../../supabase';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 
+type ResultPostMediaRow = {
+  social_post_media: {
+    url: string;
+    thumbnail_url: string | null;
+    thumbnail_timestamp_ms: number | null;
+    tags: any;
+    skip_processing: boolean | null;
+    index: number;
+  };
+};
+
 @Injectable()
 export class PostResultsService {
   constructor(private readonly supabaseService: SupabaseService) {}
+
+  private sortAndMapResultMedia(
+    resultMedia: ResultPostMediaRow[] | null | undefined,
+  ): SocialPostResultDto['media'] {
+    return (
+      resultMedia
+        ?.slice()
+        .sort((a, b) => a.social_post_media.index - b.social_post_media.index)
+        .map((resultMediaRow) => ({
+          url: resultMediaRow.social_post_media.url,
+          thumbnail_url: resultMediaRow.social_post_media.thumbnail_url,
+          thumbnail_timestamp_ms:
+            resultMediaRow.social_post_media.thumbnail_timestamp_ms,
+          tags: resultMediaRow.social_post_media.tags as any[] | null,
+          skip_processing: resultMediaRow.social_post_media.skip_processing,
+          index: resultMediaRow.social_post_media.index,
+        })) || []
+    );
+  }
 
   async getPostResultRecord(
     id: string,
@@ -54,21 +84,9 @@ export class PostResultsService {
         post_id: postResult?.post_id,
         provider_connection_id: postResult?.provider_connection_id,
         error_message: postResult?.error_message || undefined,
-        media:
-          postResult?.social_post_result_post_media
-            ?.slice()
-            .sort(
-              (a, b) => a.social_post_media.index - b.social_post_media.index,
-            )
-            .map((resultMedia) => ({
-              url: resultMedia.social_post_media.url,
-              thumbnail_url: resultMedia.social_post_media.thumbnail_url,
-              thumbnail_timestamp_ms:
-                resultMedia.social_post_media.thumbnail_timestamp_ms,
-              tags: resultMedia.social_post_media.tags as any[] | null,
-              skip_processing: resultMedia.social_post_media.skip_processing,
-              index: resultMedia.social_post_media.index,
-            })) || [],
+        media: this.sortAndMapResultMedia(
+          postResult?.social_post_result_post_media,
+        ),
       },
     };
   }
@@ -206,21 +224,7 @@ export class PostResultsService {
         error: raw.error_message,
         details: raw.details,
         platform_data,
-        media:
-          raw.social_post_result_post_media
-            ?.slice()
-            .sort(
-              (a, b) => a.social_post_media.index - b.social_post_media.index,
-            )
-            .map((resultMedia) => ({
-              url: resultMedia.social_post_media.url,
-              thumbnail_url: resultMedia.social_post_media.thumbnail_url,
-              thumbnail_timestamp_ms:
-                resultMedia.social_post_media.thumbnail_timestamp_ms,
-              tags: resultMedia.social_post_media.tags as any[] | null,
-              skip_processing: resultMedia.social_post_media.skip_processing,
-              index: resultMedia.social_post_media.index,
-            })) || [],
+        media: this.sortAndMapResultMedia(raw.social_post_result_post_media),
       };
     });
 

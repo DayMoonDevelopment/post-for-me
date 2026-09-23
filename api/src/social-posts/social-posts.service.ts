@@ -417,7 +417,7 @@ export class SocialPostsService {
         .insert(postMedia);
 
     if (insertPostMediaError) {
-      console.error(insertPostMediaError);
+      throw new Error(insertPostMediaError.message);
     }
 
     const { error: insertPostConfigurationsError } =
@@ -905,7 +905,11 @@ export class SocialPostsService {
           configuration: {
             caption: config.caption,
             media: data.social_post_media
-              .filter((media) => media.provider_connection_id)
+              .filter(
+                (media) =>
+                  media.provider_connection_id ===
+                  config.provider_connection_id,
+              )
               .map((media) => ({
                 url: media.url,
                 thumbnail_url: media.thumbnail_url,
@@ -939,7 +943,7 @@ export class SocialPostsService {
         ] = {
           caption: config.caption,
           media: data.social_post_media
-            .filter((media) => media.provider_connection_id)
+            .filter((media) => media.provider === config.provider)
             .map((media) => ({
               url: media.url,
               thumbnail_url: media.thumbnail_url,
