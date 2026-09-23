@@ -75,4 +75,13 @@ export class SocialPostMediaDto {
     default: false,
   })
   skip_processing?: boolean | null;
+
+  @ApiProperty({
+    description:
+      'Explicit sort position of this media item within the post (or within its platform/account override). If omitted, the item is ordered by its position in the submitted array.',
+    nullable: true,
+    required: false,
+    type: Number,
+  })
+  index?: number | null;
 }
