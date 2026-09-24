@@ -42,6 +42,7 @@ let createMediaCallCount: number;
 let carouselParentBehavior: (() => unknown) | null;
 let publishBehavior: (() => unknown) | null;
 let statusBehavior: (() => unknown) | null;
+let getPostUrlBehavior: (() => unknown) | null;
 
 const axiosPost = mock(async (url: string, payload?: any) => {
   if (url.endsWith("/media_publish")) {
@@ -71,6 +72,7 @@ const axiosGet = mock(async (url: string, config?: any) => {
   }
 
   if (config?.params?.fields === "permalink,media_type") {
+    if (getPostUrlBehavior) return getPostUrlBehavior();
     return { data: { permalink: "https://instagram.com/p/xyz" } };
   }
 
@@ -110,6 +112,7 @@ beforeEach(() => {
   carouselParentBehavior = null;
   publishBehavior = null;
   statusBehavior = null;
+  getPostUrlBehavior = null;
   axiosPost.mockClear();
   axiosGet.mockClear();
   waitFor.mockClear();
@@ -307,5 +310,58 @@ describe("InstagramPostClient error detail propagation", () => {
     expect(result.error_message).toBe(
       "Failed to post to Instagram : Upload failed",
     );
+  });
+
+  test("a 200-OK-with-error-body permalink fetch surfaces Instagram's structured error, not a flattened string", async () => {
+    getPostUrlBehavior = () => ({
+      data: {
+        error: {
+          message: "User access is restricted, please contact us",
+          code: 200,
+        },
+      },
+    });
+
+    const result = await publishSingle();
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toBe(
+      "Failed to post to Instagram : User access is restricted, please contact us",
+    );
+
+    const errorDetails = result.details?.error;
+    expect(errorDetails).toBeDefined();
+    expect(errorDetails.error.code).toBe(200);
+    expect(errorDetails.error.message).toBe(
+      "User access is restricted, please contact us",
+    );
+
+    // Regression guard: the old code threw a plain `new Error(string)` here,
+    // which discarded the structured Graph API error body entirely.
+    const roundTripped = JSON.parse(JSON.stringify(result.details));
+    expect(roundTripped.error.error.code).toBe(200);
+  });
+
+  test("a 200-OK-with-error-body OAuthException (code 190) during carousel creation returns the reconnect message even with no HTTP 401", async () => {
+    carouselParentBehavior = () => ({
+      data: {
+        error: {
+          message: "Error validating access token: Session has expired",
+          code: 190,
+          type: "OAuthException",
+        },
+      },
+    });
+
+    const result = await publishCarousel();
+
+    expect(result.success).toBe(false);
+    // Regression guard: `wrapResponseDataError` call sites never attach an
+    // HTTP status (the response is a 200 OK), so a check on `status === 401`
+    // alone would miss this and fall through to the generic error message.
+    expect(result.error_message).toBe(
+      "Account needs to be reconnected, Access token has expired",
+    );
+    expect(result.details?.error?.error?.code).toBe(190);
   });
 });

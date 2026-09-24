@@ -22,6 +22,7 @@ import {
   wrapPlatformError,
   wrapResponseDataError,
   PlatformApiError,
+  PlatformErrorDetails,
 } from "../platform-error";
 
 export class InstagramPostClient extends PostClient {
@@ -299,7 +300,7 @@ export class InstagramPostClient extends PostClient {
         responses: this.#responses,
       };
 
-      if (platformError.status === 401) {
+      if (this.#isReconnectError(platformError)) {
         return {
           success: false,
           post_id: postId,
@@ -781,6 +782,19 @@ export class InstagramPostClient extends PostClient {
     return extractPlatformError(error).message;
   }
 
+  // Graph API returns OAuthException errors (expired/invalid token) as
+  // `{ error: { code: 190 } }` in a 200-OK body just as often as it does via
+  // an HTTP 401 (`wrapResponseDataError` call sites never have a real HTTP
+  // status to attach), so both signals need to be checked here.
+  #isReconnectError(platformError: PlatformErrorDetails): boolean {
+    if (platformError.status === 401) {
+      return true;
+    }
+
+    const errorCode = (platformError.data as any)?.error?.code;
+    return errorCode === 190;
+  }
+
   #isNonRetryableError(error: any): boolean {
     const errorMessage = this.#getErrorMessage(error).toLowerCase();
 
@@ -877,8 +891,9 @@ export class InstagramPostClient extends PostClient {
         });
 
         if (mediaResponse.data.error) {
-          throw new Error(
-            `Failed to fetch media details: ${mediaResponse.data.error.message as string}`,
+          throw wrapResponseDataError(
+            mediaResponse.data,
+            "Failed to fetch media details",
           );
         }
 
