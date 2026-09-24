@@ -17,6 +17,11 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
+import {
+  extractPlatformError,
+  wrapPlatformError,
+  PlatformApiError,
+} from "../platform-error";
 
 export class InstagramPostClient extends PostClient {
   #maxItems = 10;
@@ -222,8 +227,11 @@ export class InstagramPostClient extends PostClient {
             },
           );
           if (publishResponse.data.error) {
-            throw new Error(
-              `Failed to publish: ${publishResponse.data.error.message}`,
+            throw wrapPlatformError(
+              {
+                response: { data: publishResponse.data, status: undefined },
+              },
+              "Failed to publish",
             );
           }
 
@@ -284,33 +292,30 @@ export class InstagramPostClient extends PostClient {
     } catch (error) {
       console.error("Error posting to Instagram:", error);
 
-      if (error.response?.status === 401) {
+      const platformError = extractPlatformError(error);
+      const errorDetails = {
+        error: platformError.data ?? { message: platformError.message },
+        requests: this.#requests,
+        responses: this.#responses,
+      };
+
+      if (platformError.status === 401) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
           error_message:
             "Account needs to be reconnected, Access token has expired",
-          details: {
-            error,
-            requests: this.#requests,
-            responses: this.#responses,
-          },
+          details: errorDetails,
         };
       }
 
       return {
         success: false,
-        error_message: `Failed to post to Instagram : ${
-          error.response?.data?.error?.message || error.message
-        }`,
+        error_message: `Failed to post to Instagram : ${platformError.message}`,
         post_id: postId,
         provider_connection_id: account.id,
-        details: {
-          error,
-          requests: this.#requests,
-          responses: this.#responses,
-        },
+        details: errorDetails,
       };
     } finally {
       this.#postStartedAtMs = null;
@@ -578,8 +583,9 @@ export class InstagramPostClient extends PostClient {
     this.#responses.push({ createCarouselResponse: carouselResponse.data });
 
     if (carouselResponse.data.error) {
-      throw new Error(
-        `Failed to create carousel container: ${carouselResponse.data.error.message}`,
+      throw wrapPlatformError(
+        { response: { data: carouselResponse.data, status: undefined } },
+        "Failed to create carousel container",
       );
     }
 
@@ -627,7 +633,12 @@ export class InstagramPostClient extends PostClient {
         });
 
         if (createMediaResponse.data.error) {
-          throw new Error(createMediaResponse.data.error.message as string);
+          throw wrapPlatformError(
+            {
+              response: { data: createMediaResponse.data, status: undefined },
+            },
+            `Failed to create ${mediaLabel}`,
+          );
         }
 
         const containerId = createMediaResponse.data.id as string | undefined;
@@ -654,14 +665,16 @@ export class InstagramPostClient extends PostClient {
         );
 
         if (this.#isNonRetryableError(error)) {
-          throw new Error(
-            `Failed to process ${mediaLabel} without retry: ${errorMessage}`,
+          throw wrapPlatformError(
+            error,
+            `Failed to process ${mediaLabel} without retry`,
           );
         }
 
         if (attempt === this.#mediaRetryAttempts) {
-          throw new Error(
-            `Failed to process ${mediaLabel} after ${this.#mediaRetryAttempts} attempts: ${errorMessage}`,
+          throw wrapPlatformError(
+            error,
+            `Failed to process ${mediaLabel} after ${this.#mediaRetryAttempts} attempts`,
           );
         }
 
@@ -726,7 +739,10 @@ export class InstagramPostClient extends PostClient {
       }
 
       if (statusData.status_code === "ERROR") {
-        throw new Error(`Upload failed: ${JSON.stringify(statusData)}`);
+        throw new PlatformApiError(
+          `Upload failed: ${JSON.stringify(statusData)}`,
+          { message: "Upload failed", data: statusData },
+        );
       }
 
       const delay = this.#getRetryDelayMs(attempt);
@@ -745,17 +761,16 @@ export class InstagramPostClient extends PostClient {
       }
     }
 
-    throw new Error(
+    throw new PlatformApiError(
       `Max attempts reached. Failed to process media. Last status: ${JSON.stringify(
         statusData,
       )}`,
+      { message: "Max attempts reached", data: statusData },
     );
   }
 
   #getErrorMessage(error: any): string {
-    return (
-      error?.response?.data?.error?.message || error?.message || "Unknown error"
-    );
+    return extractPlatformError(error).message;
   }
 
   #isNonRetryableError(error: any): boolean {
