@@ -40,3 +40,22 @@ export function wrapPlatformError(
   const details = extractPlatformError(error);
   return new PlatformApiError(`${context}: ${details.message}`, details);
 }
+
+/**
+ * For the "200 OK but the body carries `{ error }`" case (e.g. Graph API
+ * container-creation/publish calls) — builds a PlatformApiError directly
+ * from the already-parsed response body instead of faking an axios error
+ * shape just to route it through `wrapPlatformError`.
+ */
+export function wrapResponseDataError(
+  data: any,
+  context: string,
+  status?: number,
+): PlatformApiError {
+  const details: PlatformErrorDetails = {
+    message: data?.error?.message || "Unknown error",
+    status,
+    data,
+  };
+  return new PlatformApiError(`${context}: ${details.message}`, details);
+}

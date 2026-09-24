@@ -41,6 +41,7 @@ let createMediaBehaviors: Array<() => unknown>;
 let createMediaCallCount: number;
 let carouselParentBehavior: (() => unknown) | null;
 let publishBehavior: (() => unknown) | null;
+let statusBehavior: (() => unknown) | null;
 
 const axiosPost = mock(async (url: string, payload?: any) => {
   if (url.endsWith("/media_publish")) {
@@ -64,7 +65,8 @@ const axiosPost = mock(async (url: string, payload?: any) => {
 });
 
 const axiosGet = mock(async (url: string, config?: any) => {
-  if (config?.params?.fields === "status_code") {
+  if (config?.params?.fields?.startsWith("status_code")) {
+    if (statusBehavior) return statusBehavior();
     return { data: { status_code: "FINISHED" } };
   }
 
@@ -107,6 +109,7 @@ beforeEach(() => {
   createMediaCallCount = 0;
   carouselParentBehavior = null;
   publishBehavior = null;
+  statusBehavior = null;
   axiosPost.mockClear();
   axiosGet.mockClear();
   waitFor.mockClear();
@@ -274,5 +277,35 @@ describe("InstagramPostClient error detail propagation", () => {
       "Failed to post to Instagram : User access is restricted, please contact us",
     );
     expect(result.details?.error?.error?.code).toBe(200);
+  });
+
+  test("a media processing ERROR status surfaces Instagram's actual status text, not a generic 'Upload failed'", async () => {
+    statusBehavior = () => ({
+      data: {
+        status_code: "ERROR",
+        status: "Media processing failed: unsupported codec",
+      },
+    });
+
+    const result = await publishSingle();
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toBe(
+      "Failed to post to Instagram : Upload failed: Media processing failed: unsupported codec",
+    );
+    expect(result.details?.error?.status).toBe(
+      "Media processing failed: unsupported codec",
+    );
+  });
+
+  test("falls back to a generic 'Upload failed' message when Instagram's ERROR status carries no status text", async () => {
+    statusBehavior = () => ({ data: { status_code: "ERROR" } });
+
+    const result = await publishSingle();
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toBe(
+      "Failed to post to Instagram : Upload failed",
+    );
   });
 });

@@ -20,6 +20,7 @@ import {
 import {
   extractPlatformError,
   wrapPlatformError,
+  wrapResponseDataError,
   PlatformApiError,
 } from "../platform-error";
 
@@ -227,10 +228,8 @@ export class InstagramPostClient extends PostClient {
             },
           );
           if (publishResponse.data.error) {
-            throw wrapPlatformError(
-              {
-                response: { data: publishResponse.data, status: undefined },
-              },
+            throw wrapResponseDataError(
+              publishResponse.data,
               "Failed to publish",
             );
           }
@@ -243,8 +242,9 @@ export class InstagramPostClient extends PostClient {
             throw error;
           }
 
+          const platformError = extractPlatformError(error);
           console.log(
-            `Status: ${error.response?.status} Error: ${error.response?.data?.error?.message}`,
+            `Status: ${platformError.status} Error: ${platformError.message}`,
           );
           console.log("Waiting 5 secs");
           const waited = await this.#waitWithTaskBudget({
@@ -583,8 +583,8 @@ export class InstagramPostClient extends PostClient {
     this.#responses.push({ createCarouselResponse: carouselResponse.data });
 
     if (carouselResponse.data.error) {
-      throw wrapPlatformError(
-        { response: { data: carouselResponse.data, status: undefined } },
+      throw wrapResponseDataError(
+        carouselResponse.data,
         "Failed to create carousel container",
       );
     }
@@ -633,10 +633,8 @@ export class InstagramPostClient extends PostClient {
         });
 
         if (createMediaResponse.data.error) {
-          throw wrapPlatformError(
-            {
-              response: { data: createMediaResponse.data, status: undefined },
-            },
+          throw wrapResponseDataError(
+            createMediaResponse.data,
             `Failed to create ${mediaLabel}`,
           );
         }
@@ -723,7 +721,7 @@ export class InstagramPostClient extends PostClient {
         `${this.getApiBaseUrl(account)}/${containerId}`,
         {
           params: {
-            fields: "status_code",
+            fields: "status_code,status",
             access_token: account.access_token,
           },
         },
@@ -741,7 +739,12 @@ export class InstagramPostClient extends PostClient {
       if (statusData.status_code === "ERROR") {
         throw new PlatformApiError(
           `Upload failed: ${JSON.stringify(statusData)}`,
-          { message: "Upload failed", data: statusData },
+          {
+            message: statusData.status
+              ? `Upload failed: ${statusData.status}`
+              : "Upload failed",
+            data: statusData,
+          },
         );
       }
 
@@ -765,7 +768,12 @@ export class InstagramPostClient extends PostClient {
       `Max attempts reached. Failed to process media. Last status: ${JSON.stringify(
         statusData,
       )}`,
-      { message: "Max attempts reached", data: statusData },
+      {
+        message: statusData?.status
+          ? `Max attempts reached: ${statusData.status}`
+          : "Max attempts reached",
+        data: statusData,
+      },
     );
   }
 
