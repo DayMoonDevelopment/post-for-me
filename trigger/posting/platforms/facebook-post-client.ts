@@ -12,6 +12,11 @@ import {
 } from "../post.types";
 import { logger, wait } from "@trigger.dev/sdk";
 import FormData from "form-data";
+import {
+  extractPlatformError,
+  PlatformApiError,
+  wrapResponseDataError,
+} from "../platform-error";
 
 export class FacebookPostClient extends PostClient {
   #requests: any[] = [];
@@ -234,18 +239,19 @@ export class FacebookPostClient extends PostClient {
         "Error posting to Facebook:",
         error.response?.data || error,
       );
+
+      const platformError = extractPlatformError(error);
+
       return {
         success: false,
         post_id: postId,
         provider_connection_id: account.id,
         details: {
-          error,
+          error: platformError.data ?? { message: platformError.message },
           requests: this.#requests,
           responses: this.#responses,
         },
-        error_message: `Failed to post to Facebook ${
-          error.response?.data?.error?.message || error.message
-        }`,
+        error_message: `Failed to post to Facebook ${platformError.message}`,
       };
     }
   }
@@ -294,7 +300,7 @@ export class FacebookPostClient extends PostClient {
     this.#responses.push({ createTextResponse: response.data });
 
     if (response.data.error) {
-      throw new Error(`Failed to post: ${response.data.error.message}`);
+      throw wrapResponseDataError(response.data, "Failed to post");
     }
     return response.data.id;
   }
@@ -353,9 +359,7 @@ export class FacebookPostClient extends PostClient {
     this.#responses.push({ photoResponse: photoResponse.data });
 
     if (photoResponse.data.error) {
-      throw new Error(
-        `Failed to upload media: ${photoResponse.data.error.message}`,
-      );
+      throw wrapResponseDataError(photoResponse.data, "Failed to upload media");
     }
 
     return photoResponse.data.post_id || photoResponse.data.id;
@@ -421,9 +425,7 @@ export class FacebookPostClient extends PostClient {
 
       this.#responses.push({ photoResponse: photoResponse.data });
       if (photoResponse.data.error) {
-        throw new Error(
-          `Failed to upload image: ${photoResponse.data.error.message}`,
-        );
+        throw wrapResponseDataError(photoResponse.data, "Failed to upload image");
       }
       mediaIds.push({ media_fbid: photoResponse.data.id });
     }
@@ -464,9 +466,7 @@ export class FacebookPostClient extends PostClient {
     this.#responses.push({ createCarouselPostResponse: response.data });
 
     if (response.data.error) {
-      throw new Error(
-        `Failed to create carousel: ${response.data.error.message}`,
-      );
+      throw wrapResponseDataError(response.data, "Failed to create carousel");
     }
 
     return response.data.id;
@@ -586,9 +586,7 @@ export class FacebookPostClient extends PostClient {
 
     if (videoResponseData?.error) {
       console.error(videoResponseData);
-      throw new Error(
-        `Failed to publish video: ${videoResponseData.error.message}`,
-      );
+      throw wrapResponseDataError(videoResponseData, "Failed to publish video");
     }
 
     let status = "processing";
@@ -619,7 +617,10 @@ export class FacebookPostClient extends PostClient {
     }
 
     if (status === "error") {
-      throw new Error(`Failed to process video`);
+      throw new PlatformApiError("Failed to process video", {
+        message: "Failed to process video",
+        data: statusResponse?.data,
+      });
     }
 
     return videoResponseData.id;
@@ -644,8 +645,9 @@ export class FacebookPostClient extends PostClient {
 
     if (uploadSessionResponseData?.error) {
       console.error(uploadSessionResponseData);
-      throw new Error(
-        `Failed to create upload session: ${uploadSessionResponseData.error.message}`,
+      throw wrapResponseDataError(
+        uploadSessionResponseData,
+        "Failed to create upload session",
       );
     }
 
@@ -667,8 +669,9 @@ export class FacebookPostClient extends PostClient {
 
     if (uploadVideoResponseData?.error) {
       console.error(uploadVideoResponseData);
-      throw new Error(
-        `Failed to upload video: ${uploadVideoResponseData.error.message}`,
+      throw wrapResponseDataError(
+        uploadVideoResponseData,
+        "Failed to upload video",
       );
     }
 
@@ -702,7 +705,10 @@ export class FacebookPostClient extends PostClient {
     }
 
     if (videoStatus === "error") {
-      throw new Error(`Failed to process video`);
+      throw new PlatformApiError("Failed to process video", {
+        message: "Failed to process video",
+        data: videoStatusResponse?.data,
+      });
     }
 
     const createdMediaId = uploadSessionResponseData.video_id;
@@ -721,9 +727,7 @@ export class FacebookPostClient extends PostClient {
     logger.info("Story response", { storyResponseData });
 
     if (storyResponseData?.error) {
-      throw new Error(
-        `Failed to create story: ${storyResponseData.error.message}`,
-      );
+      throw wrapResponseDataError(storyResponseData, "Failed to create story");
     }
 
     let status = "processing";
@@ -757,10 +761,13 @@ export class FacebookPostClient extends PostClient {
     }
 
     if (status === "error") {
-      const error = statusResponse?.data?.status?.processing_phase?.errors
+      const errorMessage = statusResponse?.data?.status?.processing_phase?.errors
         ?.map((error: { message?: string }) => error.message)
         .join(", ");
-      throw new Error(`Failed to process video ${error}`);
+      throw new PlatformApiError(`Failed to process video ${errorMessage}`, {
+        message: errorMessage || "Failed to process video",
+        data: statusResponse?.data,
+      });
     }
 
     return storyResponseData?.post_id;
@@ -819,9 +826,7 @@ export class FacebookPostClient extends PostClient {
 
     this.#responses.push({ photoResponse: photoResponse.data });
     if (photoResponse.data.error) {
-      throw new Error(
-        `Failed to upload image: ${photoResponse.data.error.message}`,
-      );
+      throw wrapResponseDataError(photoResponse.data, "Failed to upload image");
     }
 
     const createdMediaId = photoResponse.data.id;
@@ -839,9 +844,7 @@ export class FacebookPostClient extends PostClient {
     logger.info("Story response", { storyResponseData });
 
     if (storyResponseData?.error) {
-      throw new Error(
-        `Failed to create story: ${storyResponseData.error.message}`,
-      );
+      throw wrapResponseDataError(storyResponseData, "Failed to create story");
     }
 
     return storyResponseData?.post_id;
@@ -888,8 +891,9 @@ export class FacebookPostClient extends PostClient {
 
     if (uploadSessionResponseData?.error) {
       console.error(uploadSessionResponseData);
-      throw new Error(
-        `Failed to create upload session: ${uploadSessionResponseData.error.message}`,
+      throw wrapResponseDataError(
+        uploadSessionResponseData,
+        "Failed to create upload session",
       );
     }
 
@@ -911,8 +915,9 @@ export class FacebookPostClient extends PostClient {
 
     if (uploadVideoResponseData?.error) {
       console.error(uploadVideoResponseData);
-      throw new Error(
-        `Failed to upload video: ${uploadVideoResponseData.error.message}`,
+      throw wrapResponseDataError(
+        uploadVideoResponseData,
+        "Failed to upload video",
       );
     }
 
@@ -946,7 +951,10 @@ export class FacebookPostClient extends PostClient {
     }
 
     if (videoStatus === "error") {
-      throw new Error(`Failed to process video`);
+      throw new PlatformApiError("Failed to process video", {
+        message: "Failed to process video",
+        data: videoStatusResponse?.data,
+      });
     }
 
     const createdMediaId = uploadSessionResponseData.video_id;
@@ -988,9 +996,7 @@ export class FacebookPostClient extends PostClient {
     logger.info("Reel response", { storyResponseData: reelResponseData });
 
     if (reelResponseData?.error) {
-      throw new Error(
-        `Failed to create reel: ${reelResponseData.error.message}`,
-      );
+      throw wrapResponseDataError(reelResponseData, "Failed to create reel");
     }
 
     let status = "processing";
@@ -1024,10 +1030,13 @@ export class FacebookPostClient extends PostClient {
     }
 
     if (status === "error") {
-      const error = statusResponse?.data?.status?.processing_phase?.errors
+      const errorMessage = statusResponse?.data?.status?.processing_phase?.errors
         ?.map((error: { message?: string }) => error.message)
         .join(", ");
-      throw new Error(`Failed to process video ${error}`);
+      throw new PlatformApiError(`Failed to process video ${errorMessage}`, {
+        message: errorMessage || "Failed to process video",
+        data: statusResponse?.data,
+      });
     }
 
     if (platformConfig?.collaborators) {
