@@ -206,6 +206,7 @@ export class InstagramPostClient extends PostClient {
       }
 
       let platformId: string | null = null;
+      let lastPublishError: unknown;
       const maxPublishAttempts = 15;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
@@ -243,6 +244,8 @@ export class InstagramPostClient extends PostClient {
             throw error;
           }
 
+          lastPublishError = error;
+
           const platformError = extractPlatformError(error);
           console.log(
             `Status: ${platformError.status} Error: ${platformError.message}`,
@@ -264,6 +267,13 @@ export class InstagramPostClient extends PostClient {
       }
 
       if (!platformId) {
+        if (lastPublishError) {
+          throw wrapPlatformError(
+            lastPublishError,
+            "Unable to publish media, please try again",
+          );
+        }
+
         throw new Error(
           "Unknown Error: Unable to publish media, please try again.",
         );
@@ -608,6 +618,8 @@ export class InstagramPostClient extends PostClient {
     responseLogKey: string;
     mediaLabel: string;
   }): Promise<string> {
+    let lastError: unknown;
+
     for (let attempt = 1; attempt <= this.#mediaRetryAttempts; attempt++) {
       if (!this.#hasTaskTimeRemaining()) {
         break;
@@ -650,6 +662,8 @@ export class InstagramPostClient extends PostClient {
 
         return containerId;
       } catch (error) {
+        lastError = error;
+
         if (error?.response?.data) {
           this.#responses.push({
             [responseLogKey]: error.response.data,
@@ -688,7 +702,16 @@ export class InstagramPostClient extends PostClient {
       }
     }
 
-    throw new Error(`Failed to process ${mediaLabel}`);
+    if (lastError) {
+      throw wrapPlatformError(
+        lastError,
+        `Failed to process ${mediaLabel}: task time budget exhausted`,
+      );
+    }
+
+    throw new Error(
+      `Failed to process ${mediaLabel}: task time budget exhausted`,
+    );
   }
 
   async #waitForMediaStatus({
@@ -700,11 +723,25 @@ export class InstagramPostClient extends PostClient {
     containerId: string;
     mediaLabel: string;
   }): Promise<void> {
-    let statusData;
+    let statusData: any;
+
+    const throwBudgetExhausted = (): never => {
+      throw new PlatformApiError(
+        `Task time budget exhausted while waiting for ${mediaLabel} status. Last status: ${JSON.stringify(
+          statusData,
+        )}`,
+        {
+          message: statusData?.status
+            ? `Task time budget exhausted: ${statusData.status}`
+            : `Task time budget exhausted while waiting for ${mediaLabel} status`,
+          data: statusData,
+        },
+      );
+    };
 
     for (let attempt = 1; attempt <= this.#mediaStatusMaxAttempts; attempt++) {
       if (!this.#hasTaskTimeRemaining()) {
-        return;
+        throwBudgetExhausted();
       }
 
       console.log(
@@ -761,7 +798,7 @@ export class InstagramPostClient extends PostClient {
       });
 
       if (!waited) {
-        return;
+        throwBudgetExhausted();
       }
     }
 
