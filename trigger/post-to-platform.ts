@@ -21,6 +21,7 @@ import {
 import { differenceInDays } from "date-fns";
 import Stripe from "stripe";
 import { Database } from "./supabase.types";
+import { extractPlatformError } from "./posting/platform-error";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
@@ -67,13 +68,13 @@ const createPostClient = ({
 
 const platformsToAlwaysRefresh = ["youtube", "bluesky"];
 
-const handleTokenRefresh = async ({
+export const handleTokenRefresh = async ({
   postClient,
   account,
 }: {
   postClient: PostClient;
   account: SocialAccount;
-}): Promise<{ success: boolean; error?: string }> => {
+}): Promise<{ success: boolean; error?: string; details?: unknown }> => {
   try {
     const { access_token, expires_at, refresh_token } =
       await postClient.refreshAccessToken(account);
@@ -121,9 +122,11 @@ const handleTokenRefresh = async ({
     }
   } catch (refreshError) {
     console.error(refreshError);
+    const platformError = extractPlatformError(refreshError);
     return {
       success: false,
-      error: refreshError.message,
+      error: platformError.message,
+      details: platformError.data,
     };
   }
 
@@ -233,6 +236,7 @@ export const postToPlatform = task({
             post_id: postId,
             success: false,
             error_message: refreshed.error,
+            details: refreshed.details,
           };
 
           throw new Error("Invalid Token");
