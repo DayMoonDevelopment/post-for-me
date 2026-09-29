@@ -39,7 +39,6 @@
     "@trigger.dev/build": "4.4.4",
     "@types/bun": "^1.4.0",
     "@types/fluent-ffmpeg": "^2.1.27",
-    "@types/bun": "^1.4.0",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.10.7",
     "@types/twitter-text": "^3.1.10",
