@@ -16,7 +16,7 @@ type SubscriptionEvent =
   | Stripe.CustomerSubscriptionUpdatedEvent
   | Stripe.CustomerSubscriptionDeletedEvent;
 
-type TeamRow = Pick<
+export type TeamRow = Pick<
   Database["public"]["Tables"]["teams"]["Row"],
   "id" | "created_by" | "name" | "billing_email"
 >;
@@ -148,7 +148,7 @@ export async function trackSubscriptionLifecycle(
  * redirect, which would otherwise drop a brand-new customer's conversion).
  * Fall back to the customer-id lookup for existing/older subscriptions.
  */
-async function resolveTeam(
+export async function resolveTeam(
   subscription: Stripe.Subscription,
   supabaseServiceRole: SupabaseClient<Database>,
 ): Promise<TeamRow | null> {
