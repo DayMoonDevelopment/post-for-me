@@ -42,6 +42,21 @@ type TikTokPostResultCandidate = {
     | null;
 };
 
+type FacebookPostResultCandidateSocialPost = {
+  external_id: string | null;
+};
+
+type FacebookPostResultCandidate = {
+  id: string;
+  post_id: string;
+  provider_post_id: string | null;
+  provider_post_url: string | null;
+  social_posts:
+    | FacebookPostResultCandidateSocialPost
+    | FacebookPostResultCandidateSocialPost[]
+    | null;
+};
+
 @Injectable()
 export class SocialAccountFeedsService {
   platformsToAlwaysRefresh = ['youtube', 'bluesky'];
@@ -354,6 +369,12 @@ export class SocialAccountFeedsService {
         posts: accountPostsResult.posts,
         postResultMap,
       });
+    } else if (account.provider === 'facebook') {
+      await this.reconcileFacebookProviderPostIds({
+        accountId,
+        posts: accountPostsResult.posts,
+        postResultMap,
+      });
     }
 
     const result: PaginatedPlatformPostResponse = {
@@ -497,6 +518,89 @@ export class SocialAccountFeedsService {
 
       if (updateError) {
         console.error('Unable to update TikTok provider post id', updateError);
+      }
+    }
+  }
+
+  private async reconcileFacebookProviderPostIds({
+    accountId,
+    posts,
+    postResultMap,
+  }: {
+    accountId: string;
+    posts: PlatformPost[];
+    postResultMap: Map<
+      string,
+      {
+        social_post_result_id: string;
+        social_post_id: string;
+        external_post_id: string | null | undefined;
+      }
+    >;
+  }) {
+    const unmatchedPosts = posts.filter(
+      (post) => !postResultMap.has(post.id) && post.video_target_id,
+    );
+
+    if (unmatchedPosts.length === 0) return;
+
+    const candidateVideoIds = [
+      ...new Set(unmatchedPosts.map((post) => post.video_target_id!)),
+    ];
+
+    const { data: candidateRows, error } =
+      await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .select(
+          `
+          id,
+          post_id,
+          provider_post_id,
+          provider_post_url,
+          social_posts!inner(external_id)
+        `,
+        )
+        .eq('provider_connection_id', accountId)
+        .in('provider_post_id', candidateVideoIds);
+
+    if (error) {
+      console.error('Unable to fetch Facebook post result candidates', error);
+      return;
+    }
+
+    const candidates = (candidateRows ??
+      []) as unknown as FacebookPostResultCandidate[];
+    const candidatesByVideoId = new Map(
+      candidates.map((row) => [row.provider_post_id, row]),
+    );
+
+    for (const post of unmatchedPosts) {
+      const candidate = candidatesByVideoId.get(post.video_target_id!);
+      if (!candidate) continue;
+
+      const socialPost = Array.isArray(candidate.social_posts)
+        ? candidate.social_posts[0]
+        : candidate.social_posts;
+
+      postResultMap.set(post.id, {
+        social_post_result_id: candidate.id,
+        social_post_id: candidate.post_id,
+        external_post_id: socialPost?.external_id,
+      });
+
+      const { error: updateError } = await this.supabaseService.supabaseClient
+        .from('social_post_results')
+        .update({
+          provider_post_id: post.id,
+          provider_post_url: post.url || candidate.provider_post_url,
+        })
+        .eq('id', candidate.id);
+
+      if (updateError) {
+        console.error(
+          'Unable to update Facebook provider post id',
+          updateError,
+        );
       }
     }
   }
