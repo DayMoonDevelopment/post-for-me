@@ -61,6 +61,7 @@ export interface Post {
     provider_connection_id: string | null;
     tags: UserTag[] | null;
     skip_processing: boolean | null;
+    index: number;
   }[];
   social_post_configurations: {
     caption: string | null;

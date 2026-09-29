@@ -41,7 +41,8 @@ export const processScheduledPosts = schedules.task({
               provider,
               provider_connection_id,
               tags,
-              skip_processing
+              skip_processing,
+              index
             ),
             social_post_configurations (
               caption,
@@ -55,6 +56,7 @@ export const processScheduledPosts = schedules.task({
         .lte("post_at", new Date().toISOString())
         .order("post_at", { ascending: true })
         .order("id", { ascending: true })
+        .order("index", { referencedTable: "social_post_media" })
         .limit(80);
 
       if (postsError) {

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsInt, IsOptional, Min } from 'class-validator';
 
 export class UserTagDto {
   @ApiProperty({
@@ -75,4 +76,16 @@ export class SocialPostMediaDto {
     default: false,
   })
   skip_processing?: boolean | null;
+
+  @ApiProperty({
+    description:
+      'Explicit sort position of this media item within the post (or within its platform/account override). If omitted, the item is ordered by its position in the submitted array.',
+    nullable: true,
+    required: false,
+    type: Number,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  index?: number | null;
 }

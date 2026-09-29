@@ -13,15 +13,21 @@ beforeAll(async () => {
   mod = await import("./process-post");
 });
 
-// Regression coverage for PFM-1141 / PFM-1129 / PFM-1131: media order
-// scrambled on publish. Root cause (part 2 of 2 — see Linear for the
-// database ordering half) was `process-post.ts` splitting localized media
-// into images-then-videos and concatenating, which silently discarded the
-// originally submitted interleaving for any mixed image+video post.
+// Regression coverage for PFM-1141 / PFM-1129 / PFM-1131 (part 2 of 2):
+// media order scrambled on publish. Part 1 was `process-post.ts` splitting
+// localized media into images-then-videos and concatenating, which silently
+// discarded the originally submitted interleaving for any mixed image+video
+// post — fixed by threading a `position` through localization/video
+// processing and reassembling by sorting on it instead of by type-bucket
+// concatenation order (tested below).
 //
-// The fix threads a `position` (the original submitted index) through
-// localization and video processing, and reassembles the final list by
-// sorting on that field instead of by type-bucket concatenation order.
+// Part 2 (PFM-1087) was that `position` itself being seeded from unordered
+// array read order rather than a persisted column, so even an all-image or
+// all-video carousel could still rotate between reads. That's now backed by
+// the `social_post_media.index` column (every embedded read of the table
+// orders by it), and `position` in `process-post.ts` is seeded from
+// `medium.index` instead of array position — not separately unit-tested
+// here since it's a one-line callsite, not branching logic.
 
 const medium = (
   overrides: Partial<import("./process-post").ProcessedMedium> = {},
