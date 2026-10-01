@@ -53,6 +53,9 @@ jobs:
       - name: Typecheck
         id: typecheck
         run: bun run typecheck
+      - name: Test
+        id: test
+        run: bun run test
 
   dashboard:
     name: Dashboard

@@ -214,24 +214,6 @@ export class SocialPostsService {
     return [];
   }
 
-  validatePostCaptionLength({
-    caption,
-    platform,
-  }: {
-    caption: string;
-    platform: string;
-  }): { isValid: boolean; error: string } {
-    const maxCaptionLength = 2200;
-
-    switch (platform) {
-      default:
-        return {
-          isValid: caption.length <= maxCaptionLength,
-          error: `caption must be less than ${maxCaptionLength} characters`,
-        };
-    }
-  }
-
   async createPost({
     post,
     projectId,
