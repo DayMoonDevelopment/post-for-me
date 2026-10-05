@@ -54,7 +54,7 @@ export async function getYoutubeSocialProviderConnection({
         access_token: tokens.access_token!,
         refresh_token: tokens.refresh_token ?? "",
         access_token_expires_at: new Date(
-          Date.now() + (tokens.expiry_date ?? 1000),
+          tokens.expiry_date ?? Date.now() + 1000,
         ),
       };
     });
