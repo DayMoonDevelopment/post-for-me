@@ -140,8 +140,6 @@ export class SocialPostsController {
     const postValidation = await this.postsService.validatePost({
       post: createPostsInput,
       projectId: user.projectId,
-      teamId: user.teamId,
-      isSystem,
     });
 
     if (!postValidation.isValid) {
@@ -236,8 +234,6 @@ export class SocialPostsController {
     const postValidation = await this.postsService.validatePost({
       post: updatePostInput,
       projectId: user.projectId,
-      teamId: user.teamId,
-      isSystem,
     });
 
     if (!postValidation.isValid) {

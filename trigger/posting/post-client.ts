@@ -23,8 +23,14 @@ import type {
   TwitterConfiguration,
   YoutubeConfiguration,
 } from "./post.types";
+import { extractPlatformError } from "./platform-error";
 
 export class PostClient {
+  // Platforms declare which PostMedia["type"] values they can publish.
+  // Default excludes "document" (PDF) — most platforms have no
+  // representation for it and would otherwise silently mishandle it.
+  supportedMediaTypes: string[] = ["image", "video"];
+
   constructor(
     _supabaseClient: SupabaseClient,
     _appCredentials: PlatformAppCredentials,
@@ -167,13 +173,6 @@ export class PostClient {
     await fsp.unlink(filePath).catch(() => undefined);
   }
 
-  // Meta Graph API OAuthException (code 190) subcodes that mean the
-  // session/token is permanently dead and will never succeed on retry:
-  // 460 = password changed, 463 = expired, 467 = invalid, 458/490 = deauthorized
-  private static readonly TERMINAL_AUTH_ERROR_SUBCODES = new Set([
-    458, 460, 463, 467, 490,
-  ]);
-
   private static readonly TERMINAL_AUTH_ERROR_KEYWORDS = [
     "session has been invalidated",
     "sessions for the user are not allowed because the user is not a confirmed user",
@@ -182,29 +181,24 @@ export class PostClient {
   ];
 
   protected getErrorMessage(error: any): string {
-    return (
-      error?.response?.data?.error?.message ||
-      error?.message ||
-      "Unknown error"
-    );
+    return extractPlatformError(error).message;
   }
 
   protected isTerminalAuthError(error: any): boolean {
-    const graphError = error?.response?.data?.error;
+    const platformError = extractPlatformError(error);
+    const graphError = (platformError.data as any)?.error;
     const code = graphError?.code;
-    const subcode = graphError?.error_subcode;
-    const message = this.getErrorMessage(error).toLowerCase();
-
-    const hasTerminalSubcode =
-      code === 190 &&
-      subcode !== undefined &&
-      PostClient.TERMINAL_AUTH_ERROR_SUBCODES.has(subcode);
+    const message = platformError.message.toLowerCase();
 
     const hasTerminalKeyword = PostClient.TERMINAL_AUTH_ERROR_KEYWORDS.some(
       (kw) => message.includes(kw),
     );
 
-    return hasTerminalSubcode || hasTerminalKeyword;
+    return (
+      platformError.status === 401 ||
+      code === 190 ||
+      hasTerminalKeyword
+    );
   }
 
   protected buildAuthErrorMessage(error: any): string {

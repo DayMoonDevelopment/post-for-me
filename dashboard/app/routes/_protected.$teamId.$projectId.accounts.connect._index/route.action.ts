@@ -124,26 +124,78 @@ export const action = withSupabase(
       requestBody.external_id = externalId;
     }
 
-    const response = await fetch(`${API_URL}/v1/social-accounts/auth-url`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    try {
+      const response = await fetch(`${API_URL}/v1/social-accounts/auth-url`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("API Error:", errorText);
+      if (!response.ok) {
+        const errorText = await response.text();
+        const fallbackError = "Connection failed";
+
+        let errorMessage = fallbackError;
+        try {
+          const parsedError = JSON.parse(errorText) as {
+            message?: string | string[];
+            error?: string;
+          };
+
+          if (Array.isArray(parsedError.message)) {
+            errorMessage = parsedError.message.join(", ");
+          } else {
+            errorMessage =
+              parsedError.message || parsedError.error || fallbackError;
+          }
+        } catch {
+          if (errorText.trim()) {
+            errorMessage = errorText;
+          }
+        }
+
+        console.error("API Error:", errorText);
+
+        if (requiresCustomAuth) {
+          return {
+            success: false,
+            toast_msg: errorMessage,
+            errors: {
+              submit: errorMessage,
+            },
+          };
+        }
+
+        return redirect(
+          `/${params.teamId}/${params.projectId}/accounts/connect?error=${encodeURIComponent(errorMessage)}`
+        );
+      }
+
+      const responseData = await response.json();
+
+      return redirect(responseData.url);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Connection failed";
+
+      console.error("Failed to generate auth URL:", error);
+
+      if (requiresCustomAuth) {
+        return {
+          success: false,
+          toast_msg: errorMessage,
+          errors: {
+            submit: errorMessage,
+          },
+        };
+      }
 
       return redirect(
-        `/${params.teamId}/${params.projectId}/accounts/connect?error=Connection failed`
+        `/${params.teamId}/${params.projectId}/accounts/connect?error=${encodeURIComponent(errorMessage)}`
       );
     }
-
-    const responseData = await response.json();
-
-    return redirect(responseData.url);
   })
 );

@@ -3,6 +3,13 @@ import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
+import { normalizePlatform } from "../../lib/platform.utils";
+import {
+  compressJpegToLimit,
+  computeCropDimensions,
+  resolveInstagramMinAspectRatio,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
 import {
   InstagramConfiguration,
   PlatformAppCredentials,
@@ -11,11 +18,17 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
+import {
+  extractPlatformError,
+  wrapPlatformError,
+  wrapResponseDataError,
+  PlatformApiError,
+} from "../platform-error";
 
 export class InstagramPostClient extends PostClient {
   #maxItems = 10;
   #maxFileSize = 8 * 1024 * 1024;
-  #minAspectRatio = 4 / 5;
+  #minAspectRatio = 3 / 4;
   #maxAspectRatio = 1.91;
   #storiesMinAspectRatio = 9 / 16;
   #reelsMinAspectRatio = 9 / 16;
@@ -193,6 +206,7 @@ export class InstagramPostClient extends PostClient {
       }
 
       let platformId: string | null = null;
+      let lastPublishError: unknown;
       const maxPublishAttempts = 15;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
@@ -216,8 +230,9 @@ export class InstagramPostClient extends PostClient {
             },
           );
           if (publishResponse.data.error) {
-            throw new Error(
-              `Failed to publish: ${publishResponse.data.error.message}`,
+            throw wrapResponseDataError(
+              publishResponse.data,
+              "Failed to publish",
             );
           }
 
@@ -229,8 +244,11 @@ export class InstagramPostClient extends PostClient {
             throw error;
           }
 
+          lastPublishError = error;
+
+          const platformError = extractPlatformError(error);
           console.log(
-            `Status: ${error.response?.status} Error: ${error.response?.data?.error?.message}`,
+            `Status: ${platformError.status} Error: ${platformError.message}`,
           );
           console.log("Waiting 5 secs");
           const waited = await this.#waitWithTaskBudget({
@@ -249,6 +267,13 @@ export class InstagramPostClient extends PostClient {
       }
 
       if (!platformId) {
+        if (lastPublishError) {
+          throw wrapPlatformError(
+            lastPublishError,
+            "Unable to publish media, please try again",
+          );
+        }
+
         throw new Error(
           "Unknown Error: Unable to publish media, please try again.",
         );
@@ -278,32 +303,29 @@ export class InstagramPostClient extends PostClient {
     } catch (error) {
       console.error("Error posting to Instagram:", error);
 
-      if (error.response?.status === 401 || this.isTerminalAuthError(error)) {
+      const platformError = extractPlatformError(error);
+      const errorDetails = {
+        error: platformError.data ?? { message: platformError.message },
+        requests: this.#requests,
+        responses: this.#responses,
+      };
+
+      if (this.isTerminalAuthError(error)) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
           error_message: this.buildAuthErrorMessage(error),
-          details: {
-            error,
-            requests: this.#requests,
-            responses: this.#responses,
-          },
+          details: errorDetails,
         };
       }
 
       return {
         success: false,
-        error_message: `Failed to post to Instagram : ${
-          error.response?.data?.error?.message || error.message
-        }`,
+        error_message: `Failed to post to Instagram : ${platformError.message}`,
         post_id: postId,
         provider_connection_id: account.id,
-        details: {
-          error,
-          requests: this.#requests,
-          responses: this.#responses,
-        },
+        details: errorDetails,
       };
     } finally {
       this.#postStartedAtMs = null;
@@ -339,7 +361,12 @@ export class InstagramPostClient extends PostClient {
       signedUrl = await this.getSignedUrlForFile(medium);
       if (medium.thumbnail_url) {
         const transformedThumbnail = await this.#transformImage({
-          medium: { id: medium.id, url: medium.thumbnail_url, type: "image" },
+          medium: {
+            id: medium.id,
+            url: medium.thumbnail_url,
+            type: "image",
+            skip_processing: medium.skip_processing,
+          },
           options: {
             placement: platformConfig?.placement,
             is_feed: platformConfig?.share_to_feed ?? false,
@@ -416,7 +443,9 @@ export class InstagramPostClient extends PostClient {
 
         if (medium.tags && medium.tags.length > 0) {
           createMediaParams.product_tags = medium.tags
-            .filter((t) => t.platform == "instagram" && t.type == "product")
+            .filter(
+              (t) => normalizePlatform(t.platform) == "instagram" && t.type == "product",
+            )
             .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
         }
 
@@ -425,7 +454,9 @@ export class InstagramPostClient extends PostClient {
 
     if (medium.tags && medium.tags.length > 0) {
       createMediaParams.user_tags = medium.tags
-        .filter((t) => t.platform == "instagram" && t.type == "user")
+        .filter(
+          (t) => normalizePlatform(t.platform) == "instagram" && t.type == "user",
+        )
         .map((t) => ({
           username: t.id,
           x: t.x,
@@ -472,6 +503,8 @@ export class InstagramPostClient extends PostClient {
           medium,
           options: {
             firstImage: { width: firstImageWidth, height: firstImageHeight },
+            placement: platformConfig?.placement,
+            is_feed: true,
           },
         });
 
@@ -503,7 +536,9 @@ export class InstagramPostClient extends PostClient {
 
       if (!isVideo && medium.tags && medium.tags.length > 0) {
         itemPayload.user_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "user")
+          .filter(
+            (t) => normalizePlatform(t.platform) == "instagram" && t.type == "user",
+          )
           .map((t) => ({
             username: t.id,
             x: t.x,
@@ -513,7 +548,9 @@ export class InstagramPostClient extends PostClient {
 
       if (medium.tags && medium.tags.length > 0) {
         itemPayload.product_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "product")
+          .filter(
+            (t) => normalizePlatform(t.platform) == "instagram" && t.type == "product",
+          )
           .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
       }
 
@@ -564,8 +601,9 @@ export class InstagramPostClient extends PostClient {
     this.#responses.push({ createCarouselResponse: carouselResponse.data });
 
     if (carouselResponse.data.error) {
-      throw new Error(
-        `Failed to create carousel container: ${carouselResponse.data.error.message}`,
+      throw wrapResponseDataError(
+        carouselResponse.data,
+        "Failed to create carousel container",
       );
     }
 
@@ -587,6 +625,8 @@ export class InstagramPostClient extends PostClient {
     responseLogKey: string;
     mediaLabel: string;
   }): Promise<string> {
+    let lastError: unknown;
+
     for (let attempt = 1; attempt <= this.#mediaRetryAttempts; attempt++) {
       if (!this.#hasTaskTimeRemaining()) {
         break;
@@ -613,7 +653,10 @@ export class InstagramPostClient extends PostClient {
         });
 
         if (createMediaResponse.data.error) {
-          throw new Error(createMediaResponse.data.error.message as string);
+          throw wrapResponseDataError(
+            createMediaResponse.data,
+            `Failed to create ${mediaLabel}`,
+          );
         }
 
         const containerId = createMediaResponse.data.id as string | undefined;
@@ -626,6 +669,8 @@ export class InstagramPostClient extends PostClient {
 
         return containerId;
       } catch (error) {
+        lastError = error;
+
         if (error?.response?.data) {
           this.#responses.push({
             [responseLogKey]: error.response.data,
@@ -647,8 +692,9 @@ export class InstagramPostClient extends PostClient {
         }
 
         if (attempt === this.#mediaRetryAttempts) {
-          throw new Error(
-            `Failed to process ${mediaLabel} after ${this.#mediaRetryAttempts} attempts: ${errorMessage}`,
+          throw wrapPlatformError(
+            error,
+            `Failed to process ${mediaLabel} after ${this.#mediaRetryAttempts} attempts`,
           );
         }
 
@@ -663,7 +709,16 @@ export class InstagramPostClient extends PostClient {
       }
     }
 
-    throw new Error(`Failed to process ${mediaLabel}`);
+    if (lastError) {
+      throw wrapPlatformError(
+        lastError,
+        `Failed to process ${mediaLabel}: task time budget exhausted`,
+      );
+    }
+
+    throw new Error(
+      `Failed to process ${mediaLabel}: task time budget exhausted`,
+    );
   }
 
   async #waitForMediaStatus({
@@ -675,11 +730,25 @@ export class InstagramPostClient extends PostClient {
     containerId: string;
     mediaLabel: string;
   }): Promise<void> {
-    let statusData;
+    let statusData: any;
+
+    const throwBudgetExhausted = (): never => {
+      throw new PlatformApiError(
+        `Task time budget exhausted while waiting for ${mediaLabel} status. Last status: ${JSON.stringify(
+          statusData,
+        )}`,
+        {
+          message: statusData?.status
+            ? `Task time budget exhausted: ${statusData.status}`
+            : `Task time budget exhausted while waiting for ${mediaLabel} status`,
+          data: statusData,
+        },
+      );
+    };
 
     for (let attempt = 1; attempt <= this.#mediaStatusMaxAttempts; attempt++) {
       if (!this.#hasTaskTimeRemaining()) {
-        return;
+        throwBudgetExhausted();
       }
 
       console.log(
@@ -697,7 +766,7 @@ export class InstagramPostClient extends PostClient {
         `${this.getApiBaseUrl(account)}/${containerId}`,
         {
           params: {
-            fields: "status_code",
+            fields: "status_code,status",
             access_token: account.access_token,
           },
         },
@@ -713,7 +782,15 @@ export class InstagramPostClient extends PostClient {
       }
 
       if (statusData.status_code === "ERROR") {
-        throw new Error(`Upload failed: ${JSON.stringify(statusData)}`);
+        throw new PlatformApiError(
+          `Upload failed: ${JSON.stringify(statusData)}`,
+          {
+            message: statusData.status
+              ? `Upload failed: ${statusData.status}`
+              : "Upload failed",
+            data: statusData,
+          },
+        );
       }
 
       const delay = this.#getRetryDelayMs(attempt);
@@ -728,14 +805,20 @@ export class InstagramPostClient extends PostClient {
       });
 
       if (!waited) {
-        return;
+        throwBudgetExhausted();
       }
     }
 
-    throw new Error(
+    throw new PlatformApiError(
       `Max attempts reached. Failed to process media. Last status: ${JSON.stringify(
         statusData,
       )}`,
+      {
+        message: statusData?.status
+          ? `Max attempts reached: ${statusData.status}`
+          : "Max attempts reached",
+        data: statusData,
+      },
     );
   }
 
@@ -825,8 +908,9 @@ export class InstagramPostClient extends PostClient {
         });
 
         if (mediaResponse.data.error) {
-          throw new Error(
-            `Failed to fetch media details: ${mediaResponse.data.error.message as string}`,
+          throw wrapResponseDataError(
+            mediaResponse.data,
+            "Failed to fetch media details",
           );
         }
 
@@ -896,6 +980,10 @@ export class InstagramPostClient extends PostClient {
   }> {
     const signedUrl = await this.getSignedUrlForFile(medium);
 
+    if (shouldSkipProcessing(medium)) {
+      return { signedUrl, width: undefined, height: undefined };
+    }
+
     const response = await axios({
       url: signedUrl,
       method: "GET",
@@ -914,12 +1002,13 @@ export class InstagramPostClient extends PostClient {
     let targetWidth = metadata.width;
     let targetHeight = metadata.height;
 
-    const minAspectRatio =
-      options?.placement === "stories"
-        ? this.#storiesMinAspectRatio
-        : !options?.is_feed
-          ? this.#reelsMinAspectRatio
-          : this.#minAspectRatio;
+    const minAspectRatio = resolveInstagramMinAspectRatio({
+      placement: options?.placement,
+      isFeed: options?.is_feed,
+      feedMinAspectRatio: this.#minAspectRatio,
+      storiesMinAspectRatio: this.#storiesMinAspectRatio,
+      reelsMinAspectRatio: this.#reelsMinAspectRatio,
+    });
 
     if (options?.firstImage?.width && options?.firstImage?.height) {
       const firstImageRatio =
@@ -930,13 +1019,12 @@ export class InstagramPostClient extends PostClient {
         targetHeight = options?.firstImage?.height;
       }
     } else {
-      if (aspectRatio > this.#maxAspectRatio) {
-        // Too wide → crop width to fit 1.91:1
-        targetWidth = Math.round(height * this.#maxAspectRatio);
-      } else if (aspectRatio < minAspectRatio) {
-        // Too tall → crop height to fit min aspect ratio
-        targetHeight = Math.round(width / minAspectRatio);
-      }
+      ({ width: targetWidth, height: targetHeight } = computeCropDimensions({
+        width,
+        height,
+        minAspectRatio,
+        maxAspectRatio: this.#maxAspectRatio,
+      }));
     }
 
     // Process image with Sharp (resize & compress)
@@ -947,17 +1035,10 @@ export class InstagramPostClient extends PostClient {
       .toBuffer();
 
     // Ensure size is within Instagram limits
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
