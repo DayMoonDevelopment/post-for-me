@@ -146,6 +146,46 @@ const unkey = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
 
 const UNKEY_MAX_RETRIES = 3;
 
+export type ProcessedMedium = {
+  id: string;
+  provider?: string | null;
+  provider_connection_id?: string | null;
+  url: string;
+  thumbnail_url: string;
+  thumbnail_timestamp_ms?: number | null;
+  type: string;
+  alt_text?: string | null;
+  tags?: UserTag[] | null;
+  skip_processing?: boolean | null;
+  position: number;
+};
+
+// Videos are routed through ffmpeg processing separately from images, but
+// that split must never determine final publish order — the caller
+// re-sorts by `position` via `orderProcessedMedia` once processing
+// completes. See PFM-1141/1129/1131: concatenating images-then-videos
+// silently discarded the original interleaving of mixed-media posts.
+export function splitLocalizedMediaForProcessing(
+  succesfulMedia: ProcessedMedium[],
+): { readyMedia: ProcessedMedium[]; videosToProcess: ProcessedMedium[] } {
+  const postImages = succesfulMedia.filter((medium) => medium.type !== "video");
+  const postVideos = succesfulMedia.filter((medium) => medium.type === "video");
+
+  return {
+    readyMedia: [...postImages, ...postVideos.filter((m) => m.skip_processing)],
+    videosToProcess: postVideos.filter((m) => !m.skip_processing),
+  };
+}
+
+export function orderProcessedMedia(
+  readyMedia: ProcessedMedium[],
+  processedVideos: ProcessedMedium[],
+): ProcessedMedium[] {
+  return [...readyMedia, ...processedVideos].sort(
+    (a, b) => a.position - b.position,
+  );
+}
+
 export const processPost = task({
   id: "process-post",
   maxDuration: 3600,
@@ -245,24 +285,13 @@ export const processPost = task({
       }
 
       await tags.add(`${project.team_id}`);
-      const postMedia: {
-        id: string;
-        provider?: string | null;
-        provider_connection_id?: string | null;
-        url: string;
-        thumbnail_url: string;
-        thumbnail_timestamp_ms?: number | null;
-        type: string;
-        alt_text?: string | null;
-        tags?: UserTag[] | null;
-        skip_processing?: boolean | null;
-      }[] = [];
+      const postMedia: ProcessedMedium[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
         logger.info("Localizing Media", { media: post.social_post_media });
 
         const localizedMedia = await tasks.batchTriggerAndWait(
           "process-post-medium",
-          post.social_post_media.map((medium) => ({
+          post.social_post_media.map((medium, position) => ({
             payload: {
               medium: {
                 id: medium.id,
@@ -274,6 +303,7 @@ export const processPost = task({
                 alt_text: medium.alt_text,
                 tags: medium.tags,
                 skip_processing: medium.skip_processing,
+                position,
               },
             },
           })),
@@ -285,17 +315,10 @@ export const processPost = task({
           .filter((run) => run.ok)
           .map((run) => run.output);
 
-        const postImages = succesfulMedia.filter(
-          (medium) => medium.type !== "video",
-        );
-        const postVideos = succesfulMedia.filter(
-          (medium) => medium.type === "video",
-        );
+        const { readyMedia, videosToProcess } =
+          splitLocalizedMediaForProcessing(succesfulMedia);
 
-        postMedia.push(...postImages);
-        postMedia.push(...postVideos.filter((m) => m.skip_processing));
-
-        const videosToProcess = postVideos.filter((m) => !m.skip_processing);
+        let processedVideos: ProcessedMedium[] = [];
 
         if (videosToProcess.length > 0) {
           logger.info("Processing Videos");
@@ -310,16 +333,16 @@ export const processPost = task({
 
           logger.info("Processing Videos Complete", { processVideosResult });
 
-          postMedia.push(
-            ...processVideosResult.runs
-              .filter((run) => run.ok)
-              .map((run) => run.output),
-          );
+          processedVideos = processVideosResult.runs
+            .filter((run) => run.ok)
+            .map((run) => run.output);
 
           logger.info("Updated post media with processed video URLs", {
-            postMedia,
+            processedVideos,
           });
         }
+
+        postMedia.push(...orderProcessedMedia(readyMedia, processedVideos));
 
         if (postMedia.length == 0) {
           logger.error("All Media Failed");
@@ -385,6 +408,16 @@ export const processPost = task({
                   break;
               }
 
+              break;
+            case "x":
+              appCredentials = project.social_provider_app_credentials.find(
+                (credential) =>
+                  credential.provider ===
+                  (account.social_provider_metadata?.connection_type ===
+                  "oauth2"
+                    ? "x_oauth2"
+                    : "x"),
+              ) as PlatformAppCredentials;
               break;
             default:
               appCredentials = project.social_provider_app_credentials.find(

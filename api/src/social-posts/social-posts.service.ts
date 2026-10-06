@@ -16,6 +16,7 @@ import {
 import { Database, Json } from '../../supabase';
 import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from '../social-post-meters/social-post-meters.service';
+import { normalizePlatform } from '../lib/platform.utils';
 
 type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
 
@@ -614,7 +615,7 @@ export class SocialPostsService {
 
       query.in(
         'social_post_provider_connections.social_provider_connections.provider',
-        values.map((v) => v as ProviderTypeEnum),
+        values.map((v) => normalizePlatform(v) as ProviderTypeEnum),
       );
     }
 

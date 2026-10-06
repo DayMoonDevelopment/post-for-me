@@ -1,13 +1,12 @@
 import { Link, useLoaderData } from "react-router";
 
-import { getProviderLabel } from "~/lib/utils";
-
 import { BrandIcon } from "~/components/brand-icon";
 
 import { Button } from "~/ui/button";
 
 import type { Route } from "./+types/route";
 import { useForm } from "~/hooks/use-form";
+import { getSetupProviderLabel } from "./_provider-label";
 
 const allPlatforms = [
   "facebook",
@@ -15,6 +14,7 @@ const allPlatforms = [
   "instagram_w_facebook",
   "youtube",
   "x",
+  "x_oauth2",
   "pinterest",
   "linkedin",
   "threads",
@@ -53,7 +53,7 @@ export function UnstartedGrid() {
           />
 
           <h3 className="text-lg font-semibold leading-tight">
-            {getProviderLabel(provider)}
+            {getSetupProviderLabel(provider)}
           </h3>
 
           {isSystem ? (
