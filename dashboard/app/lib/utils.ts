@@ -59,6 +59,7 @@ export const getProviderLabel = (provider: string) => {
     instagram: "Instagram",
     youtube: "YouTube",
     x: "X (Twitter)",
+    x_oauth2: "X (Twitter) OAuth 2.0",
     bluesky: "Bluesky",
     pinterest: "Pinterest",
     linkedin: "LinkedIn",

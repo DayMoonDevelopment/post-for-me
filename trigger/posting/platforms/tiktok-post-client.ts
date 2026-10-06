@@ -1,8 +1,13 @@
+import { createReadStream } from "fs";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
+import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -386,7 +391,7 @@ export class TikTokPostClient extends PostClient {
     postUrl: string;
     payload: any;
     account: SocialAccount;
-  }) {
+  }): Promise<{ publishId: string; uploadUrl?: string }> {
     this.#requests.push({
       publishIdRequest: {
         postUrl: postUrl,
@@ -405,9 +410,119 @@ export class TikTokPostClient extends PostClient {
       publishIdResponse: initResponse.data,
     });
 
-    const { publish_id } = initResponse.data.data;
+    const { publish_id, upload_url } = initResponse.data.data;
 
-    return publish_id;
+    return { publishId: publish_id, uploadUrl: upload_url };
+  }
+
+  #planVideoUploadChunks(size: number): {
+    chunkSize: number;
+    totalChunkCount: number;
+  } {
+    if (size <= 0) {
+      throw new Error(`Invalid TikTok video size: ${size}`);
+    }
+
+    const minChunkSize = 5 * 1024 * 1024;
+    const maxChunkSize = 64 * 1024 * 1024;
+
+    // Files smaller than 5MB must be uploaded as a whole.
+    if (size < minChunkSize) {
+      return { chunkSize: size, totalChunkCount: 1 };
+    }
+
+    // Files up to 64MB can be uploaded as a single chunk.
+    if (size <= maxChunkSize) {
+      return { chunkSize: size, totalChunkCount: 1 };
+    }
+
+    // Files over 64MB must use multiple chunks. Choose a chunk size that keeps
+    // chunks within bounds, then compute total_chunk_count as floor(size/chunk).
+    const minChunkCount = Math.ceil(size / maxChunkSize);
+
+    if (minChunkCount > 1000) {
+      throw new Error(
+        `TikTok upload requires too many chunks (${minChunkCount}). Max is 1000.`,
+      );
+    }
+
+    const chunkSize = Math.max(
+      minChunkSize,
+      Math.min(maxChunkSize, Math.floor(size / minChunkCount)),
+    );
+    const totalChunkCount = Math.floor(size / chunkSize);
+
+    if (totalChunkCount < 2) {
+      throw new Error(
+        `TikTok upload requires multiple chunks for files over 64MB (size=${size}, chunk_size=${chunkSize}, total_chunk_count=${totalChunkCount})`,
+      );
+    }
+
+    if (totalChunkCount > 1000) {
+      throw new Error(
+        `TikTok upload exceeds maximum chunk count (total_chunk_count=${totalChunkCount}). Max is 1000.`,
+      );
+    }
+
+    return { chunkSize, totalChunkCount };
+  }
+
+  #resolveVideoContentType(mimeType: string): string {
+    const allowedContentTypes = ["video/mp4", "video/quicktime", "video/webm"];
+    const baseMimeType = mimeType.split(";")[0].trim().toLowerCase();
+    return allowedContentTypes.includes(baseMimeType)
+      ? baseMimeType
+      : "video/mp4";
+  }
+
+  async #uploadVideoFile({
+    filePath,
+    uploadUrl,
+    mimeType,
+    size,
+  }: {
+    filePath: string;
+    uploadUrl: string;
+    mimeType: string;
+    size: number;
+  }): Promise<void> {
+    if (size <= 0) {
+      throw new Error(
+        `Cannot upload video to TikTok: downloaded file is empty (${size} bytes)`,
+      );
+    }
+
+    const contentType = this.#resolveVideoContentType(mimeType);
+    const { chunkSize, totalChunkCount } = this.#planVideoUploadChunks(size);
+
+    for (let chunkIndex = 0; chunkIndex < totalChunkCount; chunkIndex++) {
+      const start = chunkIndex * chunkSize;
+      const isLastChunk = chunkIndex === totalChunkCount - 1;
+      const end = isLastChunk ? size - 1 : start + chunkSize - 1;
+      const contentRange = `bytes ${start}-${end}/${size}`;
+
+      this.#requests.push({
+        videoUploadRequest: { chunkIndex, totalChunkCount, contentRange },
+      });
+
+      const uploadResponse = await axios.put(
+        uploadUrl,
+        createReadStream(filePath, { start, end }),
+        {
+          headers: {
+            "Content-Type": contentType,
+            "Content-Length": end - start + 1,
+            "Content-Range": contentRange,
+          },
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+        },
+      );
+
+      this.#responses.push({
+        videoUploadResponse: { chunkIndex, status: uploadResponse.status },
+      });
+    }
   }
 
   async #processVideo({
@@ -423,75 +538,99 @@ export class TikTokPostClient extends PostClient {
     coverTimestamp: number | undefined;
     account: SocialAccount;
   }) {
-    // Get the signed URL for the file
-    const signedUrl = await this.getSignedUrlForFile(medium);
+    const { filePath, mimeType, size } = await this.downloadToTempFile(
+      medium.url,
+      { prefix: "tiktok" },
+    );
 
-    if (platformData?.is_draft) {
-      return await this.#getPublishId({
-        postUrl:
-          "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-        payload: {
-          post_info: {
-            title: caption,
-            video_cover_timestamp_ms: coverTimestamp
-              ? coverTimestamp
-              : undefined,
-            is_aigc:
-              platformData?.is_ai_generated === undefined
-                ? false
-                : platformData.is_ai_generated,
+    try {
+      const { chunkSize, totalChunkCount } = this.#planVideoUploadChunks(size);
+
+      const sourceInfo = {
+        source: "FILE_UPLOAD",
+        video_size: size,
+        chunk_size: chunkSize,
+        total_chunk_count: totalChunkCount,
+      };
+
+      let publishId: string;
+      let uploadUrl: string | undefined;
+
+      if (platformData?.is_draft) {
+        ({ publishId, uploadUrl } = await this.#getPublishId({
+          postUrl:
+            "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
+          payload: {
+            post_info: {
+              title: caption,
+              video_cover_timestamp_ms: coverTimestamp
+                ? coverTimestamp
+                : undefined,
+              is_aigc:
+                platformData?.is_ai_generated === undefined
+                  ? false
+                  : platformData.is_ai_generated,
+            },
+            source_info: sourceInfo,
           },
-          source_info: {
-            source: "PULL_FROM_URL",
-            video_url: signedUrl,
+          account,
+        }));
+      } else {
+        ({ publishId, uploadUrl } = await this.#getPublishId({
+          postUrl: "https://open.tiktokapis.com/v2/post/publish/video/init/",
+          payload: {
+            post_info: {
+              title: caption,
+              privacy_level:
+                platformData.privacy_status == "private"
+                  ? "SELF_ONLY"
+                  : "PUBLIC_TO_EVERYONE",
+              disable_duet:
+                platformData.allow_duet === undefined
+                  ? false
+                  : !platformData.allow_duet,
+              disable_comment:
+                platformData.allow_comment === undefined
+                  ? false
+                  : !platformData.allow_comment,
+              disable_stitch:
+                platformData.allow_stitch === undefined
+                  ? false
+                  : !platformData.allow_stitch,
+              video_cover_timestamp_ms: coverTimestamp
+                ? coverTimestamp
+                : undefined,
+              brand_content_toggle:
+                platformData.disclose_branded_content === undefined
+                  ? false
+                  : platformData.disclose_branded_content,
+              brand_organic_toggle:
+                platformData.disclose_your_brand === undefined
+                  ? false
+                  : platformData.disclose_your_brand,
+              is_aigc:
+                platformData.is_ai_generated === undefined
+                  ? false
+                  : platformData.is_ai_generated,
+            },
+            source_info: sourceInfo,
           },
-        },
-        account,
-      });
+          account,
+        }));
+      }
+
+      if (!uploadUrl) {
+        throw new Error(
+          "TikTok did not return an upload_url for FILE_UPLOAD source",
+        );
+      }
+
+      await this.#uploadVideoFile({ filePath, uploadUrl, mimeType, size });
+
+      return publishId;
+    } finally {
+      await this.unlinkQuiet(filePath);
     }
-
-    return await this.#getPublishId({
-      postUrl: "https://open.tiktokapis.com/v2/post/publish/video/init/",
-      payload: {
-        post_info: {
-          title: caption,
-          privacy_level:
-            platformData.privacy_status == "private"
-              ? "SELF_ONLY"
-              : "PUBLIC_TO_EVERYONE",
-          disable_duet:
-            platformData.allow_duet === undefined
-              ? false
-              : !platformData.allow_duet,
-          disable_comment:
-            platformData.allow_comment === undefined
-              ? false
-              : !platformData.allow_comment,
-          disable_stitch:
-            platformData.allow_stitch === undefined
-              ? false
-              : !platformData.allow_stitch,
-          video_cover_timestamp_ms: coverTimestamp ? coverTimestamp : undefined,
-          brand_content_toggle:
-            platformData.disclose_branded_content === undefined
-              ? false
-              : platformData.disclose_branded_content,
-          brand_organic_toggle:
-            platformData.disclose_your_brand === undefined
-              ? false
-              : platformData.disclose_your_brand,
-          is_aigc:
-            platformData.is_ai_generated === undefined
-              ? false
-              : platformData.is_ai_generated,
-        },
-        source_info: {
-          source: "PULL_FROM_URL",
-          video_url: signedUrl,
-        },
-      },
-      account,
-    });
   }
 
   async #processImages({
@@ -518,7 +657,7 @@ export class TikTokPostClient extends PostClient {
       photoUrls.push(signedUrl);
     }
 
-    return await this.#getPublishId({
+    const { publishId } = await this.#getPublishId({
       postUrl: "https://open.tiktokapis.com/v2/post/publish/content/init/",
       payload: {
         post_info: {
@@ -555,6 +694,8 @@ export class TikTokPostClient extends PostClient {
       },
       account,
     });
+
+    return publishId;
   }
 
   async #getErrorDetails(error: any) {
@@ -579,6 +720,10 @@ export class TikTokPostClient extends PostClient {
 
   async #transformImage(medium: PostMedia): Promise<string> {
     const signedUrl = await this.getSignedUrlForFile(medium);
+
+    if (shouldSkipProcessing(medium)) {
+      return signedUrl;
+    }
 
     const response = await axios({
       url: signedUrl,
@@ -622,17 +767,10 @@ export class TikTokPostClient extends PostClient {
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";

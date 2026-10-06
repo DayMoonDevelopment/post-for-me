@@ -43,6 +43,7 @@ import { tasks } from '@trigger.dev/sdk';
 import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
 import { SupabaseService } from '../supabase/supabase.service';
 import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
+import { getCredentialsSetupPlatformLabel } from './helper/credentials-setup-platform.helper';
 
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
@@ -213,6 +214,47 @@ export class SocialAccountsController {
         }
 
         break;
+      case 'x':
+        switch (createAuthUrlInput.platform_data?.x?.connection_type) {
+          case 'oauth1': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                'x',
+                user.projectId,
+              );
+            break;
+          }
+          case 'oauth2': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                'x_oauth2',
+                user.projectId,
+              );
+            break;
+          }
+          default: {
+            const credentials =
+              await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
+                [createAuthUrlInput.platform, 'x_oauth2'],
+                user.projectId,
+              );
+
+            if (credentials) {
+              if (credentials.length > 1) {
+                throw new HttpException(
+                  'X connection_type is required. Use the value "oauth1" to use OAuth 1.0, use the value "oauth2" to use OAuth 2.0.',
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+
+              socialProviderAppCredentials = credentials[0];
+            }
+
+            break;
+          }
+        }
+
+        break;
       default:
         socialProviderAppCredentials =
           await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
@@ -223,8 +265,13 @@ export class SocialAccountsController {
     }
 
     if (!socialProviderAppCredentials) {
+      const credentialsSetupPlatform = getCredentialsSetupPlatformLabel({
+        platform: createAuthUrlInput.platform,
+        platformData: createAuthUrlInput.platform_data,
+      });
+
       throw new HttpException(
-        'Social provider app credentials not found',
+        `Social provider app credentials not found for ${credentialsSetupPlatform}. Please set up or enable this platform in Project Setup.`,
         HttpStatus.NOT_FOUND,
       );
     }

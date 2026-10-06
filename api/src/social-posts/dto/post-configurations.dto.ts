@@ -362,7 +362,11 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
       'Per-language localizations for the video title and description. Keys are BCP-47 language tags (e.g. "fr", "es"). Maps to localizations on the YouTube Data API videos resource.',
     type: 'object',
     additionalProperties: {
-      $ref: '#/components/schemas/YoutubeLocalizationDto',
+      type: 'object',
+      properties: {
+        title: { type: 'string', nullable: true },
+        description: { type: 'string', nullable: true },
+      },
     },
     nullable: true,
   })
@@ -687,7 +691,11 @@ export class AccountConfigurationDetailsDto {
       'Per-language localizations for the video title and description. Keys are BCP-47 language tags (e.g. "fr", "es"). Maps to localizations on the YouTube Data API videos resource.',
     type: 'object',
     additionalProperties: {
-      $ref: '#/components/schemas/YoutubeLocalizationDto',
+      type: 'object',
+      properties: {
+        title: { type: 'string', nullable: true },
+        description: { type: 'string', nullable: true },
+      },
     },
     nullable: true,
   })
