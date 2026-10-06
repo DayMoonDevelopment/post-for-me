@@ -15,6 +15,7 @@ import {
   SocialAccountMetadata,
 } from './dto/create-social-account.dto';
 import { Database } from '../../supabase';
+import { normalizePlatform } from '../lib/platform.utils';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -59,7 +60,7 @@ export class SocialAccountsService {
 
       query.in(
         'provider',
-        values.map((provider) => provider as ProviderEnum),
+        values.map((provider) => normalizePlatform(provider) as ProviderEnum),
       );
     }
 
@@ -292,7 +293,7 @@ export class SocialAccountsService {
       .upsert(
         {
           project_id: projectId,
-          provider: socialAccount.platform,
+          provider: normalizePlatform(socialAccount.platform) as ProviderEnum,
           social_provider_user_name: socialAccount.username,
           social_provider_user_id: socialAccount.user_id,
           external_id: socialAccount.external_id,

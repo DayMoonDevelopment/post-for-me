@@ -30,6 +30,7 @@ const defaultLabels = {
   facebook: { appId: "App ID", appSecret: "App Secret" },
   tiktok: { appId: "Client Key", appSecret: "Client Secret" },
   x: { appId: "Client ID", appSecret: "Client Secret" },
+  x_oauth2: { appId: "Client ID", appSecret: "Client Secret" },
   youtube: { appId: "Google Client ID", appSecret: "Google Client Secret" },
   linkedin: { appId: "Client ID", appSecret: "Client Secret" },
   pinterest: { appId: "App ID", appSecret: "App Secret" },

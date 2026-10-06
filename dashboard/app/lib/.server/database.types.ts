@@ -139,6 +139,7 @@ export type Database = {
       }
       social_post_media: {
         Row: {
+          alt_text: string | null
           created_at: string
           external_id: string | null
           id: string
@@ -154,6 +155,7 @@ export type Database = {
           url: string
         }
         Insert: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
@@ -169,6 +171,7 @@ export type Database = {
           url: string
         }
         Update: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
@@ -995,8 +998,8 @@ export type Database = {
       }
     }
     Functions: {
-      get_exceeded_team_usage_windows: {
-        Args: never
+      get_team_usage_windows_over_threshold: {
+        Args: { threshold_percent: number }
         Returns: {
           count: number
           end_at: string
@@ -1053,7 +1056,7 @@ export type Database = {
     }
     Enums: {
       delivery_type: "email"
-      notification_type: "usage_alert" | "general"
+      notification_type: "usage_alert" | "general" | "subscription_alert"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1072,6 +1075,7 @@ export type Database = {
         | "threads"
         | "tiktok_business"
         | "instagram_w_facebook"
+        | "x_oauth2"
       subscription_addon: "managed_system_credentials"
       webhook_event_status: "pending" | "processing" | "completed" | "failed"
       webhook_event_type:
@@ -1212,7 +1216,7 @@ export const Constants = {
   public: {
     Enums: {
       delivery_type: ["email"],
-      notification_type: ["usage_alert", "general"],
+      notification_type: ["usage_alert", "general", "subscription_alert"],
       social_post_status: [
         "draft",
         "scheduled",
@@ -1232,6 +1236,7 @@ export const Constants = {
         "threads",
         "tiktok_business",
         "instagram_w_facebook",
+        "x_oauth2",
       ],
       subscription_addon: ["managed_system_credentials"],
       webhook_event_status: ["pending", "processing", "completed", "failed"],

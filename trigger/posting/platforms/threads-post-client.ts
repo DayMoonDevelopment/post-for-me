@@ -9,6 +9,11 @@ import {
   PostResult,
   PlatformAppCredentials,
 } from "../post.types";
+import {
+  extractPlatformError,
+  wrapPlatformError,
+  wrapResponseDataError,
+} from "../platform-error";
 
 interface TokenRefreshResult {
   access_token: string;
@@ -112,6 +117,7 @@ export class ThreadsPostClient extends PostClient {
       }
 
       let platformId: string | null = null;
+      let lastPublishError: unknown;
       const maxPublishAttempts = 10;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
@@ -144,6 +150,12 @@ export class ThreadsPostClient extends PostClient {
           platformId = publishResponse.data.id;
         } catch (error: any) {
           if (error.response?.status === 400) {
+            lastPublishError = error;
+
+            if (this.isTerminalAuthError(error)) {
+              throw error;
+            }
+
             console.log(
               `Bad Request With Error: ${error.response?.data?.error?.message || "Unknown error"}`,
             );
@@ -159,6 +171,13 @@ export class ThreadsPostClient extends PostClient {
       }
 
       if (!platformId) {
+        if (lastPublishError) {
+          throw wrapPlatformError(
+            lastPublishError,
+            "Unable to publish media, please try again",
+          );
+        }
+
         throw new Error(
           "Unknown Error: Unable to publish media, please try again.",
         );
@@ -179,18 +198,21 @@ export class ThreadsPostClient extends PostClient {
     } catch (error: any) {
       console.error("Error posting to Threads:", error.response?.data || error);
 
+      const platformError = extractPlatformError(error);
+      const errorDetails = {
+        error: platformError.data ?? { message: platformError.message },
+        requests: this.#requests,
+        responses: this.#responses,
+      };
+
       // Handle specific error cases
-      if (error.response?.status === 401) {
+      if (this.isTerminalAuthError(error)) {
         return {
           success: false,
           provider_connection_id: account.id,
           post_id: postId,
-          error_message: "Account needs to be reconnected",
-          details: {
-            error,
-            requests: this.#requests,
-            responses: this.#responses,
-          },
+          error_message: this.buildAuthErrorMessage(error),
+          details: errorDetails,
         };
       }
 
@@ -198,12 +220,8 @@ export class ThreadsPostClient extends PostClient {
         success: false,
         provider_connection_id: account.id,
         post_id: postId,
-        error_message: "Failed to post to Threads",
-        details: {
-          error: error.response?.data || error.message,
-          requests: this.#requests,
-          responses: this.#responses,
-        },
+        error_message: `Failed to post to Threads: ${platformError.message}`,
+        details: errorDetails,
       };
     }
   }
@@ -269,6 +287,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
       },
@@ -285,6 +304,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
         {
@@ -350,6 +370,10 @@ export class ThreadsPostClient extends PostClient {
         attempts++;
       } catch (error: any) {
         if (error.response?.status === 400) {
+          if (this.isTerminalAuthError(error)) {
+            throw error;
+          }
+
           // If we get a 400 error, the media might be ready
           break;
         }
@@ -382,6 +406,7 @@ export class ThreadsPostClient extends PostClient {
           params: {
             media_type: isVideo ? "VIDEO" : "IMAGE",
             [isVideo ? "video_url" : "image_url"]: signedUrl,
+            alt_text: medium.alt_text,
             is_carousel_item: true,
           },
         },
@@ -393,6 +418,7 @@ export class ThreadsPostClient extends PostClient {
         {
           media_type: isVideo ? "VIDEO" : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           is_carousel_item: true,
         },
         {
@@ -470,8 +496,9 @@ export class ThreadsPostClient extends PostClient {
     this.#responses.push({ getPostUrlResponse: mediaResponse.data });
 
     if (mediaResponse.data.error) {
-      throw new Error(
-        `Failed to fetch media details: ${mediaResponse.data.error.message}`,
+      throw wrapResponseDataError(
+        mediaResponse.data,
+        "Failed to fetch media details",
       );
     }
 
