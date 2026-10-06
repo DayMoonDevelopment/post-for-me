@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useSubmit } from "react-router";
+import { useActionData, useNavigation, useSubmit } from "react-router";
 import * as z from "zod";
 
 import {
@@ -75,10 +75,15 @@ export function SocialAuthForm({
   onBack,
 }: SocialAuthFormProps) {
   const submit = useSubmit();
+  const navigation = useNavigation();
+  const actionData = useActionData() as
+    | { success?: boolean; toast_msg?: string }
+    | undefined;
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>(
     {}
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Dynamically create Zod schema based on provider fields
   const createFormSchema = (fields: FormField[]) => {
@@ -161,8 +166,21 @@ export function SocialAuthForm({
       form.reset(defaultValues);
       setShowPasswords({});
       setIsSubmitting(false);
+      setSubmitError(null);
     }
   }, [provider, form]);
+
+  useEffect(() => {
+    if (navigation.state === "idle") {
+      setIsSubmitting(false);
+    }
+  }, [navigation.state]);
+
+  useEffect(() => {
+    if (actionData?.success === false) {
+      setSubmitError(actionData.toast_msg || "Connection failed");
+    }
+  }, [actionData]);
 
   const togglePasswordVisibility = (fieldName: string) => {
     setShowPasswords((prev) => ({ ...prev, [fieldName]: !prev[fieldName] }));
@@ -171,6 +189,7 @@ export function SocialAuthForm({
   const onSubmit = (data: Record<string, string | string[]>) => {
     // Set submitting state
     setIsSubmitting(true);
+    setSubmitError(null);
 
     // Create FormData for submission
     const formData = new FormData();
@@ -297,6 +316,9 @@ export function SocialAuthForm({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <input type="hidden" name="provider" value={provider.id} />
             {provider.fields.map(renderField)}
+            {submitError ? (
+              <p className="text-sm text-destructive">{submitError}</p>
+            ) : null}
             <div className="flex gap-2 pt-4">
               <Button
                 type="button"

@@ -18,9 +18,8 @@ export const loader = withSupabase(async function ({
   let { provider } = params;
 
   const key =
-    provider?.toLowerCase() === "x"
-      ? (url.searchParams.get("oauth_token") as string)
-      : (url.searchParams.get("state") as string);
+    (url.searchParams.get("oauth_token") as string) ||
+    (url.searchParams.get("state") as string);
 
   if (!key) {
     return createResponse({
@@ -68,8 +67,16 @@ export const loader = withSupabase(async function ({
     provider = "instagram_w_facebook";
   }
 
+  if (provider === "x" && connectionType === "oauth2") {
+    provider = "x_oauth2";
+  }
+
   const normalizedProvider =
-    provider === "instagram_w_facebook" ? "instagram" : provider;
+    provider === "instagram_w_facebook"
+      ? "instagram"
+      : provider === "x_oauth2"
+        ? "x"
+        : provider;
 
   const { data: project, error: projectError } = await supabaseServiceRole
     .from("projects")
