@@ -237,6 +237,13 @@ export class TwitterPostClient extends PostClient {
 
       this.#responses.push({ uploadResponse: { mediaId } });
       mediaIds.push(mediaId);
+
+      if (medium.alt_text) {
+        await twitterClient.v1.createMediaMetadata(mediaId, {
+          alt_text: { text: medium.alt_text },
+        });
+      }
+
       // Add a small delay after successful upload
       await wait.for({ seconds: 1 });
     } else {
@@ -257,6 +264,12 @@ export class TwitterPostClient extends PostClient {
 
         this.#responses.push({ uploadResponse: { mediaId } });
         mediaIds.push(mediaId);
+
+        if (medium.alt_text) {
+          await twitterClient.v1.createMediaMetadata(mediaId, {
+            alt_text: { text: medium.alt_text },
+          });
+        }
       }
       // Add a small delay after uploads
       await wait.for({ seconds: 1 });

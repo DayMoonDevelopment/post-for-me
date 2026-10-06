@@ -287,6 +287,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
       },
@@ -303,6 +304,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
         {
@@ -404,6 +406,7 @@ export class ThreadsPostClient extends PostClient {
           params: {
             media_type: isVideo ? "VIDEO" : "IMAGE",
             [isVideo ? "video_url" : "image_url"]: signedUrl,
+            alt_text: medium.alt_text,
             is_carousel_item: true,
           },
         },
@@ -415,6 +418,7 @@ export class ThreadsPostClient extends PostClient {
         {
           media_type: isVideo ? "VIDEO" : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           is_carousel_item: true,
         },
         {

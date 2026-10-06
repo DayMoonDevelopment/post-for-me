@@ -390,6 +390,7 @@ export class InstagramPostClient extends PostClient {
       location_id?: string;
       user_tags?: any[];
       audio_name?: string;
+      alt_text?: string;
       trial_params?: {
         graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
       };
@@ -398,6 +399,10 @@ export class InstagramPostClient extends PostClient {
       caption: caption,
       access_token: account.access_token,
     };
+
+    if (medium.alt_text) {
+      createMediaParams.alt_text = medium.alt_text;
+    }
 
     switch (platformConfig?.placement) {
       case "stories":
@@ -527,12 +532,17 @@ export class InstagramPostClient extends PostClient {
         product_tags?: any[];
         location_id?: string;
         user_tags?: any[];
+        alt_text?: string;
       } = {
         media_type: isVideo ? "VIDEO" : undefined,
         [isVideo ? "video_url" : "image_url"]: signedUrl,
         is_carousel_item: true,
         access_token: account.access_token,
       };
+
+      if (medium.alt_text) {
+        itemPayload.alt_text = medium.alt_text;
+      }
 
       if (!isVideo && medium.tags && medium.tags.length > 0) {
         itemPayload.user_tags = medium.tags
