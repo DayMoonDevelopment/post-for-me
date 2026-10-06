@@ -23,7 +23,6 @@ import {
   wrapPlatformError,
   wrapResponseDataError,
   PlatformApiError,
-  PlatformErrorDetails,
 } from "../platform-error";
 
 export class InstagramPostClient extends PostClient {
@@ -241,7 +240,7 @@ export class InstagramPostClient extends PostClient {
 
           platformId = publishResponse.data.id;
         } catch (error) {
-          if (this.#isNonRetryableError(error)) {
+          if (this.isTerminalAuthError(error)) {
             throw error;
           }
 
@@ -311,13 +310,12 @@ export class InstagramPostClient extends PostClient {
         responses: this.#responses,
       };
 
-      if (this.#isReconnectError(platformError)) {
+      if (this.isTerminalAuthError(error)) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message:
-            "Account needs to be reconnected, Access token has expired",
+          error_message: this.buildAuthErrorMessage(error),
           details: errorDetails,
         };
       }
@@ -681,16 +679,16 @@ export class InstagramPostClient extends PostClient {
           });
         }
 
-        const errorMessage = this.#getErrorMessage(error);
+        const errorMessage = this.getErrorMessage(error);
         console.error(
           `Failed to process ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}: ${errorMessage}`,
         );
 
-        if (this.#isNonRetryableError(error)) {
-          throw wrapPlatformError(
-            error,
-            `Failed to process ${mediaLabel} without retry`,
+        if (this.isTerminalAuthError(error)) {
+          console.error(
+            `Failed to process ${mediaLabel} - terminal auth error, not retrying: ${errorMessage}`,
           );
+          throw error;
         }
 
         if (attempt === this.#mediaRetryAttempts) {
@@ -824,33 +822,6 @@ export class InstagramPostClient extends PostClient {
     );
   }
 
-  #getErrorMessage(error: any): string {
-    return extractPlatformError(error).message;
-  }
-
-  // Graph API returns OAuthException errors (expired/invalid token) as
-  // `{ error: { code: 190 } }` in a 200-OK body just as often as it does via
-  // an HTTP 401 (`wrapResponseDataError` call sites never have a real HTTP
-  // status to attach), so both signals need to be checked here.
-  #isReconnectError(platformError: PlatformErrorDetails): boolean {
-    if (platformError.status === 401) {
-      return true;
-    }
-
-    const errorCode = (platformError.data as any)?.error?.code;
-    return errorCode === 190;
-  }
-
-  #isNonRetryableError(error: any): boolean {
-    const errorMessage = this.#getErrorMessage(error).toLowerCase();
-
-    return (
-      errorMessage.includes(
-        "error validating access token: sessions for the user are not allowed because the user is not a confirmed user",
-      ) || errorMessage.includes("user access is restricted")
-    );
-  }
-
   #getRetryDelayMs(attempt: number): number {
     return Math.min(
       this.#mediaStatusInitialDelayMs *
@@ -950,9 +921,9 @@ export class InstagramPostClient extends PostClient {
 
         return permalink;
       } catch (error) {
-        const errorMessage = this.#getErrorMessage(error);
+        const errorMessage = this.getErrorMessage(error);
 
-        if (this.#isNonRetryableError(error)) {
+        if (this.isTerminalAuthError(error)) {
           throw error;
         }
 

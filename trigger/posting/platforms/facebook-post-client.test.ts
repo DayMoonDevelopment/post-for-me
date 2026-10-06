@@ -78,6 +78,10 @@ const axiosGet = mock(async (url: string) => {
     return { data: { permalink_url: "https://facebook.com/photo/permalink" } };
   }
 
+  if (url.endsWith(`/${DEFAULT_VIDEO_ID}`)) {
+    return { data: { post_id: "video_post_1" } };
+  }
+
   throw new Error(`Unhandled axios.get url in test: ${url}`);
 });
 
@@ -343,6 +347,29 @@ describe("FacebookPostClient video read-back retry (PFM-1057)", () => {
     expect(
       axiosGet.mock.calls.filter(([url]) => /\?fields=status$/.test(url)),
     ).toHaveLength(1);
+  });
+
+  test("does not retry a terminal auth error and asks for reconnection", async () => {
+    videoStatusBehaviors = [
+      () => {
+        throw makeGraphReadBackError({
+          code: 190,
+          message: "Error validating access token: Session has expired",
+          status: 400,
+        });
+      },
+    ];
+
+    const result = await publishVideo();
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toBe(
+      "Account needs to be reconnected: Error validating access token: Session has expired",
+    );
+    expect(
+      axiosGet.mock.calls.filter(([url]) => /\?fields=status$/.test(url)),
+    ).toHaveLength(1);
+    expect(innerRetryWaits()).toHaveLength(0);
   });
 
   test("does not retry a 'does not exist' message under a non-eventual-consistency error code", async () => {
