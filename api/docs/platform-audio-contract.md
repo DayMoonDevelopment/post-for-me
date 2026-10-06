@@ -8,6 +8,11 @@ write or individual-track endpoint. PFM-1289 adds the authenticated endpoint,
 project-scoped account lookup, provider dispatch, refresh, and Swagger registration.
 This issue adds contracts, not a live endpoint or provider calls.
 
+Platform-specific discovery filters, response/platform-data DTOs, and publishing
+selection DTOs live alongside their services in `api/src/instagram/dto/` and
+`api/src/tiktok-business/dto/`. Only the shared base, query wrapper, response
+envelope, and service parameter types live in `api/src/lib/dto/`.
+
 Every `SocialPlatformService` requires
 `getPlatformAudio({ account, query }): Promise<PlatformAudioResponseDto>`.
 All ten implementations initially reject with `HttpException`, HTTP **400**, and

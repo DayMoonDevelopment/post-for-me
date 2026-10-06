@@ -3,11 +3,9 @@ import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec
 import { ModelPropertiesAccessor } from '@nestjs/swagger/dist/services/model-properties-accessor';
 import { SchemaObjectFactory } from '@nestjs/swagger/dist/services/schema-object-factory';
 import { SwaggerTypesMapper } from '@nestjs/swagger/dist/services/swagger-types-mapper';
-import {
-  InstagramPlatformAudioDto,
-  PlatformAudioResponseDto,
-  TikTokBusinessPlatformAudioDto,
-} from './platform-audio.dto';
+import { PlatformAudioResponseDto } from './platform-audio.dto';
+import { InstagramPlatformAudioDto } from '../../instagram/dto/instagram-audio.dto';
+import { TikTokBusinessPlatformAudioDto } from '../../tiktok-business/dto/tiktok-business-audio.dto';
 import {
   PlatformConfigurationsDto,
   AccountConfigurationDetailsDto,

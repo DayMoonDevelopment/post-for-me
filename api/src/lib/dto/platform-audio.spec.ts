@@ -3,16 +3,16 @@ import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
-  InstagramAudioQueryDto,
   PLATFORM_AUDIO_VALIDATION_OPTIONS,
   PlatformAudioQueryDto,
+} from './platform-audio-query.dto';
+import { InstagramAudioQueryDto } from '../../instagram/dto/instagram-audio-query.dto';
+import {
   TikTokBusinessAudioQueryDto,
   TIKTOK_BUSINESS_AUDIO_GENRES,
-} from './platform-audio-query.dto';
-import {
-  InstagramAudioConfigurationDto,
-  TikTokBusinessMusicSoundInfoDto,
-} from './platform-audio-publishing.dto';
+} from '../../tiktok-business/dto/tiktok-business-audio-query.dto';
+import { InstagramAudioConfigurationDto } from '../../instagram/dto/instagram-audio-configuration.dto';
+import { TikTokBusinessMusicSoundInfoDto } from '../../tiktok-business/dto/tiktok-business-music-sound-info.dto';
 import { platformAudioDurationMs } from './platform-audio.dto';
 import type {
   PlatformAudio,

@@ -1,10 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional } from 'class-validator';
 import { SocialPostMediaDto } from './post-media.dto';
-import {
-  InstagramAudioConfigurationDto,
-  TikTokBusinessMusicSoundInfoDto,
-} from '../../lib/dto/platform-audio-publishing.dto';
+import { InstagramAudioConfigurationDto } from '../../instagram/dto/instagram-audio-configuration.dto';
+import { TikTokBusinessMusicSoundInfoDto } from '../../tiktok-business/dto/tiktok-business-music-sound-info.dto';
 
 export enum TiktokPrivacyStatus {
   PUBLIC = 'public',
