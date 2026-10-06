@@ -96,6 +96,17 @@ in `Access-Token`. PFM-1288 uses Facebook Graph `/ig_audio`, `user_id` from the
 account, its access token, and the selected audio filters. Reject Instagram Login
 before any discovery request. No caller-supplied tokens or account IDs in filters.
 
+PFM-1288 implements Instagram discovery at Facebook Graph v23.0 `/ig_audio`,
+using the existing service version. Omitted `audio_type` defaults to `music`,
+including when no provider configuration is supplied; omitted `search_query`
+requests trending audio. Instagram Login (connection metadata or legacy `IG`
+token detection) is rejected with HTTP **400** and an explicit Facebook Login
+requirement. HTTP, network, and Graph error envelopes return HTTP **502** with
+`Instagram audio discovery failed`; raw Graph messages, Axios config, causes,
+and token-bearing paging URLs are never logged or exposed. Results use an
+explicit track-field allowlist and always return `has_more: false, next: null`.
+Temporary audio preview URLs remain provider-supplied; no audio is downloaded.
+
 ## Publishing field choices (contracts only)
 
 PFM-1290/PFM-1291 own worker types, payload integration, media validation, and
