@@ -31,6 +31,12 @@ export class TikTokPostClient extends PostClient {
   ];
   #maxItems = 32;
   #titleLength = 85;
+  #privacyLevelMap: Record<string, string> = {
+    public: "PUBLIC_TO_EVERYONE",
+    private: "SELF_ONLY",
+    followers: "FOLLOWER_OF_CREATOR",
+    friends: "MUTUAL_FOLLOW_FRIENDS",
+  };
   #clientKey: string;
   #clientSecret: string;
   #localSupabaseClient;
@@ -136,6 +142,7 @@ export class TikTokPostClient extends PostClient {
           coverTimestamp: medium.thumbnail_timestamp_ms || undefined,
           account,
           platformData: platformConfig,
+          creatorInfoResponse,
         });
       } else {
         publishId = await this.#processImages({
@@ -144,6 +151,7 @@ export class TikTokPostClient extends PostClient {
           title: platformConfig?.title,
           account,
           platformData: platformConfig,
+          creatorInfoResponse,
         });
       }
 
@@ -229,6 +237,32 @@ export class TikTokPostClient extends PostClient {
         },
       };
     }
+  }
+
+  #resolvePrivacyLevel({
+    platformData,
+    creatorInfoResponse,
+  }: {
+    platformData: TiktokConfiguration;
+    creatorInfoResponse: any;
+  }): string {
+    const requestedLevel =
+      this.#privacyLevelMap[platformData.privacy_status ?? "public"] ??
+      "PUBLIC_TO_EVERYONE";
+
+    const allowedLevels: string[] | undefined =
+      creatorInfoResponse?.data?.data?.privacy_level_options;
+
+    if (allowedLevels?.length && !allowedLevels.includes(requestedLevel)) {
+      // The creator's account doesn't support the requested privacy level
+      // (e.g. TikTok hides MUTUAL_FOLLOW_FRIENDS/FOLLOWER_OF_CREATOR for some
+      // accounts) - fall back to the most restrictive option TikTok will allow.
+      return allowedLevels.includes("SELF_ONLY")
+        ? "SELF_ONLY"
+        : allowedLevels[0];
+    }
+
+    return requestedLevel;
   }
 
   async #getCreatorInfo(account: SocialAccount) {
@@ -531,12 +565,14 @@ export class TikTokPostClient extends PostClient {
     coverTimestamp,
     account,
     platformData,
+    creatorInfoResponse,
   }: {
     medium: PostMedia;
     caption: string;
     platformData: TiktokConfiguration;
     coverTimestamp: number | undefined;
     account: SocialAccount;
+    creatorInfoResponse: any;
   }) {
     const { filePath, mimeType, size } = await this.downloadToTempFile(
       medium.url,
@@ -581,10 +617,10 @@ export class TikTokPostClient extends PostClient {
           payload: {
             post_info: {
               title: caption,
-              privacy_level:
-                platformData.privacy_status == "private"
-                  ? "SELF_ONLY"
-                  : "PUBLIC_TO_EVERYONE",
+              privacy_level: this.#resolvePrivacyLevel({
+                platformData,
+                creatorInfoResponse,
+              }),
               disable_duet:
                 platformData.allow_duet === undefined
                   ? false
@@ -639,12 +675,14 @@ export class TikTokPostClient extends PostClient {
     title,
     account,
     platformData,
+    creatorInfoResponse,
   }: {
     media: PostMedia[];
     caption: string;
     title: string | undefined;
     account: SocialAccount;
     platformData: TiktokConfiguration;
+    creatorInfoResponse: any;
   }) {
     const allowedMedia = media.slice(0, this.#maxItems);
 
@@ -663,10 +701,10 @@ export class TikTokPostClient extends PostClient {
         post_info: {
           title: (title ?? "").slice(0, this.#titleLength),
           description: caption,
-          privacy_level:
-            platformData.privacy_status == "private"
-              ? "SELF_ONLY"
-              : "PUBLIC_TO_EVERYONE",
+          privacy_level: this.#resolvePrivacyLevel({
+            platformData,
+            creatorInfoResponse,
+          }),
           disable_comment:
             platformData.allow_comment === undefined
               ? false
