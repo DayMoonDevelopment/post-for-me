@@ -1,7 +1,6 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { FacebookService } from '../facebook/facebook.service';
-import { InstagramService } from '../instagram/instagram.service';
 import { LinkedInService } from '../linkedin/linkedin.service';
 import { PinterestService } from '../pinterest/pinterest.service';
 import { ThreadsService } from '../threads/threads.service';
@@ -28,7 +27,6 @@ describe('explicit unsupported platform audio implementations', () => {
     [
       BlueskyService,
       FacebookService,
-      InstagramService,
       LinkedInService,
       PinterestService,
       ThreadsService,
