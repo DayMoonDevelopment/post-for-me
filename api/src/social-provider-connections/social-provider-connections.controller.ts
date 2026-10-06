@@ -44,6 +44,7 @@ import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
 import { SupabaseService } from '../supabase/supabase.service';
 import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
 import { getCredentialsSetupPlatformLabel } from './helper/credentials-setup-platform.helper';
+import { normalizePlatform } from '../lib/platform.utils';
 
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
@@ -147,6 +148,7 @@ export class SocialAccountsController {
     @Body() createAuthUrlInput: CreateSocialAccountProviderAuthUrlDto,
     @User() user: RequestUser,
   ): Promise<SocialAccountProviderAuthUrlDto> {
+    const platform = normalizePlatform(createAuthUrlInput.platform);
     const project = await this.supabaseService.supabaseClient
       .from('projects')
       .select('is_system')
@@ -164,7 +166,7 @@ export class SocialAccountsController {
     let socialProviderAppCredentials: SocialProviderAppCredentialsDto | null =
       null;
 
-    switch (createAuthUrlInput.platform) {
+    switch (platform) {
       case 'bluesky':
         socialProviderAppCredentials = {
           projectId: user.projectId,
@@ -186,7 +188,7 @@ export class SocialAccountsController {
           case 'instagram': {
             socialProviderAppCredentials =
               await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
-                createAuthUrlInput.platform,
+                platform,
                 user.projectId,
               );
             break;
@@ -194,7 +196,7 @@ export class SocialAccountsController {
           default: {
             const credentials =
               await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
-                [createAuthUrlInput.platform, 'instagram_w_facebook'],
+                [platform, 'instagram_w_facebook'],
                 user.projectId,
               );
 
@@ -235,7 +237,7 @@ export class SocialAccountsController {
           default: {
             const credentials =
               await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
-                [createAuthUrlInput.platform, 'x_oauth2'],
+                [platform, 'x_oauth2'],
                 user.projectId,
               );
 
@@ -258,7 +260,7 @@ export class SocialAccountsController {
       default:
         socialProviderAppCredentials =
           await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
-            createAuthUrlInput.platform,
+            platform,
             user.projectId,
           );
         break;
@@ -266,7 +268,7 @@ export class SocialAccountsController {
 
     if (!socialProviderAppCredentials) {
       const credentialsSetupPlatform = getCredentialsSetupPlatformLabel({
-        platform: createAuthUrlInput.platform,
+        platform,
         platformData: createAuthUrlInput.platform_data,
       });
 
@@ -288,7 +290,7 @@ export class SocialAccountsController {
 
     return {
       url: authUrl || '',
-      platform: createAuthUrlInput.platform,
+      platform,
     };
   }
 

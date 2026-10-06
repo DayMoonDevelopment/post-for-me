@@ -4,6 +4,10 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
+import {
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -27,6 +31,12 @@ export class TikTokBusinessPostClient extends PostClient {
   ];
   #maxItems = 32;
   #titleLength = 85;
+  #privacyLevelMap: Record<string, string> = {
+    public: "PUBLIC_TO_EVERYONE",
+    private: "SELF_ONLY",
+    followers: "FOLLOWER_OF_CREATOR",
+    friends: "MUTUAL_FOLLOW_FRIENDS",
+  };
   #clientKey: string;
   #clientSecret: string;
   #localSupabaseClient;
@@ -718,9 +728,8 @@ export class TikTokBusinessPostClient extends PostClient {
           caption,
           is_draft: platformData?.is_draft ? true : undefined,
           privacy_level:
-            platformData.privacy_status == "private"
-              ? "SELF_ONLY"
-              : "PUBLIC_TO_EVERYONE",
+            this.#privacyLevelMap[platformData.privacy_status ?? "public"] ??
+            "PUBLIC_TO_EVERYONE",
           disable_comment:
             platformData.allow_comment === undefined
               ? false
@@ -766,6 +775,10 @@ export class TikTokBusinessPostClient extends PostClient {
   async #transformImage(medium: PostMedia): Promise<string> {
     const signedUrl = await this.getSignedUrlForFile(medium);
 
+    if (shouldSkipProcessing(medium)) {
+      return signedUrl;
+    }
+
     const response = await axios({
       url: signedUrl,
       method: "GET",
@@ -808,17 +821,10 @@ export class TikTokBusinessPostClient extends PostClient {
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";

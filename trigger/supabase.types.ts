@@ -139,6 +139,7 @@ export type Database = {
       }
       social_post_media: {
         Row: {
+          alt_text: string | null
           created_at: string
           external_id: string | null
           id: string
@@ -154,6 +155,7 @@ export type Database = {
           url: string
         }
         Insert: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
@@ -169,6 +171,7 @@ export type Database = {
           url: string
         }
         Update: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
