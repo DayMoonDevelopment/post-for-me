@@ -228,7 +228,7 @@ export class TikTokPostClient extends PostClient {
 
       const errorMessage =
         tiktokErrorCode === "reached_active_user_cap"
-          ? "TikTok has temporarily reached its daily cap on new active users for our app (this is a limit TikTok imposes until our app completes their review — it is not a Post for Me limit). This resets automatically within 24 hours; please try posting again after that."
+          ? "TikTok has temporarily reached its daily cap on new active users for our app (this is a limit TikTok imposes). This resets automatically within 24 hours; please try posting again later or posting as a draft."
           : "Failed to post to TikTok";
 
       return {
