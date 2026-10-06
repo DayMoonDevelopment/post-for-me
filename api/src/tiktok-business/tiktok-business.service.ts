@@ -1,4 +1,15 @@
-import { HttpException, HttpStatus, Injectable, Scope } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Scope,
+  ValidationPipe,
+} from '@nestjs/common';
+import { platformAudioDurationMs } from '../lib/dto/platform-audio.dto';
+import {
+  PLATFORM_AUDIO_VALIDATION_OPTIONS,
+  PlatformAudioQueryDto,
+} from '../lib/dto/platform-audio-query.dto';
 import type {
   GetPlatformAudioParams,
   PlatformAudioResponseDto,
@@ -14,19 +25,109 @@ import type {
 import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import { TikTokBusinessMetricsDto } from './dto/tiktok-business-post-metrics.dto';
+import { TikTokBusinessAudioQueryDto } from './dto/tiktok-business-audio-query.dto';
+import type { TikTokBusinessAudioPlatformDataDto } from './dto/tiktok-business-audio.dto';
+import type { TikTokBusinessAudioResponse } from './dto/tiktok-business-audio-response.dto';
 
 @Injectable({ scope: Scope.REQUEST })
 export class TikTokBusinessService implements SocialPlatformService {
-  getPlatformAudio(
-    params: GetPlatformAudioParams,
-  ): Promise<PlatformAudioResponseDto> {
-    void params;
-    return Promise.reject(
-      new HttpException(
-        'Platform audio is not supported for this platform',
+  async getPlatformAudio({
+    account,
+    query,
+  }: GetPlatformAudioParams): Promise<PlatformAudioResponseDto> {
+    const validatedQuery = (await new ValidationPipe(
+      PLATFORM_AUDIO_VALIDATION_OPTIONS,
+    ).transform(query, {
+      type: 'query',
+      metatype: PlatformAudioQueryDto,
+    })) as PlatformAudioQueryDto;
+
+    if (validatedQuery.platform_configurations?.instagram !== undefined) {
+      throw new HttpException(
+        'Only TikTok Business audio configuration is supported for this account',
         HttpStatus.BAD_REQUEST,
-      ),
-    );
+      );
+    }
+
+    const filters =
+      validatedQuery.platform_configurations?.tiktok_business ??
+      new TikTokBusinessAudioQueryDto();
+
+    let response: TikTokBusinessAudioResponse;
+    try {
+      const result = await axios.get<TikTokBusinessAudioResponse>(
+        `${this.apiUrl}discovery/cml/trending_list/`,
+        {
+          headers: { 'Access-Token': account.access_token },
+          params: {
+            business_id: account.social_provider_user_id,
+            country_code: filters.country_code,
+            date_range: filters.date_range,
+            genre: filters.genre,
+          },
+        },
+      );
+      response = result.data;
+    } catch {
+      // Do not expose Axios request headers or provider bodies containing credentials.
+      throw new HttpException(
+        'Unable to get TikTok Business audio',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    if (response?.code !== 0) {
+      throw new HttpException(
+        'Unable to get TikTok Business audio: provider returned an error',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const tracks = response.data?.list ?? [];
+    if (
+      !response.data ||
+      response.data.list === undefined ||
+      !Array.isArray(tracks) ||
+      tracks.some(
+        (track) =>
+          !track ||
+          typeof track.commercial_music_id !== 'string' ||
+          !track.commercial_music_id.trim(),
+      )
+    ) {
+      throw new HttpException(
+        'Unable to get TikTok Business audio: invalid provider response',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    // The provider returns up to 100 tracks and documents no pagination.
+    const data = tracks.map((track) => this.mapPlatformAudio(track));
+    return { data, meta: { count: data.length, has_more: false, next: null } };
+  }
+
+  private mapPlatformAudio(
+    track: TikTokBusinessAudioPlatformDataDto,
+  ): PlatformAudioResponseDto['data'][number] {
+    const optionalText = (value: string | null | undefined) =>
+      typeof value === 'string' && value.trim() ? value : undefined;
+    const title = optionalText(track.commercial_music_name);
+    const artist = optionalText(track.artist);
+    const previewUrl = optionalText(track.preview_url);
+    const artworkUrl = optionalText(track.thumbnail_url);
+    const durationMs = platformAudioDurationMs(track.duration, 'seconds');
+
+    return {
+      provider: 'tiktok_business',
+      // This is a discovery ID. Publishing must select a clip's song_clip_id.
+      id: track.commercial_music_id,
+      ...(title !== undefined && { title }),
+      ...(artist !== undefined && { artist }),
+      ...(previewUrl !== undefined && { preview_url: previewUrl }),
+      ...(artworkUrl !== undefined && { artwork_url: artworkUrl }),
+      ...(durationMs !== undefined && { duration_ms: durationMs }),
+      platform_data: track,
+    };
   }
 
   appCredentials: SocialProviderAppCredentials;
