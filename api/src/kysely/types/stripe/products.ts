@@ -15,7 +15,11 @@ export default interface ProductsTable {
 
   metadata: ColumnType<unknown | null, unknown | null, unknown | null>;
 
-  stripe_created: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  stripe_created: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   livemode: ColumnType<boolean | null, boolean | null, boolean | null>;
 
@@ -23,7 +27,11 @@ export default interface ProductsTable {
 
   synced_at: ColumnType<Date, Date | string | undefined, Date | string>;
 
-  deleted_at: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  deleted_at: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 }
 
 export type Products = Selectable<ProductsTable>;

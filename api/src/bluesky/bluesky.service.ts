@@ -54,6 +54,52 @@ export class BlueskyService implements SocialPlatformService {
     }
   }
 
+  private isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+
+  private extractBlueskyMedia(
+    embed: unknown,
+  ): { url: string; thumbnail_url?: string }[] {
+    if (!this.isObject(embed)) {
+      return [];
+    }
+
+    const media: { url: string; thumbnail_url?: string }[] = [];
+
+    const images = embed.images;
+    if (Array.isArray(images)) {
+      for (const image of images) {
+        if (!this.isObject(image)) {
+          continue;
+        }
+
+        const fullsize = image.fullsize;
+        const thumb = image.thumb;
+
+        if (typeof fullsize === 'string' && fullsize.length > 0) {
+          media.push(
+            typeof thumb === 'string' && thumb.length > 0 && thumb !== fullsize
+              ? { url: fullsize, thumbnail_url: thumb }
+              : { url: fullsize },
+          );
+        }
+      }
+    }
+
+    const nestedMedia = embed.media;
+    if (this.isObject(nestedMedia)) {
+      media.push(...this.extractBlueskyMedia(nestedMedia));
+    }
+
+    const nestedRecord = embed.record;
+    if (this.isObject(nestedRecord)) {
+      media.push(...this.extractBlueskyMedia(nestedRecord));
+    }
+
+    return media;
+  }
+
   async getAccountPosts({
     account,
     platformIds,
@@ -92,7 +138,7 @@ export class BlueskyService implements SocialPlatformService {
           account_id: post.author.did,
           caption: (post.record as { text?: string })?.text || '',
           url: `https://bsky.app/profile/${post.author.did}/post/${post.uri.split('/').pop()}`,
-          media: [],
+          media: this.extractBlueskyMedia(post.embed),
           metrics: includeMetrics
             ? {
                 replyCount: post.replyCount || 0,
@@ -125,7 +171,7 @@ export class BlueskyService implements SocialPlatformService {
           account_id: post.author.did,
           caption: (post.record as { text?: string })?.text || '',
           url: `https://bsky.app/profile/${post.author.did}/post/${post.uri.split('/').pop()}`,
-          media: [],
+          media: this.extractBlueskyMedia(post.embed),
           metrics: includeMetrics
             ? {
                 replyCount: post.replyCount || 0,

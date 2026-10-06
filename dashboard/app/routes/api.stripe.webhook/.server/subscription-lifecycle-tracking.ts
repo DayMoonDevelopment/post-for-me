@@ -16,7 +16,7 @@ type SubscriptionEvent =
   | Stripe.CustomerSubscriptionUpdatedEvent
   | Stripe.CustomerSubscriptionDeletedEvent;
 
-type TeamRow = Pick<
+export type TeamRow = Pick<
   Database["public"]["Tables"]["teams"]["Row"],
   "id" | "created_by" | "name" | "billing_email"
 >;

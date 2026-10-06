@@ -1,7 +1,9 @@
 import type { ColumnType, Selectable, Insertable, Updateable } from 'kysely';
 
 /** Identifier type for stripe.subscription_items */
-export type SubscriptionItemsId = string & { __brand: 'stripe.subscription_items' };
+export type SubscriptionItemsId = string & {
+  __brand: 'stripe.subscription_items';
+};
 
 /** Represents the table stripe.subscription_items */
 export default interface SubscriptionItemsTable {
@@ -15,7 +17,11 @@ export default interface SubscriptionItemsTable {
 
   metadata: ColumnType<unknown | null, unknown | null, unknown | null>;
 
-  stripe_created: ColumnType<Date | null, Date | string | null, Date | string | null>;
+  stripe_created: ColumnType<
+    Date | null,
+    Date | string | null,
+    Date | string | null
+  >;
 
   data: ColumnType<unknown, unknown, unknown>;
 
