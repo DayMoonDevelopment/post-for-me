@@ -77,7 +77,8 @@ export class CreateSocialAccountDto {
   refresh_token: string | null | undefined;
 
   @ApiProperty({
-    description: 'The access token expiration date of the social account',
+    description:
+      'The access token expiration date of the social account, in UTC (ISO 8601)',
     type: Date,
     required: true,
   })
@@ -85,7 +86,8 @@ export class CreateSocialAccountDto {
   access_token_expires_at: Date;
 
   @ApiProperty({
-    description: 'The refresh token expiration date of the social account',
+    description:
+      'The refresh token expiration date of the social account, in UTC (ISO 8601)',
     type: Date,
     nullable: true,
     required: false,
