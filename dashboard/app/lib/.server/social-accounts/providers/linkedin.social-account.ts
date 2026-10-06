@@ -36,7 +36,7 @@ export async function getLinkedInSocialProviderConnection({
 
   const accessToken = tokenData.access_token;
   const accessTokenExpiresAt: Date = new Date(
-    Date.now() + (tokenData.expires_in - 86400) * 1000
+    Date.now() + (tokenData.expires_in - 86400) * 1000,
   );
   const refreshToken = tokenData.refresh_token;
   const refreshTokenExpiresAt: Date | undefined =
@@ -55,6 +55,11 @@ export async function getLinkedInSocialProviderConnection({
       refresh_token: refreshToken,
       refresh_token_expires_at: refreshTokenExpiresAt,
       social_provider_photo_url: profileData.pictureUrl,
+      social_provider_metadata: {
+        connection_type: "personal",
+        profile_slug: profileData.profileSlug,
+        profile_url: profileData.profileUrl,
+      },
     },
   ];
 
@@ -62,7 +67,7 @@ export async function getLinkedInSocialProviderConnection({
     accessToken,
     refreshToken,
     accessTokenExpiresAt,
-    refreshTokenExpiresAt
+    refreshTokenExpiresAt,
   );
 
   accounts.push(...pageAccounts);
@@ -70,9 +75,13 @@ export async function getLinkedInSocialProviderConnection({
   return accounts;
 }
 
-async function getProfileData(
-  accessToken: string
-): Promise<{ name: string; pictureUrl: string; id: string }> {
+async function getProfileData(accessToken: string): Promise<{
+  name: string;
+  pictureUrl: string;
+  id: string;
+  profileSlug?: string;
+  profileUrl?: string;
+}> {
   const userResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -103,7 +112,7 @@ async function getProfileData(
         Authorization: `Bearer ${accessToken}`,
         "X-Restli-Protocol-Version": "2.0.0",
       },
-    }
+    },
   );
 
   const pictureData = await pictureResponse.json();
@@ -119,7 +128,7 @@ async function getProfileData(
           };
         }) =>
           element.data?.["com.linkedin.digitalmedia.mediaartifact.StillImage"]
-            ?.storageSize?.width
+            ?.storageSize?.width,
       )
       ?.sort(
         (
@@ -136,7 +145,7 @@ async function getProfileData(
                 storageSize?: { width: number };
               };
             };
-          }
+          },
         ) => {
           const widthA =
             a.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
@@ -145,12 +154,17 @@ async function getProfileData(
             b.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
               ?.storageSize?.width || 0;
           return widthB - widthA;
-        }
+        },
       )?.[0]?.identifiers?.[0]?.identifier || null;
 
   return {
     name: `${profileData.localizedFirstName || ""} ${profileData.localizedLastName || ""}`.trim(),
     pictureUrl: profilePictureUrl,
+    profileSlug: profileData.vanityName,
+    profileUrl: profileData.vanityName
+      ? `https://www.linkedin.com/in/${profileData.vanityName}`
+      : undefined,
+
     id: profileData.id,
   };
 }
@@ -159,38 +173,37 @@ async function getPageAccounts(
   accessToken: string,
   refreshToken: string,
   accessTokenExpiresAt: Date,
-  refreshTokenExpiresAt: Date | undefined
+  refreshTokenExpiresAt: Date | undefined,
 ): Promise<SocialProviderConnection[]> {
   const accounts: SocialProviderConnection[] = [];
-  const pageResponse = await fetch(
-    "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED",
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-    }
+  const administratorAclElements = await getAclElementsByRole(
+    accessToken,
+    "ADMINISTRATOR",
+  );
+  const contentAdministratorAclElements = await getAclElementsByRole(
+    accessToken,
+    "CONTENT_ADMINISTRATOR",
+  );
+  const aclElements = [
+    ...administratorAclElements,
+    ...contentAdministratorAclElements,
+  ];
+
+  if (aclElements.length === 0) {
+    return accounts;
+  }
+
+  const organizationIds = Array.from(
+    new Set(
+      aclElements
+        .map((element) => element.organizationalTarget.split(":").pop())
+        .filter((orgId): orgId is string => Boolean(orgId)),
+    ),
   );
 
-  if (!pageResponse.ok) {
-    return accounts;
-  }
-
-  const data = await pageResponse.json();
-
-  if (!data.elements) {
-    return accounts;
-  }
-
   await Promise.all(
-    data.elements.map(async (element: { organizationalTarget: string }) => {
+    organizationIds.map(async (orgId) => {
       try {
-        const orgId = element.organizationalTarget.split(":").pop();
-
-        if (!orgId) {
-          return;
-        }
-
         const orgResponse = await fetch(
           `https://api.linkedin.com/v2/organizations/${orgId}`,
           {
@@ -198,20 +211,20 @@ async function getPageAccounts(
               Authorization: `Bearer ${accessToken}`,
               "X-Restli-Protocol-Version": "2.0.0",
             },
-          }
+          },
         );
 
         const orgData = await orgResponse.json();
 
         // Get organization picture
         const pictureResponse = await fetch(
-          `https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,vanityName,localizedName,logoV2(original~digitalmediaAsset:playableStreams))`,
+          `https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,localizedName,logoV2(original~digitalmediaAsset:playableStreams))`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "X-Restli-Protocol-Version": "2.0.0",
             },
-          }
+          },
         );
 
         const pictureData = await pictureResponse.json();
@@ -229,7 +242,7 @@ async function getPageAccounts(
               }) =>
                 element.data?.[
                   "com.linkedin.digitalmedia.mediaartifact.StillImage"
-                ]?.storageSize?.width
+                ]?.storageSize?.width,
             )
             ?.sort(
               (
@@ -246,7 +259,7 @@ async function getPageAccounts(
                       storageSize?: { width: number };
                     };
                   };
-                }
+                },
               ) => {
                 const widthA =
                   a.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
@@ -255,13 +268,19 @@ async function getPageAccounts(
                   b.data["com.linkedin.digitalmedia.mediaartifact.StillImage"]
                     ?.storageSize?.width || 0;
                 return widthB - widthA;
-              }
+              },
             )?.[0]?.identifiers?.[0]?.identifier || null;
 
         accounts.push({
           social_provider_user_id: orgId,
           social_provider_user_name: orgData.localizedName,
-          social_provider_metadata: { connection_type: "page" },
+          social_provider_metadata: {
+            connection_type: "page",
+            profile_slug: orgData.vanityName,
+            profile_url: orgData.vanityName
+              ? `https://www.linkedin.com/company/${orgData.vanityName}`
+              : undefined,
+          },
           social_provider_photo_url: logoUrl,
           access_token: accessToken,
           access_token_expires_at: accessTokenExpiresAt,
@@ -271,8 +290,73 @@ async function getPageAccounts(
       } catch (error) {
         console.error("Error fetching organization:", error);
       }
-    })
+    }),
   );
 
   return accounts;
+}
+
+async function getAclElementsByRole(
+  accessToken: string,
+  role: "ADMINISTRATOR" | "CONTENT_ADMINISTRATOR",
+): Promise<{ organizationalTarget: string }[]> {
+  const aclElements: { organizationalTarget: string }[] = [];
+  const pageSize = 100;
+  let start = 0;
+  let hasMorePages = true;
+
+  while (hasMorePages) {
+    try {
+      const pageUrl = new URL(
+        "https://api.linkedin.com/v2/organizationalEntityAcls",
+      );
+      pageUrl.searchParams.set("q", "roleAssignee");
+      pageUrl.searchParams.set("role", role);
+      pageUrl.searchParams.set("state", "APPROVED");
+      pageUrl.searchParams.set("start", String(start));
+      pageUrl.searchParams.set("count", String(pageSize));
+
+      const pageResponse = await fetch(pageUrl.toString(), {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      });
+
+      if (!pageResponse.ok) {
+        break;
+      }
+
+      const data = (await pageResponse.json()) as {
+        elements?: { organizationalTarget: string }[];
+        paging?: { start?: number; count?: number; total?: number };
+      };
+
+      const currentElements = data.elements ?? [];
+
+      if (currentElements.length === 0) {
+        break;
+      }
+
+      aclElements.push(...currentElements);
+
+      const currentStart = data.paging?.start ?? start;
+      const currentCount = data.paging?.count ?? pageSize;
+      const total = data.paging?.total;
+      const nextStart = currentStart + currentCount;
+      const advanced = nextStart > currentStart;
+
+      start = nextStart;
+      hasMorePages =
+        advanced &&
+        (typeof total === "number"
+          ? start < total
+          : currentCount > 0 && currentElements.length >= currentCount);
+    } catch (error) {
+      console.error("Error fetching LinkedIn organization ACL page:", error);
+      break;
+    }
+  }
+
+  return aclElements;
 }
