@@ -1,4 +1,8 @@
-import { Injectable, Scope } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Scope } from '@nestjs/common';
+import type {
+  GetPlatformAudioParams,
+  PlatformAudioResponseDto,
+} from '../lib/dto/platform-audio.dto';
 import axios, { AxiosError } from 'axios';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
@@ -66,6 +70,18 @@ interface PinterestTokenResponse {
 
 @Injectable({ scope: Scope.REQUEST })
 export class PinterestService implements SocialPlatformService {
+  getPlatformAudio(
+    params: GetPlatformAudioParams,
+  ): Promise<PlatformAudioResponseDto> {
+    void params;
+    return Promise.reject(
+      new HttpException(
+        'Platform audio is not supported for this platform',
+        HttpStatus.BAD_REQUEST,
+      ),
+    );
+  }
+
   appCredentials: SocialProviderAppCredentials;
 
   constructor(private readonly supabaseService: SupabaseService) {}

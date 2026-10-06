@@ -1,4 +1,14 @@
-import { Injectable, Logger, Scope } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  Scope,
+} from '@nestjs/common';
+import type {
+  GetPlatformAudioParams,
+  PlatformAudioResponseDto,
+} from '../lib/dto/platform-audio.dto';
 import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
@@ -47,6 +57,18 @@ type LinkedInPostElement = {
 
 @Injectable({ scope: Scope.REQUEST })
 export class LinkedInService implements SocialPlatformService {
+  getPlatformAudio(
+    params: GetPlatformAudioParams,
+  ): Promise<PlatformAudioResponseDto> {
+    void params;
+    return Promise.reject(
+      new HttpException(
+        'Platform audio is not supported for this platform',
+        HttpStatus.BAD_REQUEST,
+      ),
+    );
+  }
+
   appCredentials: SocialProviderAppCredentials;
 
   apiVersion: string;
