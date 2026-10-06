@@ -251,6 +251,20 @@ export class FacebookPostClient extends PostClient {
 
       const platformError = extractPlatformError(error);
 
+      if (this.isTerminalAuthError(error)) {
+        return {
+          success: false,
+          post_id: postId,
+          provider_connection_id: account.id,
+          error_message: this.buildAuthErrorMessage(error),
+          details: {
+            error: platformError.data ?? { message: platformError.message },
+            requests: this.#requests,
+            responses: this.#responses,
+          },
+        };
+      }
+
       return {
         success: false,
         post_id: postId,
@@ -542,10 +556,9 @@ export class FacebookPostClient extends PostClient {
     );
     return undefined;
 }
-  
+
   #isRetryableReadBackError(error: any): boolean {
-    // TODO(PFM-1057): once feat/loop-auth-errors merges, short-circuit here:
-    // if (this.isTerminalAuthError(error)) return false;
+    if (this.isTerminalAuthError(error)) return false;
 
     const graphError = error?.response?.data?.error;
     const status = error?.response?.status;
