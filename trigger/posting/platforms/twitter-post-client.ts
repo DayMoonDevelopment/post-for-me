@@ -101,13 +101,13 @@ export class TwitterPostClient extends PostClient {
             accessSecret: account.refresh_token,
           } as TwitterApiTokens));
 
+      const isPremium = await this.#getIsPremium({ twitterClient, account });
+
       const mediaIds = await this.#processMedia({
         twitterClient,
         media,
         isOAuth2,
       });
-
-      const isPremium = await this.#getIsPremium({ twitterClient, account });
 
       const allowedCaption = caption.slice(
         0,
@@ -210,20 +210,34 @@ export class TwitterPostClient extends PostClient {
         "user.fields": "verified_type",
       });
 
-      const isPremium = user.verified_type
-        ? user.verified_type !== "none"
-        : false;
+      const verifiedType = user.verified_type ?? "none";
+      const isPremium = verifiedType !== "none";
+      const storedVerifiedType =
+        account.social_provider_metadata?.verified_type ?? "none";
 
-      if (isPremium !== storedIsPremium) {
-        await this.#localSupabaseClient
-          .from("social_provider_connections")
-          .update({
-            social_provider_metadata: {
-              ...account.social_provider_metadata,
-              has_platform_premium: isPremium,
-            },
-          })
-          .eq("id", account.id);
+      if (
+        isPremium !== storedIsPremium ||
+        verifiedType !== storedVerifiedType
+      ) {
+        try {
+          const { error } = await this.#localSupabaseClient
+            .from("social_provider_connections")
+            .update({
+              social_provider_metadata: {
+                ...account.social_provider_metadata,
+                has_platform_premium: isPremium,
+                verified_type: verifiedType,
+              },
+            })
+            .eq("id", account.id);
+
+          if (error) throw error;
+        } catch (error) {
+          console.error(
+            `Error synchronizing premium status for Twitter account ${account.id}:`,
+            error,
+          );
+        }
       }
 
       return isPremium;
