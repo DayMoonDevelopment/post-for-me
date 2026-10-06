@@ -28,6 +28,13 @@ export async function getInstagramWFacebookSocialProviderConnection({
   });
   const tokenData = await tokenResponse.json();
 
+  if (!tokenData?.access_token) {
+    console.error("Error fetching access token", tokenData);
+    throw Error(
+      `Error fetching access token ${tokenData?.error?.message || ""}`,
+    );
+  }
+
   const longLivedTokenParams = new URLSearchParams([
     ["grant_type", "fb_exchange_token"],
     ["client_id", appCredentials.appId!],
@@ -40,6 +47,13 @@ export async function getInstagramWFacebookSocialProviderConnection({
   );
 
   const longLivedData = await longLivedResponse.json();
+
+  if (!longLivedData?.access_token) {
+    console.error("Error fetching long-lived access token", longLivedData);
+    throw Error(
+      `Error fetching long-lived access token ${longLivedData?.error?.message || ""}`,
+    );
+  }
 
   const accessToken = longLivedData.access_token;
 
