@@ -3,6 +3,7 @@ import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
+import { normalizePlatform } from "../../lib/platform.utils";
 import {
   compressJpegToLimit,
   computeCropDimensions,
@@ -444,7 +445,9 @@ export class InstagramPostClient extends PostClient {
 
         if (medium.tags && medium.tags.length > 0) {
           createMediaParams.product_tags = medium.tags
-            .filter((t) => t.platform == "instagram" && t.type == "product")
+            .filter(
+              (t) => normalizePlatform(t.platform) == "instagram" && t.type == "product",
+            )
             .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
         }
 
@@ -453,7 +456,9 @@ export class InstagramPostClient extends PostClient {
 
     if (medium.tags && medium.tags.length > 0) {
       createMediaParams.user_tags = medium.tags
-        .filter((t) => t.platform == "instagram" && t.type == "user")
+        .filter(
+          (t) => normalizePlatform(t.platform) == "instagram" && t.type == "user",
+        )
         .map((t) => ({
           username: t.id,
           x: t.x,
@@ -533,7 +538,9 @@ export class InstagramPostClient extends PostClient {
 
       if (!isVideo && medium.tags && medium.tags.length > 0) {
         itemPayload.user_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "user")
+          .filter(
+            (t) => normalizePlatform(t.platform) == "instagram" && t.type == "user",
+          )
           .map((t) => ({
             username: t.id,
             x: t.x,
@@ -543,7 +550,9 @@ export class InstagramPostClient extends PostClient {
 
       if (medium.tags && medium.tags.length > 0) {
         itemPayload.product_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "product")
+          .filter(
+            (t) => normalizePlatform(t.platform) == "instagram" && t.type == "product",
+          )
           .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
       }
 

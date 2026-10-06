@@ -12,6 +12,7 @@ import {
 } from "../post.types";
 import { logger, wait } from "@trigger.dev/sdk";
 import FormData from "form-data";
+import { normalizePlatform } from "../../lib/platform.utils";
 import {
   extractPlatformError,
   PlatformApiError,
@@ -341,7 +342,9 @@ export class FacebookPostClient extends PostClient {
 
     if (medium.tags && medium.tags.length > 0) {
       payload.tags = medium.tags
-        .filter((t) => t.platform === "facebook" && t.type == "user")
+        .filter(
+          (t) => normalizePlatform(t.platform) === "facebook" && t.type == "user",
+        )
         .map((t) => ({
           x: t.x,
           y: t.y,
@@ -418,7 +421,9 @@ export class FacebookPostClient extends PostClient {
 
       if (medium.tags && medium.tags.length > 0) {
         payload.tags = medium.tags
-          .filter((t) => t.platform === "facebook" && t.type == "user")
+          .filter(
+            (t) => normalizePlatform(t.platform) === "facebook" && t.type == "user",
+          )
           .map((t) => ({
             x: t.x,
             y: t.y,
@@ -872,7 +877,9 @@ export class FacebookPostClient extends PostClient {
 
     if (medium.tags && medium.tags.length > 0) {
       payload.tags = medium.tags
-        .filter((t) => t.platform === "facebook" && t.type == "user")
+        .filter(
+          (t) => normalizePlatform(t.platform) === "facebook" && t.type == "user",
+        )
         .map((t) => ({
           x: t.x,
           y: t.y,
