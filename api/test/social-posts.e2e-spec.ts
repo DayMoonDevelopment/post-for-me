@@ -11,11 +11,7 @@ import request from 'supertest';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 
 import { buildE2eApp, closeE2eApp } from './utils/build-e2e-app';
-import {
-  invalidVerifyKeyResponse,
-  validVerifyKeyResponse,
-  type MockUnkeyClient,
-} from './utils/mock-unkey';
+import { principalHeader } from './utils/unkey-principal';
 import {
   getSeededTestContext,
   type SeededTestContext,
@@ -38,12 +34,12 @@ interface PaginatedSocialPostsResponse {
 
 describe('Social Posts CRUD (e2e)', () => {
   let app: NestExpressApplication;
-  let mockUnkey: MockUnkeyClient;
+  let authHeader: string;
   let ctx: SeededTestContext;
   let createdPostIds: string[] = [];
 
   beforeAll(async () => {
-    ({ app, mockUnkey } = await buildE2eApp());
+    ({ app } = await buildE2eApp());
     ctx = await getSeededTestContext();
   });
 
@@ -57,14 +53,12 @@ describe('Social Posts CRUD (e2e)', () => {
   });
 
   function authAsUser1() {
-    mockUnkey.keys.verifyKey.mockResolvedValueOnce(
-      validVerifyKeyResponse({
-        userId: ctx.userIds.user1,
-        projectId: ctx.projectId,
-        teamId: ctx.teamId,
-        planType: 'legacy',
-      }),
-    );
+    authHeader = principalHeader({
+      userId: ctx.userIds.user1,
+      projectId: ctx.projectId,
+      teamId: ctx.teamId,
+      planType: 'legacy',
+    });
   }
 
   function minimalPayload(overrides: Record<string, unknown> = {}) {
@@ -80,16 +74,14 @@ describe('Social Posts CRUD (e2e)', () => {
     };
   }
 
-  it('rejects requests with no bearer token', async () => {
+  it('rejects requests with no gateway principal', async () => {
     await request(app.getHttpServer()).get('/v1/social-posts').expect(401);
   });
 
-  it('rejects requests when Unkey reports the key as invalid', async () => {
-    mockUnkey.keys.verifyKey.mockResolvedValueOnce(invalidVerifyKeyResponse());
-
+  it('rejects requests with an invalid gateway principal', async () => {
     await request(app.getHttpServer())
       .get('/v1/social-posts')
-      .set('Authorization', 'Bearer whatever')
+      .set('X-Unkey-Principal', '{invalid')
       .expect(401);
   });
 
@@ -97,7 +89,7 @@ describe('Social Posts CRUD (e2e)', () => {
     authAsUser1();
     const createRes = await request(app.getHttpServer())
       .post('/v1/social-posts')
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .send(minimalPayload())
       .expect(201);
 
@@ -111,14 +103,14 @@ describe('Social Posts CRUD (e2e)', () => {
     authAsUser1();
     const getRes = await request(app.getHttpServer())
       .get(`/v1/social-posts/${created.id}`)
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .expect(200);
     expect((getRes.body as SocialPostResponse).id).toBe(created.id);
 
     authAsUser1();
     const listRes = await request(app.getHttpServer())
       .get('/v1/social-posts')
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .expect(200);
     const list = listRes.body as PaginatedSocialPostsResponse;
     expect(list.data.some((post) => post.id === created.id)).toBe(true);
@@ -126,7 +118,7 @@ describe('Social Posts CRUD (e2e)', () => {
     authAsUser1();
     const updateRes = await request(app.getHttpServer())
       .put(`/v1/social-posts/${created.id}`)
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .send(minimalPayload({ caption: 'updated e2e caption' }))
       .expect(200);
     expect((updateRes.body as SocialPostResponse).caption).toBe(
@@ -136,13 +128,13 @@ describe('Social Posts CRUD (e2e)', () => {
     authAsUser1();
     await request(app.getHttpServer())
       .delete(`/v1/social-posts/${created.id}`)
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .expect(200);
 
     authAsUser1();
     await request(app.getHttpServer())
       .get(`/v1/social-posts/${created.id}`)
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .expect(404);
   });
 
@@ -150,7 +142,7 @@ describe('Social Posts CRUD (e2e)', () => {
     authAsUser1();
     const createRes = await request(app.getHttpServer())
       .post('/v1/social-posts')
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .send(minimalPayload())
       .expect(201);
     const created = createRes.body as SocialPostResponse;
@@ -159,16 +151,14 @@ describe('Social Posts CRUD (e2e)', () => {
     // user5 is seeded but was never added to "Example Team" — blocked by
     // user_has_project_access() (RLS), not by the controller's own
     // project_id filter, since we pass the real project id here.
-    mockUnkey.keys.verifyKey.mockResolvedValueOnce(
-      validVerifyKeyResponse({
-        userId: ctx.userIds.user5,
-        projectId: ctx.projectId,
-        teamId: ctx.teamId,
-      }),
-    );
+    authHeader = principalHeader({
+      userId: ctx.userIds.user5,
+      projectId: ctx.projectId,
+      teamId: ctx.teamId,
+    });
     await request(app.getHttpServer())
       .get(`/v1/social-posts/${created.id}`)
-      .set('Authorization', 'Bearer test-token')
+      .set('X-Unkey-Principal', authHeader)
       .expect(404);
   });
 });

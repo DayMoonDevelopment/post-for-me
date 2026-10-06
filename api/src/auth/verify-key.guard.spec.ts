@@ -1,169 +1,113 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
-import type { Unkey } from '@unkey/api';
 import { describe, expect, it, vi } from 'vitest';
 
+import { VERIFY_KEY_PERMISSIONS } from './verify-key.decorator';
 import { VerifyKeyGuard } from './verify-key.guard';
 
-interface MockRequest {
-  headers: Record<string, string>;
+function buildGuard({ header, query }: { header?: string; query?: string }) {
+  const getAllAndOverride = vi.fn().mockReturnValue(query);
+  const guard = new VerifyKeyGuard({
+    getAllAndOverride,
+  } as unknown as Reflector);
+  const handler = vi.fn();
+  const controller = vi.fn();
+  const context = {
+    switchToHttp: () => ({
+      getRequest: () => ({
+        headers: header ? { 'x-unkey-principal': header } : {},
+      }),
+    }),
+    getHandler: () => handler,
+    getClass: () => controller,
+  } as unknown as ExecutionContext;
+
+  return { guard, context, getAllAndOverride, handler, controller };
+}
+
+function principalHeader(permissions?: string[]) {
+  return JSON.stringify({
+    version: 'v1',
+    subject: 'key_1',
+    type: 'API_KEY',
+    source: {
+      key: { keyId: 'key_1', keySpaceId: 'space_1', meta: {}, permissions },
+    },
+  });
 }
 
 describe('VerifyKeyGuard', () => {
-  function buildContext({
-    authorization,
-    permissions,
-  }: {
-    authorization?: string;
-    permissions?: string;
-  }) {
-    const request: MockRequest = {
-      headers: authorization ? { authorization } : {},
-    };
+  it.each([
+    undefined,
+    '',
+    '{invalid',
+    'null',
+    '{}',
+    JSON.stringify({
+      version: 'v1',
+      subject: 'user_1',
+      type: 'USER',
+    }),
+  ])('rejects missing or invalid principals: %s', (header) => {
+    const { guard, context } = buildGuard({ header });
 
-    const getAllAndOverride = vi.fn().mockReturnValue(permissions);
-    const reflector = { getAllAndOverride } as unknown as Reflector;
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+  });
 
-    const context = {
-      switchToHttp: () => ({ getRequest: () => request }),
-      getHandler: () => undefined,
-      getClass: () => undefined,
-    } as unknown as ExecutionContext;
+  it('allows a valid principal without a permission requirement', () => {
+    const { guard, context, getAllAndOverride, handler, controller } =
+      buildGuard({
+        header: principalHeader(),
+      });
 
-    return { context, reflector, getAllAndOverride };
-  }
+    expect(guard.canActivate(context)).toBe(true);
+    expect(getAllAndOverride).toHaveBeenCalledWith(VERIFY_KEY_PERMISSIONS, [
+      handler,
+      controller,
+    ]);
+  });
 
-  function buildGuard({
-    verifyKey,
-    reflector,
-  }: {
-    verifyKey: ReturnType<typeof vi.fn>;
-    reflector: Reflector;
-  }) {
-    const unkey = { keys: { verifyKey } } as unknown as Unkey;
-    return new VerifyKeyGuard(unkey, reflector);
-  }
+  it.each([
+    ['cms.read', ['cms.read']],
+    ['cms.read AND cms.write', ['cms.read', 'cms.write']],
+    ['cms.read OR cms.write', ['cms.write']],
+    ['(cms.read OR cms.write) AND cms.admin', ['cms.write', 'cms.admin']],
+    ['cms.read or cms.write and cms.admin', ['cms.read']],
+  ])('allows a satisfied permission query: %s', (query, permissions) => {
+    const { guard, context } = buildGuard({
+      header: principalHeader(permissions),
+      query,
+    });
 
-  it('rejects a request with no Authorization header', async () => {
-    const { context, reflector } = buildContext({});
-    const guard = buildGuard({ verifyKey: vi.fn(), reflector });
+    expect(guard.canActivate(context)).toBe(true);
+  });
 
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
+  it.each([
+    'cms.write',
+    'cms.read AND cms.write',
+    '(cms.read OR cms.write) AND cms.admin',
+    'cms.read AND',
+    '(cms.read',
+    'cms.read cms.write',
+    'cms.read )',
+  ])('rejects unsatisfied or malformed queries: %s', (query) => {
+    const { guard, context } = buildGuard({
+      header: principalHeader(['cms.read']),
+      query,
+    });
+
+    expect(() => guard.canActivate(context)).toThrow(
+      new ForbiddenException(`Key lacks required permission: ${query}`),
     );
   });
 
-  it('rejects a malformed Authorization header', async () => {
-    const { context, reflector } = buildContext({
-      authorization: 'Token abc123',
+  it('rejects a principal without permissions when a permission is required', () => {
+    const { guard, context } = buildGuard({
+      header: principalHeader(),
+      query: 'cms.read',
     });
-    const guard = buildGuard({ verifyKey: vi.fn(), reflector });
 
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('rejects an empty bearer token', async () => {
-    const { context, reflector } = buildContext({ authorization: 'Bearer ' });
-    const guard = buildGuard({ verifyKey: vi.fn(), reflector });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('rejects when unkey returns no data', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({ data: null });
-    const { context, reflector } = buildContext({
-      authorization: 'Bearer token-1',
-    });
-    const guard = buildGuard({ verifyKey, reflector });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('grants access for a valid key with no permission requirement', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({ data: { valid: true } });
-    const { context, reflector } = buildContext({
-      authorization: 'Bearer token-1',
-    });
-    const guard = buildGuard({ verifyKey, reflector });
-
-    await expect(guard.canActivate(context)).resolves.toBe(true);
-  });
-
-  it('passes the reflected permission query through to unkey.keys.verifyKey', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({ data: { valid: true } });
-    const { context, reflector } = buildContext({
-      authorization: 'Bearer token-1',
-      permissions: 'cms.read AND cms.write',
-    });
-    const guard = buildGuard({ verifyKey, reflector });
-
-    await guard.canActivate(context);
-
-    expect(verifyKey).toHaveBeenCalledWith({
-      key: 'token-1',
-      permissions: 'cms.read AND cms.write',
-    });
-  });
-
-  it('throws Forbidden with the permission query when unkey returns INSUFFICIENT_PERMISSIONS', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: { valid: false, code: 'INSUFFICIENT_PERMISSIONS' },
-    });
-    const { context, reflector } = buildContext({
-      authorization: 'Bearer token-1',
-      permissions: 'cms.write',
-    });
-    const guard = buildGuard({ verifyKey, reflector });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      new ForbiddenException('Key lacks required permission: cms.write'),
-    );
-  });
-
-  it('throws a generic Forbidden when unkey returns FORBIDDEN with no permission query', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: { valid: false, code: 'FORBIDDEN' },
-    });
-    const { context, reflector } = buildContext({
-      authorization: 'Bearer token-1',
-    });
-    const guard = buildGuard({ verifyKey, reflector });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      new ForbiddenException('Key is forbidden from accessing this resource.'),
-    );
-  });
-
-  it('throws Unauthorized for any other invalid code', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: { valid: false, code: 'NOT_FOUND' },
-    });
-    const { context, reflector } = buildContext({
-      authorization: 'Bearer token-1',
-    });
-    const guard = buildGuard({ verifyKey, reflector });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('wraps a thrown verifyKey error as Unauthorized', async () => {
-    const verifyKey = vi.fn().mockRejectedValue(new Error('network error'));
-    const { context, reflector } = buildContext({
-      authorization: 'Bearer token-1',
-    });
-    const guard = buildGuard({ verifyKey, reflector });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
+    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 });

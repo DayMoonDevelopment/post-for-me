@@ -1,238 +1,88 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { UnauthorizedException } from '@nestjs/common';
-import type { Unkey } from '@unkey/api';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SupabaseService } from '../supabase/supabase.service';
 import { AuthGuard } from './auth.guard';
+import type { UnkeyPrincipal } from './unkey-principal';
 import type { RequestUser } from './user.interface';
 
-interface MockRequest {
-  headers: Record<string, string>;
-  path: string;
-  user?: RequestUser;
-  planType?: string;
+function makePrincipal(): UnkeyPrincipal {
+  return {
+    version: 'v1',
+    subject: 'key_1',
+    type: 'API_KEY',
+    identity: { externalId: 'project_1' },
+    source: {
+      key: {
+        keyId: 'key_1',
+        keySpaceId: 'space_1',
+        meta: { created_by: 'user_1', team_id: 'team_1' },
+      },
+    },
+  };
 }
 
-interface MockResponse {
-  setHeader: ReturnType<typeof vi.fn>;
+function buildGuard(
+  headers: Record<string, string | undefined> = {},
+  path = '/social-posts',
+) {
+  const request: {
+    headers: Record<string, string | undefined>;
+    path: string;
+    user?: RequestUser;
+    planType?: string;
+  } = { headers, path };
+  const context = {
+    switchToHttp: () => ({ getRequest: () => request }),
+  } as unknown as ExecutionContext;
+  const setUser = vi.fn();
+  const guard = new AuthGuard({ setUser } as unknown as SupabaseService);
+
+  return { guard, context, request, setUser };
 }
 
 describe('AuthGuard', () => {
-  function buildContext({
-    authorization,
-    path = '/social-posts',
-  }: {
-    authorization?: string;
-    path?: string;
-  }) {
-    const request: MockRequest = {
-      headers: authorization ? { authorization } : {},
-      path,
-    };
+  it.each([
+    {},
+    { authorization: 'Bearer token' },
+    { 'x-unkey-principal': '' },
+    { 'x-unkey-principal': '{invalid' },
+    { 'x-unkey-principal': 'null' },
+    { 'x-unkey-principal': '{}' },
+    {
+      'x-unkey-principal': JSON.stringify({ ...makePrincipal(), type: 'USER' }),
+    },
+  ])('rejects missing or invalid gateway principals: %j', (headers) => {
+    const { guard, context, setUser } = buildGuard(headers);
 
-    const response: MockResponse = {
-      setHeader: vi.fn(),
-    };
-
-    const context = {
-      switchToHttp: () => ({
-        getRequest: () => request,
-        getResponse: () => response,
-      }),
-    } as unknown as ExecutionContext;
-
-    return { context, request, response };
-  }
-
-  function buildGuard({ verifyKey }: { verifyKey: ReturnType<typeof vi.fn> }) {
-    const setUser = vi.fn();
-    const supabaseService = { setUser } as unknown as SupabaseService;
-    const unkey = { keys: { verifyKey } } as unknown as Unkey;
-
-    return {
-      guard: new AuthGuard(supabaseService, unkey),
-      setUser,
-    };
-  }
-
-  it('rejects a request with no Authorization header', async () => {
-    const { guard } = buildGuard({ verifyKey: vi.fn() });
-    const { context } = buildContext({});
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(setUser).not.toHaveBeenCalled();
   });
 
-  it('rejects a malformed Authorization header (no Bearer prefix)', async () => {
-    const { guard } = buildGuard({ verifyKey: vi.fn() });
-    const { context } = buildContext({ authorization: 'Token abc123' });
+  it.each(['created_by', 'projectId'])(
+    'rejects a principal missing %s',
+    (field) => {
+      const principal = makePrincipal();
+      if (field === 'created_by') {
+        principal.source!.key!.meta = {};
+      } else {
+        principal.identity = undefined;
+      }
+      const { guard, context } = buildGuard({
+        'x-unkey-principal': JSON.stringify(principal),
+      });
 
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    },
+  );
 
-  it('rejects an empty bearer token', async () => {
-    const { guard } = buildGuard({ verifyKey: vi.fn() });
-    const { context } = buildContext({ authorization: 'Bearer ' });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('rejects when unkey reports the token as invalid', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: { valid: false, code: 'NOT_FOUND' },
-      meta: {},
-    });
-    const { guard } = buildGuard({ verifyKey });
-    const { context } = buildContext({ authorization: 'Bearer bad-token' });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('applies rate-limit headers and throws 429 when unkey reports RATE_LIMITED', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: {
-        valid: false,
-        code: 'RATE_LIMITED',
-        ratelimits: [
-          {
-            name: 'default',
-            exceeded: true,
-            limit: 100,
-            remaining: 0,
-            reset: 5000,
-            duration: 60000,
-          },
-        ],
-      },
-      meta: {},
-    });
-    const { guard } = buildGuard({ verifyKey });
-    const { context, response } = buildContext({
-      authorization: 'Bearer rate-limited-token',
+  it('attaches the principal identity and sets the Supabase user', () => {
+    const { guard, context, request, setUser } = buildGuard({
+      'x-unkey-principal': JSON.stringify(makePrincipal()),
     });
 
-    await expect(guard.canActivate(context)).rejects.toMatchObject({
-      status: 429,
-    });
-
-    expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '5');
-    expect(response.setHeader).toHaveBeenCalledWith(
-      'X-Rate-Limit-Limit',
-      '100',
-    );
-    expect(response.setHeader).toHaveBeenCalledWith(
-      'X-Rate-Limit-Remaining',
-      '0',
-    );
-  });
-
-  it('rejects a valid token that is missing userId/projectId', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: {
-        valid: true,
-        code: 'VALID',
-        keyId: 'key_1',
-        meta: {},
-        identity: undefined,
-      },
-      meta: {},
-    });
-    const { guard } = buildGuard({ verifyKey });
-    const { context } = buildContext({ authorization: 'Bearer valid-token' });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('rejects when unkey.keys.verifyKey throws', async () => {
-    const verifyKey = vi.fn().mockRejectedValue(new Error('network error'));
-    const { guard } = buildGuard({ verifyKey });
-    const { context } = buildContext({ authorization: 'Bearer valid-token' });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('rejects access to /social-account-feeds when plan_type is not new_pricing', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: {
-        valid: true,
-        code: 'VALID',
-        keyId: 'key_1',
-        meta: { created_by: 'user_1', team_id: 'team_1', plan_type: 'legacy' },
-        identity: { externalId: 'project_1' },
-      },
-      meta: {},
-    });
-    const { guard } = buildGuard({ verifyKey });
-    const { context } = buildContext({
-      authorization: 'Bearer valid-token',
-      path: '/social-account-feeds',
-    });
-
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('allows access to /social-account-feeds when plan_type is new_pricing', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: {
-        valid: true,
-        code: 'VALID',
-        keyId: 'key_1',
-        meta: {
-          created_by: 'user_1',
-          team_id: 'team_1',
-          plan_type: 'new_pricing',
-        },
-        identity: { externalId: 'project_1' },
-      },
-      meta: {},
-    });
-    const { guard } = buildGuard({ verifyKey });
-    const { context, request } = buildContext({
-      authorization: 'Bearer valid-token',
-      path: '/social-account-feeds',
-    });
-
-    await expect(guard.canActivate(context)).resolves.toBe(true);
-    expect(request.user).toEqual({
-      id: 'user_1',
-      projectId: 'project_1',
-      apiKey: 'key_1',
-      teamId: 'team_1',
-    });
-  });
-
-  it('grants access on the happy path and attaches request.user / calls setUser', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: {
-        valid: true,
-        code: 'VALID',
-        keyId: 'key_1',
-        meta: { created_by: 'user_1', team_id: 'team_1' },
-        identity: { externalId: 'project_1' },
-      },
-      meta: {},
-    });
-    const { guard, setUser } = buildGuard({ verifyKey });
-    const { context, request } = buildContext({
-      authorization: 'Bearer valid-token',
-    });
-
-    await expect(guard.canActivate(context)).resolves.toBe(true);
-
+    expect(guard.canActivate(context)).toBe(true);
     expect(setUser).toHaveBeenCalledWith('user_1');
     expect(request.user).toEqual({
       id: 'user_1',
@@ -242,23 +92,40 @@ describe('AuthGuard', () => {
     });
   });
 
-  it('defaults keyId/teamId to empty strings when unkey omits them', async () => {
-    const verifyKey = vi.fn().mockResolvedValue({
-      data: {
-        valid: true,
-        code: 'VALID',
-        keyId: undefined,
-        meta: { created_by: 'user_1' },
-        identity: { externalId: 'project_1' },
-      },
-      meta: {},
-    });
-    const { guard } = buildGuard({ verifyKey });
-    const { context, request } = buildContext({
-      authorization: 'Bearer valid-token',
+  it.each([undefined, 'legacy', 'new_pricing'])(
+    'enforces the social-account-feeds plan requirement for %s',
+    (planType) => {
+      const principal = makePrincipal();
+      principal.source!.key!.meta.plan_type = planType;
+      const { guard, context, request, setUser } = buildGuard(
+        { 'x-unkey-principal': JSON.stringify(principal) },
+        '/social-account-feeds',
+      );
+
+      if (planType === 'new_pricing') {
+        expect(guard.canActivate(context)).toBe(true);
+        expect(request.planType).toBe('new_pricing');
+      } else {
+        expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+        expect(setUser).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('defaults omitted keyId and teamId to empty strings', () => {
+    const principal = makePrincipal();
+    // A gateway payload may omit optional identity metadata at runtime.
+    const key = principal.source!.key!;
+    const { guard, context, request } = buildGuard({
+      'x-unkey-principal': JSON.stringify({
+        ...principal,
+        source: {
+          key: { ...key, keyId: undefined, meta: { created_by: 'user_1' } },
+        },
+      }),
     });
 
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(guard.canActivate(context)).toBe(true);
     expect(request.user).toEqual({
       id: 'user_1',
       projectId: 'project_1',

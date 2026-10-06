@@ -5,21 +5,13 @@ import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 
 import { AppModule } from '../../src/app.module';
-import { UNKEY_INSTANCE } from '../../src/unkey/unkey.module';
-import { createMockUnkeyClient, type MockUnkeyClient } from './mock-unkey';
 
 export async function buildE2eApp(): Promise<{
   app: NestExpressApplication;
-  mockUnkey: MockUnkeyClient;
 }> {
-  const mockUnkey = createMockUnkeyClient();
-
   const moduleFixture = await Test.createTestingModule({
     imports: [AppModule],
-  })
-    .overrideProvider(UNKEY_INSTANCE)
-    .useValue(mockUnkey)
-    .compile();
+  }).compile();
 
   const app = moduleFixture.createNestApplication<NestExpressApplication>();
 
@@ -35,7 +27,7 @@ export async function buildE2eApp(): Promise<{
 
   await app.init();
 
-  return { app, mockUnkey };
+  return { app };
 }
 
 export async function closeE2eApp(

@@ -1,4 +1,5 @@
 import type { ConfigService } from '@nestjs/config';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseService } from '../supabase/supabase.service';
 import { FacebookService } from './facebook.service';
 import type { FacebookPost } from './facebook.types';
@@ -12,7 +13,7 @@ function asTestAccess(service: FacebookService): FacebookServiceTestAccess {
 }
 
 function makeConfigService(): ConfigService {
-  return { get: jest.fn() } as unknown as ConfigService;
+  return { get: vi.fn() } as unknown as ConfigService;
 }
 
 describe('FacebookService', () => {

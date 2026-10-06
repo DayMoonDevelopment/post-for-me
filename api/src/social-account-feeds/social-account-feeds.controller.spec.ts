@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { describe, expect, it, vi } from 'vitest';
 import type { RequestUser } from '../auth/user.interface';
 import { YouTubeError } from '../youtube/youtube.service';
 import { SocialAccountFeedsController } from './social-account-feeds.controller';
@@ -34,7 +35,7 @@ function makeYouTubeError(overrides: {
 }
 
 describe('SocialAccountFeedsController', () => {
-  function makeController(getPlatformPosts: jest.Mock): {
+  function makeController(getPlatformPosts: ReturnType<typeof vi.fn>): {
     controller: SocialAccountFeedsController;
   } {
     const serviceStub = {
@@ -46,7 +47,7 @@ describe('SocialAccountFeedsController', () => {
 
   it('returns the feed as-is on success', async () => {
     const feed = { posts: [], count: 0, has_more: false };
-    const { controller } = makeController(jest.fn().mockResolvedValue(feed));
+    const { controller } = makeController(vi.fn().mockResolvedValue(feed));
 
     await expect(
       controller.getAccountFeed(
@@ -59,9 +60,7 @@ describe('SocialAccountFeedsController', () => {
 
   it('rethrows an HttpException from the service as-is', async () => {
     const notFound = new HttpException('Not found', HttpStatus.NOT_FOUND);
-    const { controller } = makeController(
-      jest.fn().mockRejectedValue(notFound),
-    );
+    const { controller } = makeController(vi.fn().mockRejectedValue(notFound));
 
     await expect(
       controller.getAccountFeed(
@@ -78,7 +77,7 @@ describe('SocialAccountFeedsController', () => {
       authFailure: true,
       retryable: false,
     });
-    const { controller } = makeController(jest.fn().mockRejectedValue(error));
+    const { controller } = makeController(vi.fn().mockRejectedValue(error));
 
     let thrown: unknown;
 
@@ -102,7 +101,7 @@ describe('SocialAccountFeedsController', () => {
       retryable: false,
       message: 'invalid_grant',
     });
-    const { controller } = makeController(jest.fn().mockRejectedValue(error));
+    const { controller } = makeController(vi.fn().mockRejectedValue(error));
 
     let thrown: unknown;
 
@@ -125,7 +124,7 @@ describe('SocialAccountFeedsController', () => {
       authFailure: false,
       retryable: false,
     });
-    const { controller } = makeController(jest.fn().mockRejectedValue(error));
+    const { controller } = makeController(vi.fn().mockRejectedValue(error));
 
     let thrown: unknown;
 
@@ -147,7 +146,7 @@ describe('SocialAccountFeedsController', () => {
 
   it('falls back to 500 for an unrelated error', async () => {
     const { controller } = makeController(
-      jest.fn().mockRejectedValue(new Error('boom')),
+      vi.fn().mockRejectedValue(new Error('boom')),
     );
 
     let thrown: unknown;

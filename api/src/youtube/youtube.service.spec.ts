@@ -1,15 +1,16 @@
 import { google } from 'googleapis';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SocialAccount } from '../lib/dto/global.dto';
 import type { SupabaseService } from '../supabase/supabase.service';
 import { YouTubeError, YouTubeService } from './youtube.service';
 
-jest.mock('googleapis', () => ({
+vi.mock('googleapis', () => ({
   google: {
-    youtube: jest.fn(),
+    youtube: vi.fn(),
   },
 }));
 
-const mockedYoutube = google.youtube as jest.Mock;
+const mockedYoutube = google.youtube as unknown as ReturnType<typeof vi.fn>;
 
 interface FakeGoogleApiSubError {
   message?: string;
@@ -59,7 +60,7 @@ function makeDocumentedSuspensionError(
 
 interface YouTubeServiceTestAccess {
   isSuspendedAccountError(error: unknown): boolean;
-  oauth2Client: { setCredentials: jest.Mock } | null;
+  oauth2Client: { setCredentials: ReturnType<typeof vi.fn> } | null;
 }
 
 function asTestAccess(service: YouTubeService): YouTubeServiceTestAccess {
@@ -215,7 +216,7 @@ describe('YouTubeService', () => {
 
   describe('getAccountPosts', () => {
     beforeEach(() => {
-      asTestAccess(service).oauth2Client = { setCredentials: jest.fn() };
+      asTestAccess(service).oauth2Client = { setCredentials: vi.fn() };
     });
 
     it('throws a suspended-account YouTubeError when the channel is suspended', async () => {
@@ -224,9 +225,9 @@ describe('YouTubeService', () => {
       );
 
       mockedYoutube.mockReturnValue({
-        channels: { list: jest.fn().mockRejectedValue(error) },
-        playlistItems: { list: jest.fn() },
-        videos: { list: jest.fn() },
+        channels: { list: vi.fn().mockRejectedValue(error) },
+        playlistItems: { list: vi.fn() },
+        videos: { list: vi.fn() },
       });
 
       let thrown: unknown;
@@ -248,9 +249,9 @@ describe('YouTubeService', () => {
       });
 
       mockedYoutube.mockReturnValue({
-        channels: { list: jest.fn().mockRejectedValue(error) },
-        playlistItems: { list: jest.fn() },
-        videos: { list: jest.fn() },
+        channels: { list: vi.fn().mockRejectedValue(error) },
+        playlistItems: { list: vi.fn() },
+        videos: { list: vi.fn() },
       });
 
       await expect(
