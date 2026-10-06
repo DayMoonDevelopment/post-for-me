@@ -1,4 +1,8 @@
-import { Injectable, Scope } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Scope } from '@nestjs/common';
+import type {
+  GetPlatformAudioParams,
+  PlatformAudioResponseDto,
+} from '../lib/dto/platform-audio.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -13,6 +17,18 @@ import { TikTokBusinessMetricsDto } from './dto/tiktok-business-post-metrics.dto
 
 @Injectable({ scope: Scope.REQUEST })
 export class TikTokBusinessService implements SocialPlatformService {
+  getPlatformAudio(
+    params: GetPlatformAudioParams,
+  ): Promise<PlatformAudioResponseDto> {
+    void params;
+    return Promise.reject(
+      new HttpException(
+        'Platform audio is not supported for this platform',
+        HttpStatus.BAD_REQUEST,
+      ),
+    );
+  }
+
   appCredentials: SocialProviderAppCredentials;
   tokenUrl: string;
   apiUrl: string;

@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional } from 'class-validator';
 import { SocialPostMediaDto } from './post-media.dto';
+import { InstagramAudioConfigurationDto } from '../../instagram/dto/instagram-audio-configuration.dto';
+import { TikTokBusinessMusicSoundInfoDto } from '../../tiktok-business/dto/tiktok-business-music-sound-info.dto';
 
 export enum TiktokPrivacyStatus {
   PUBLIC = 'public',
@@ -86,6 +88,14 @@ export class PinterestConfigurationDto extends BaseConfigurationDto {
 }
 
 export class InstagramConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description:
+      'Selected audio for a single video Reel, Facebook Login only. Not supported for Instagram Login, photos, carousels, or Stories. Publishing integration follows in PFM-1291.',
+    type: InstagramAudioConfigurationDto,
+    required: false,
+  })
+  audio_configuration?: InstagramAudioConfigurationDto;
+
   @ApiProperty({
     description: 'Instagram post placement',
     enum: ['reels', 'stories', 'timeline'],
@@ -224,6 +234,14 @@ export class TiktokConfigurationDto extends BaseConfigurationDto {
 }
 
 export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description:
+      'Selected sound clip for a single TikTok Business video. Mapped to post_info.music_sound_info, not the request root. Not supported for photo posts, drafts, or regular TikTok. Publishing integration follows in PFM-1290.',
+    type: TikTokBusinessMusicSoundInfoDto,
+    required: false,
+  })
+  music_sound_info?: TikTokBusinessMusicSoundInfoDto;
+
   @ApiProperty({
     description: 'Overrides the `title` from the post',
     nullable: true,
@@ -592,8 +610,8 @@ export class PlatformConfigurationsDto {
   threads?: ThreadsConfigurationDto;
 
   @ApiProperty({
-    description: 'TikTok configuration',
-    type: TiktokConfigurationDto,
+    description: 'TikTok Business configuration',
+    type: TiktokBusinessConfigurationDto,
     required: false,
     nullable: true,
   })
@@ -602,6 +620,22 @@ export class PlatformConfigurationsDto {
 //
 
 export class AccountConfigurationDetailsDto {
+  @ApiProperty({
+    description:
+      'Account override for Instagram selected audio. Single video Reels with Facebook Login only; replaces the entire platform audio_configuration object.',
+    type: InstagramAudioConfigurationDto,
+    required: false,
+  })
+  audio_configuration?: InstagramAudioConfigurationDto;
+
+  @ApiProperty({
+    description:
+      'Account override for TikTok Business selected sound. Single video only; replaces the entire platform music_sound_info object.',
+    type: TikTokBusinessMusicSoundInfoDto,
+    required: false,
+  })
+  music_sound_info?: TikTokBusinessMusicSoundInfoDto;
+
   @ApiProperty({
     description: 'Overrides the `caption` from the post',
     nullable: true,

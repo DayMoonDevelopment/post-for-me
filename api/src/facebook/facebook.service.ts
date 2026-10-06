@@ -1,4 +1,8 @@
-import { Injectable, Scope } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Scope } from '@nestjs/common';
+import type {
+  GetPlatformAudioParams,
+  PlatformAudioResponseDto,
+} from '../lib/dto/platform-audio.dto';
 import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
@@ -30,6 +34,18 @@ type FacebookInsightsInterval = { since: string; until: string };
 
 @Injectable({ scope: Scope.REQUEST })
 export class FacebookService implements SocialPlatformService {
+  getPlatformAudio(
+    params: GetPlatformAudioParams,
+  ): Promise<PlatformAudioResponseDto> {
+    void params;
+    return Promise.reject(
+      new HttpException(
+        'Platform audio is not supported for this platform',
+        HttpStatus.BAD_REQUEST,
+      ),
+    );
+  }
+
   appCredentials: SocialProviderAppCredentials;
 
   constructor(
