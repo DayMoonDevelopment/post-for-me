@@ -7,7 +7,7 @@ export const VERIFY_KEY_PERMISSIONS = 'verify_key_permissions';
 export interface VerifyKeyOptions {
   /**
    * Unkey permission query required to access this route. Supports the same
-   * syntax as `keys.verifyKey({ permissions })`:
+   * syntax as the gateway API key policy permission query:
    *   - single: "cms.read"
    *   - AND/OR: "cms.read AND cms.write"
    *   - grouped: "(cms.read OR cms.write) AND authors.view"
