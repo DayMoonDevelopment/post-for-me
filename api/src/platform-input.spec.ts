@@ -1,4 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
+import { describe, expect, it, vi } from 'vitest';
 import type { ConfigService } from '@nestjs/config';
 import type { RequestUser } from './auth/user.interface';
 import type { PaginationService } from './pagination/pagination.service';
@@ -25,23 +26,23 @@ function makeChain(data: unknown = []) {
     | 'upsert'
     | 'single'
     | 'maybeSingle',
-    jest.Mock
+    ReturnType<typeof vi.fn>
   > & { then: (resolve: (value: unknown) => unknown) => unknown } = {
-    select: jest.fn(() => chain),
-    eq: jest.fn(() => chain),
-    in: jest.fn(() => chain),
-    range: jest.fn(() => chain),
-    order: jest.fn(() => chain),
-    upsert: jest.fn(() => chain),
-    single: jest.fn(() => chain),
-    maybeSingle: jest.fn(() => chain),
+    select: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    range: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    upsert: vi.fn(() => chain),
+    single: vi.fn(() => chain),
+    maybeSingle: vi.fn(() => chain),
     then: (resolve: (value: unknown) => unknown) =>
       resolve({ data, error: null, count: 0 }),
   };
   return chain;
 }
 
-function makeSupabase(from: jest.Mock): SupabaseService {
+function makeSupabase(from: ReturnType<typeof vi.fn>): SupabaseService {
   return {
     supabaseClient: { from },
     supabaseServiceRole: { from },
@@ -57,7 +58,7 @@ describe('request platform identifiers', () => {
       const resultPosts = makeChain([{ id: 'post_1' }]);
       const results = makeChain();
       const supabase = makeSupabase(
-        jest
+        vi
           .fn()
           .mockReturnValueOnce(accounts)
           .mockReturnValueOnce(posts)
@@ -96,7 +97,7 @@ describe('request platform identifiers', () => {
   it('writes a canonical provider when creating an account without altering metadata', async () => {
     const chain = makeChain({ id: 'account_1', provider: 'tiktok_business' });
     const service = new SocialAccountsService(
-      makeSupabase(jest.fn(() => chain)),
+      makeSupabase(vi.fn(() => chain)),
       {} as ConfigService,
     );
     const socialAccount = {
@@ -130,7 +131,7 @@ describe('request platform identifiers', () => {
     const many = makeChain();
     const service = new SocialProviderAppCredentialsService(
       makeSupabase(
-        jest.fn().mockReturnValueOnce(single).mockReturnValueOnce(many),
+        vi.fn().mockReturnValueOnce(single).mockReturnValueOnce(many),
       ),
     );
 
@@ -181,26 +182,21 @@ describe('request platform identifiers', () => {
     async (input) => {
       const credentials = { provider: input.provider };
       const credentialService = {
-        getSocialProviderAppCredentials: jest
-          .fn()
-          .mockResolvedValue(credentials),
-        getManySocialProviderAppCredentials: jest
+        getSocialProviderAppCredentials: vi.fn().mockResolvedValue(credentials),
+        getManySocialProviderAppCredentials: vi
           .fn()
           .mockResolvedValue([credentials]),
       };
       const accounts = {
-        getSocialAccountAuthUrl: jest
-          .fn<
-            Promise<string>,
-            [Parameters<SocialAccountsService['getSocialAccountAuthUrl']>[0]]
-          >()
+        getSocialAccountAuthUrl: vi
+          .fn<SocialAccountsService['getSocialAccountAuthUrl']>()
           .mockResolvedValue('https://auth.test'),
       };
       const controller = new SocialAccountsController(
         accounts as unknown as SocialAccountsService,
         {} as PaginationService,
         credentialService as unknown as SocialProviderAppCredentialsService,
-        makeSupabase(jest.fn(() => makeChain({ is_system: false }))),
+        makeSupabase(vi.fn(() => makeChain({ is_system: false }))),
       );
 
       const result = await controller.createSocialAccountAuthUrl(input, {
