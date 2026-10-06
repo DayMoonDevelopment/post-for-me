@@ -19,6 +19,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 import { PrivateModule } from './private/private.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
+import { PlatformAudioModule } from './platform-audio/platform-audio.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
     SocialPostPreviewsModule,
     WebhooksModule,
     SocialAccountFeedsModule,
+    PlatformAudioModule,
     PrivateModule,
     HealthcheckModule,
   ],
