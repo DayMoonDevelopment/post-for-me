@@ -34,6 +34,13 @@ export async function getLinkedInSocialProviderConnection({
 
   const tokenData = await tokenResponse.json();
 
+  if (!tokenData?.access_token) {
+    console.error("Error fetching access token", tokenData);
+    throw Error(
+      `Error fetching access token ${tokenData?.error_description || tokenData?.error || ""}`,
+    );
+  }
+
   const accessToken = tokenData.access_token;
   const accessTokenExpiresAt: Date = new Date(
     Date.now() + (tokenData.expires_in - 86400) * 1000,
