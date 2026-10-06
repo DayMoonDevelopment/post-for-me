@@ -164,6 +164,50 @@ const publishCarousel = () =>
     platformConfig: {},
   });
 
+describe("InstagramPostClient media tag platform filters", () => {
+  for (const carousel of [false, true]) {
+    test(`matches case and whitespace variants for ${carousel ? "carousel" : "single media"} without changing input`, async () => {
+      const tags = ["instagram", "Instagram", "INSTAGRAM", " \tInStAgRaM\n", "facebook"].flatMap(
+        (platform, index) => ["user", "product", "other"].map((type) => ({
+          platform, type, id: `${type}_${index}`, x: 0.2, y: 0.3,
+        })),
+      );
+      const medium: PostMedia = {
+        id: "media_1",
+        url: "https://cdn.example.com/photo.jpg",
+        type: "image",
+        skip_processing: true,
+        tags,
+      };
+      const media = carousel ? [medium, { ...medium, id: "media_2" }] : [medium];
+      const originalInput = JSON.stringify(media);
+
+      const result = await makeClient().post({
+        postId: "post_1",
+        account: makeAccount(),
+        caption: "caption",
+        media,
+        platformConfig: {},
+      });
+
+      expect(result.success).toBe(true);
+      const itemCalls = axiosPost.mock.calls.filter(([url, payload]) =>
+        url.endsWith("/media") && payload.media_type !== "CAROUSEL",
+      );
+      expect(itemCalls).toHaveLength(media.length);
+      for (const [, payload] of itemCalls) {
+        expect(payload.user_tags).toEqual(tags.slice(0, 12).filter((tag) => tag.type === "user").map((tag) => ({
+          username: tag.id, x: tag.x, y: tag.y,
+        })));
+        expect(payload.product_tags).toEqual(tags.slice(0, 12).filter((tag) => tag.type === "product").map((tag) => ({
+          product_id: tag.id, x: tag.x, y: tag.y,
+        })));
+      }
+      expect(JSON.stringify(media)).toBe(originalInput);
+    });
+  }
+});
+
 describe("InstagramPostClient error detail propagation", () => {
   test("posts a single video successfully (happy path)", async () => {
     const result = await publishSingle();
