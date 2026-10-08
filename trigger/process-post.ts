@@ -1,4 +1,6 @@
-import { logger, task, tasks, tags, wait } from "@trigger.dev/sdk";
+import { task, tasks, tags, wait } from "@trigger.dev/sdk";
+import { safeLogger as logger } from "./safe-logger";
+import { redactSecrets } from "./redact-secrets";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -375,10 +377,10 @@ export const processPost = task({
       const bulkPostData: IndividualPostData[] = [];
       const storyBulkPostData: IndividualPostData[] = [];
       for (const account of postData.accounts) {
+        let appCredentials: PlatformAppCredentials | null = null;
         try {
           logger.info("Getting App Credentials");
 
-          let appCredentials: PlatformAppCredentials | null = null;
           switch (account.provider) {
             case "bluesky":
               appCredentials = {
@@ -523,13 +525,22 @@ export const processPost = task({
             error,
           });
 
-          errorResults.push({
-            success: false,
-            error_message: error?.message || "Unkown error",
-            provider_connection_id: account.id,
-            post_id: postData.id,
-            details: { error },
-          });
+          errorResults.push(
+            redactSecrets(
+              {
+                success: false,
+                error_message: error?.message || "Unkown error",
+                provider_connection_id: account.id,
+                post_id: postData.id,
+                details: { error },
+              },
+              [
+                account.access_token,
+                account.refresh_token,
+                appCredentials?.app_secret,
+              ].filter((value): value is string => Boolean(value)),
+            ),
+          );
         }
       }
 

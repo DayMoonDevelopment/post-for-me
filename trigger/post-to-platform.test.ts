@@ -1,6 +1,21 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
 import type { PostClient } from "./posting/post-client";
-import type { SocialAccount } from "./posting/post.types";
+import type {
+  IndividualPostData,
+  PostResult,
+  SocialAccount,
+} from "./posting/post.types";
+import { LinkedInPostClient } from "./posting/platforms/linkedin-post-client";
+import { tags, tasks } from "@trigger.dev/sdk";
+import * as sdk from "@trigger.dev/sdk";
 
 // post-to-platform.ts constructs a Supabase client and a Stripe client at
 // module scope, so these need to resolve to something construction-time-valid
@@ -19,11 +34,25 @@ process.env.STRIPE_SECRET_KEY = "sk_test_dummy";
 // body now flows through `error`/`details`.
 
 let updateEq: ReturnType<typeof mock>;
+let insertedResult: PostResult;
+let webhookData: unknown;
+let runPost: (payload: IndividualPostData) => Promise<PostResult>;
 
 mock.module("@supabase/supabase-js", () => ({
   createClient: () => ({
-    from: () => ({
+    from: (table: string) => ({
       update: () => ({ eq: updateEq }),
+      insert: (data: PostResult) => {
+        if (table === "social_post_results") insertedResult = data;
+        return {
+          select: () => ({
+            single: async () => ({
+              data: { ...data, id: "result_1" },
+              error: null,
+            }),
+          }),
+        };
+      },
     }),
   }),
 }));
@@ -31,7 +60,80 @@ mock.module("@supabase/supabase-js", () => ({
 let mod: typeof import("./post-to-platform");
 
 beforeAll(async () => {
-  mod = await import("./post-to-platform");
+  const actualTask = sdk.task;
+  const taskSpy = spyOn(sdk, "task").mockImplementation((options: any) => {
+    if (options.id === "post-to-platform") runPost = options.run;
+    return actualTask(options);
+  });
+  try {
+    mod = await import("./post-to-platform");
+  } finally {
+    taskSpy.mockRestore();
+  }
+});
+
+describe("post-result diagnostic boundary", () => {
+  test("redacts stored results, task output and webhook details without changing account credentials", async () => {
+    const addTag = spyOn(tags, "add").mockResolvedValue(undefined);
+    const triggerWebhook = spyOn(tasks, "trigger").mockImplementation(
+      async (_id, payload) => {
+        webhookData = payload;
+        return { id: "webhook_1" } as any;
+      },
+    );
+    const post = spyOn(LinkedInPostClient.prototype, "post").mockResolvedValue({
+      success: false,
+      post_id: "post_1",
+      provider_connection_id: "spc_1",
+      error_message: "Rejected account-secret",
+      details: {
+        requests: ["https://example.com/?access_token=query-secret"],
+        responses: [
+          { access_token: "refreshed-secret", refresh_token: "refresh-secret" },
+        ],
+        error: new Error("Rejected app-secret"),
+      },
+    });
+    const postAccount: SocialAccount = {
+      ...account,
+      provider: "linkedin",
+      access_token: "account-secret",
+      access_token_expires_at: new Date("2030-01-01"),
+    };
+    try {
+      const result = await runPost({
+        account: postAccount,
+        appCredentials: { app_id: "app_1", app_secret: "app-secret" },
+        platform: "linkedin",
+        postId: "post_1",
+        caption: "Test",
+        media: [],
+        platformConfig: {},
+        projectId: "project_1",
+        teamId: "team_1",
+        stripeCustomerId: "cus_1",
+      });
+      for (const output of [result, insertedResult, webhookData]) {
+        for (const secret of [
+          "account-secret",
+          "app-secret",
+          "query-secret",
+          "refreshed-secret",
+          "refresh-secret",
+        ])
+          expect(JSON.stringify(output)).not.toContain(secret);
+      }
+      expect(result.error_message).toBe("Rejected [REDACTED]");
+      expect(postAccount.access_token).toBe("account-secret");
+      expect(post.mock.calls[0]?.[0].account.access_token).toBe(
+        "account-secret",
+      );
+    } finally {
+      post.mockRestore();
+      addTag.mockRestore();
+      triggerWebhook.mockRestore();
+    }
+  });
 });
 
 beforeEach(() => {
@@ -70,6 +172,41 @@ const postClientWith = (
 ): PostClient => ({ refreshAccessToken }) as PostClient;
 
 describe("handleTokenRefresh", () => {
+  test("redacts refresh failure logs and details while preserving diagnostics", async () => {
+    const spy = spyOn(console, "error").mockImplementation(() => undefined);
+    const failedAccount = { ...account, access_token: "account-secret" };
+    const postClient = postClientWith(async () => {
+      const error = makeGraphError({
+        message: "Rejected account-secret",
+        code: 190,
+      });
+      error.config = {
+        url: "https://example.com/?access_token=url-secret",
+        headers: { Authorization: "Bearer header-secret" },
+      };
+      error.response.data.access_token = "response-secret";
+      throw error;
+    });
+    try {
+      const result = await mod.handleTokenRefresh({
+        postClient,
+        account: failedAccount,
+      });
+      for (const secret of [
+        "account-secret",
+        "url-secret",
+        "header-secret",
+        "response-secret",
+      ]) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(JSON.stringify(spy.mock.calls)).not.toContain(secret);
+      }
+      expect((result.details as any).error.code).toBe(190);
+      expect(failedAccount.access_token).toBe("account-secret");
+    } finally {
+      spy.mockRestore();
+    }
+  });
   test("returns success and updates the connection when refresh succeeds", async () => {
     const postClient = postClientWith(async () => ({
       access_token: "new_token",
@@ -119,7 +256,11 @@ describe("handleTokenRefresh", () => {
 
     const result = await mod.handleTokenRefresh({ postClient, account });
 
-    expect(result).toEqual({ success: false, error: "socket hang up", details: undefined });
+    expect(result).toEqual({
+      success: false,
+      error: "socket hang up",
+      details: undefined,
+    });
   });
 
   test("reports a generic error and no details when the platform returns no access token", async () => {

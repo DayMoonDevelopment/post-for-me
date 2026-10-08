@@ -1,5 +1,8 @@
+import { safeConsole as console } from "./safe-console";
+import { safeLogger as logger } from "./safe-logger";
+import { redactSecrets } from "./redact-secrets";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
+import { idempotencyKeys, task, tags, tasks } from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -121,13 +124,19 @@ export const handleTokenRefresh = async ({
       };
     }
   } catch (refreshError) {
-    console.error(refreshError);
+    const secrets = [account.access_token, account.refresh_token].filter(
+      (value): value is string => Boolean(value),
+    );
+    console.error(redactSecrets(refreshError, secrets));
     const platformError = extractPlatformError(refreshError);
-    return {
-      success: false,
-      error: platformError.message,
-      details: platformError.data,
-    };
+    return redactSecrets(
+      {
+        success: false,
+        error: platformError.message,
+        details: platformError.data,
+      },
+      secrets,
+    );
   }
 
   return {
@@ -159,6 +168,11 @@ export const postToPlatform = task({
       projectId,
     } = payload;
     let postResult: PostResult | null = null;
+    const originalSecrets = [
+      account.access_token,
+      account.refresh_token,
+      appCredentials.app_secret,
+    ];
     try {
       await tags.add(`${account.id}`);
 
@@ -275,7 +289,14 @@ export const postToPlatform = task({
 
       }
     } catch (error) {
-      logger.error("Failed Processing Platform Post", { error });
+      logger.error("Failed Processing Platform Post", {
+        error: redactSecrets(
+          error,
+          [...originalSecrets, account.access_token, account.refresh_token].filter(
+            (value): value is string => Boolean(value),
+          ),
+        ),
+      });
 
       if (!postResult) {
         postResult = {
@@ -291,6 +312,13 @@ export const postToPlatform = task({
 
     await tags.add(`result_${postResult.success ? "success" : "error"}`);
 
+    // Sanitize before persistence, logging, task output, and webhook delivery.
+    postResult = redactSecrets(
+      postResult,
+      [...originalSecrets, account.access_token, account.refresh_token].filter(
+        (value): value is string => Boolean(value),
+      ),
+    );
     logger.info("Saving Post Result", { postResult });
     const { data: insertedPostResult, error: insertResultError } =
       await supabaseClient

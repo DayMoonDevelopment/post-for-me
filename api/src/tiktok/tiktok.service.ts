@@ -1,3 +1,4 @@
+import { safeConsole as console } from '../logging/safe-console';
 import { Injectable, Scope } from '@nestjs/common';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {

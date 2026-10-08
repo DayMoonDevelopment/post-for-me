@@ -1,3 +1,4 @@
+import { safeConsole as console } from "~/lib/.server/logging/safe-console";
 import type {
   SocialProviderConnection,
   SocialProviderInfo,

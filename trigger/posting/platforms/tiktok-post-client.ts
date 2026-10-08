@@ -1,3 +1,4 @@
+import { safeConsole as console } from "../../safe-console";
 import { createReadStream } from "fs";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
