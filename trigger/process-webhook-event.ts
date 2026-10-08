@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { logger, retry, tags, task } from "@trigger.dev/sdk";
+import { retry, tags, task } from "@trigger.dev/sdk";
+import { safeLogger as logger } from "./safe-logger";
 import { Database } from "./supabase.types";
 
 type EventTypeEnum = Database["public"]["Enums"]["webhook_event_type"];

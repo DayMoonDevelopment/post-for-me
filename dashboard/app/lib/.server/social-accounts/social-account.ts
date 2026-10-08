@@ -1,3 +1,4 @@
+import { safeConsole as console } from "~/lib/.server/logging/safe-console";
 import type { Database } from "~/lib/.server/database.types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {

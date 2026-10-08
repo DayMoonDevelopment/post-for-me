@@ -1,4 +1,5 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
+import { task } from "@trigger.dev/sdk/v3";
+import { safeLogger as logger } from "./safe-logger";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";

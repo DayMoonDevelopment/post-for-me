@@ -1,4 +1,6 @@
-import { logger, schedules } from "@trigger.dev/sdk";
+import { schedules } from "@trigger.dev/sdk";
+import { safeLogger as logger } from "./safe-logger";
+import { redactSecrets } from "./redact-secrets";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
@@ -118,9 +120,15 @@ export const handleTokenRefresh = async ({
       accountId: account.id,
     };
   } catch (refreshError) {
-    const platformError = extractPlatformError(refreshError);
+    const secrets = [account.access_token, account.refresh_token].filter(
+      (value): value is string => Boolean(value),
+    );
+    const platformError = redactSecrets(
+      extractPlatformError(refreshError),
+      secrets,
+    );
     logger.error(`Token refresh error for account ${account.id}:`, {
-      error: refreshError,
+      error: redactSecrets(refreshError, secrets),
       platformError,
     });
     return {
