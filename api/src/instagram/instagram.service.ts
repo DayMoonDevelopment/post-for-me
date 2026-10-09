@@ -1,4 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -21,12 +22,31 @@ import type {
 import { mapWithConcurrency } from '../lib/async.utils';
 
 const INSTAGRAM_METRICS_CONCURRENCY = 3;
+const DEFAULT_FACEBOOK_API_VERSION = 'v25.0';
+const DEFAULT_INSTAGRAM_API_VERSION = 'v23.0';
 
 @Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private get facebookApiVersion(): string {
+    return (
+      this.configService.get<string>('FACEBOOK_API_VERSION') ||
+      DEFAULT_FACEBOOK_API_VERSION
+    );
+  }
+
+  private get instagramApiVersion(): string {
+    return (
+      this.configService.get<string>('INSTAGRAM_API_VERSION') ||
+      DEFAULT_INSTAGRAM_API_VERSION
+    );
+  }
 
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
@@ -37,9 +57,9 @@ export class InstagramService implements SocialPlatformService {
       accountMetaData?.connection_type === 'instagram' ||
       (account.access_token && account.access_token.startsWith('IG'))
     ) {
-      return 'https://graph.instagram.com/v23.0';
+      return `https://graph.instagram.com/${this.instagramApiVersion}`;
     }
-    return 'https://graph.facebook.com/v23.0';
+    return `https://graph.facebook.com/${this.facebookApiVersion}`;
   }
 
   async initService(projectId: string): Promise<void> {
@@ -114,7 +134,7 @@ export class InstagramService implements SocialPlatformService {
         }
       } else {
         const response = await axios.get<FacebookRefreshTokenResponse>(
-          'https://graph.facebook.com/v20.0/oauth/access_token',
+          `https://graph.facebook.com/${this.facebookApiVersion}/oauth/access_token`,
           {
             params: {
               grant_type: 'fb_exchange_token',
