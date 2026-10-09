@@ -107,7 +107,7 @@ describe('generateAuthUrl', () => {
       baseArgs({ appCredentials: credentials('facebook') }),
     );
 
-    expect(url).toContain('https://www.facebook.com/v23.0/dialog/oauth?');
+    expect(url).toContain('https://www.facebook.com/v25.0/dialog/oauth?');
     const params = new URLSearchParams(url!.split('?')[1]);
     expect(params.get('client_id')).toBe('app-id-1');
     expect(params.get('redirect_uri')).toBe(
