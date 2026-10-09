@@ -39,6 +39,10 @@ async function bootstrap() {
   // so opt back into the extended parser (qs).
   app.set('query parser', 'extended');
 
+  // Trust the immediate ingress proxy for the public protocol and host used in
+  // pagination links. The ingress must overwrite X-Forwarded-Proto/Host.
+  app.set('trust proxy', 1);
+
   app.enableShutdownHooks();
 
   app.enableVersioning({

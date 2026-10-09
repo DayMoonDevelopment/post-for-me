@@ -30,7 +30,7 @@ export class PaginationService {
 
     const nextOffset = meta.offset + meta.limit;
     const url = new URL(
-      `${this.request.protocol}://${this.request.get('host')}${this.request.path}`,
+      `${this.request.protocol}://${this.request.host}${this.request.path}`,
     );
 
     for (const key in currentQuery) {
