@@ -2,6 +2,10 @@ import type {
   SocialProviderConnection,
   SocialProviderInfo,
 } from "../social-account.types";
+import {
+  INSTAGRAM_API_VERSION,
+  INSTAGRAM_GRAPH_API_URL,
+} from "../social-account.constants";
 
 export async function getInstagramSocialProviderConnection({
   redirectUri,
@@ -47,10 +51,17 @@ export async function getInstagramSocialProviderConnection({
   ]);
 
   const longLivedResponse = await fetch(
-    `https://graph.instagram.com/access_token?${longLivedTokenParams.toString()}`,
+    `${INSTAGRAM_GRAPH_API_URL}/access_token?${longLivedTokenParams.toString()}`,
   );
 
   const longLivedData = await longLivedResponse.json();
+
+  if (!longLivedData?.access_token) {
+    console.error("Error fetching long-lived access token", longLivedData);
+    throw Error(
+      `Error fetching long-lived access token ${longLivedData?.error_message || ""}`,
+    );
+  }
 
   const accessToken = longLivedData.access_token;
 
@@ -62,7 +73,7 @@ export async function getInstagramSocialProviderConnection({
 
   try {
     const profileResponse = await fetch(
-      `https://graph.instagram.com/v23.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`,
+      `${INSTAGRAM_GRAPH_API_URL}/${INSTAGRAM_API_VERSION}/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`,
       {
         method: "GET",
       },

@@ -95,16 +95,16 @@ function ResultRow({ result }: { result: PostResult }) {
       <TableRow className={cn(showError && "border-0")}>
         <TableCell>
           <div className="flex min-w-0 flex-row items-center gap-2">
-            <div className="relative shrink-0">
-              <Avatar className="size-6">
+            <div className="relative mr-5 shrink-0">
+              <Avatar className="size-10">
                 <AvatarImage src={result.account?.profile_photo_url || ""} />
                 <AvatarFallback>
-                  <BrandIcon brand={provider} className="size-3.5" />
+                  <BrandIcon brand={provider} className="size-5" />
                 </AvatarFallback>
               </Avatar>
               {provider ? (
-                <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
-                  <BrandIcon brand={provider} className="size-2.5" />
+                <span className="absolute -bottom-1 -right-7 flex h-6 w-9 items-center justify-center rounded-md bg-background p-0.5">
+                  <BrandIcon brand={provider} className="size-5" />
                 </span>
               ) : null}
             </div>
@@ -251,7 +251,7 @@ function RawDataDialog({ result }: { result: PostResult }) {
       <DialogContent className="sm:max-w-5xl lg:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="flex flex-row items-center gap-2">
-            <BrandIcon brand={provider} className="size-4" />
+            <BrandIcon brand={provider} className="size-5" />
             {handle}
             <span
               className={cn(
