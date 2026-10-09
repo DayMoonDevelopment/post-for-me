@@ -29,6 +29,9 @@ jobs:
       - name: Typecheck
         id: typecheck
         run: bun run typecheck
+      - name: Test
+        id: test
+        run: bun run test
       - name: Build
         id: build
         run: bun run build

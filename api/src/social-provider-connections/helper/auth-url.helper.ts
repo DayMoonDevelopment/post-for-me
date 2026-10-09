@@ -6,6 +6,7 @@ import { google } from 'googleapis';
 import type { SupabaseService } from '../../supabase/supabase.service';
 import type { AuthUrlProviderData } from '../dto/create-provider-auth-url.dto';
 import type { Database } from '../../../supabase';
+import { getFacebookApiVersion } from '../../lib/graph-api-version.util';
 
 type SocialProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -113,8 +114,7 @@ export async function generateAuthUrl({
         }
       }
 
-      const facebookVersion =
-        configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
+      const facebookVersion = getFacebookApiVersion(configService);
       const authParams = new URLSearchParams([
         ['client_id', appId],
         ['redirect_uri', callbackUrl],
@@ -161,8 +161,7 @@ export async function generateAuthUrl({
         }
       }
 
-      const facebookVersion =
-        configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
+      const facebookVersion = getFacebookApiVersion(configService);
       const authParams = new URLSearchParams([
         ['client_id', appId],
         ['redirect_uri', callbackUrl],
