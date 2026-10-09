@@ -139,6 +139,7 @@ export type Database = {
       }
       social_post_media: {
         Row: {
+          alt_text: string | null
           created_at: string
           external_id: string | null
           id: string
@@ -154,6 +155,7 @@ export type Database = {
           url: string
         }
         Insert: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
@@ -169,6 +171,7 @@ export type Database = {
           url: string
         }
         Update: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
@@ -1004,8 +1007,8 @@ export type Database = {
       }
     }
     Functions: {
-      get_exceeded_team_usage_windows: {
-        Args: never
+      get_team_usage_windows_over_threshold: {
+        Args: { threshold_percent: number }
         Returns: {
           count: number
           end_at: string
@@ -1062,7 +1065,7 @@ export type Database = {
     }
     Enums: {
       delivery_type: "email"
-      notification_type: "usage_alert" | "general"
+      notification_type: "usage_alert" | "general" | "subscription_alert"
       social_post_status:
         | "draft"
         | "scheduled"
@@ -1223,7 +1226,7 @@ export const Constants = {
   public: {
     Enums: {
       delivery_type: ["email"],
-      notification_type: ["usage_alert", "general"],
+      notification_type: ["usage_alert", "general", "subscription_alert"],
       social_post_status: [
         "draft",
         "scheduled",

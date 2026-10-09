@@ -17,7 +17,9 @@ export const formSchema = z
         tiktok: z
           .object({
             title: z.string().optional(),
-            privacy_status: z.enum(["public", "private"]).optional(),
+            privacy_status: z
+              .enum(["public", "private", "followers", "friends"])
+              .optional(),
             disclose_your_brand: z.boolean().optional(),
             disclose_branded_content: z.boolean().optional(),
             allow_comments: z.boolean().optional(),

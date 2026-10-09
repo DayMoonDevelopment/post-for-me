@@ -11,7 +11,7 @@ const supabaseClient = createClient<Database>(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-const handleTokenRefresh = async ({
+export const handleTokenRefresh = async ({
   postClient,
   account,
 }: {
@@ -38,7 +38,11 @@ const handleTokenRefresh = async ({
     );
   }
 
-  return { ...result, accountId: account.id };
+  return {
+    success: result.success,
+    ...(result.error ? { error: result.error } : {}),
+    accountId: account.id,
+  };
 };
 
 const refreshAccountsByProviderAndProject = async ({
@@ -124,7 +128,13 @@ export const refreshAccountTokens = schedules.task({
         .from("social_provider_connections")
         .select("*")
         .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
-        .in("provider", ["facebook", "instagram", "threads", "pinterest"])
+        .in("provider", [
+          "facebook",
+          "instagram",
+          "threads",
+          "pinterest",
+          "youtube",
+        ])
         .order("access_token_expires_at", { ascending: true })
         .limit(50);
 

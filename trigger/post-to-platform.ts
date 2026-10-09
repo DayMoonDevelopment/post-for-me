@@ -55,6 +55,45 @@ export const postToPlatform = task({
         appCredentials,
       });
 
+      // Each PostClient declares which media types it can publish (e.g.
+      // Facebook/Twitter clients only special-case "video" and would
+      // otherwise silently submit a PDF as an image). Unsupported media is
+      // dropped and the post proceeds with whatever remains; the account
+      // post only fails outright if every attached medium is unsupported.
+      const unsupportedMedia = media.filter(
+        (m) => !postClient.supportedMediaTypes.includes(m.type),
+      );
+      const supportedMedia = media.filter((m) =>
+        postClient.supportedMediaTypes.includes(m.type),
+      );
+
+      if (unsupportedMedia.length > 0) {
+        const unsupportedTypes = [
+          ...new Set(unsupportedMedia.map((m) => m.type)),
+        ].join(", ");
+
+        if (supportedMedia.length === 0) {
+          const error_message = `${unsupportedTypes} media is not supported on ${platform} and was not published to this account`;
+          logger.error(error_message, { platform, account: account.id });
+          postResult = {
+            provider_connection_id: account.id,
+            post_id: postId,
+            success: false,
+            error_message,
+          };
+          throw new Error(error_message);
+        }
+
+        logger.warn(
+          `Dropping unsupported media (${unsupportedTypes}) for ${platform}; continuing with remaining media`,
+          {
+            platform,
+            account: account.id,
+            droppedMediaIds: unsupportedMedia.map((m) => m.id),
+          },
+        );
+      }
+
       if (shouldRefreshToken(account as SocialAccount)) {
         logger.info("Refreshing Token", {
           platform: account.provider,
@@ -76,6 +115,7 @@ export const postToPlatform = task({
             post_id: postId,
             success: false,
             error_message: refreshed.error,
+            details: refreshed.details,
           };
 
           throw new Error("Invalid Token");
@@ -86,7 +126,7 @@ export const postToPlatform = task({
         postId,
         account,
         caption,
-        media,
+        media: supportedMedia,
         platformConfig,
       });
 

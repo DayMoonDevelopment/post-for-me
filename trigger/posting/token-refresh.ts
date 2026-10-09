@@ -3,6 +3,7 @@ import { logger } from "@trigger.dev/sdk";
 import { differenceInDays } from "date-fns";
 import { PostClient } from "./post-client";
 import { SocialAccount } from "./post.types";
+import { extractPlatformError } from "./platform-error";
 
 const platformsToAlwaysRefresh = ["youtube", "bluesky"];
 
@@ -21,7 +22,7 @@ export const handleTokenRefresh = async ({
   supabaseClient: SupabaseClient;
   postClient: PostClient;
   account: SocialAccount;
-}): Promise<{ success: boolean; error?: string }> => {
+}): Promise<{ success: boolean; error?: string; details?: unknown }> => {
   try {
     const { access_token, expires_at, refresh_token } =
       await postClient.refreshAccessToken(account);
@@ -61,9 +62,17 @@ export const handleTokenRefresh = async ({
       return { success: false, error: error.message };
     }
   } catch (refreshError) {
-    logger.error("Token refresh error", { error: refreshError });
+    const platformError = extractPlatformError(refreshError);
+    logger.error("Token refresh error", {
+      error: refreshError,
+      platformError,
+    });
 
-    return { success: false, error: refreshError.message };
+    return {
+      success: false,
+      error: platformError.message,
+      details: platformError.data,
+    };
   }
 
   return { success: true };
