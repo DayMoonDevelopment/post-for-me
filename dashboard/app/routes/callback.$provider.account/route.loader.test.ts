@@ -129,7 +129,7 @@ describe("callback.$provider.account loader (system project)", () => {
     expect(addSocialAccountConnectionsMock).not.toHaveBeenCalled();
   });
 
-  it("still returns 'Auth state not set' when no state is present, without querying the database", async () => {
+  it("returns the provider denial reason when no state is present, without querying the database", async () => {
     const request = buildRequest(
       "?error=access_denied&error_reason=user_denied"
     );
@@ -149,7 +149,7 @@ describe("callback.$provider.account loader (system project)", () => {
     } as any)) as any;
 
     expect(result.isSuccess).toBe(false);
-    expect(result.error).toBe("Auth state not set");
+    expect(result.error).toBe("user_denied");
     expect(addSocialAccountConnectionsMock).not.toHaveBeenCalled();
   });
 });

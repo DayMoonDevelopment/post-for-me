@@ -7,6 +7,20 @@ export class SocialAccountMetadata {
   has_platform_premium?: boolean;
 
   is_sandbox?: boolean;
+
+  @ApiProperty({
+    description: "The platform's verification status of the social account",
+    type: String,
+    required: false,
+  })
+  verified_type?: string;
+
+  @ApiProperty({
+    description: "The platform's display name of the social account",
+    type: String,
+    required: false,
+  })
+  display_name?: string;
 }
 
 export class CreateSocialAccountDto {
@@ -77,7 +91,8 @@ export class CreateSocialAccountDto {
   refresh_token: string | null | undefined;
 
   @ApiProperty({
-    description: 'The access token expiration date of the social account',
+    description:
+      'The access token expiration date of the social account, in UTC (ISO 8601)',
     type: Date,
     required: true,
   })
@@ -85,7 +100,8 @@ export class CreateSocialAccountDto {
   access_token_expires_at: Date;
 
   @ApiProperty({
-    description: 'The refresh token expiration date of the social account',
+    description:
+      'The refresh token expiration date of the social account, in UTC (ISO 8601)',
     type: Date,
     nullable: true,
     required: false,

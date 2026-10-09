@@ -2,6 +2,10 @@ import type {
   SocialProviderConnection,
   SocialProviderInfo,
 } from "../social-account.types";
+import {
+  FACEBOOK_API_VERSION,
+  FACEBOOK_GRAPH_API_URL,
+} from "../social-account.constants";
 
 export async function getFacebookSocialProviderConnection({
   redirectUri,
@@ -16,7 +20,7 @@ export async function getFacebookSocialProviderConnection({
     throw Error("No code provided");
   }
 
-  const tokenUrl = `https://graph.facebook.com/v23.0/oauth/access_token`;
+  const tokenUrl = `${FACEBOOK_GRAPH_API_URL}/${FACEBOOK_API_VERSION}/oauth/access_token`;
   const tokenParams = new URLSearchParams([
     ["client_id", appCredentials.appId!],
     ["client_secret", appCredentials.appSecret!],
@@ -49,6 +53,13 @@ export async function getFacebookSocialProviderConnection({
 
   const longLivedData = await longLivedResponse.json();
 
+  if (!longLivedData?.access_token) {
+    console.error("Error fetching long-lived access token", longLivedData);
+    throw Error(
+      `Error fetching long-lived access token ${longLivedData?.error?.message || ""}`,
+    );
+  }
+
   const accessToken = longLivedData.access_token;
 
   // Identifies which Facebook login this grant came from, so re-auth
@@ -56,7 +67,7 @@ export async function getFacebookSocialProviderConnection({
   let facebookUserId: string | undefined;
   try {
     const meResponse = await fetch(
-      `https://graph.facebook.com/v23.0/me?fields=id&access_token=${accessToken}`,
+      `${FACEBOOK_GRAPH_API_URL}/${FACEBOOK_API_VERSION}/me?fields=id&access_token=${accessToken}`,
     );
     const meData = await meResponse.json();
     facebookUserId = meData?.id;
@@ -64,7 +75,7 @@ export async function getFacebookSocialProviderConnection({
     console.error("Error fetching Facebook user id:", error);
   }
 
-  let accountsUrl = `https://graph.facebook.com/v23.0/me/accounts?fields=name,access_token,picture&limit=100&access_token=${accessToken}`;
+  let accountsUrl = `${FACEBOOK_GRAPH_API_URL}/${FACEBOOK_API_VERSION}/me/accounts?fields=name,access_token,picture&limit=100&access_token=${accessToken}`;
 
   const accounts: SocialProviderConnection[] = [];
 
