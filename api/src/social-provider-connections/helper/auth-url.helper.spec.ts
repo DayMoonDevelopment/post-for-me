@@ -87,6 +87,7 @@ describe('generateAuthUrl', () => {
     externalId?: string;
     redirectUrlOverride?: string | null;
     permissions?: string[];
+    forceReauth?: boolean;
   }) {
     const { supabaseService } = buildSupabaseService();
     return {
@@ -98,6 +99,7 @@ describe('generateAuthUrl', () => {
       externalId: undefined,
       redirectUrlOverride: undefined,
       permissions: [],
+      forceReauth: undefined,
       ...overrides,
     };
   }
@@ -413,4 +415,112 @@ describe('generateAuthUrl', () => {
     expect(from).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
   });
+  it.each(['facebook', 'instagram_w_facebook'] as const)(
+    'includes auth_type=rerequest for %s by default',
+    async (provider) => {
+      const url = await generateAuthUrl(
+        baseArgs({ appCredentials: credentials(provider) }),
+      );
+
+      expect(new URL(url!).searchParams.get('auth_type')).toBe('rerequest');
+    },
+  );
+
+  it.each(['facebook', 'instagram_w_facebook'] as const)(
+    'omits auth_type for %s when forceReauth is false',
+    async (provider) => {
+      const url = await generateAuthUrl(
+        baseArgs({ appCredentials: credentials(provider), forceReauth: false }),
+      );
+
+      expect(new URL(url!).searchParams.get('auth_type')).toBeNull();
+    },
+  );
+
+  it('does not add auth_type for native instagram, and defaults force_reauth to false', async () => {
+    const url = await generateAuthUrl(
+      baseArgs({ appCredentials: credentials('instagram') }),
+    );
+
+    const params = new URL(url!).searchParams;
+    expect(params.get('auth_type')).toBeNull();
+    expect(params.get('force_reauth')).toBe('false');
+  });
+
+  it('sets force_reauth=true for native instagram when forceReauth is explicitly true', async () => {
+    const url = await generateAuthUrl(
+      baseArgs({ appCredentials: credentials('instagram'), forceReauth: true }),
+    );
+
+    expect(new URL(url!).searchParams.get('force_reauth')).toBe('true');
+  });
+
+  it.each(['tiktok', 'tiktok_business'] as const)(
+    'includes disable_auto_auth=1 for %s by default',
+    async (provider) => {
+      const url = await generateAuthUrl(
+        baseArgs({ appCredentials: credentials(provider) }),
+      );
+
+      expect(new URL(url!).searchParams.get('disable_auto_auth')).toBe('1');
+    },
+  );
+
+  it.each(['tiktok', 'tiktok_business'] as const)(
+    'omits disable_auto_auth for %s when forceReauth is false',
+    async (provider) => {
+      const url = await generateAuthUrl(
+        baseArgs({ appCredentials: credentials(provider), forceReauth: false }),
+      );
+
+      expect(new URL(url!).searchParams.get('disable_auto_auth')).toBeNull();
+    },
+  );
+
+  it('includes prompt=consent for youtube by default', async () => {
+    await generateAuthUrl(baseArgs({ appCredentials: credentials('youtube') }));
+
+    expect(generateGoogleAuthUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'consent' }),
+    );
+  });
+
+  it('omits prompt entirely for youtube when forceReauth is false', async () => {
+    await generateAuthUrl(
+      baseArgs({ appCredentials: credentials('youtube'), forceReauth: false }),
+    );
+
+    expect(generateGoogleAuthUrl.mock.calls[0][0]).not.toHaveProperty('prompt');
+  });
+
+  it('does not pass forceLogin for x (oauth1) by default', async () => {
+    await generateAuthUrl(baseArgs({ appCredentials: credentials('x') }));
+
+    expect(generateAuthLink).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ forceLogin: undefined }),
+    );
+  });
+
+  it('passes forceLogin=true for x (oauth1) when forceReauth is explicitly true', async () => {
+    await generateAuthUrl(
+      baseArgs({ appCredentials: credentials('x'), forceReauth: true }),
+    );
+
+    expect(generateAuthLink).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ forceLogin: true }),
+    );
+  });
+
+  it.each(['pinterest', 'linkedin', 'threads', 'tiktok'] as const)(
+    'does not add auth_type for %s',
+    async (provider) => {
+      const url = await generateAuthUrl(
+        baseArgs({ appCredentials: credentials(provider) }),
+      );
+
+      expect(new URL(url!).searchParams.get('auth_type')).toBeNull();
+    },
+  );
 });

@@ -61,6 +61,19 @@ export async function getInstagramWFacebookSocialProviderConnection({
 
   const accessToken = longLivedData.access_token;
 
+  // Identifies which Facebook login this grant came from, so re-auth
+  // reconciliation only ever touches accounts granted by the same login.
+  let facebookUserId: string | undefined;
+  try {
+    const meResponse = await fetch(
+      `${FACEBOOK_GRAPH_API_URL}/${FACEBOOK_API_VERSION}/me?fields=id&access_token=${accessToken}`,
+    );
+    const meData = await meResponse.json();
+    facebookUserId = meData?.id;
+  } catch (error) {
+    console.error("Error fetching Facebook user id:", error);
+  }
+
   const allPages: {
     instagram_business_account: {
       id: string;
@@ -105,6 +118,7 @@ export async function getInstagramWFacebookSocialProviderConnection({
           page.instagram_business_account.profile_picture_url,
         social_provider_metadata: {
           connection_type: "facebook",
+          facebook_user_id: facebookUserId,
         },
       });
     }

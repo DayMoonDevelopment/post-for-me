@@ -31,18 +31,6 @@ export const loader = withSupabase(async function ({
     });
   }
 
-  const key =
-    (url.searchParams.get("oauth_token") as string) ||
-    (url.searchParams.get("state") as string);
-
-  if (!key) {
-    return createOauthCallbackResponse({
-      isSuccess: false,
-      errors: [oauthErrorMessage || "Auth state not set"],
-      isLoggedIn,
-    });
-  }
-
   const { data: project, error: projectError } = await supabaseServiceRole
     .from("projects")
     .select(
@@ -86,6 +74,18 @@ export const loader = withSupabase(async function ({
       provider: normalizedProvider,
       callbackUrl: project.auth_callback_url,
       errors: [oauthErrorMessage],
+      isLoggedIn,
+    });
+  }
+
+  const key =
+    (url.searchParams.get("oauth_token") as string) ||
+    (url.searchParams.get("state") as string);
+
+  if (!key) {
+    return createOauthCallbackResponse({
+      isSuccess: false,
+      errors: ["Auth state not set"],
       isLoggedIn,
     });
   }
