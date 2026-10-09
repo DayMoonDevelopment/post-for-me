@@ -13,7 +13,6 @@ import { PinterestModule } from '../pinterest/pinterest.module';
 import { ThreadsModule } from '../threads/threads.module';
 import { TwitterModule } from '../twitter/twitter.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
-import { TokenRefreshModule } from '../token-refresh/token-refresh.module';
 
 @Module({
   imports: [
@@ -28,7 +27,6 @@ import { TokenRefreshModule } from '../token-refresh/token-refresh.module';
     ThreadsModule,
     TwitterModule,
     BlueskyModule,
-    TokenRefreshModule,
   ],
   controllers: [SocialAccountFeedsController],
   providers: [SocialAccountFeedsService],
