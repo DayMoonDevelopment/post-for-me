@@ -17,7 +17,10 @@ import { YouTubeError, YouTubeService } from '../youtube/youtube.service';
 import { TikTokService } from '../tiktok/tiktok.service';
 import { InstagramService } from '../instagram/instagram.service';
 import { FacebookService } from '../facebook/facebook.service';
-import { LinkedInService } from '../linkedin/linkedin.service';
+import {
+  LINKEDIN_FEED_LIMIT,
+  LinkedInService,
+} from '../linkedin/linkedin.service';
 import { PinterestService } from '../pinterest/pinterest.service';
 import { ThreadsService } from '../threads/threads.service';
 import { TwitterService } from '../twitter/twitter.service';
@@ -94,7 +97,7 @@ export class SocialAccountFeedsService {
     }
 
     const url = new URL(
-      `${this.request.protocol}://${this.request.get('host')}${this.request.path}`,
+      `${this.request.protocol}://${this.request.host}${this.request.path}`,
     );
 
     if (cursor) {
@@ -307,10 +310,12 @@ export class SocialAccountFeedsService {
       includeMetrics = values.includes('metrics');
     }
 
-    const effectiveLimit =
-      includeMetrics && account.provider === 'facebook'
-        ? Math.min(queryParams.limit, this.facebookMetricsLimitCap)
-        : queryParams.limit;
+    let effectiveLimit = queryParams.limit;
+    if (account.provider === 'linkedin') {
+      effectiveLimit = Math.min(effectiveLimit, LINKEDIN_FEED_LIMIT);
+    } else if (includeMetrics && account.provider === 'facebook') {
+      effectiveLimit = Math.min(effectiveLimit, this.facebookMetricsLimitCap);
+    }
 
     // Fetch account posts and social post results in parallel
     const accountPostsResult = await platformService.getAccountPosts({

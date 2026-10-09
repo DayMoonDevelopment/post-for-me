@@ -11,6 +11,13 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { mapWithConcurrency } from '../lib/async.utils';
 
 const LINKEDIN_METRICS_CONCURRENCY = 3;
+export const LINKEDIN_FEED_LIMIT = 100;
+
+type LinkedInPaging = {
+  start?: number;
+  total?: number;
+  links?: Array<{ rel?: string }>;
+};
 
 type LinkedInBatchGetResponse<T> = {
   results?: Record<string, T>;
@@ -407,10 +414,11 @@ export class LinkedInService implements SocialPlatformService {
     includeMetrics?: boolean;
   }): Promise<PlatformPostsResponse> {
     const { account, platformIds, includeMetrics } = params;
+    const count = Math.min(params.limit, LINKEDIN_FEED_LIMIT);
     /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
     try {
       let posts: any[] = [];
-      let paging: any = {};
+      let paging: LinkedInPaging = {};
       let isBatch = false;
       const metadata = account.social_provider_metadata as {
         connection_type?: string;
@@ -450,10 +458,7 @@ export class LinkedInService implements SocialPlatformService {
         posts = results.length > 0 ? (results as any[]) : [];
         isBatch = true;
       } else {
-        let url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}&q=author`;
-        if (params.cursor) {
-          url += `&start=${encodeURIComponent(params.cursor)}`;
-        }
+        const url = `https://api.linkedin.com/rest/posts?author=${encodedAuthorUrn}&q=author&count=${count}&start=${encodeURIComponent(params.cursor ?? '0')}`;
 
         const response = await fetch(url, {
           headers: {
@@ -475,8 +480,15 @@ export class LinkedInService implements SocialPlatformService {
         paging = data.paging || {};
       }
 
-      const totalCount = isBatch ? posts.length : paging.count || posts.length;
-      const cursor = isBatch ? undefined : paging.start;
+      const nextStart =
+        (paging.start ?? Number(params.cursor ?? 0)) + posts.length;
+      const cursor = isBatch ? undefined : String(nextStart);
+      const hasMore =
+        !isBatch &&
+        (paging.links?.some((link) => link.rel === 'next') ||
+          (paging.total !== undefined
+            ? nextStart < paging.total
+            : posts.length === count));
 
       // Resolve media from the modern Posts API response shape:
       //   { content: { media: { id: 'urn:li:image:...' | 'urn:li:video:...' } } }
@@ -534,7 +546,7 @@ export class LinkedInService implements SocialPlatformService {
           return {
             provider: 'linkedin',
             id: postUrn,
-            account_id: account.id,
+            account_id: account.social_provider_user_id,
             caption: post.commentary || '',
             url: `https://www.linkedin.com/posts/${postUrn.split(':').pop()}`,
             posted_at: createdObj?.time,
@@ -549,7 +561,7 @@ export class LinkedInService implements SocialPlatformService {
         posts: platformPosts as any,
         count: posts.length,
         cursor,
-        has_more: totalCount > posts.length,
+        has_more: Boolean(hasMore),
       };
     } catch (error) {
       if (error instanceof Error) {
