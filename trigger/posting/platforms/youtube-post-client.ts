@@ -56,7 +56,7 @@ export class YouTubePostClient extends PostClient {
     this.#oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
-      expiry_date: new Date(account.refresh_token_expires_at!).getTime(),
+      expiry_date: new Date(account.access_token_expires_at!).getTime(),
     });
 
     const { credentials } = await this.#oauth2Client.refreshAccessToken();
