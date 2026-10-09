@@ -1,4 +1,5 @@
 import type { ConfigService } from '@nestjs/config';
+import { describe, expect, it } from 'vitest';
 import { LinkedInService } from './linkedin.service';
 import type { SupabaseService } from '../supabase/supabase.service';
 
