@@ -52,6 +52,13 @@ export async function getInstagramSocialProviderConnection({
 
   const longLivedData = await longLivedResponse.json();
 
+  if (!longLivedData?.access_token) {
+    console.error("Error fetching long-lived access token", longLivedData);
+    throw Error(
+      `Error fetching long-lived access token ${longLivedData?.error_message || ""}`,
+    );
+  }
+
   const accessToken = longLivedData.access_token;
 
   let profileData: {

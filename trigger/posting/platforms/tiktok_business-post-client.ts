@@ -4,6 +4,10 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
+import {
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -27,6 +31,12 @@ export class TikTokBusinessPostClient extends PostClient {
   ];
   #maxItems = 32;
   #titleLength = 85;
+  #privacyLevelMap: Record<string, string> = {
+    public: "PUBLIC_TO_EVERYONE",
+    private: "SELF_ONLY",
+    followers: "FOLLOWER_OF_CREATOR",
+    friends: "MUTUAL_FOLLOW_FRIENDS",
+  };
   #clientKey: string;
   #clientSecret: string;
   #localSupabaseClient;
@@ -85,7 +95,10 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ refreshResponse: refreshResponse.data, attempt });
+        this.#responses.push({
+          refreshResponse: refreshResponse.data,
+          attempt,
+        });
 
         if (refreshResponse.data.code !== 0) {
           const refreshError = new Error(
@@ -202,7 +215,8 @@ export class TikTokBusinessPostClient extends PostClient {
           provider_connection_id: account.id,
           details: {
             status: "Processing",
-            message: "Still Proccessing, check TikTok account to confirm status",
+            message:
+              "Still Proccessing, check TikTok account to confirm status",
             addedMedia: this.#addedMedia,
             requests: this.#requests,
             responses: this.#responses,
@@ -274,10 +288,12 @@ export class TikTokBusinessPostClient extends PostClient {
           const creatorInfoError = new Error(
             `Failed to fetch business creator info: ${response.data.message}`,
           );
-          (creatorInfoError as any).retryable = this.#isRetryableTikTokApiError({
-            code: response.data.code,
-            message: response.data.message,
-          });
+          (creatorInfoError as any).retryable = this.#isRetryableTikTokApiError(
+            {
+              code: response.data.code,
+              message: response.data.message,
+            },
+          );
           throw creatorInfoError;
         }
 
@@ -539,9 +555,13 @@ export class TikTokBusinessPostClient extends PostClient {
 
     const axiosCode = error?.code;
     if (
-      ["ECONNABORTED", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND"].includes(
-        axiosCode,
-      )
+      [
+        "ECONNABORTED",
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "EAI_AGAIN",
+        "ENOTFOUND",
+      ].includes(axiosCode)
     ) {
       return true;
     }
@@ -577,7 +597,9 @@ export class TikTokBusinessPostClient extends PostClient {
     const hasAxiosCode = typeof error?.code === "string";
     const hasTikTokApiCode = typeof error?.response?.data?.code === "number";
 
-    return !hasRetryableFlag && !hasHttpStatus && !hasAxiosCode && !hasTikTokApiCode;
+    return (
+      !hasRetryableFlag && !hasHttpStatus && !hasAxiosCode && !hasTikTokApiCode
+    );
   }
 
   #isRetryableTikTokApiError({
@@ -660,6 +682,10 @@ export class TikTokBusinessPostClient extends PostClient {
             platformData.disclose_your_brand === undefined
               ? false
               : platformData.disclose_your_brand,
+          is_ai_generated:
+            platformData.is_ai_generated === undefined
+              ? false
+              : platformData.is_ai_generated,
         },
       },
       account,
@@ -702,9 +728,8 @@ export class TikTokBusinessPostClient extends PostClient {
           caption,
           is_draft: platformData?.is_draft ? true : undefined,
           privacy_level:
-            platformData.privacy_status == "private"
-              ? "SELF_ONLY"
-              : "PUBLIC_TO_EVERYONE",
+            this.#privacyLevelMap[platformData.privacy_status ?? "public"] ??
+            "PUBLIC_TO_EVERYONE",
           disable_comment:
             platformData.allow_comment === undefined
               ? false
@@ -750,6 +775,10 @@ export class TikTokBusinessPostClient extends PostClient {
   async #transformImage(medium: PostMedia): Promise<string> {
     const signedUrl = await this.getSignedUrlForFile(medium);
 
+    if (shouldSkipProcessing(medium)) {
+      return signedUrl;
+    }
+
     const response = await axios({
       url: signedUrl,
       method: "GET",
@@ -792,17 +821,10 @@ export class TikTokBusinessPostClient extends PostClient {
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
