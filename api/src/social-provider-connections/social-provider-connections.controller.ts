@@ -110,7 +110,6 @@ export class SocialAccountsController {
       socialAccount = await this.socialAccountsService.getSocialAccountById({
         id: params.id,
         projectId: user.projectId,
-        withTokenRefresh: true,
       });
     } catch (e) {
       console.error('/social-accounts/:id', e);
