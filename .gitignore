@@ -184,3 +184,6 @@ backfill/
 
 
 .scripts/
+
+# Playwright e2e auth artifacts (minted per-run by app/e2e/fixtures/global-setup.ts)
+e2e/.auth/user.json

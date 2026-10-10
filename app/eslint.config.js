@@ -14,7 +14,7 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   { ignores: ["build/", ".react-router/", "node_modules/", ".vendor/"] },
   {
-    files: ["app/**/*.{ts,tsx}"],
+    files: ["app/**/*.{ts,tsx}", "e2e/**/*.{ts,tsx}", "playwright.config.ts"],
     plugins: { react },
     languageOptions: {
       parser: tseslint.parser,
@@ -67,7 +67,7 @@ export default tseslint.config(
     // `supabase.types.ts` is excluded — a `gen types` run would churn it.
     // NOT enabled: `sort-objects` (reordering runtime object literals can change
     // behavior via spreads/ordered config — too risky to blanket auto-fix).
-    files: ["app/**/*.{ts,tsx}"],
+    files: ["app/**/*.{ts,tsx}", "e2e/**/*.{ts,tsx}", "playwright.config.ts"],
     ignores: ["app/lib/.server/supabase.types.ts"],
     plugins: { perfectionist },
     rules: {

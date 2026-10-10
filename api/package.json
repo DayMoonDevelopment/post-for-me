@@ -106,6 +106,7 @@
     "testEnvironment": "node"
   },
   "trustedDependencies": [
-    "@sentry/cli"
+    "@sentry/cli",
+    "supabase"
   ]
 }
