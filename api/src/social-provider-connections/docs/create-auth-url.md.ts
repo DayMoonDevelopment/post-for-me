@@ -30,4 +30,5 @@ If \`external_id\` is provided and an account resolved during authentication alr
 
 - If the existing connection's \`external_id\` matches the one you supplied, the connection is updated in place (fresh tokens are stored) and no error is raised.
 - If the existing connection has a **different** \`external_id\` already set, that account fails to connect - no new token is issued for it, it's included in \`failedAccountIds\`, and \`error\` includes \`External Id already exists for account {id}\`. If this happens for every account in the attempt, the overall result is \`isSuccess=false\` and \`error\` also includes \`No valid accounts found\`.
+- To reconnect the account with a different \`external_id\` then you must first disconnect or delete the account.
 `;
