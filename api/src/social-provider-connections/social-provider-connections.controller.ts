@@ -36,6 +36,7 @@ import { SocialAccountProviderAuthUrlDto } from './dto/provider-auth-url.dto';
 import { SocialProviderAppCredentialsService } from '../social-provider-app-credentials/social-provider-app-credentials.service';
 import { CreateSocialAccountProviderAuthUrlDto } from './dto/create-provider-auth-url.dto';
 import { SocialProviderAppCredentialsDto } from '../social-provider-app-credentials/dto/social-provider-app-credentials.dto';
+import { PostStatus, SocialPostDto } from '../social-posts/dto/post.dto';
 import { createAuthUrlDescription } from './docs/create-auth-url.md';
 import { UpdateSocialAccountDto } from './dto/update-social-account.dto';
 import { CreateSocialAccountDto } from './dto/create-social-account.dto';
@@ -43,6 +44,8 @@ import { tasks } from '@trigger.dev/sdk';
 import { PROCESS_WEBHOOK_TASK } from '../constants/string.constants';
 import { SupabaseService } from '../supabase/supabase.service';
 import { DeleteEntityResponseDto } from '../lib/dto/global.dto';
+import { getCredentialsSetupPlatformLabel } from './helper/credentials-setup-platform.helper';
+import { normalizePlatform } from '../lib/platform.utils';
 
 @Controller('social-accounts')
 @ApiTags('Social Accounts')
@@ -146,6 +149,7 @@ export class SocialAccountsController {
     @Body() createAuthUrlInput: CreateSocialAccountProviderAuthUrlDto,
     @User() user: RequestUser,
   ): Promise<SocialAccountProviderAuthUrlDto> {
+    const platform = normalizePlatform(createAuthUrlInput.platform);
     const project = await this.supabaseService.supabaseClient
       .from('projects')
       .select('is_system')
@@ -163,7 +167,7 @@ export class SocialAccountsController {
     let socialProviderAppCredentials: SocialProviderAppCredentialsDto | null =
       null;
 
-    switch (createAuthUrlInput.platform) {
+    switch (platform) {
       case 'bluesky':
         socialProviderAppCredentials = {
           projectId: user.projectId,
@@ -185,7 +189,7 @@ export class SocialAccountsController {
           case 'instagram': {
             socialProviderAppCredentials =
               await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
-                createAuthUrlInput.platform,
+                platform,
                 user.projectId,
               );
             break;
@@ -193,7 +197,7 @@ export class SocialAccountsController {
           default: {
             const credentials =
               await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
-                [createAuthUrlInput.platform, 'instagram_w_facebook'],
+                [platform, 'instagram_w_facebook'],
                 user.projectId,
               );
 
@@ -213,18 +217,64 @@ export class SocialAccountsController {
         }
 
         break;
+      case 'x':
+        switch (createAuthUrlInput.platform_data?.x?.connection_type) {
+          case 'oauth1': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                'x',
+                user.projectId,
+              );
+            break;
+          }
+          case 'oauth2': {
+            socialProviderAppCredentials =
+              await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
+                'x_oauth2',
+                user.projectId,
+              );
+            break;
+          }
+          default: {
+            const credentials =
+              await this.socialProviderAppCredentialsService.getManySocialProviderAppCredentials(
+                [platform, 'x_oauth2'],
+                user.projectId,
+              );
+
+            if (credentials) {
+              if (credentials.length > 1) {
+                throw new HttpException(
+                  'X connection_type is required. Use the value "oauth1" to use OAuth 1.0, use the value "oauth2" to use OAuth 2.0.',
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+
+              socialProviderAppCredentials = credentials[0];
+            }
+
+            break;
+          }
+        }
+
+        break;
       default:
         socialProviderAppCredentials =
           await this.socialProviderAppCredentialsService.getSocialProviderAppCredentials(
-            createAuthUrlInput.platform,
+            platform,
             user.projectId,
           );
         break;
     }
 
     if (!socialProviderAppCredentials) {
+      const credentialsSetupPlatform = getCredentialsSetupPlatformLabel({
+        platform,
+        platformData: createAuthUrlInput.platform_data,
+      });
+
       throw new HttpException(
-        'Social provider app credentials not found',
+        `Social provider app credentials not found for ${credentialsSetupPlatform}. Please set up or enable this platform in Project Setup.`,
         HttpStatus.NOT_FOUND,
       );
     }
@@ -236,12 +286,13 @@ export class SocialAccountsController {
       externalId: createAuthUrlInput.external_id,
       redirectUrlOverride: createAuthUrlInput.redirect_url_override || null,
       permissions: createAuthUrlInput.permissions || ['posts'],
+      forceReauth: createAuthUrlInput.force_reauth,
       isSystem,
     });
 
     return {
       url: authUrl || '',
-      platform: createAuthUrlInput.platform,
+      platform,
     };
   }
 
@@ -424,10 +475,39 @@ export class SocialAccountsController {
         );
       }
 
-      return this.socialAccountsService.deleteSocialAccount({
-        id,
-        projectId: user.projectId,
-      });
+      const { deletedPosts, ...deleteResponse } =
+        await this.socialAccountsService.deleteSocialAccount({
+          id,
+          projectId: user.projectId,
+        });
+
+      await Promise.all(
+        deletedPosts.map((post) =>
+          tasks.trigger(PROCESS_WEBHOOK_TASK, {
+            projectId: user.projectId,
+            eventType: 'social.post.deleted',
+            // Same shape as the direct post-delete webhook (SocialPostDto).
+            // The post's media/configurations/connections are already gone
+            // by this point (cascaded by delete_social_account), so those
+            // relations come back empty rather than omitted or mismatched.
+            eventData: {
+              id: post.id,
+              external_id: post.external_id,
+              caption: post.caption,
+              status: post.status as unknown as PostStatus,
+              scheduled_at: post.post_at,
+              platform_configurations: null,
+              account_configurations: [],
+              media: [],
+              social_accounts: [],
+              created_at: post.created_at,
+              updated_at: post.updated_at,
+            } satisfies SocialPostDto,
+          }),
+        ),
+      );
+
+      return deleteResponse;
     } catch (error) {
       console.error(`Error deleting social account ${id}:`, error);
       if (error instanceof HttpException) {

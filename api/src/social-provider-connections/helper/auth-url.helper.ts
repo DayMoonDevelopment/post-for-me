@@ -6,6 +6,7 @@ import { google } from 'googleapis';
 import type { SupabaseService } from '../../supabase/supabase.service';
 import type { AuthUrlProviderData } from '../dto/create-provider-auth-url.dto';
 import type { Database } from '../../../supabase';
+import { getFacebookApiVersion } from '../../lib/graph-api-version.util';
 
 type SocialProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -19,6 +20,7 @@ export async function generateAuthUrl({
   externalId,
   redirectUrlOverride,
   permissions,
+  forceReauth,
 }: {
   projectId: string;
   isSystem: boolean;
@@ -29,13 +31,16 @@ export async function generateAuthUrl({
   externalId: string | undefined;
   redirectUrlOverride: string | undefined | null;
   permissions: string[];
+  forceReauth: boolean | undefined;
 }): Promise<string | undefined> {
   const { appId, appSecret } = appCredentials;
 
   const provider =
     appCredentials.provider == 'instagram_w_facebook'
       ? 'instagram'
-      : appCredentials.provider;
+      : appCredentials.provider == 'x_oauth2'
+        ? 'x'
+        : appCredentials.provider;
 
   const appUrl = configService.get<string>('DASHBOARD_APP_URL');
 
@@ -111,8 +116,7 @@ export async function generateAuthUrl({
         }
       }
 
-      const facebookVersion =
-        configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
+      const facebookVersion = getFacebookApiVersion(configService);
       const authParams = new URLSearchParams([
         ['client_id', appId],
         ['redirect_uri', callbackUrl],
@@ -120,6 +124,10 @@ export async function generateAuthUrl({
         ['response_type', 'code'],
         ['state', authState],
       ]);
+
+      if (forceReauth !== false) {
+        authParams.append('auth_type', 'rerequest');
+      }
 
       authUrl = `https://www.facebook.com/${facebookVersion}/dialog/oauth?${authParams.toString()}`;
 
@@ -159,8 +167,7 @@ export async function generateAuthUrl({
         }
       }
 
-      const facebookVersion =
-        configService.get<string>('FACEBOOK_API_VERSION') || 'v23.0';
+      const facebookVersion = getFacebookApiVersion(configService);
       const authParams = new URLSearchParams([
         ['client_id', appId],
         ['redirect_uri', callbackUrl],
@@ -168,6 +175,10 @@ export async function generateAuthUrl({
         ['response_type', 'code'],
         ['state', authState],
       ]);
+
+      if (forceReauth !== false) {
+        authParams.append('auth_type', 'rerequest');
+      }
 
       authUrl = `https://www.facebook.com/${facebookVersion}/dialog/oauth?${authParams.toString()}`;
       break;
@@ -196,7 +207,7 @@ export async function generateAuthUrl({
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
         ['state', authState],
-        ['force_reauth', 'false'],
+        ['force_reauth', forceReauth === true ? 'true' : 'false'],
       ]);
 
       authUrl = `https://www.instagram.com/oauth/authorize?${authParams.toString()}`;
@@ -211,6 +222,7 @@ export async function generateAuthUrl({
 
       const authLink = await client.generateAuthLink(callbackUrl, {
         linkMode: 'authorize',
+        forceLogin: forceReauth === true ? true : undefined,
       });
 
       authUrl = authLink.url;
@@ -245,6 +257,48 @@ export async function generateAuthUrl({
 
       break;
     }
+    case 'x_oauth2': {
+      const client = new TwitterApi({
+        clientId: appId,
+        clientSecret: appSecret,
+      });
+
+      const authLink = client.generateOAuth2AuthLink(callbackUrl, {
+        scope: [
+          'tweet.read',
+          'tweet.write',
+          'users.read',
+          'offline.access',
+          'media.write',
+        ],
+        state: authState,
+      });
+
+      authUrl = authLink.url;
+
+      // Use the normalized provider ('x') here, matching every other
+      // oauth_data row pushed for this auth attempt (isSystem/redirect/
+      // external_id above), since the callback loader looks these rows up
+      // by the URL's provider segment ('x'), before knowing which app
+      // credentials (x vs x_oauth2) apply.
+      oauthData.push({
+        project_id: projectId,
+        provider: provider as SocialProviderEnum,
+        key: 'code_verifier',
+        key_id: authState,
+        value: authLink.codeVerifier,
+      });
+
+      oauthData.push({
+        project_id: projectId,
+        provider: provider as SocialProviderEnum,
+        key: 'connection_type',
+        key_id: authState,
+        value: 'oauth2',
+      });
+
+      break;
+    }
     case 'tiktok': {
       const scopes: string[] = [];
 
@@ -270,8 +324,11 @@ export async function generateAuthUrl({
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
         ['state', authState],
-        ['disable_auto_auth', '1'],
       ]);
+
+      if (forceReauth !== false) {
+        authParams.append('disable_auto_auth', '1');
+      }
 
       const tikTokVersion =
         configService.get<string>('TIKTOK_API_VERSION') || 'v2';
@@ -314,9 +371,12 @@ export async function generateAuthUrl({
         ['redirect_uri', callbackUrl],
         ['scope', scopes.join(',')],
         ['response_type', 'code'],
-        ['disable_auto_auth', '1'],
         ['state', authState],
       ]);
+
+      if (forceReauth !== false) {
+        authParams.append('disable_auto_auth', '1');
+      }
 
       const tikTokVersion =
         configService.get<string>('TIKTOK_API_VERSION') || 'v2';
@@ -356,8 +416,8 @@ export async function generateAuthUrl({
         access_type: 'offline',
         scope: scopes,
         include_granted_scopes: true,
-        prompt: 'consent',
         state: authState,
+        ...(forceReauth !== false ? { prompt: 'consent' } : {}),
       });
 
       break;

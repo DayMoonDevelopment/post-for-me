@@ -15,13 +15,16 @@ import type {
   FacebookFeedResponse,
   FacebookInsightsResponse,
   FacebookInsight,
+  FacebookAttachment,
 } from './facebook.types';
 import { FacebookPostMetricsDto } from './dto/facebook-post-metrics.dto';
 import { mapWithConcurrency } from '../lib/async.utils';
+import { getFacebookApiVersion } from '../lib/graph-api-version.util';
 
 const FACEBOOK_METRICS_POST_CONCURRENCY = 3;
 const FACEBOOK_INSIGHTS_INTERVAL_CONCURRENCY = 2;
-const DEFAULT_FACEBOOK_API_VERSION = 'v25.0';
+const FACEBOOK_POST_FIELDS =
+  'id,message,created_time,permalink_url,full_picture,attachments{media_type,media,url,target,subattachments{media_type,media,url,target}},likes.summary(true),comments.summary(true),shares';
 
 type FacebookInsightsInterval = { since: string; until: string };
 
@@ -35,11 +38,7 @@ export class FacebookService implements SocialPlatformService {
   ) {}
 
   private get graphApiBaseUrl(): string {
-    const facebookApiVersion =
-      this.configService.get<string>('FACEBOOK_API_VERSION') ||
-      DEFAULT_FACEBOOK_API_VERSION;
-
-    return `https://graph.facebook.com/${facebookApiVersion}`;
+    return `https://graph.facebook.com/${getFacebookApiVersion(this.configService)}`;
   }
 
   private logFacebookInsightsError(error: unknown, groupName?: string): void {
@@ -97,6 +96,71 @@ export class FacebookService implements SocialPlatformService {
       this.logFacebookInsightsError(error, groupName);
       return [];
     }
+  }
+
+  private getVideoTargetId(post: FacebookPost): string | undefined {
+    const attachments = post.attachments?.data || [];
+    const allAttachments = attachments.flatMap((attachment) => [
+      attachment,
+      ...(attachment.subattachments?.data || []),
+    ]);
+
+    return allAttachments.find(
+      (attachment) =>
+        attachment.media_type === 'video' && attachment.target?.id,
+    )?.target?.id;
+  }
+
+  private mapAttachmentToMedia(
+    attachment: FacebookAttachment,
+  ): { url: string; thumbnail_url?: string } | null {
+    const mediaUrl =
+      attachment.media?.image?.src ||
+      attachment.media?.source ||
+      attachment.url;
+
+    if (!mediaUrl) {
+      return null;
+    }
+
+    return {
+      url: mediaUrl,
+      thumbnail_url: attachment.media?.image?.src,
+    };
+  }
+
+  private getPostMedia(post: FacebookPost): {
+    url: string;
+    thumbnail_url?: string;
+  }[] {
+    const attachments = post.attachments?.data || [];
+    const carouselAttachments = attachments.flatMap(
+      (attachment) => attachment.subattachments?.data || [],
+    );
+
+    if (carouselAttachments.length > 0) {
+      return carouselAttachments
+        .map((attachment) => this.mapAttachmentToMedia(attachment))
+        .filter(
+          (attachment): attachment is { url: string; thumbnail_url?: string } =>
+            attachment !== null,
+        );
+    }
+
+    const attachmentMedia = attachments
+      .map((attachment) => this.mapAttachmentToMedia(attachment))
+      .filter(
+        (attachment): attachment is { url: string; thumbnail_url?: string } =>
+          attachment !== null,
+      );
+
+    if (attachmentMedia.length > 0) {
+      return attachmentMedia;
+    }
+
+    return post.full_picture
+      ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
+      : [];
   }
 
   async initService(projectId: string): Promise<void> {
@@ -161,7 +225,6 @@ export class FacebookService implements SocialPlatformService {
   }: {
     account: SocialAccount;
     platformIds?: string[];
-    platformPostsMetadata?: any;
     limit: number;
     cursor?: string;
     includeMetrics?: boolean;
@@ -173,8 +236,7 @@ export class FacebookService implements SocialPlatformService {
           async (id) => {
             const response = await axios.get(`${this.graphApiBaseUrl}/${id}`, {
               params: {
-                fields:
-                  'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
+                fields: FACEBOOK_POST_FIELDS,
                 access_token: account.access_token,
               },
             });
@@ -201,8 +263,7 @@ export class FacebookService implements SocialPlatformService {
         `${this.graphApiBaseUrl}/${account.social_provider_user_id}/feed`,
         {
           params: {
-            fields:
-              'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares',
+            fields: FACEBOOK_POST_FIELDS,
             access_token: account.access_token,
             limit: limit,
             after: cursor,
@@ -621,9 +682,8 @@ export class FacebookService implements SocialPlatformService {
       caption: post.message || '',
       url: post.permalink_url || '',
       posted_at: post.created_time,
-      media: post.full_picture
-        ? [{ url: post.full_picture, thumbnail_url: post.full_picture }]
-        : [],
+      media: this.getPostMedia(post),
+      video_target_id: this.getVideoTargetId(post),
       metrics: includeMetrics
         ? {
             ...insights,

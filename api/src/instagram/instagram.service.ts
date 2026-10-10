@@ -1,4 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -9,6 +10,7 @@ import type {
 import axios, { AxiosError } from 'axios';
 import { SupabaseService } from '../supabase/supabase.service';
 import type {
+  InstagramMediaChild,
   InstagramMediaItem,
   InstagramMediaListResponse,
   InstagramRefreshTokenResponse,
@@ -18,14 +20,30 @@ import type {
   InstagramInsight,
 } from './instagram.types';
 import { mapWithConcurrency } from '../lib/async.utils';
+import {
+  getFacebookApiVersion,
+  getInstagramApiVersion,
+} from '../lib/graph-api-version.util';
 
 const INSTAGRAM_METRICS_CONCURRENCY = 3;
+const GRAPH_INSTAGRAM_DOMAIN = 'https://graph.instagram.com';
 
 @Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private get facebookApiVersion(): string {
+    return getFacebookApiVersion(this.configService);
+  }
+
+  private get instagramApiVersion(): string {
+    return getInstagramApiVersion(this.configService);
+  }
 
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
@@ -36,9 +54,9 @@ export class InstagramService implements SocialPlatformService {
       accountMetaData?.connection_type === 'instagram' ||
       (account.access_token && account.access_token.startsWith('IG'))
     ) {
-      return 'https://graph.instagram.com/v23.0';
+      return `${GRAPH_INSTAGRAM_DOMAIN}/${this.instagramApiVersion}`;
     }
-    return 'https://graph.facebook.com/v23.0';
+    return `https://graph.facebook.com/${this.facebookApiVersion}`;
   }
 
   async initService(projectId: string): Promise<void> {
@@ -92,7 +110,7 @@ export class InstagramService implements SocialPlatformService {
 
       if (accountMetaData?.connection_type === 'instagram') {
         const response = await axios.get<InstagramRefreshTokenResponse>(
-          'https://graph.instagram.com/refresh_access_token',
+          `${GRAPH_INSTAGRAM_DOMAIN}/refresh_access_token`,
           {
             params: {
               grant_type: 'ig_refresh_token',
@@ -113,7 +131,7 @@ export class InstagramService implements SocialPlatformService {
         }
       } else {
         const response = await axios.get<FacebookRefreshTokenResponse>(
-          'https://graph.facebook.com/v20.0/oauth/access_token',
+          `https://graph.facebook.com/${this.facebookApiVersion}/oauth/access_token`,
           {
             params: {
               grant_type: 'fb_exchange_token',
@@ -219,6 +237,20 @@ export class InstagramService implements SocialPlatformService {
     includeMetrics: boolean = false,
   ): PlatformPost {
     const insights = this.extractInsightsFromResponse(item.insights);
+    const children: InstagramMediaChild[] = item.children?.data ?? [];
+    const childMedia = children.map((child) => ({
+      url: child.media_url || '',
+      thumbnail_url: child.thumbnail_url || child.media_url || '',
+    }));
+    const media =
+      childMedia.length > 0
+        ? childMedia
+        : [
+            {
+              url: item.media_url || '',
+              thumbnail_url: item.thumbnail_url || item.media_url || '',
+            },
+          ];
 
     const post: PlatformPost = {
       provider: 'instagram',
@@ -227,12 +259,7 @@ export class InstagramService implements SocialPlatformService {
       caption: item.caption || '',
       url: item.permalink || '',
       posted_at: item.timestamp,
-      media: [
-        {
-          url: item.media_url || '',
-          thumbnail_url: item.thumbnail_url || item.media_url || '',
-        },
-      ],
+      media,
       metrics: includeMetrics
         ? {
             likes: insights.likes,
@@ -372,7 +399,7 @@ export class InstagramService implements SocialPlatformService {
 
       const mediaUrl = `${baseUrl}/${account.social_provider_user_id}/media`;
       const baseFields =
-        'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp';
+        'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,children{id,media_type,media_url,thumbnail_url}';
 
       if (platformIds && platformIds.length > 0) {
         const mediaItems = await mapWithConcurrency(

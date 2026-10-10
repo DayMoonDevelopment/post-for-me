@@ -14,6 +14,7 @@ import { getTikTokSocialProviderConnection } from "./providers/tiktok.social-acc
 import { getInstagramSocialProviderConnection } from "./providers/instagram.social-account";
 import { getFacebookSocialProviderConnection } from "./providers/facebook.social-account";
 import { getXSocialProviderConnection } from "./providers/x.social-account";
+import { getXOAuth2SocialProviderConnection } from "./providers/x-oauth2.social-account";
 import { getLinkedInSocialProviderConnection } from "./providers/linkedin.social-account";
 import { getYoutubeSocialProviderConnection } from "./providers/youtube.social-account";
 import { getPinterestSocialProviderConnection } from "./providers/pinterest.social-account";
@@ -53,7 +54,11 @@ export async function addSocialAccountConnections({
   const errors: string[] = [];
   const failedConnections: string[] = [];
   const normalizedProvider =
-    provider === "instagram_w_facebook" ? "instagram" : provider;
+    provider === "instagram_w_facebook"
+      ? "instagram"
+      : provider === "x_oauth2"
+        ? "x"
+        : provider;
 
   let redirectUri = `${REDIRECT_APP_URL}/callback/${projectId}/${normalizedProvider}/account`;
 
@@ -171,6 +176,7 @@ export async function addSocialAccountConnections({
   if (connectionsError) {
     console.error(connectionsError);
   }
+
   return {
     successConnections: insertedConnections?.map((i) => i.id) || [],
     failedConnections,
@@ -182,36 +188,33 @@ async function getSocialProviderConnections(
   provider: string,
   info: SocialProviderInfo,
 ): Promise<SocialProviderConnection[]> {
-  try {
-    switch (provider) {
-      case "tiktok":
-        return getTikTokSocialProviderConnection(info);
-      case "instagram":
-        return getInstagramSocialProviderConnection(info);
-      case "facebook":
-        return getFacebookSocialProviderConnection(info);
-      case "x":
-        return getXSocialProviderConnection(info);
-      case "youtube":
-        return getYoutubeSocialProviderConnection(info);
-      case "linkedin":
-        return getLinkedInSocialProviderConnection(info);
-      case "pinterest":
-        return getPinterestSocialProviderConnection(info);
-      case "bluesky":
-        return getBlueskySocialProviderConnection(info);
-      case "threads":
-        return getThreadsSocialProviderConnection(info);
-      case "tiktok_business":
-        return getTikTokBusinessSocialProviderConnection(info);
-      case "instagram_w_facebook":
-        return getInstagramWFacebookSocialProviderConnection(info);
-      default:
-        return [];
-    }
-  } catch (error) {
-    console.error(error);
-    return [];
+  switch (provider) {
+    case "tiktok":
+      return getTikTokSocialProviderConnection(info);
+    case "instagram":
+      return getInstagramSocialProviderConnection(info);
+    case "facebook":
+      return getFacebookSocialProviderConnection(info);
+    case "x":
+      return getXSocialProviderConnection(info);
+    case "x_oauth2":
+      return getXOAuth2SocialProviderConnection(info);
+    case "youtube":
+      return getYoutubeSocialProviderConnection(info);
+    case "linkedin":
+      return getLinkedInSocialProviderConnection(info);
+    case "pinterest":
+      return getPinterestSocialProviderConnection(info);
+    case "bluesky":
+      return getBlueskySocialProviderConnection(info);
+    case "threads":
+      return getThreadsSocialProviderConnection(info);
+    case "tiktok_business":
+      return getTikTokBusinessSocialProviderConnection(info);
+    case "instagram_w_facebook":
+      return getInstagramWFacebookSocialProviderConnection(info);
+    default:
+      return [];
   }
 }
 
