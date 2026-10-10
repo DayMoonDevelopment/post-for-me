@@ -1,0 +1,467 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/ibm-plex-sans";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/400-italic.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-heading: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: "DM Mono", ui-monospace, "SF Mono", "Cascadia Code",
+    "Roboto Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+@theme inline {
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-hint: var(--hint);
+  --color-hint-foreground: var(--hint-foreground);
+  /* JSON syntax highlight tokens — only the unique value-type/key colors (the
+     surface + punctuation reuse muted). Consumed by `text-json-*` utilities in
+     the JsonBlock primitive; an independent space so highlight hues don't track
+     the brand accent the way `--primary` does. */
+  --color-json-key: var(--json-key);
+  --color-json-string: var(--json-string);
+  --color-json-number: var(--json-number);
+  --color-json-boolean: var(--json-boolean);
+  --color-json-null: var(--json-null);
+  /* Source-code syntax tokens — editor-style hues consumed by `text-syntax-*`
+     utilities in the CodeBlock primitive (mapped from Prism token types). Like
+     `--json-*`, an independent space so highlight colors don't track the brand
+     accent; plain text stays `--foreground`. */
+  --color-syntax-keyword: var(--syntax-keyword);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-number: var(--syntax-number);
+  --color-syntax-function: var(--syntax-function);
+  --color-syntax-class: var(--syntax-class);
+  --color-syntax-comment: var(--syntax-comment);
+  --color-syntax-punctuation: var(--syntax-punctuation);
+  --color-invert: var(--invert);
+  --color-invert-foreground: var(--invert-foreground);
+  --color-pop: var(--pop);
+  --color-focus: var(--focus);
+  --color-focus-foreground: var(--focus-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --animate-orbit: orbit calc(var(--duration) * 1s) linear infinite;
+  @keyframes orbit {
+    0% {
+      transform: rotate(calc(var(--angle) * 1deg))
+        translateY(calc(var(--radius) * 1px)) rotate(calc(var(--angle) * -1deg));
+    }
+    100% {
+      transform: rotate(calc(var(--angle) * 1deg + 360deg))
+        translateY(calc(var(--radius) * 1px))
+        rotate(calc((var(--angle) * -1deg) - 360deg));
+    }
+  }
+  /* The Hint glyph gently "breathes" — a subtle scale once every ~10s, then
+     rests. It's a transform on the SVG (crisp), and the only idle motion. */
+  --animate-hint-breathe: hint-breathe 10s ease-out infinite;
+  @keyframes hint-breathe {
+    0% {
+      transform: scale(1);
+    }
+    5% {
+      transform: scale(1.1);
+    }
+    13%,
+    100% {
+      transform: scale(1);
+    }
+  }
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --animate-social-post-story-arrow: social-post-story-arrow calc(var(--social-post-story-arrow-pause, 1.4s) / 0.68) ease-out infinite;
+  @keyframes social-post-story-arrow {
+  0% {
+    transform: translateX(0);
+    }
+  16% {
+    transform: translateX(calc(var(--social-post-story-arrow-dir, 1) * var(--social-post-story-arrow-travel, 0.34em)));
+    }
+  32%, 100% {
+    transform: translateX(0);
+    }
+  }
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.208 0.042 265.755);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.208 0.042 265.755);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.208 0.042 265.755);
+  --primary: oklch(0.6677 0.1381 235.02);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: var(--color-red-800);
+  /* `info` tracks the `pop` accent so functional "info" surfaces (alerts, badges,
+     status dots) stay in sync with the brand's designed accent. */
+  --info: var(--pop);
+  --info-foreground: var(--color-violet-900);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-900);
+  --warning: var(--color-yellow-500);
+  --warning-foreground: var(--color-yellow-900);
+  /* hint — an amber "tip / idea" accent (the lightbulb), distinct from the
+     yellow `warning` status. */
+  --hint: var(--color-amber-500);
+  --hint-foreground: var(--color-amber-900);
+  /* JSON syntax highlight (light) — editor-style hues, independent of --primary. */
+  --json-key: var(--color-sky-700);
+  --json-string: var(--color-emerald-600);
+  --json-number: var(--color-violet-600);
+  --json-boolean: var(--color-amber-600);
+  --json-null: var(--color-zinc-500);
+  /* Source-code syntax highlight (light) — oklch siblings of the brand palette,
+     not stock Tailwind: keyword tracks --pop's violet, function tracks
+     --primary's blue, and all share the brand's moderate chroma so the code
+     reads as family. Comment/punctuation reuse the neutral --muted-foreground. */
+  --syntax-keyword: oklch(0.5614 0.1539 280.23);
+  --syntax-function: oklch(0.556 0.132 240);
+  --syntax-string: oklch(0.566 0.118 158);
+  --syntax-number: oklch(0.588 0.128 62);
+  --syntax-class: oklch(0.566 0.104 205);
+  --syntax-comment: color-mix(in oklch, var(--muted-foreground) 80%, transparent);
+  --syntax-punctuation: var(--muted-foreground);
+  --invert: var(--color-zinc-900);
+  --invert-foreground: var(--color-zinc-50);
+  --pop: oklch(0.5614 0.1539 280.23);
+  --focus: var(--pop);
+  --focus-foreground: var(--color-violet-900);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  /* Focus ring tracks the brand accent (primary), not a neutral gray — keeps
+     focus states in the primary color space and consistent with the per-brand
+     overrides below. */
+  --ring: var(--primary);
+  --chart-1: oklch(0.865 0.127 207.078);
+  --chart-2: oklch(0.715 0.143 215.221);
+  --chart-3: oklch(0.609 0.126 221.723);
+  --chart-4: oklch(0.52 0.105 223.128);
+  --chart-5: oklch(0.45 0.085 224.283);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-primary: oklch(0.208 0.042 265.755);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: oklch(0.704 0.04 256.788);
+}
+
+.dark {
+  /* Native chrome (scrollbars, form controls) tracks the RESOLVED theme, not
+     raw OS state — a user who explicitly picks "light" while their OS is dark
+     should still get light-themed scrollbars. */
+  color-scheme: dark;
+  --background: oklch(0.12 0.005 264.695);
+  --foreground: oklch(0.95 0.005 264.695);
+  --card: oklch(0.18 0.008 264.695);
+  --card-foreground: oklch(0.95 0.005 264.695);
+  --popover: oklch(0.18 0.008 264.695);
+  --popover-foreground: oklch(0.95 0.005 264.695);
+  --primary: oklch(0.6677 0.1381 235.02);
+  --primary-foreground: oklch(0.12 0.005 264.695);
+  --secondary: oklch(0.22 0.01 264.695);
+  --secondary-foreground: oklch(0.95 0.005 264.695);
+  --muted: oklch(0.22 0.01 264.695);
+  --muted-foreground: oklch(0.65 0.015 264.695);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: var(--color-red-600);
+  /* `info` tracks the `pop` accent so functional "info" surfaces (alerts, badges,
+     status dots) stay in sync with the brand's designed accent. */
+  --info: var(--pop);
+  --info-foreground: var(--color-violet-600);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-600);
+  --warning: var(--color-yellow-500);
+  --warning-foreground: var(--color-yellow-600);
+  /* hint — amber "tip / idea" accent for the dark surface. */
+  --hint: var(--color-amber-500);
+  --hint-foreground: var(--color-amber-600);
+  /* JSON syntax highlight (dark) — lighter shades for the dark surface. */
+  --json-key: var(--color-sky-300);
+  --json-string: var(--color-emerald-400);
+  --json-number: var(--color-violet-400);
+  --json-boolean: var(--color-amber-400);
+  --json-null: var(--color-zinc-400);
+  /* Source-code syntax highlight (dark) — same brand-sibling hues, lifted for
+     the dark surface. */
+  --syntax-keyword: oklch(0.74 0.14 280.23);
+  --syntax-function: oklch(0.74 0.12 240);
+  --syntax-string: oklch(0.78 0.115 158);
+  --syntax-number: oklch(0.8 0.12 62);
+  --syntax-class: oklch(0.78 0.09 205);
+  --syntax-comment: color-mix(in oklch, var(--muted-foreground) 80%, transparent);
+  --syntax-punctuation: var(--muted-foreground);
+  --invert: var(--color-zinc-700);
+  --invert-foreground: var(--color-zinc-50);
+  --pop: oklch(0.5614 0.1539 280.23);
+  --focus: var(--pop);
+  --focus-foreground: var(--color-violet-600);
+  --border: oklch(0.25 0.01 264.695);
+  --input: oklch(0.28 0.01 264.695);
+  --ring: var(--primary);
+  --chart-1: oklch(0.865 0.127 207.078);
+  --chart-2: oklch(0.715 0.143 215.221);
+  --chart-3: oklch(0.609 0.126 221.723);
+  --chart-4: oklch(0.52 0.105 223.128);
+  --chart-5: oklch(0.45 0.085 224.283);
+  --sidebar: oklch(0.15 0.008 264.695);
+  --sidebar-foreground: oklch(0.95 0.005 264.695);
+  --sidebar-primary: oklch(0.75 0.025 265.755);
+  --sidebar-primary-foreground: oklch(0.12 0.005 264.695);
+  --sidebar-accent: oklch(0.22 0.01 264.695);
+  --sidebar-accent-foreground: oklch(0.95 0.005 264.695);
+  --sidebar-border: oklch(0.25 0.01 264.695);
+  --sidebar-ring: oklch(0.5 0.02 265.755);
+}
+
+/* ---------------------------------------------------------------------------
+   Brand themes — the second theming axis.
+
+   System themes (`:root` / `.dark`) own the neutrals. Brand themes re-point the
+   accent (`--primary`) for a subtree via `data-brand`. Because the theme layer
+   above is `@theme inline`, every `*-primary` utility reads `--primary`
+   directly, so anything inside a `[data-brand]` container recolors
+   automatically — and still composes with light/dark, since these only touch
+   the accent and the neutrals come from the system theme.
+
+   default brand = no attribute (the base teal `--primary`).
+   --------------------------------------------------------------------------- */
+[data-brand="quickstart"] {
+  --primary: oklch(0.68 0.16 55); /* warm amber — "launch fast, get started" */
+  --primary-foreground: oklch(0.985 0.01 55); /* white — reads on the amber fill */
+  --ring: oklch(0.68 0.16 55);
+}
+
+[data-brand="white-label"] {
+  --primary: oklch(0.5 0.16 262); /* professional blue — "your brand" */
+  --primary-foreground: oklch(0.985 0.01 262);
+  --ring: oklch(0.5 0.16 262);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading;
+  }
+}
+/* Toast motion (Sonner).
+   Entrance is already bottom-up (Sonner's default for a bottom-anchored
+   toaster: --y animates translateY(100%) → 0). We only retarget the EXIT:
+   instead of sliding down, the toast leaves toward the inline-end (off the
+   right in LTR, the left in RTL — mirrored so it always exits past the edge it
+   sits against). Scoped to data-swipe-out='false' so a swipe-to-dismiss still
+   follows the swipe. `--y` feeds Sonner's `transform: var(--y)`. */
+[data-sonner-toaster] [data-sonner-toast][data-removed="true"][data-swipe-out="false"] {
+  --y: translateX(150%) !important;
+}
+[dir="rtl"] [data-sonner-toaster] [data-sonner-toast][data-removed="true"][data-swipe-out="false"] {
+  --y: translateX(-150%) !important;
+}
+
+/* Clip toast content to the rounded corners so the bottom progress bar can't
+   poke past them. Safe now that the close button is inset (below); box-shadow is
+   outside the box, so it's unaffected. */
+[data-sonner-toast][data-styled="true"] {
+  overflow: hidden;
+}
+
+/* Toast close button — inset WITHIN the toast at the trailing (inline-end) edge,
+   RTL-aware (instead of Sonner's default pushed-outside corner), and restyled
+   as a ghost button: no border, transparent until hovered. */
+[data-sonner-toast][data-styled="true"] [data-close-button] {
+  left: auto !important;
+  right: auto !important;
+  inset-inline-start: auto !important;
+  inset-inline-end: 0.5rem !important;
+  top: 0.5rem !important;
+  transform: none !important;
+  border: none !important;
+  /* Match the dialog's ghost close button shape (rounded-md), not a circle. */
+  border-radius: var(--radius-md) !important;
+  background: transparent !important;
+  color: var(--muted-foreground) !important;
+}
+[data-sonner-toast][data-styled="true"] [data-close-button]:hover {
+  background: var(--muted) !important;
+  color: var(--foreground) !important;
+}
+
+/* Toast progress indicator — a subtle (muted) bar along the bottom that depletes
+   over the toast's lifetime, so a time-based toast shows the time left. It lives
+   on ::before (free in the resting state — Sonner only uses ::before while
+   swiping/removing and ::after while expanded, so this never fights them).
+   Hidden for loading toasts (no countdown). Duration follows --toast-duration
+   (defaults to Sonner's 4s; pass it per-toast for a non-default duration).
+   Paused while the toaster is hovered, matching Sonner pausing the dismiss
+   timer. Depletes toward the inline-start (mirrored in RTL). */
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+/* `.toast-no-progress` (set via the `hideProgress()` helper in ~/ui/sonner) opts
+   a toast out of the bar — baked into the selector so it simply never renders. */
+[data-sonner-toast][data-styled="true"][data-swiping="false"]:not([data-removed="true"]):not([data-type="loading"]):not(.toast-no-progress)::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+  border-end-start-radius: var(--radius);
+  border-end-end-radius: var(--radius);
+  transform-origin: left;
+  animation: toast-progress var(--toast-duration, 4000ms) linear forwards;
+}
+[dir="rtl"]
+  [data-sonner-toast][data-styled="true"][data-swiping="false"]:not(
+    [data-removed="true"]
+  ):not([data-type="loading"]):not(.toast-no-progress)::before {
+  transform-origin: right;
+}
+[data-sonner-toaster]:hover [data-sonner-toast][data-styled="true"]::before {
+  animation-play-state: paused;
+}
+
+/* Modal view transitions (ModalViews replace-style navigation).
+   Only the active view is mounted; it remounts on change (keyed) so this enter
+   animation replays. A subtle in-place fade + micro-slide reads as a "replace"
+   (not a horizontal track). The Y axis keeps it RTL-agnostic; push (forward) and
+   pop (back) nudge from opposite directions. */
+@keyframes modal-view-forward {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes modal-view-back {
+  from {
+    opacity: 0;
+    transform: translateY(-0.375rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+[data-slot="modal-view"] {
+  animation: modal-view-forward 200ms ease-out;
+}
+[data-slot="modal-view"][data-direction="back"] {
+  animation-name: modal-view-back;
+}
+[data-slot="modal-view"][data-direction="none"] {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="modal-view"] {
+    animation: none;
+  }
+}
+
+/* Feather the horizontal edges of an overflow-x scroller so cut-off content fades out
+   instead of hard-clipping. The shadcn `attachment` primitive (AttachmentGroup) already
+   applies `scroll-fade-x`, but shadcn/tailwind.css doesn't define it — so add it here. */
+@utility scroll-fade-x {
+  --scroll-fade: 1.25rem;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--scroll-fade),
+    black calc(100% - var(--scroll-fade)),
+    transparent
+  );
+}
+
+/* Hide the scrollbar. The primitive uses `scrollbar-none`; shadcn ships `no-scrollbar`. */
+@utility scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
