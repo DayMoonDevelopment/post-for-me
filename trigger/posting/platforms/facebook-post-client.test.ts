@@ -60,7 +60,7 @@ function makeNetworkError(message = "socket hang up") {
   return err;
 }
 
-const axiosGet = mock(async (url: string) => {
+const axiosGet = mock(async (url: string, config?: any) => {
   if (/\?fields=status$/.test(url)) {
     const behavior = videoStatusBehaviors[videoStatusCallCount];
     videoStatusCallCount++;
@@ -72,6 +72,10 @@ const axiosGet = mock(async (url: string) => {
 
   if (url.includes("fields=url")) {
     return { data: { url: "https://facebook.com/story/permalink" } };
+  }
+
+  if (config?.params?.fields === "post_id") {
+    return { data: { post_id: "page_1_456" } };
   }
 
   if (url.endsWith("/photo_post_1") || url.endsWith("/carousel_post_1")) {
