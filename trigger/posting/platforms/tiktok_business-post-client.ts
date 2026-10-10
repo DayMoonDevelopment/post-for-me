@@ -15,15 +15,12 @@ import {
   SocialAccount,
   TiktokConfiguration,
 } from "../post.types";
+import { TIKTOK_PROCESSING_STATUSES } from "./tiktok-shared";
 
 export class TikTokBusinessPostClient extends PostClient {
   #tokenUrl =
     "https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/refresh_token/";
-  #processingStatuses = [
-    "PROCESSING",
-    "PROCESSING_DOWNLOAD",
-    "PROCESSING_UPLOAD",
-  ];
+  #processingStatuses = TIKTOK_PROCESSING_STATUSES;
   #processedStatuses = [
     "PUBLISH_COMPLETE",
     "PUBLISH_SUCCESS",
@@ -179,18 +176,21 @@ export class TikTokBusinessPostClient extends PostClient {
 
       if (platformConfig?.is_draft) {
         const { status } = await this.#getPublishStatus({ publishId, account });
+        const isProcessing = this.#processingStatuses.includes(status);
 
         return {
-          success: true,
+          success: !isProcessing,
+          is_processing: isProcessing,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message: this.#processingStatuses.includes(status)
+          error_message: isProcessing
             ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
             : undefined,
           details: {
-            status: "Saved as draft",
-            message:
-              "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
+            status: isProcessing ? "Processing" : "Saved as draft",
+            message: isProcessing
+              ? "TikTok is still processing this draft. It will be automatically reconciled once TikTok finishes."
+              : "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
             addedMedia: this.#addedMedia,
             requests: this.#requests,
             responses: this.#responses,
@@ -261,6 +261,28 @@ export class TikTokBusinessPostClient extends PostClient {
     }
   }
 
+  /**
+   * Single, cheap re-check of a draft's publish status for reconciliation.
+   * Unlike #getPublishStatus's internal poll loop (used during post()), this
+   * performs exactly one status check and never waits/retries internally —
+   * the caller (a scheduled reconciliation task) provides the retry cadence.
+   */
+  async checkDraftPublishStatus({
+    publishId,
+    account,
+  }: {
+    publishId: string;
+    account: SocialAccount;
+  }): Promise<{ status: string; failReason?: string }> {
+    const { status, failReason } = await this.#getPublishStatus({
+      publishId,
+      account,
+      maxAttempts: 1,
+    });
+
+    return { status, failReason };
+  }
+
   async #getCreatorInfo(account: SocialAccount) {
     const creatorInfoUrl =
       "https://business-api.tiktok.com/open_api/v1.3/business/get/";
@@ -306,10 +328,12 @@ export class TikTokBusinessPostClient extends PostClient {
     publishId,
     account,
     waitForPublicPostId = false,
+    maxAttempts = 15,
   }: {
     publishId: string;
     account: SocialAccount;
     waitForPublicPostId?: boolean;
+    maxAttempts?: number;
   }) {
     let status = "PROCESSING";
     let failReason;
@@ -317,7 +341,6 @@ export class TikTokBusinessPostClient extends PostClient {
     let attempts = 0;
     let publicPostIdAttempts = 0;
     const initialDelayMs = 5000;
-    const maxAttempts = 15;
     const maxPublicPostIdAttempts = 3;
 
     const statusUrl =

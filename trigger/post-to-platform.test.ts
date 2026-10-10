@@ -1,10 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { PostClient } from "./posting/post-client";
 import type { SocialAccount } from "./posting/post.types";
+import { createClient } from "@supabase/supabase-js";
 
-// post-to-platform.ts constructs a Supabase client and a Stripe client at
-// module scope, so these need to resolve to something construction-time-valid
-// before the module can be imported (no network calls happen at import).
+// Construct a valid mock client without making network calls.
 process.env.SUPABASE_URL = "https://example.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-dummy";
 process.env.STRIPE_SECRET_KEY = "sk_test_dummy";
@@ -28,10 +27,12 @@ mock.module("@supabase/supabase-js", () => ({
   }),
 }));
 
-let mod: typeof import("./post-to-platform");
+let mod: typeof import("./posting/token-refresh");
+let supabaseClient: ReturnType<typeof createClient>;
 
 beforeAll(async () => {
-  mod = await import("./post-to-platform");
+  mod = await import("./posting/token-refresh");
+  supabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 });
 
 beforeEach(() => {
@@ -76,7 +77,7 @@ describe("handleTokenRefresh", () => {
       expires_at: "2026-01-01T00:00:00.000Z",
     }));
 
-    const result = await mod.handleTokenRefresh({ postClient, account });
+    const result = await mod.handleTokenRefresh({ supabaseClient, postClient, account });
 
     expect(result).toEqual({ success: true });
     expect(updateEq).toHaveBeenCalledTimes(1);
@@ -95,7 +96,7 @@ describe("handleTokenRefresh", () => {
       });
     });
 
-    const result = await mod.handleTokenRefresh({ postClient, account });
+    const result = await mod.handleTokenRefresh({ supabaseClient, postClient, account });
 
     expect(result.success).toBe(false);
     expect(result.error).toBe(
@@ -117,7 +118,7 @@ describe("handleTokenRefresh", () => {
       throw new Error("socket hang up");
     });
 
-    const result = await mod.handleTokenRefresh({ postClient, account });
+    const result = await mod.handleTokenRefresh({ supabaseClient, postClient, account });
 
     expect(result).toEqual({ success: false, error: "socket hang up", details: undefined });
   });
@@ -128,7 +129,7 @@ describe("handleTokenRefresh", () => {
       expires_at: "2026-01-01T00:00:00.000Z",
     }));
 
-    const result = await mod.handleTokenRefresh({ postClient, account });
+    const result = await mod.handleTokenRefresh({ supabaseClient, postClient, account });
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Failed to refresh instagram token");
@@ -142,7 +143,7 @@ describe("handleTokenRefresh", () => {
       expires_at: "2026-01-01T00:00:00.000Z",
     }));
 
-    const result = await mod.handleTokenRefresh({ postClient, account });
+    const result = await mod.handleTokenRefresh({ supabaseClient, postClient, account });
 
     expect(result).toEqual({ success: false, error: "db unavailable" });
   });

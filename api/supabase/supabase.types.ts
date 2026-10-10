@@ -524,10 +524,13 @@ export type Database = {
           details: Json | null
           error_message: string | null
           id: string
+          is_processing: boolean
           post_id: string
           provider_connection_id: string
           provider_post_id: string | null
           provider_post_url: string | null
+          reconciliation_attempts: number
+          reconciliation_deadline_at: string | null
           success: boolean
           updated_at: string
         }
@@ -536,10 +539,13 @@ export type Database = {
           details?: Json | null
           error_message?: string | null
           id?: string
+          is_processing?: boolean
           post_id: string
           provider_connection_id: string
           provider_post_id?: string | null
           provider_post_url?: string | null
+          reconciliation_attempts?: number
+          reconciliation_deadline_at?: string | null
           success: boolean
           updated_at?: string
         }
@@ -548,10 +554,13 @@ export type Database = {
           details?: Json | null
           error_message?: string | null
           id?: string
+          is_processing?: boolean
           post_id?: string
           provider_connection_id?: string
           provider_post_id?: string | null
           provider_post_url?: string | null
+          reconciliation_attempts?: number
+          reconciliation_deadline_at?: string | null
           success?: boolean
           updated_at?: string
         }
@@ -1341,6 +1350,7 @@ export type Database = {
         | "social.post.result.created"
         | "social.account.created"
         | "social.account.updated"
+        | "social.post.result.updated"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1506,6 +1516,7 @@ export const Constants = {
         "social.post.result.created",
         "social.account.created",
         "social.account.updated",
+        "social.post.result.updated",
       ],
     },
   },

@@ -14,6 +14,11 @@ export class SocialPostResultDto {
   @ApiProperty({ description: 'Indicates if the post was successful' })
   success: boolean;
 
+  @ApiProperty({
+    description: 'Whether the post is still being processed by the platform',
+  })
+  is_processing: boolean;
+
   @ApiProperty({ description: 'Error message if the post failed' })
   error: string | null;
 

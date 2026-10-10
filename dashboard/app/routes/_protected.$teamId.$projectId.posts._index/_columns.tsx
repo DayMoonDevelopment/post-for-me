@@ -160,17 +160,21 @@ export const columns: ColumnDef<PostWithConnections>[] = [
         <div className="flex flex-wrap gap-1">
           {uniqueProviders.map((provider) => {
             const status = providerStatus?.[provider];
+            const StatusIcon =
+              status === "success"
+                ? CheckmarkSmallIcon
+                : status === "processing"
+                  ? LoadingCircleIcon
+                  : status === "failed"
+                    ? TriangleExclamationIcon
+                    : null;
 
             return (
               <Badge
                 key={provider}
                 className={`${providerColors[provider as keyof typeof providerColors] || "bg-gray-500"} text-white text-xs gap-1`}
               >
-                {status === undefined ? null : status ? (
-                  <CheckmarkSmallIcon className="size-3" />
-                ) : (
-                  <TriangleExclamationIcon className="size-3" />
-                )}
+                {StatusIcon ? <StatusIcon className="size-3" /> : null}
                 {provider}
               </Badge>
             );
