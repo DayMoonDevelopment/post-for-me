@@ -10,6 +10,10 @@ import {
   STRIPE_CANCELLED_STATUSES,
 } from "~/lib/.server/stripe.constants";
 import { getSubscriptionPlanInfo } from "~/lib/.server/get-subscription-plan-info";
+import {
+  SCHEDULE_TYPE,
+  findScheduleOfType,
+} from "~/lib/.server/subscription-schedules";
 import type Stripe from "stripe";
 
 export const loader = withSupabase(async ({ supabase, params, request }) => {
@@ -91,10 +95,16 @@ export const loader = withSupabase(async ({ supabase, params, request }) => {
         customer: team.data.stripe_customer_id,
       });
 
-      hasCredsAddon =
-        schedules.data.filter((s) => s.status === "active").length > 0
-          ? false
-          : hasCredsAccess;
+      const activeSchedules = schedules.data.filter(
+        (s) => s.status === "active",
+      );
+
+      hasCredsAddon = findScheduleOfType(
+        activeSchedules,
+        SCHEDULE_TYPE.ADDON_REMOVAL,
+      )
+        ? false
+        : hasCredsAccess;
 
       try {
         upcomingInvoice = await stripe.invoices.createPreview({
