@@ -382,6 +382,7 @@ export type Database = {
       }
       social_post_media: {
         Row: {
+          alt_text: string | null
           created_at: string
           external_id: string | null
           id: string
@@ -397,6 +398,7 @@ export type Database = {
           url: string
         }
         Insert: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
@@ -412,6 +414,7 @@ export type Database = {
           url: string
         }
         Update: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
@@ -1238,6 +1241,19 @@ export type Database = {
       }
     }
     Functions: {
+      delete_social_account: {
+        Args: { p_id: string; p_project_id: string }
+        Returns: {
+          caption: string
+          created_at: string
+          external_id: string
+          id: string
+          post_at: string
+          project_id: string
+          status: Database["public"]["Enums"]["social_post_status"]
+          updated_at: string
+        }[]
+      }
       get_team_usage_windows_over_threshold: {
         Args: { threshold_percent: number }
         Returns: {
@@ -1494,4 +1510,3 @@ export const Constants = {
     },
   },
 } as const
-

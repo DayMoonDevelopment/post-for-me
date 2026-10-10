@@ -3,6 +3,7 @@ import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
+import { normalizePlatform } from "../../lib/platform.utils";
 import {
   compressJpegToLimit,
   computeCropDimensions,
@@ -22,7 +23,6 @@ import {
   wrapPlatformError,
   wrapResponseDataError,
   PlatformApiError,
-  PlatformErrorDetails,
 } from "../platform-error";
 
 export class InstagramPostClient extends PostClient {
@@ -46,15 +46,25 @@ export class InstagramPostClient extends PostClient {
   #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 
+  #graphApiUrl = (
+    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com"
+  ).replace(/\/+$/, "");
+  #graphInstagramApiUrl = (
+    process.env.INSTAGRAM_GRAPH_API_URL || "https://graph.instagram.com"
+  ).replace(/\/+$/, "");
+  #apiVersion = process.env.FACEBOOK_API_VERSION || "v25.0";
+  #instagramApiVersion = process.env.INSTAGRAM_API_VERSION || "v23.0";
+  #oauthApiVersion = process.env.FACEBOOK_OAUTH_API_VERSION || "v20.0";
+
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
     if (
       account.social_provider_metadata?.connection_type === "instagram" ||
       (account.access_token && account.access_token.startsWith("IG"))
     ) {
-      return "https://graph.instagram.com/v23.0";
+      return `${this.#graphInstagramApiUrl}/${this.#instagramApiVersion}`;
     }
-    return "https://graph.facebook.com/v23.0";
+    return `${this.#graphApiUrl}/${this.#apiVersion}`;
   }
 
   constructor(
@@ -76,14 +86,14 @@ export class InstagramPostClient extends PostClient {
           `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`,
         );
         this.#requests.push({
-          refreshRequest: "https://graph.instagram.com/refresh_access_token",
+          refreshRequest: `${this.#graphInstagramApiUrl}/refresh_access_token`,
           params: {
             grant_type: "ig_refresh_token",
             access_token: account.access_token,
           },
         });
         const response = await axios.get(
-          `https://graph.instagram.com/refresh_access_token`,
+          `${this.#graphInstagramApiUrl}/refresh_access_token`,
           {
             params: {
               grant_type: "ig_refresh_token",
@@ -119,11 +129,11 @@ export class InstagramPostClient extends PostClient {
         };
 
         this.#requests.push({
-          refreshRequest: "https://graph.facebook.com/v20.0/oauth/access_token",
+          refreshRequest: `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
           params: refreshTokenParams,
         });
         const response = await axios.get(
-          `https://graph.facebook.com/v20.0/oauth/access_token`,
+          `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
           {
             params: refreshTokenParams,
           },
@@ -240,7 +250,7 @@ export class InstagramPostClient extends PostClient {
 
           platformId = publishResponse.data.id;
         } catch (error) {
-          if (this.#isNonRetryableError(error)) {
+          if (this.isTerminalAuthError(error)) {
             throw error;
           }
 
@@ -310,13 +320,12 @@ export class InstagramPostClient extends PostClient {
         responses: this.#responses,
       };
 
-      if (this.#isReconnectError(platformError)) {
+      if (this.isTerminalAuthError(error)) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message:
-            "Account needs to be reconnected, Access token has expired",
+          error_message: this.buildAuthErrorMessage(error),
           details: errorDetails,
         };
       }
@@ -391,6 +400,7 @@ export class InstagramPostClient extends PostClient {
       location_id?: string;
       user_tags?: any[];
       audio_name?: string;
+      alt_text?: string;
       trial_params?: {
         graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
       };
@@ -399,6 +409,10 @@ export class InstagramPostClient extends PostClient {
       caption: caption,
       access_token: account.access_token,
     };
+
+    if (medium.alt_text) {
+      createMediaParams.alt_text = medium.alt_text;
+    }
 
     switch (platformConfig?.placement) {
       case "stories":
@@ -444,7 +458,9 @@ export class InstagramPostClient extends PostClient {
 
         if (medium.tags && medium.tags.length > 0) {
           createMediaParams.product_tags = medium.tags
-            .filter((t) => t.platform == "instagram" && t.type == "product")
+            .filter(
+              (t) => normalizePlatform(t.platform) == "instagram" && t.type == "product",
+            )
             .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
         }
 
@@ -453,7 +469,9 @@ export class InstagramPostClient extends PostClient {
 
     if (medium.tags && medium.tags.length > 0) {
       createMediaParams.user_tags = medium.tags
-        .filter((t) => t.platform == "instagram" && t.type == "user")
+        .filter(
+          (t) => normalizePlatform(t.platform) == "instagram" && t.type == "user",
+        )
         .map((t) => ({
           username: t.id,
           x: t.x,
@@ -524,6 +542,7 @@ export class InstagramPostClient extends PostClient {
         product_tags?: any[];
         location_id?: string;
         user_tags?: any[];
+        alt_text?: string;
       } = {
         media_type: isVideo ? "VIDEO" : undefined,
         [isVideo ? "video_url" : "image_url"]: signedUrl,
@@ -531,9 +550,15 @@ export class InstagramPostClient extends PostClient {
         access_token: account.access_token,
       };
 
+      if (medium.alt_text) {
+        itemPayload.alt_text = medium.alt_text;
+      }
+
       if (!isVideo && medium.tags && medium.tags.length > 0) {
         itemPayload.user_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "user")
+          .filter(
+            (t) => normalizePlatform(t.platform) == "instagram" && t.type == "user",
+          )
           .map((t) => ({
             username: t.id,
             x: t.x,
@@ -543,7 +568,9 @@ export class InstagramPostClient extends PostClient {
 
       if (medium.tags && medium.tags.length > 0) {
         itemPayload.product_tags = medium.tags
-          .filter((t) => t.platform == "instagram" && t.type == "product")
+          .filter(
+            (t) => normalizePlatform(t.platform) == "instagram" && t.type == "product",
+          )
           .map((t) => ({ product_id: t.id, x: t.x, y: t.y }));
       }
 
@@ -672,16 +699,16 @@ export class InstagramPostClient extends PostClient {
           });
         }
 
-        const errorMessage = this.#getErrorMessage(error);
+        const errorMessage = this.getErrorMessage(error);
         console.error(
           `Failed to process ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}: ${errorMessage}`,
         );
 
-        if (this.#isNonRetryableError(error)) {
-          throw wrapPlatformError(
-            error,
-            `Failed to process ${mediaLabel} without retry`,
+        if (this.isTerminalAuthError(error)) {
+          console.error(
+            `Failed to process ${mediaLabel} - terminal auth error, not retrying: ${errorMessage}`,
           );
+          throw error;
         }
 
         if (attempt === this.#mediaRetryAttempts) {
@@ -815,33 +842,6 @@ export class InstagramPostClient extends PostClient {
     );
   }
 
-  #getErrorMessage(error: any): string {
-    return extractPlatformError(error).message;
-  }
-
-  // Graph API returns OAuthException errors (expired/invalid token) as
-  // `{ error: { code: 190 } }` in a 200-OK body just as often as it does via
-  // an HTTP 401 (`wrapResponseDataError` call sites never have a real HTTP
-  // status to attach), so both signals need to be checked here.
-  #isReconnectError(platformError: PlatformErrorDetails): boolean {
-    if (platformError.status === 401) {
-      return true;
-    }
-
-    const errorCode = (platformError.data as any)?.error?.code;
-    return errorCode === 190;
-  }
-
-  #isNonRetryableError(error: any): boolean {
-    const errorMessage = this.#getErrorMessage(error).toLowerCase();
-
-    return (
-      errorMessage.includes(
-        "error validating access token: sessions for the user are not allowed because the user is not a confirmed user",
-      ) || errorMessage.includes("user access is restricted")
-    );
-  }
-
   #getRetryDelayMs(attempt: number): number {
     return Math.min(
       this.#mediaStatusInitialDelayMs *
@@ -941,9 +941,9 @@ export class InstagramPostClient extends PostClient {
 
         return permalink;
       } catch (error) {
-        const errorMessage = this.#getErrorMessage(error);
+        const errorMessage = this.getErrorMessage(error);
 
-        if (this.#isNonRetryableError(error)) {
+        if (this.isTerminalAuthError(error)) {
           throw error;
         }
 

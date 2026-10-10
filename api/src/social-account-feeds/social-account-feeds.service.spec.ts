@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { describe, expect, it, vi } from 'vitest';
 import type { ConfigService } from '@nestjs/config';
 import type { PlatformPost } from '../lib/dto/global.dto';
 import type { SupabaseService } from '../supabase/supabase.service';
@@ -29,10 +30,10 @@ function asTestAccess(
 // resolves to the given result.
 function makeSupabaseChain(result: { data?: unknown; error?: unknown }) {
   const chain: Record<string, unknown> = {
-    select: jest.fn(() => chain),
-    eq: jest.fn(() => chain),
-    in: jest.fn(() => chain),
-    update: jest.fn(() => chain),
+    select: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    update: vi.fn(() => chain),
     then: (resolve: (value: typeof result) => unknown) => resolve(result),
   };
   return chain;
@@ -50,11 +51,13 @@ function makePost(overrides: Partial<PlatformPost> = {}): PlatformPost {
   };
 }
 
-function makeService(fromMock: jest.Mock): SocialAccountFeedsService {
+function makeService(
+  fromMock: ReturnType<typeof vi.fn>,
+): SocialAccountFeedsService {
   const supabaseService = {
     supabaseClient: { from: fromMock },
   } as unknown as SupabaseService;
-  const configService = { get: jest.fn() } as unknown as ConfigService;
+  const configService = { get: vi.fn() } as unknown as ConfigService;
 
   return new SocialAccountFeedsService(
     configService,
@@ -84,7 +87,7 @@ describe('SocialAccountFeedsService', () => {
         social_posts: { external_id: 'ext_1' },
       };
 
-      const fromMock = jest
+      const fromMock = vi
         .fn()
         .mockReturnValueOnce(
           makeSupabaseChain({ data: [candidateRow], error: null }),
@@ -111,7 +114,7 @@ describe('SocialAccountFeedsService', () => {
       });
 
       const updateChain = fromMock.mock.results[1].value as {
-        update: jest.Mock;
+        update: ReturnType<typeof vi.fn>;
       };
       expect(updateChain.update).toHaveBeenCalledWith({
         provider_post_id: 'page_1_post_1',
@@ -120,7 +123,7 @@ describe('SocialAccountFeedsService', () => {
     });
 
     it('does nothing when no candidate row matches the video target id', async () => {
-      const fromMock = jest
+      const fromMock = vi
         .fn()
         .mockReturnValueOnce(makeSupabaseChain({ data: [], error: null }));
 
@@ -142,7 +145,7 @@ describe('SocialAccountFeedsService', () => {
     });
 
     it('skips posts that already have a postResultMap entry or no video_target_id', async () => {
-      const fromMock = jest.fn();
+      const fromMock = vi.fn();
       const service = makeService(fromMock);
 
       const matchedPost = makePost({

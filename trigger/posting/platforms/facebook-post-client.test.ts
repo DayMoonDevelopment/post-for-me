@@ -78,10 +78,28 @@ const axiosGet = mock(async (url: string, config?: any) => {
     return { data: { post_id: "page_1_456" } };
   }
 
+  if (url.endsWith("/photo_post_1") || url.endsWith("/carousel_post_1")) {
+    return { data: { permalink_url: "https://facebook.com/photo/permalink" } };
+  }
+
+  if (url.endsWith(`/${DEFAULT_VIDEO_ID}`)) {
+    return { data: { post_id: "video_post_1" } };
+  }
+
   throw new Error(`Unhandled axios.get url in test: ${url}`);
 });
 
 const axiosPost = mock(async (url: string, body?: any) => {
+  if (url.endsWith("/photos")) {
+    return { data: { id: "photo_1", post_id: "photo_post_1" } };
+  }
+  if (url.endsWith("/photo_stories")) {
+    return { data: { post_id: "story_post_1" } };
+  }
+  if (url.endsWith("/feed")) {
+    return { data: { id: "carousel_post_1" } };
+  }
+
   if (url.endsWith("/videos")) {
     return { data: { id: DEFAULT_VIDEO_ID } };
   }
@@ -200,6 +218,43 @@ const publishVideo = (placement?: FacebookConfiguration["placement"]) =>
 const innerRetryWaits = () =>
   waitFor.mock.calls.filter(([opts]) => opts.seconds < 5);
 
+describe("FacebookPostClient media tag platform filters", () => {
+  for (const placement of ["feed", "stories", "carousel"] as const) {
+    test(`matches case and whitespace variants for ${placement} without changing input`, async () => {
+      const tags = ["facebook", "Facebook", "FACEBOOK", " \tFaCeBoOk\n", "instagram"].map(
+        (platform, index) => ({ platform, type: "user", id: `user_${index}`, x: 0.2, y: 0.3 }),
+      );
+      tags.push({ platform: "Facebook", type: "product", id: "product_1", x: 0.2, y: 0.3 });
+      const medium: PostMedia = {
+        id: "media_1",
+        url: "https://cdn.example.com/photo.jpg",
+        type: "image",
+        tags,
+      };
+      const media = placement === "carousel" ? [medium, { ...medium, id: "media_2" }] : [medium];
+      const originalInput = JSON.stringify(media);
+
+      const result = await makeClient().post({
+        postId: "post_1",
+        account: makeAccount(),
+        caption: "caption",
+        media,
+        platformConfig: { placement: placement === "stories" ? "stories" : undefined },
+      });
+
+      expect(result.success).toBe(true);
+      const photoCalls = axiosPost.mock.calls.filter(([url]) => url.endsWith("/photos"));
+      expect(photoCalls).toHaveLength(media.length);
+      for (const [, payload] of photoCalls) {
+        expect(payload.tags).toEqual(tags.slice(0, 4).map((tag) => ({
+          tag_uid: tag.id, x: tag.x, y: tag.y,
+        })));
+      }
+      expect(JSON.stringify(media)).toBe(originalInput);
+    });
+  }
+});
+
 describe("FacebookPostClient video read-back retry (PFM-1057)", () => {
   test("publishes successfully when the status read-back succeeds on the first try", async () => {
     const result = await publishVideo();
@@ -296,6 +351,29 @@ describe("FacebookPostClient video read-back retry (PFM-1057)", () => {
     expect(
       axiosGet.mock.calls.filter(([url]) => /\?fields=status$/.test(url)),
     ).toHaveLength(1);
+  });
+
+  test("does not retry a terminal auth error and asks for reconnection", async () => {
+    videoStatusBehaviors = [
+      () => {
+        throw makeGraphReadBackError({
+          code: 190,
+          message: "Error validating access token: Session has expired",
+          status: 400,
+        });
+      },
+    ];
+
+    const result = await publishVideo();
+
+    expect(result.success).toBe(false);
+    expect(result.error_message).toBe(
+      "Account needs to be reconnected: Error validating access token: Session has expired",
+    );
+    expect(
+      axiosGet.mock.calls.filter(([url]) => /\?fields=status$/.test(url)),
+    ).toHaveLength(1);
+    expect(innerRetryWaits()).toHaveLength(0);
   });
 
   test("does not retry a 'does not exist' message under a non-eventual-consistency error code", async () => {
