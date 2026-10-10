@@ -12,6 +12,7 @@ import { PinterestPostClient } from "./posting/platforms/pinterest-post-client";
 import { YouTubePostClient } from "./posting/platforms/youtube-post-client";
 import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
 import { PlatformAppCredentials, SocialAccount } from "./posting/post.types";
+import { extractPlatformError } from "./posting/platform-error";
 
 import { Database } from "./supabase.types";
 
@@ -55,7 +56,7 @@ const createPostClient = ({
   }
 };
 
-const handleTokenRefresh = async ({
+export const handleTokenRefresh = async ({
   postClient,
   account,
 }: {
@@ -117,13 +118,14 @@ const handleTokenRefresh = async ({
       accountId: account.id,
     };
   } catch (refreshError) {
-    logger.error(
-      `Token refresh error for account ${account.id}:`,
-      refreshError,
-    );
+    const platformError = extractPlatformError(refreshError);
+    logger.error(`Token refresh error for account ${account.id}:`, {
+      error: refreshError,
+      platformError,
+    });
     return {
       success: false,
-      error: refreshError.message,
+      error: platformError.message,
       accountId: account.id,
     };
   }
@@ -212,7 +214,13 @@ export const refreshAccountTokens = schedules.task({
         .from("social_provider_connections")
         .select("*")
         .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
-        .in("provider", ["facebook", "instagram", "threads", "pinterest"])
+        .in("provider", [
+          "facebook",
+          "instagram",
+          "threads",
+          "pinterest",
+          "youtube",
+        ])
         .order("access_token_expires_at", { ascending: true })
         .limit(50);
 

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsOptional } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional } from 'class-validator';
 
 export class BlueskyAuthUrlProviderData {
   @ApiProperty({ description: 'The handle of the account', type: String })
@@ -207,7 +207,8 @@ export class CreateSocialAccountProviderAuthUrlDto {
   platform_data?: AuthUrlProviderData | null;
 
   @ApiProperty({
-    description: 'Your unique identifier for the social account',
+    description:
+      'Your unique identifier for the social account. If this account already has a connection with a different external_id set, the reconnect attempt will fail for that account - see "Reconnecting an Account" above.',
     required: false,
   })
   external_id?: string;
@@ -229,4 +230,13 @@ export class CreateSocialAccountProviderAuthUrlDto {
   @IsIn(['posts', 'feeds'], { each: true })
   @IsOptional()
   permissions?: string[];
+
+  @ApiProperty({
+    description:
+      "Forces the OAuth flow to show the account picker / consent screen again during re-authorization, rather than silently reusing previously granted access. Only applies to facebook, instagram (both connection_types), tiktok, tiktok_business, youtube, and x (oauth1 connection_type) — ignored for all other platforms. There is no single default: facebook, instagram (facebook connection_type), tiktok, tiktok_business, and youtube default to forcing re-auth (true); instagram (instagram connection_type) and x (oauth1) default to NOT forcing re-auth (false). Set explicitly to override a given platform's default.",
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  force_reauth?: boolean;
 }

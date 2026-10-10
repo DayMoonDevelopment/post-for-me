@@ -1,4 +1,4 @@
-import { Injectable, Scope } from '@nestjs/common';
+import { Injectable, Logger, Scope } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
@@ -51,12 +51,27 @@ export class LinkedInService implements SocialPlatformService {
 
   apiVersion: string;
 
+  private readonly logger = new Logger(LinkedInService.name);
+
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly configService: ConfigService,
   ) {
-    this.apiVersion =
-      this.configService.get<string>('LinkedInVersion') || '202601';
+    // Kept in sync manually with trigger/'s LINKEDIN_API_VERSION — the two
+    // siblings can't share config, so bumping this when LinkedIn deprecates
+    // a version means updating both.
+    const configuredVersion = this.configService.get<string>(
+      'LINKEDIN_API_VERSION',
+    );
+    const legacyVersion = this.configService.get<string>('LinkedInVersion');
+
+    if (!configuredVersion && legacyVersion) {
+      this.logger.warn(
+        'LinkedInVersion is deprecated; rename it to LINKEDIN_API_VERSION. Falling back to the legacy value for now.',
+      );
+    }
+
+    this.apiVersion = configuredVersion || legacyVersion || '202601';
   }
 
   private getRestHeaders(accessToken: string): Record<string, string> {
@@ -64,6 +79,20 @@ export class LinkedInService implements SocialPlatformService {
       Authorization: `Bearer ${accessToken}`,
       'Linkedin-Version': this.apiVersion,
     };
+  }
+
+  private resolvePostedAt(post: {
+    publishedAt?: unknown;
+    createdAt?: unknown;
+  }): string | undefined {
+    let epochMs: number | undefined;
+    if (typeof post.publishedAt === 'number') {
+      epochMs = post.publishedAt;
+    } else if (typeof post.createdAt === 'number') {
+      epochMs = post.createdAt;
+    }
+
+    return epochMs === undefined ? undefined : new Date(epochMs).toISOString();
   }
 
   private getMediaTypeFromUrn(mediaUrn: string): 'image' | 'video' | undefined {
@@ -475,7 +504,6 @@ export class LinkedInService implements SocialPlatformService {
         async (post) => {
           const postUrn: string = post.id || post.urn;
           const content = post.content;
-          const createdObj = post.created;
 
           const metrics = includeMetrics
             ? await this.getPostMetrics(
@@ -522,7 +550,9 @@ export class LinkedInService implements SocialPlatformService {
             account_id: account.id,
             caption: post.commentary || '',
             url: `https://www.linkedin.com/posts/${postUrn.split(':').pop()}`,
-            posted_at: createdObj?.time,
+            posted_at: this.resolvePostedAt(
+              post as { publishedAt?: unknown; createdAt?: unknown },
+            ),
             media,
             metrics,
           };

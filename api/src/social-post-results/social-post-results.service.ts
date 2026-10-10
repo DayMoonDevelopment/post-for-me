@@ -7,6 +7,7 @@ import { SocialPostResultQueryDto } from './dto/post-results.query.dto';
 import type { PaginatedRequestQuery } from '../pagination/pagination-request.interface';
 
 import { Database } from '../../supabase';
+import { normalizePlatform } from '../lib/platform.utils';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -151,7 +152,7 @@ export class PostResultsService {
 
       query.in(
         'social_provider_connections.provider',
-        values.map((provider) => provider as ProviderEnum),
+        values.map((provider) => normalizePlatform(provider) as ProviderEnum),
       );
     }
 
