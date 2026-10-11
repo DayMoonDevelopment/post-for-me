@@ -151,6 +151,11 @@ export class ThreadsPostClient extends PostClient {
         } catch (error: any) {
           if (error.response?.status === 400) {
             lastPublishError = error;
+
+            if (this.isTerminalAuthError(error)) {
+              throw error;
+            }
+
             console.log(
               `Bad Request With Error: ${error.response?.data?.error?.message || "Unknown error"}`,
             );
@@ -201,12 +206,12 @@ export class ThreadsPostClient extends PostClient {
       };
 
       // Handle specific error cases
-      if (error.response?.status === 401) {
+      if (this.isTerminalAuthError(error)) {
         return {
           success: false,
           provider_connection_id: account.id,
           post_id: postId,
-          error_message: "Account needs to be reconnected",
+          error_message: this.buildAuthErrorMessage(error),
           details: errorDetails,
         };
       }
@@ -282,6 +287,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
       },
@@ -298,6 +304,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
         {
@@ -363,6 +370,10 @@ export class ThreadsPostClient extends PostClient {
         attempts++;
       } catch (error: any) {
         if (error.response?.status === 400) {
+          if (this.isTerminalAuthError(error)) {
+            throw error;
+          }
+
           // If we get a 400 error, the media might be ready
           break;
         }
@@ -395,6 +406,7 @@ export class ThreadsPostClient extends PostClient {
           params: {
             media_type: isVideo ? "VIDEO" : "IMAGE",
             [isVideo ? "video_url" : "image_url"]: signedUrl,
+            alt_text: medium.alt_text,
             is_carousel_item: true,
           },
         },
@@ -406,6 +418,7 @@ export class ThreadsPostClient extends PostClient {
         {
           media_type: isVideo ? "VIDEO" : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           is_carousel_item: true,
         },
         {

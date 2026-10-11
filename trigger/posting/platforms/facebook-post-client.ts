@@ -12,6 +12,7 @@ import {
 } from "../post.types";
 import { logger, wait } from "@trigger.dev/sdk";
 import FormData from "form-data";
+import { normalizePlatform } from "../../lib/platform.utils";
 import {
   extractPlatformError,
   PlatformApiError,
@@ -29,6 +30,24 @@ export class FacebookPostClient extends PostClient {
     "upload_failed",
     "upload_complete",
   ];
+
+  #graphApiUrl = (
+    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com"
+  ).replace(/\/+$/, "");
+  #graphVideoApiUrl = (
+    process.env.FACEBOOK_GRAPH_VIDEO_API_URL ||
+    "https://graph-video.facebook.com"
+  ).replace(/\/+$/, "");
+  #apiVersion = process.env.FACEBOOK_API_VERSION || "v25.0";
+  #oauthApiVersion = process.env.FACEBOOK_OAUTH_API_VERSION || "v20.0";
+
+  get #baseUrl(): string {
+    return `${this.#graphApiUrl}/${this.#apiVersion}`;
+  }
+
+  get #videoBaseUrl(): string {
+    return `${this.#graphVideoApiUrl}/${this.#apiVersion}`;
+  }
 
   static readonly READ_BACK_MAX_ATTEMPTS = 4; // 1 initial try + 3 retries
   static readonly READ_BACK_INITIAL_DELAY_MS = 1_000;
@@ -57,11 +76,11 @@ export class FacebookPostClient extends PostClient {
         fb_exchange_token: account.access_token,
       };
       this.#requests.push({
-        refreshRequest: "https://graph.facebook.com/v20.0/oauth/access_token",
+        refreshRequest: `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
         params: refreshParams,
       });
       const response = await axios.get(
-        "https://graph.facebook.com/v20.0/oauth/access_token",
+        `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
         {
           params: refreshParams,
         },
@@ -208,7 +227,7 @@ export class FacebookPostClient extends PostClient {
       if (!platformUrl) {
         this.#requests.push({
           postRequest: {
-            url: `https://graph.facebook.com/v20.0/${platformId}`,
+            url: `${this.#baseUrl}/${platformId}`,
             params: {
               fields: "permalink_url",
               access_token: account.access_token,
@@ -217,7 +236,7 @@ export class FacebookPostClient extends PostClient {
         });
         // Get the permalink URL for non-video posts
         const postResponse = await axios.get(
-          `https://graph.facebook.com/v20.0/${platformId}`,
+          `${this.#baseUrl}/${platformId}`,
           {
             params: {
               fields: "permalink_url",
@@ -249,6 +268,20 @@ export class FacebookPostClient extends PostClient {
       );
 
       const platformError = extractPlatformError(error);
+
+      if (this.isTerminalAuthError(error)) {
+        return {
+          success: false,
+          post_id: postId,
+          provider_connection_id: account.id,
+          error_message: this.buildAuthErrorMessage(error),
+          details: {
+            error: platformError.data ?? { message: platformError.message },
+            requests: this.#requests,
+            responses: this.#responses,
+          },
+        };
+      }
 
       return {
         success: false,
@@ -295,13 +328,13 @@ export class FacebookPostClient extends PostClient {
 
     this.#requests.push({
       createTextRequest: {
-        url: `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
+        url: `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
         body: postData,
       },
     });
 
     const response = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
       postData,
     );
 
@@ -332,6 +365,7 @@ export class FacebookPostClient extends PostClient {
       access_token: string;
       tags?: any[];
       place?: string;
+      alt_text_custom?: string;
     } = {
       url: fileUrl,
       published: true,
@@ -341,7 +375,9 @@ export class FacebookPostClient extends PostClient {
 
     if (medium.tags && medium.tags.length > 0) {
       payload.tags = medium.tags
-        .filter((t) => t.platform === "facebook" && t.type == "user")
+        .filter(
+          (t) => normalizePlatform(t.platform) === "facebook" && t.type == "user",
+        )
         .map((t) => ({
           x: t.x,
           y: t.y,
@@ -353,14 +389,18 @@ export class FacebookPostClient extends PostClient {
       payload.place = platformConfig.location;
     }
 
+    if (medium.alt_text) {
+      payload.alt_text_custom = medium.alt_text;
+    }
+
     this.#requests.push({
       photoRequest: {
-        url: `https://graph-video.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
+        url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
         data: payload,
       },
     });
     const photoResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/photos`,
       payload,
     );
 
@@ -406,6 +446,7 @@ export class FacebookPostClient extends PostClient {
         published: boolean;
         access_token: string;
         tags?: any[];
+        alt_text_custom?: string;
       } = {
         url: fileUrl,
         published: false,
@@ -416,9 +457,15 @@ export class FacebookPostClient extends PostClient {
         payload.message = caption;
       }
 
+      if (medium.alt_text) {
+        payload.alt_text_custom = medium.alt_text;
+      }
+
       if (medium.tags && medium.tags.length > 0) {
         payload.tags = medium.tags
-          .filter((t) => t.platform === "facebook" && t.type == "user")
+          .filter(
+            (t) => normalizePlatform(t.platform) === "facebook" && t.type == "user",
+          )
           .map((t) => ({
             x: t.x,
             y: t.y,
@@ -428,12 +475,12 @@ export class FacebookPostClient extends PostClient {
 
       this.#requests.push({
         photoRequest: {
-          url: `https://graph-video.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
+          url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
           data: payload,
         },
       });
       const photoResponse = await axios.post(
-        `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
+        `${this.#baseUrl}/${account.social_provider_user_id}/photos`,
         payload,
       );
 
@@ -446,7 +493,7 @@ export class FacebookPostClient extends PostClient {
 
     this.#requests.push({
       createCarouselPostRequest: {
-        url: `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
+        url: `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
         body: {
           message: caption,
           access_token: account.access_token,
@@ -473,7 +520,7 @@ export class FacebookPostClient extends PostClient {
     }
     // Create the carousel post
     const response = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/feed`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
       carouselBody,
     );
 
@@ -501,14 +548,14 @@ export class FacebookPostClient extends PostClient {
     for (let attempt = 0; attempt < attempts; attempt++) {
       this.#requests.push({
         resolveFeedPostIdRequest: {
-          url: `https://graph.facebook.com/${mediaId}`,
+          url: `${this.#graphApiUrl}/${mediaId}`,
           params: { fields: "post_id" },
         },
       });
 
       try {
         const response = await axios.get(
-          `https://graph.facebook.com/${mediaId}`,
+          `${this.#graphApiUrl}/${mediaId}`,
           {
             params: { fields: "post_id", access_token: accessToken },
           },
@@ -537,10 +584,9 @@ export class FacebookPostClient extends PostClient {
     );
     return undefined;
 }
-  
+
   #isRetryableReadBackError(error: any): boolean {
-    // TODO(PFM-1057): once feat/loop-auth-errors merges, short-circuit here:
-    // if (this.isTerminalAuthError(error)) return false;
+    if (this.isTerminalAuthError(error)) return false;
 
     const graphError = error?.response?.data?.error;
     const status = error?.response?.status;
@@ -629,7 +675,7 @@ export class FacebookPostClient extends PostClient {
     const fileUrl = await this.getSignedUrlForFile(medium);
     this.#requests.push({
       videoRequest: {
-        url: `https://graph-video.facebook.com/v20.0/${account.social_provider_user_id}/videos`,
+        url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/videos`,
         data: {
           file_url: fileUrl,
           description: caption,
@@ -638,7 +684,7 @@ export class FacebookPostClient extends PostClient {
       },
     });
     const videoResponse = await axios.post(
-      `https://graph-video.facebook.com/v20.0/${account.social_provider_user_id}/videos`,
+      `${this.#videoBaseUrl}/${account.social_provider_user_id}/videos`,
       {
         file_url: fileUrl,
         description: caption,
@@ -664,11 +710,11 @@ export class FacebookPostClient extends PostClient {
     while (status === "processing" && attempts < maxAttempts) {
       this.#requests.push({
         statusRequest: {
-          url: `https://graph.facebook.com/${videoResponseData.id}?fields=status`,
+          url: `${this.#graphApiUrl}/${videoResponseData.id}?fields=status`,
         },
       });
       statusResponse = await this.#getObjectStatusWithRetry({
-        url: `https://graph.facebook.com/${videoResponseData.id}?fields=status`,
+        url: `${this.#graphApiUrl}/${videoResponseData.id}?fields=status`,
         accessToken: account.access_token,
         objectId: videoResponseData.id,
         label: "video",
@@ -705,7 +751,7 @@ export class FacebookPostClient extends PostClient {
     medium: PostMedia;
   }): Promise<string> {
     const uploadSessionResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_stories`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/video_stories`,
       {
         upload_phase: "start",
         access_token: account.access_token,
@@ -757,7 +803,7 @@ export class FacebookPostClient extends PostClient {
       vidoeAttempts < videoMaxAttempts
     ) {
       videoStatusResponse = await this.#getObjectStatusWithRetry({
-        url: `https://graph.facebook.com/${uploadSessionResponseData.video_id}?fields=status`,
+        url: `${this.#graphApiUrl}/${uploadSessionResponseData.video_id}?fields=status`,
         accessToken: account.access_token,
         objectId: uploadSessionResponseData.video_id,
         label: "video_story",
@@ -785,7 +831,7 @@ export class FacebookPostClient extends PostClient {
     const createdMediaId = uploadSessionResponseData.video_id;
 
     const storyResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_stories`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/video_stories`,
       {
         video_id: createdMediaId,
         upload_phase: "finish",
@@ -812,7 +858,7 @@ export class FacebookPostClient extends PostClient {
       attempts < maxAttempts
     ) {
       statusResponse = await this.#getObjectStatusWithRetry({
-        url: `https://graph.facebook.com/${createdMediaId}?fields=status`,
+        url: `${this.#graphApiUrl}/${createdMediaId}?fields=status`,
         accessToken: account.access_token,
         objectId: createdMediaId,
         label: "video_story_finish",
@@ -872,7 +918,9 @@ export class FacebookPostClient extends PostClient {
 
     if (medium.tags && medium.tags.length > 0) {
       payload.tags = medium.tags
-        .filter((t) => t.platform === "facebook" && t.type == "user")
+        .filter(
+          (t) => normalizePlatform(t.platform) === "facebook" && t.type == "user",
+        )
         .map((t) => ({
           x: t.x,
           y: t.y,
@@ -886,12 +934,12 @@ export class FacebookPostClient extends PostClient {
 
     this.#requests.push({
       photoRequest: {
-        url: `https://graph-video.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
+        url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
         data: payload,
       },
     });
     const photoResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/photos`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/photos`,
       payload,
     );
 
@@ -903,7 +951,7 @@ export class FacebookPostClient extends PostClient {
     const createdMediaId = photoResponse.data.id;
 
     const storyResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/photo_stories`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/photo_stories`,
       {
         photo_id: createdMediaId,
         access_token: account.access_token,
@@ -929,7 +977,7 @@ export class FacebookPostClient extends PostClient {
     accessToken: string;
   }): Promise<string | undefined> {
     const postResponse = await axios.get(
-      `https://graph.facebook.com/v20.0/${platformId}?fields=url&access_token=${accessToken}`,
+      `${this.#baseUrl}/${platformId}?fields=url&access_token=${accessToken}`,
     );
 
     const postResponseData = postResponse.data as {
@@ -951,7 +999,7 @@ export class FacebookPostClient extends PostClient {
     platformConfig: FacebookConfiguration;
   }): Promise<{ id: string; feedPostId?: string }> {
     const uploadSessionResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_reels`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/video_reels`,
       {
         upload_phase: "start",
         access_token: account.access_token,
@@ -1003,7 +1051,7 @@ export class FacebookPostClient extends PostClient {
       vidoeAttempts < videoMaxAttempts
     ) {
       videoStatusResponse = await this.#getObjectStatusWithRetry({
-        url: `https://graph.facebook.com/${uploadSessionResponseData.video_id}?fields=status`,
+        url: `${this.#graphApiUrl}/${uploadSessionResponseData.video_id}?fields=status`,
         accessToken: account.access_token,
         objectId: uploadSessionResponseData.video_id,
         label: "reel",
@@ -1058,7 +1106,7 @@ export class FacebookPostClient extends PostClient {
     }
 
     const reelResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${account.social_provider_user_id}/video_reels`,
+      `${this.#baseUrl}/${account.social_provider_user_id}/video_reels`,
       reelBody,
     );
 
@@ -1081,7 +1129,7 @@ export class FacebookPostClient extends PostClient {
       attempts < maxAttempts
     ) {
       statusResponse = await this.#getObjectStatusWithRetry({
-        url: `https://graph.facebook.com/${createdMediaId}?fields=status`,
+        url: `${this.#graphApiUrl}/${createdMediaId}?fields=status`,
         accessToken: account.access_token,
         objectId: createdMediaId,
         label: "reel_finish",
@@ -1115,7 +1163,7 @@ export class FacebookPostClient extends PostClient {
       for (const collaborator of platformConfig.collaborators) {
         try {
           const collaboratorResponse = await axios.post(
-            `https://graph.facebook.com/v20.0/${createdMediaId}/collaborators`,
+            `${this.#baseUrl}/${createdMediaId}/collaborators`,
             {
               target_id: collaborator,
               access_token: account.access_token,
@@ -1169,7 +1217,7 @@ export class FacebookPostClient extends PostClient {
       contentType: file.type,
     });
 
-    await fetch(`https://graph.facebook.com/v20.0/${videoId}/thumbnails`, {
+    await fetch(`${this.#baseUrl}/${videoId}/thumbnails`, {
       method: "POST",
       body: form,
       headers: {

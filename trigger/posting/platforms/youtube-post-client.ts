@@ -2,6 +2,7 @@ import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { logger, wait } from "@trigger.dev/sdk";
+import ffmpeg from "fluent-ffmpeg";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -58,6 +59,22 @@ export class YouTubeRefreshError extends Error {
   }
 }
 
+export function isRetriableYouTubeSessionInitError(
+  status: number,
+  bodyText: string,
+): boolean {
+  if (status === 429 || (status >= 500 && status <= 599)) return true;
+  if (status === 409) {
+    try {
+      const parsed = JSON.parse(bodyText);
+      return parsed?.error?.errors?.[0]?.reason === "alreadyExists";
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export class YouTubePostClient extends PostClient {
   #oauth2Client: any;
   #googleClientId: string;
@@ -69,6 +86,7 @@ export class YouTubePostClient extends PostClient {
   static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
   static readonly MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
   static readonly MAX_RESUMABLE_UPLOAD_ATTEMPTS = 5;
+  static readonly MAX_SESSION_INIT_ATTEMPTS = 3;
   static readonly MAX_PROCESSING_POLL_ATTEMPTS = 20;
   static readonly MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS = 1_000;
   static readonly PROCESSING_POLL_INITIAL_DELAY_MS = 5_000;
@@ -420,13 +438,30 @@ export class YouTubePostClient extends PostClient {
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       console.log("Video uploaded. ID:", videoId, "URL:", videoUrl);
 
-      // Upload custom thumbnail if provided
+      // Upload custom thumbnail if provided: explicit image URL takes precedence
+      // over a timestamp, since a URL is an unambiguous, already-rendered image
+      // while a timestamp requires local extraction from the video we just staged.
       if (medium.thumbnail_url) {
         try {
-          await this.#uploadThumbnail(youtube, videoId, medium);
+          await this.#uploadThumbnailFromUrl(youtube, videoId, medium);
         } catch (thumbnailError) {
           console.error("Failed to upload thumbnail:", thumbnailError);
           // Don't fail the entire post if thumbnail upload fails
+        }
+      } else if (medium.thumbnail_timestamp_ms != null && stagedFilePath) {
+        try {
+          await this.#uploadThumbnailFromTimestamp(
+            youtube,
+            videoId,
+            medium,
+            stagedFilePath,
+          );
+        } catch (thumbnailError) {
+          console.error(
+            "Failed to upload thumbnail from timestamp:",
+            thumbnailError,
+          );
+          // Don't fail the entire post if thumbnail extraction/upload fails
         }
       }
 
@@ -590,39 +625,81 @@ export class YouTubePostClient extends PostClient {
       part: videoRequest.part,
     });
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Length": String(fileSize),
-        "X-Upload-Content-Type": mimeType,
-      },
-      body: JSON.stringify(videoRequest.requestBody ?? {}),
-    });
+    for (
+      let attempt = 1;
+      attempt <= YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS;
+      attempt += 1
+    ) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Length": String(fileSize),
+          "X-Upload-Content-Type": mimeType,
+        },
+        body: JSON.stringify(videoRequest.requestBody ?? {}),
+      });
 
-    const location = res.headers.get("location") || res.headers.get("Location");
-    if (!res.ok || !location) {
+      const location =
+        res.headers.get("location") || res.headers.get("Location");
+      if (res.ok && location) {
+        this.#responses.push({
+          resumableSession: {
+            status: res.status,
+            location,
+          },
+        });
+
+        logger.info("Started YouTube resumable upload session", {
+          status: res.status,
+          fileSize,
+          mimeType,
+        });
+
+        return location;
+      }
+
       const bodyText = await this.#safeReadText(res);
+      const retriable = isRetriableYouTubeSessionInitError(
+        res.status,
+        bodyText,
+      );
+
+      if (
+        retriable &&
+        attempt < YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS
+      ) {
+        const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
+        this.#responses.push({
+          sessionInitRetry: {
+            attempt,
+            maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
+            status: res.status,
+            waitMs,
+          },
+        });
+        logger.warn("Retrying YouTube resumable upload session init", {
+          attempt,
+          maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
+          status: res.status,
+          statusText: res.statusText,
+          waitMs,
+        });
+        await this.#sleep(waitMs);
+        continue;
+      }
+
       throw new Error(
         `Failed to start YouTube resumable upload session: ${res.status} ${res.statusText}. ${bodyText}`,
       );
     }
 
-    this.#responses.push({
-      resumableSession: {
-        status: res.status,
-        location,
-      },
-    });
-
-    logger.info("Started YouTube resumable upload session", {
-      status: res.status,
-      fileSize,
-      mimeType,
-    });
-
-    return location;
+    // Unreachable: every loop iteration above returns or throws. Present only
+    // because TS can't prove that and requires a return on this code path.
+    throw new Error(
+      "Failed to start YouTube resumable upload session: exhausted retry attempts",
+    );
   }
 
   async #downloadRemoteFileToTemp({
@@ -1089,7 +1166,7 @@ export class YouTubePostClient extends PostClient {
     return sanitized.slice(0, 100);
   }
 
-  async #uploadThumbnail(
+  async #uploadThumbnailFromUrl(
     youtube: youtube_v3.Youtube,
     videoId: string,
     medium: PostMedia,
@@ -1098,24 +1175,57 @@ export class YouTubePostClient extends PostClient {
       return;
     }
 
+    const res = await fetch(medium.thumbnail_url);
+    if (!res.ok) {
+      const bodyText = await this.#safeReadText(res);
+      throw new Error(
+        `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
+      );
+    }
+
+    const imageBuffer = Buffer.from(await res.arrayBuffer());
+
+    const rawContentType = res.headers.get("content-type") ?? "image/jpeg";
+    const mimeType = rawContentType.split(";")[0].trim() || "image/jpeg";
+
+    await this.#setThumbnail(youtube, videoId, imageBuffer, mimeType, {
+      thumbnailUrl: medium.thumbnail_url,
+    });
+  }
+
+  async #uploadThumbnailFromTimestamp(
+    youtube: youtube_v3.Youtube,
+    videoId: string,
+    medium: PostMedia,
+    stagedFilePath: string,
+  ): Promise<void> {
+    if (medium.thumbnail_timestamp_ms == null) {
+      return;
+    }
+
+    const { buffer, mimeType } = await this.#extractFrameAtTimestamp({
+      videoFilePath: stagedFilePath,
+      timestampMs: medium.thumbnail_timestamp_ms,
+      mediaId: medium.id,
+    });
+
+    await this.#setThumbnail(youtube, videoId, buffer, mimeType, {
+      thumbnailTimestampMs: medium.thumbnail_timestamp_ms,
+    });
+  }
+
+  async #setThumbnail(
+    youtube: youtube_v3.Youtube,
+    videoId: string,
+    imageBuffer: Buffer,
+    mimeType: string,
+    source: { thumbnailUrl?: string; thumbnailTimestampMs?: number },
+  ): Promise<void> {
     try {
-      const res = await fetch(medium.thumbnail_url);
-      if (!res.ok) {
-        const bodyText = await this.#safeReadText(res);
-        throw new Error(
-          `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
-        );
-      }
-
-      const imageBuffer = Buffer.from(await res.arrayBuffer());
-
-      const rawContentType = res.headers.get("content-type") ?? "image/jpeg";
-      const mimeType = rawContentType.split(";")[0].trim() || "image/jpeg";
-
       this.#requests.push({
         thumbnailUploadRequest: {
           videoId,
-          thumbnail: medium.thumbnail_url,
+          ...source,
           mimeType,
           sizeBytes: imageBuffer.length,
         },
@@ -1136,11 +1246,60 @@ export class YouTubePostClient extends PostClient {
       this.#responses.push({
         thumbnailError: {
           videoId,
-          thumbnail: medium.thumbnail_url,
+          ...source,
           error: error instanceof Error ? error.message : String(error),
         },
       });
       throw error;
+    }
+  }
+
+  async #extractFrameAtTimestamp({
+    videoFilePath,
+    timestampMs,
+    mediaId,
+  }: {
+    videoFilePath: string;
+    timestampMs: number;
+    mediaId: string;
+  }): Promise<{ buffer: Buffer; mimeType: string }> {
+    const safeMediaId = mediaId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const outputPath = path.join(
+      os.tmpdir(),
+      `youtube_thumb_${safeMediaId}_${Date.now()}.jpg`,
+    );
+
+    try {
+      logger.info("Extracting YouTube thumbnail frame", {
+        mediaId,
+        timestampMs,
+        videoFilePath,
+        outputPath,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(videoFilePath)
+          .on("end", () => resolve())
+          .on("error", (err) => reject(err))
+          .screenshots({
+            timestamps: [timestampMs / 1000],
+            filename: path.basename(outputPath),
+            folder: path.dirname(outputPath),
+          });
+      });
+
+      const buffer = await fs.readFile(outputPath);
+
+      logger.info("Extracted YouTube thumbnail frame", {
+        mediaId,
+        timestampMs,
+        outputPath,
+        sizeBytes: buffer.length,
+      });
+
+      return { buffer, mimeType: "image/jpeg" };
+    } finally {
+      await fs.unlink(outputPath).catch(() => undefined);
     }
   }
 

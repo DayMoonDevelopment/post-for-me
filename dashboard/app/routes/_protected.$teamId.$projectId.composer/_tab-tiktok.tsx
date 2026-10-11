@@ -110,7 +110,7 @@ export function TabTikTok() {
                   <CircleInfoIcon className="h-4 w-4" />
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Branded content cannot be set to private
+                  Branded content requires this video to be public
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -123,6 +123,20 @@ export function TabTikTok() {
               >
                 <ToggleGroupItem value="public" className="px-3">
                   Public
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="friends"
+                  disabled={discloseBrandedContent}
+                  className="px-3"
+                >
+                  Friends
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="followers"
+                  disabled={discloseBrandedContent}
+                  className="px-3"
+                >
+                  Followers
                 </ToggleGroupItem>
                 <ToggleGroupItem
                   value="private"
@@ -266,7 +280,8 @@ export function TabTikTok() {
                     <div className="flex items-center gap-2">
                       <Switch
                         disabled={
-                          !discloseContent || privacyStatus === "private"
+                          !discloseContent ||
+                          (!!privacyStatus && privacyStatus !== "public")
                         }
                         checked={field.value}
                         onCheckedChange={field.onChange}

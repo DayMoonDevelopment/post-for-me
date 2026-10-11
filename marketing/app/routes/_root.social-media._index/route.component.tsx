@@ -35,7 +35,7 @@ const platformIcons = [
 
 const postingFeatures = [
   "Publish text, images, and video to any platform in one call",
-  "Schedule posts for future publishing with timezone handling",
+  "Schedule posts for future publishing with UTC (ISO 8601) timestamps",
   "Post to multiple platforms simultaneously",
   "Platform-specific formatting applied automatically",
   "Media transcoding and validation handled for you",
@@ -81,7 +81,7 @@ const faqs = [
   {
     question: "Can I schedule social media posts through the API?",
     answer:
-      'Yes. Set a <code>publish_at</code> timestamp in your API call and Post for Me handles the rest, including timezone handling and platform-specific scheduling rules.',
+      'Yes. Set a <code>scheduled_at</code> timestamp (UTC, ISO 8601) in your API call and Post for Me handles the rest, including platform-specific scheduling rules.',
   },
   {
     question: "Do I need my own platform API credentials to get started?",

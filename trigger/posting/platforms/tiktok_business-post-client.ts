@@ -31,6 +31,12 @@ export class TikTokBusinessPostClient extends PostClient {
   ];
   #maxItems = 32;
   #titleLength = 85;
+  #privacyLevelMap: Record<string, string> = {
+    public: "PUBLIC_TO_EVERYONE",
+    private: "SELF_ONLY",
+    followers: "FOLLOWER_OF_CREATOR",
+    friends: "MUTUAL_FOLLOW_FRIENDS",
+  };
   #clientKey: string;
   #clientSecret: string;
   #localSupabaseClient;
@@ -722,9 +728,8 @@ export class TikTokBusinessPostClient extends PostClient {
           caption,
           is_draft: platformData?.is_draft ? true : undefined,
           privacy_level:
-            platformData.privacy_status == "private"
-              ? "SELF_ONLY"
-              : "PUBLIC_TO_EVERYONE",
+            this.#privacyLevelMap[platformData.privacy_status ?? "public"] ??
+            "PUBLIC_TO_EVERYONE",
           disable_comment:
             platformData.allow_comment === undefined
               ? false

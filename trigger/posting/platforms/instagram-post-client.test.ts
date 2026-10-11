@@ -164,6 +164,50 @@ const publishCarousel = () =>
     platformConfig: {},
   });
 
+describe("InstagramPostClient media tag platform filters", () => {
+  for (const carousel of [false, true]) {
+    test(`matches case and whitespace variants for ${carousel ? "carousel" : "single media"} without changing input`, async () => {
+      const tags = ["instagram", "Instagram", "INSTAGRAM", " \tInStAgRaM\n", "facebook"].flatMap(
+        (platform, index) => ["user", "product", "other"].map((type) => ({
+          platform, type, id: `${type}_${index}`, x: 0.2, y: 0.3,
+        })),
+      );
+      const medium: PostMedia = {
+        id: "media_1",
+        url: "https://cdn.example.com/photo.jpg",
+        type: "image",
+        skip_processing: true,
+        tags,
+      };
+      const media = carousel ? [medium, { ...medium, id: "media_2" }] : [medium];
+      const originalInput = JSON.stringify(media);
+
+      const result = await makeClient().post({
+        postId: "post_1",
+        account: makeAccount(),
+        caption: "caption",
+        media,
+        platformConfig: {},
+      });
+
+      expect(result.success).toBe(true);
+      const itemCalls = axiosPost.mock.calls.filter(([url, payload]) =>
+        url.endsWith("/media") && payload.media_type !== "CAROUSEL",
+      );
+      expect(itemCalls).toHaveLength(media.length);
+      for (const [, payload] of itemCalls) {
+        expect(payload.user_tags).toEqual(tags.slice(0, 12).filter((tag) => tag.type === "user").map((tag) => ({
+          username: tag.id, x: tag.x, y: tag.y,
+        })));
+        expect(payload.product_tags).toEqual(tags.slice(0, 12).filter((tag) => tag.type === "product").map((tag) => ({
+          product_id: tag.id, x: tag.x, y: tag.y,
+        })));
+      }
+      expect(JSON.stringify(media)).toBe(originalInput);
+    });
+  }
+});
+
 describe("InstagramPostClient error detail propagation", () => {
   test("posts a single video successfully (happy path)", async () => {
     const result = await publishSingle();
@@ -179,7 +223,7 @@ describe("InstagramPostClient error detail propagation", () => {
     expect(result.provider_post_id).toBe("platform_post_1");
   });
 
-  test("a non-retryable carousel-item failure surfaces Instagram's structured error in details, not a flattened string", async () => {
+  test("a restricted carousel-item failure asks for reconnection and preserves structured details", async () => {
     createMediaBehaviors = [
       () => {
         throw makeGraphError({
@@ -194,7 +238,7 @@ describe("InstagramPostClient error detail propagation", () => {
 
     expect(result.success).toBe(false);
     expect(result.error_message).toBe(
-      "Failed to post to Instagram : User access is restricted, please contact us",
+      "Account needs to be reconnected: User access is restricted, please contact us",
     );
     expect(result.error_message).not.toContain(
       "Request failed with status code",
@@ -251,7 +295,7 @@ describe("InstagramPostClient error detail propagation", () => {
 
     expect(result.success).toBe(false);
     expect(result.error_message).toBe(
-      "Account needs to be reconnected, Access token has expired",
+      "Account needs to be reconnected: Error validating access token: user access is restricted",
     );
 
     const errorDetails = result.details?.error;
@@ -264,7 +308,7 @@ describe("InstagramPostClient error detail propagation", () => {
     expect(createMediaCallCount).toBe(1);
   });
 
-  test("a non-retryable publish failure surfaces the platform error instead of a generic message", async () => {
+  test("a restricted publish failure asks for reconnection with the platform error", async () => {
     publishBehavior = () => {
       throw makeGraphError({
         status: 400,
@@ -277,7 +321,7 @@ describe("InstagramPostClient error detail propagation", () => {
 
     expect(result.success).toBe(false);
     expect(result.error_message).toBe(
-      "Failed to post to Instagram : User access is restricted, please contact us",
+      "Account needs to be reconnected: User access is restricted, please contact us",
     );
     expect(result.details?.error?.error?.code).toBe(200);
   });
@@ -326,7 +370,7 @@ describe("InstagramPostClient error detail propagation", () => {
 
     expect(result.success).toBe(false);
     expect(result.error_message).toBe(
-      "Failed to post to Instagram : User access is restricted, please contact us",
+      "Account needs to be reconnected: User access is restricted, please contact us",
     );
 
     const errorDetails = result.details?.error;
@@ -360,7 +404,7 @@ describe("InstagramPostClient error detail propagation", () => {
     // HTTP status (the response is a 200 OK), so a check on `status === 401`
     // alone would miss this and fall through to the generic error message.
     expect(result.error_message).toBe(
-      "Account needs to be reconnected, Access token has expired",
+      "Account needs to be reconnected: Error validating access token: Session has expired",
     );
     expect(result.details?.error?.error?.code).toBe(190);
   });
