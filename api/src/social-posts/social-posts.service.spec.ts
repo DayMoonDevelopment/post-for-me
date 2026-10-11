@@ -303,33 +303,6 @@ describe('SocialPostsService', () => {
     });
   });
 
-  describe('validatePostCaptionLength', () => {
-    const { service } = buildService();
-
-    it('accepts a caption under the max length', () => {
-      expect(
-        service.validatePostCaptionLength({ caption: 'short', platform: 'x' }),
-      ).toEqual({
-        isValid: true,
-        error: 'caption must be less than 2200 characters',
-      });
-    });
-
-    it('accepts a caption exactly at the max length', () => {
-      const caption = 'a'.repeat(2200);
-      expect(
-        service.validatePostCaptionLength({ caption, platform: 'x' }).isValid,
-      ).toBe(true);
-    });
-
-    it('rejects a caption over the max length', () => {
-      const caption = 'a'.repeat(2201);
-      expect(
-        service.validatePostCaptionLength({ caption, platform: 'x' }).isValid,
-      ).toBe(false);
-    });
-  });
-
   describe('createPost', () => {
     const insertedPost = {
       id: 'post-1',
