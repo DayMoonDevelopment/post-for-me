@@ -38,8 +38,6 @@ export class YouTubePostClient extends PostClient {
   #oauth2Client: any;
   #googleClientId: string;
   #googleClientSecret: string;
-  #requests: any[] = [];
-  #responses: any[] = [];
 
   // Must be a multiple of 256KB per YouTube resumable upload guidance.
   static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
@@ -64,7 +62,7 @@ export class YouTubePostClient extends PostClient {
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
-    this.#requests.push({ refreshRequest: "refreshing access token" });
+    this.requests.push({ refreshRequest: "refreshing access token" });
     this.#oauth2Client = new google.auth.OAuth2(
       this.#googleClientId,
       this.#googleClientSecret,
@@ -79,7 +77,7 @@ export class YouTubePostClient extends PostClient {
 
     const { credentials } = await this.#oauth2Client.refreshAccessToken();
 
-    this.#responses.push({
+    this.responses.push({
       refreshResponse: {
         scope: credentials.scope,
         token_type: credentials.token_type,
@@ -185,7 +183,7 @@ export class YouTubePostClient extends PostClient {
         },
       };
 
-      this.#requests.push({
+      this.requests.push({
         postRequest: {
           ...videoRequest,
           media: medium,
@@ -219,7 +217,7 @@ export class YouTubePostClient extends PostClient {
         chunkSizeBytes: YouTubePostClient.DEFAULT_CHUNK_SIZE_BYTES,
       });
 
-      this.#responses.push({ postResponse: uploadedVideo });
+      this.responses.push({ postResponse: uploadedVideo });
 
       const videoId = uploadedVideo.id!;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -266,8 +264,8 @@ export class YouTubePostClient extends PostClient {
           provider_post_url: videoUrl,
           error_message: processingResult.message,
           details: {
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
           },
         };
       }
@@ -280,8 +278,8 @@ export class YouTubePostClient extends PostClient {
         provider_post_url: videoUrl,
         details: {
           message: processingResult.message,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error: any) {
@@ -297,8 +295,8 @@ export class YouTubePostClient extends PostClient {
         error_message: `Failed to post to Youtube: ${error.message}`,
         details: {
           error: error?.response?.data || error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } finally {
@@ -320,7 +318,7 @@ export class YouTubePostClient extends PostClient {
       const pollRequest = {
         processingStatusPollRequest: { videoId, attempt },
       };
-      this.#requests.push(pollRequest);
+      this.requests.push(pollRequest);
       console.log(
         `Polling YouTube processing status for video ${videoId} (attempt ${attempt}/${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS})`,
       );
@@ -334,7 +332,7 @@ export class YouTubePostClient extends PostClient {
       const processingDetails = video?.processingDetails;
       const processingStatus = processingDetails?.processingStatus;
 
-      this.#responses.push({
+      this.responses.push({
         processingStatusPollResponse: {
           attempt,
           videoId,
@@ -373,7 +371,7 @@ export class YouTubePostClient extends PostClient {
         console.log(
           `Video ${videoId} still processing (status: ${processingStatus}); waiting ${waitMs}ms before next poll`,
         );
-        this.#responses.push({
+        this.responses.push({
           processingStatusPollWait: { attempt, processingStatus, waitMs },
         });
         await this.#sleep(waitMs);
@@ -431,7 +429,7 @@ export class YouTubePostClient extends PostClient {
       const location =
         res.headers.get("location") || res.headers.get("Location");
       if (res.ok && location) {
-        this.#responses.push({
+        this.responses.push({
           resumableSession: {
             status: res.status,
             location,
@@ -458,7 +456,7 @@ export class YouTubePostClient extends PostClient {
         attempt < YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS
       ) {
         const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
-        this.#responses.push({
+        this.responses.push({
           sessionInitRetry: {
             attempt,
             maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
@@ -559,7 +557,7 @@ export class YouTubePostClient extends PostClient {
           tempPath,
         });
 
-        this.#responses.push({
+        this.responses.push({
           mediaStagedForYoutube: {
             attempt,
             size: stat.size,
@@ -580,7 +578,7 @@ export class YouTubePostClient extends PostClient {
           YouTubePostClient.MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS *
             2 ** (attempt - 1),
         );
-        this.#responses.push({
+        this.responses.push({
           mediaStageRetry: {
             attempt,
             maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
@@ -706,7 +704,7 @@ export class YouTubePostClient extends PostClient {
 
               nextStart = lastByte + 1;
 
-              this.#responses.push({
+              this.responses.push({
                 resumableChunk: {
                   status: res.status,
                   contentRange,
@@ -738,7 +736,7 @@ export class YouTubePostClient extends PostClient {
                 );
               }
 
-              this.#responses.push({
+              this.responses.push({
                 resumableComplete: {
                   status: res.status,
                   contentRange,
@@ -787,7 +785,7 @@ export class YouTubePostClient extends PostClient {
           }
 
           const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
-          this.#responses.push({
+          this.responses.push({
             resumableChunkRetry: {
               attempt,
               maxAttempts: YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS,
@@ -889,7 +887,7 @@ export class YouTubePostClient extends PostClient {
         const res = await fetch(url, init);
         if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
           // Retry throttling/transient server errors.
-          this.#responses.push({
+          this.responses.push({
             resumableRetry: {
               attempt,
               status: res.status,
@@ -903,7 +901,7 @@ export class YouTubePostClient extends PostClient {
         return res;
       } catch (err) {
         lastErr = err;
-        this.#responses.push({
+        this.responses.push({
           resumableRetry: {
             attempt,
             error: String(err),
@@ -1009,7 +1007,7 @@ export class YouTubePostClient extends PostClient {
     source: { thumbnailUrl?: string; thumbnailTimestampMs?: number },
   ): Promise<void> {
     try {
-      this.#requests.push({
+      this.requests.push({
         thumbnailUploadRequest: {
           videoId,
           ...source,
@@ -1026,11 +1024,11 @@ export class YouTubePostClient extends PostClient {
         },
       });
 
-      this.#responses.push({ thumbnailResponse: thumbnailResponse.data });
+      this.responses.push({ thumbnailResponse: thumbnailResponse.data });
       console.log("Thumbnail uploaded successfully for video:", videoId);
     } catch (error) {
       console.error("Error uploading thumbnail:", error);
-      this.#responses.push({
+      this.responses.push({
         thumbnailError: {
           videoId,
           ...source,

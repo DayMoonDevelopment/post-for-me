@@ -20,8 +20,6 @@ import {
 } from "../platform-error";
 
 export class FacebookPostClient extends PostClient {
-  #requests: any[] = [];
-  #responses: any[] = [];
   #appCredentials: PlatformAppCredentials;
   #completeStatuses = [
     "error",
@@ -75,7 +73,7 @@ export class FacebookPostClient extends PostClient {
         client_secret: this.#appCredentials.app_secret,
         fb_exchange_token: account.access_token,
       };
-      this.#requests.push({
+      this.requests.push({
         refreshRequest: `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
         params: refreshParams,
       });
@@ -85,7 +83,7 @@ export class FacebookPostClient extends PostClient {
           params: refreshParams,
         },
       );
-      this.#responses.push({ refreshResponse: response.data });
+      this.responses.push({ refreshResponse: response.data });
 
       if (!response.data.access_token) {
         console.error("Failed to refresh Facebook token", response.data);
@@ -225,7 +223,7 @@ export class FacebookPostClient extends PostClient {
       }
 
       if (!platformUrl) {
-        this.#requests.push({
+        this.requests.push({
           postRequest: {
             url: `${this.#baseUrl}/${platformId}`,
             params: {
@@ -245,7 +243,7 @@ export class FacebookPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ postResponse: postResponse.data });
+        this.responses.push({ postResponse: postResponse.data });
         platformUrl = postResponse.data.permalink_url;
       }
 
@@ -256,8 +254,8 @@ export class FacebookPostClient extends PostClient {
         provider_post_id: feedPostId ?? platformId,
         provider_post_url: platformUrl ?? "https://www.facebook.com/profile",
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
           raw_media_id: platformId,
         },
       };
@@ -277,8 +275,8 @@ export class FacebookPostClient extends PostClient {
           error_message: this.buildAuthErrorMessage(error),
           details: {
             error: platformError.data ?? { message: platformError.message },
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
           },
         };
       }
@@ -289,8 +287,8 @@ export class FacebookPostClient extends PostClient {
         provider_connection_id: account.id,
         details: {
           error: platformError.data ?? { message: platformError.message },
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
         error_message: `Failed to post to Facebook ${platformError.message}`,
       };
@@ -326,7 +324,7 @@ export class FacebookPostClient extends PostClient {
       postData.link = link;
     }
 
-    this.#requests.push({
+    this.requests.push({
       createTextRequest: {
         url: `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
         body: postData,
@@ -338,7 +336,7 @@ export class FacebookPostClient extends PostClient {
       postData,
     );
 
-    this.#responses.push({ createTextResponse: response.data });
+    this.responses.push({ createTextResponse: response.data });
 
     if (response.data.error) {
       throw wrapResponseDataError(response.data, "Failed to post");
@@ -393,7 +391,7 @@ export class FacebookPostClient extends PostClient {
       payload.alt_text_custom = medium.alt_text;
     }
 
-    this.#requests.push({
+    this.requests.push({
       photoRequest: {
         url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
         data: payload,
@@ -404,7 +402,7 @@ export class FacebookPostClient extends PostClient {
       payload,
     );
 
-    this.#responses.push({ photoResponse: photoResponse.data });
+    this.responses.push({ photoResponse: photoResponse.data });
 
     if (photoResponse.data.error) {
       throw wrapResponseDataError(photoResponse.data, "Failed to upload media");
@@ -473,7 +471,7 @@ export class FacebookPostClient extends PostClient {
           }));
       }
 
-      this.#requests.push({
+      this.requests.push({
         photoRequest: {
           url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
           data: payload,
@@ -484,14 +482,14 @@ export class FacebookPostClient extends PostClient {
         payload,
       );
 
-      this.#responses.push({ photoResponse: photoResponse.data });
+      this.responses.push({ photoResponse: photoResponse.data });
       if (photoResponse.data.error) {
         throw wrapResponseDataError(photoResponse.data, "Failed to upload image");
       }
       mediaIds.push({ media_fbid: photoResponse.data.id });
     }
 
-    this.#requests.push({
+    this.requests.push({
       createCarouselPostRequest: {
         url: `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
         body: {
@@ -524,7 +522,7 @@ export class FacebookPostClient extends PostClient {
       carouselBody,
     );
 
-    this.#responses.push({ createCarouselPostResponse: response.data });
+    this.responses.push({ createCarouselPostResponse: response.data });
 
     if (response.data.error) {
       throw wrapResponseDataError(response.data, "Failed to create carousel");
@@ -546,7 +544,7 @@ export class FacebookPostClient extends PostClient {
     delayMs?: number;
   }): Promise<string | undefined> {
     for (let attempt = 0; attempt < attempts; attempt++) {
-      this.#requests.push({
+      this.requests.push({
         resolveFeedPostIdRequest: {
           url: `${this.#graphApiUrl}/${mediaId}`,
           params: { fields: "post_id" },
@@ -561,7 +559,7 @@ export class FacebookPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ resolveFeedPostIdResponse: response.data });
+        this.responses.push({ resolveFeedPostIdResponse: response.data });
 
         if (response.data?.post_id) {
           return response.data.post_id;
@@ -673,7 +671,7 @@ export class FacebookPostClient extends PostClient {
     medium: PostMedia;
   }): Promise<{ id: string; feedPostId?: string }> {
     const fileUrl = await this.getSignedUrlForFile(medium);
-    this.#requests.push({
+    this.requests.push({
       videoRequest: {
         url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/videos`,
         data: {
@@ -694,7 +692,7 @@ export class FacebookPostClient extends PostClient {
 
     const videoResponseData = videoResponse.data;
 
-    this.#responses.push({ videoResponse: videoResponseData });
+    this.responses.push({ videoResponse: videoResponseData });
 
     if (videoResponseData?.error) {
       console.error(videoResponseData);
@@ -708,7 +706,7 @@ export class FacebookPostClient extends PostClient {
     const maxAttempts = 48;
 
     while (status === "processing" && attempts < maxAttempts) {
-      this.#requests.push({
+      this.requests.push({
         statusRequest: {
           url: `${this.#graphApiUrl}/${videoResponseData.id}?fields=status`,
         },
@@ -720,7 +718,7 @@ export class FacebookPostClient extends PostClient {
         label: "video",
       });
 
-      this.#responses.push({ statusResponse: statusResponse.data });
+      this.responses.push({ statusResponse: statusResponse.data });
 
       status = statusResponse.data?.status?.video_status;
       attempts++;
@@ -932,7 +930,7 @@ export class FacebookPostClient extends PostClient {
       payload.place = platformConfig.location;
     }
 
-    this.#requests.push({
+    this.requests.push({
       photoRequest: {
         url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
         data: payload,
@@ -943,7 +941,7 @@ export class FacebookPostClient extends PostClient {
       payload,
     );
 
-    this.#responses.push({ photoResponse: photoResponse.data });
+    this.responses.push({ photoResponse: photoResponse.data });
     if (photoResponse.data.error) {
       throw wrapResponseDataError(photoResponse.data, "Failed to upload image");
     }
