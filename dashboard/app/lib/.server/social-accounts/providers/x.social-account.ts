@@ -51,12 +51,16 @@ export async function getXSocialProviderConnection({
       refresh_token: accessSecret,
       social_provider_user_id: user.id,
       social_provider_user_name: user.username,
-      social_provider_photo_url: user.profile_image_url,
+      social_provider_photo_url: user.profile_image_url?.replace(
+        /_normal(?=\.\w+$)/,
+        "",
+      ),
       access_token_expires_at: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
       social_provider_metadata: {
         connection_type: "oauth1",
         has_platform_premium: isPremium,
         verified_type: user.verified_type ?? "none",
+        display_name: user.name,
       },
     },
   ];

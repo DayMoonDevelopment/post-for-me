@@ -108,13 +108,24 @@ export class PinterestPostClient extends PostClient {
 
       // Create the pin
       const pinTitle = platformConfig?.title?.trim() || caption;
-      const pinData = {
+      const pinData: {
+        board_id: string;
+        title: string;
+        link?: string;
+        description: string;
+        media_source: typeof mediaSource;
+        alt_text?: string;
+      } = {
         board_id: boardId,
         title: pinTitle.slice(0, 100),
         link: platformConfig?.link,
         description: caption.slice(0, 800),
         media_source: mediaSource,
       };
+
+      if (medium.alt_text) {
+        pinData.alt_text = medium.alt_text.slice(0, 500);
+      }
 
       this.#requests.push({ postRequest: pinData });
 

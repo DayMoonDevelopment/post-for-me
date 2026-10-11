@@ -5,6 +5,10 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
+import {
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -27,6 +31,12 @@ export class TikTokPostClient extends PostClient {
   ];
   #maxItems = 32;
   #titleLength = 85;
+  #privacyLevelMap: Record<string, string> = {
+    public: "PUBLIC_TO_EVERYONE",
+    private: "SELF_ONLY",
+    followers: "FOLLOWER_OF_CREATOR",
+    friends: "MUTUAL_FOLLOW_FRIENDS",
+  };
   #clientKey: string;
   #clientSecret: string;
   #localSupabaseClient;
@@ -132,6 +142,7 @@ export class TikTokPostClient extends PostClient {
           coverTimestamp: medium.thumbnail_timestamp_ms || undefined,
           account,
           platformData: platformConfig,
+          creatorInfoResponse,
         });
       } else {
         publishId = await this.#processImages({
@@ -140,6 +151,7 @@ export class TikTokPostClient extends PostClient {
           title: platformConfig?.title,
           account,
           platformData: platformConfig,
+          creatorInfoResponse,
         });
       }
 
@@ -212,12 +224,18 @@ export class TikTokPostClient extends PostClient {
     } catch (error) {
       console.error("Error in postToTikTok:", error.message);
       const errorDetails = await this.#getErrorDetails(error);
+      const tiktokErrorCode = error.response?.data?.error?.code;
+
+      const errorMessage =
+        tiktokErrorCode === "reached_active_user_cap"
+          ? "TikTok has temporarily reached its daily cap on new active users for our app (this is a limit TikTok imposes). This resets automatically within 24 hours; please try posting again later or posting as a draft."
+          : "Failed to post to TikTok";
 
       return {
         success: false,
         post_id: postId,
         provider_connection_id: account.id,
-        error_message: "Failed to post to TikTok",
+        error_message: errorMessage,
         details: {
           error: errorDetails,
           requests: this.#requests,
@@ -225,6 +243,32 @@ export class TikTokPostClient extends PostClient {
         },
       };
     }
+  }
+
+  #resolvePrivacyLevel({
+    platformData,
+    creatorInfoResponse,
+  }: {
+    platformData: TiktokConfiguration;
+    creatorInfoResponse: any;
+  }): string {
+    const requestedLevel =
+      this.#privacyLevelMap[platformData.privacy_status ?? "public"] ??
+      "PUBLIC_TO_EVERYONE";
+
+    const allowedLevels: string[] | undefined =
+      creatorInfoResponse?.data?.data?.privacy_level_options;
+
+    if (allowedLevels?.length && !allowedLevels.includes(requestedLevel)) {
+      // The creator's account doesn't support the requested privacy level
+      // (e.g. TikTok hides MUTUAL_FOLLOW_FRIENDS/FOLLOWER_OF_CREATOR for some
+      // accounts) - fall back to the most restrictive option TikTok will allow.
+      return allowedLevels.includes("SELF_ONLY")
+        ? "SELF_ONLY"
+        : allowedLevels[0];
+    }
+
+    return requestedLevel;
   }
 
   async #getCreatorInfo(account: SocialAccount) {
@@ -527,12 +571,14 @@ export class TikTokPostClient extends PostClient {
     coverTimestamp,
     account,
     platformData,
+    creatorInfoResponse,
   }: {
     medium: PostMedia;
     caption: string;
     platformData: TiktokConfiguration;
     coverTimestamp: number | undefined;
     account: SocialAccount;
+    creatorInfoResponse: any;
   }) {
     const { filePath, mimeType, size } = await this.downloadToTempFile(
       medium.url,
@@ -577,10 +623,10 @@ export class TikTokPostClient extends PostClient {
           payload: {
             post_info: {
               title: caption,
-              privacy_level:
-                platformData.privacy_status == "private"
-                  ? "SELF_ONLY"
-                  : "PUBLIC_TO_EVERYONE",
+              privacy_level: this.#resolvePrivacyLevel({
+                platformData,
+                creatorInfoResponse,
+              }),
               disable_duet:
                 platformData.allow_duet === undefined
                   ? false
@@ -635,12 +681,14 @@ export class TikTokPostClient extends PostClient {
     title,
     account,
     platformData,
+    creatorInfoResponse,
   }: {
     media: PostMedia[];
     caption: string;
     title: string | undefined;
     account: SocialAccount;
     platformData: TiktokConfiguration;
+    creatorInfoResponse: any;
   }) {
     const allowedMedia = media.slice(0, this.#maxItems);
 
@@ -659,10 +707,10 @@ export class TikTokPostClient extends PostClient {
         post_info: {
           title: (title ?? "").slice(0, this.#titleLength),
           description: caption,
-          privacy_level:
-            platformData.privacy_status == "private"
-              ? "SELF_ONLY"
-              : "PUBLIC_TO_EVERYONE",
+          privacy_level: this.#resolvePrivacyLevel({
+            platformData,
+            creatorInfoResponse,
+          }),
           disable_comment:
             platformData.allow_comment === undefined
               ? false
@@ -717,6 +765,10 @@ export class TikTokPostClient extends PostClient {
   async #transformImage(medium: PostMedia): Promise<string> {
     const signedUrl = await this.getSignedUrlForFile(medium);
 
+    if (shouldSkipProcessing(medium)) {
+      return signedUrl;
+    }
+
     const response = await axios({
       url: signedUrl,
       method: "GET",
@@ -759,17 +811,10 @@ export class TikTokPostClient extends PostClient {
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { SocialProviderAppCredentialsDto } from './dto/social-provider-app-credentials.dto';
+import { normalizePlatform } from '../lib/platform.utils';
 
 @Injectable()
 export class SocialProviderAppCredentialsService {
@@ -15,7 +16,7 @@ export class SocialProviderAppCredentialsService {
       .select('*')
       .eq(
         'provider',
-        provider as
+        normalizePlatform(provider) as
           | 'facebook'
           | 'instagram'
           | 'x'
@@ -55,7 +56,7 @@ export class SocialProviderAppCredentialsService {
         'provider',
         providers.map(
           (p) =>
-            p as
+            normalizePlatform(p) as
               | 'facebook'
               | 'instagram'
               | 'x'

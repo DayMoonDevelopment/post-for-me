@@ -2,21 +2,20 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Unkey } from '@unkey/api';
 import type { Request } from 'express';
 
-import { UNKEY_INSTANCE } from '../unkey/unkey.module';
+import { getUnkeyPrincipalFromRequest } from './unkey-principal';
 
 import { VERIFY_KEY_PERMISSIONS } from './verify-key.decorator';
 
 /**
- * Generic Unkey-backed auth guard. Verifies the bearer token and optionally
- * enforces a permission query (via Unkey RBAC). Apply with `@VerifyKey(...)`.
+ * Generic Unkey-backed auth guard. Verifies the gateway-injected principal and
+ * optionally enforces a permission query from the principal payload.
+ * Apply with `@VerifyKey(...)`.
  *
  * This is *not* the customer-facing auth primitive — that's `AuthGuard`,
  * which also extracts user/project/team identity and runs plan-type checks.
@@ -25,21 +24,17 @@ import { VERIFY_KEY_PERMISSIONS } from './verify-key.decorator';
  */
 @Injectable()
 export class VerifyKeyGuard implements CanActivate {
-  constructor(
-    @Inject(UNKEY_INSTANCE) private unkey: Unkey,
-    private readonly reflector: Reflector,
-  ) {}
+  constructor(private readonly reflector: Reflector) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
     if (!request) {
       throw new UnauthorizedException('Request object not available.');
     }
 
-    const token = this.getBearerToken(request);
-
-    if (!token) {
-      throw new UnauthorizedException('Authorization token not found.');
+    const principal = getUnkeyPrincipalFromRequest(request);
+    if (!principal || principal.type !== 'API_KEY') {
+      throw new UnauthorizedException('Invalid or missing Unkey principal.');
     }
 
     const permissions = this.reflector.getAllAndOverride<string | undefined>(
@@ -47,59 +42,99 @@ export class VerifyKeyGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    try {
-      const response = await this.unkey.keys.verifyKey({
-        key: token,
-        permissions,
-      });
-
-      const data = response.data;
-
-      if (!data) {
-        throw new UnauthorizedException('Key verification failed.');
-      }
-
-      if (data.valid) return true;
-
-      switch (data.code) {
-        case 'INSUFFICIENT_PERMISSIONS':
-        case 'FORBIDDEN':
-          throw new ForbiddenException(
-            permissions
-              ? `Key lacks required permission: ${permissions}`
-              : 'Key is forbidden from accessing this resource.',
-          );
-        default:
-          throw new UnauthorizedException('Invalid or expired key.');
-      }
-    } catch (error) {
-      if (
-        error instanceof UnauthorizedException ||
-        error instanceof ForbiddenException
-      ) {
-        throw error;
-      }
-      console.error('[VerifyKeyGuard] verifyKey error', error);
-      throw new UnauthorizedException('Authentication failed.');
+    if (!permissions) {
+      return true;
     }
+
+    const grantedPermissions = principal.source?.key?.permissions;
+    if (!Array.isArray(grantedPermissions)) {
+      throw new ForbiddenException(
+        `Key lacks required permission: ${permissions}`,
+      );
+    }
+
+    if (!this.evaluatePermissionQuery(permissions, grantedPermissions)) {
+      throw new ForbiddenException(
+        `Key lacks required permission: ${permissions}`,
+      );
+    }
+
+    return true;
   }
 
-  private getBearerToken(request: Request): string | null {
-    const authorization = request.headers.authorization;
-
-    if (typeof authorization !== 'string') {
-      return null;
+  private evaluatePermissionQuery(
+    query: string,
+    grantedPermissions: string[],
+  ): boolean {
+    const tokens = query.match(/\(|\)|\bAND\b|\bOR\b|[^\s()]+/gi);
+    if (!tokens || tokens.length === 0) {
+      return false;
     }
 
-    if (!authorization.startsWith('Bearer ')) {
-      return null;
-    }
+    const normalizedTokens = tokens.map((token) => token.trim());
+    const granted = new Set(grantedPermissions);
+    let index = 0;
 
-    const parts = authorization.split(' ');
-    if (parts.length !== 2 || !parts[1]) {
-      return null;
-    }
+    const parseExpression = (): boolean => {
+      let value = parseTerm();
 
-    return parts[1].trim() || null;
+      while (normalizedTokens[index]?.toUpperCase() === 'OR') {
+        index += 1;
+        const nextValue = parseTerm();
+        value = value || nextValue;
+      }
+
+      return value;
+    };
+
+    const parseTerm = (): boolean => {
+      let value = parseFactor();
+
+      while (normalizedTokens[index]?.toUpperCase() === 'AND') {
+        index += 1;
+        const nextValue = parseFactor();
+        value = value && nextValue;
+      }
+
+      return value;
+    };
+
+    const parseFactor = (): boolean => {
+      const token = normalizedTokens[index];
+
+      if (!token) {
+        throw new Error('Unexpected end of permission query.');
+      }
+
+      if (token === '(') {
+        index += 1;
+        const value = parseExpression();
+
+        if (normalizedTokens[index] !== ')') {
+          throw new Error('Missing closing parenthesis in permission query.');
+        }
+
+        index += 1;
+        return value;
+      }
+
+      if (
+        token === ')' ||
+        token.toUpperCase() === 'AND' ||
+        token.toUpperCase() === 'OR'
+      ) {
+        throw new Error('Malformed permission query.');
+      }
+
+      index += 1;
+      return granted.has(token);
+    };
+
+    try {
+      const result = parseExpression();
+      return result && index === normalizedTokens.length;
+    } catch {
+      return false;
+    }
   }
 }

@@ -23,8 +23,14 @@ import type {
   TwitterConfiguration,
   YoutubeConfiguration,
 } from "./post.types";
+import { extractPlatformError } from "./platform-error";
 
 export class PostClient {
+  // Platforms declare which PostMedia["type"] values they can publish.
+  // Default excludes "document" (PDF) — most platforms have no
+  // representation for it and would otherwise silently mishandle it.
+  supportedMediaTypes: string[] = ["image", "video"];
+
   constructor(
     _supabaseClient: SupabaseClient,
     _appCredentials: PlatformAppCredentials,
@@ -165,5 +171,37 @@ export class PostClient {
 
   protected async unlinkQuiet(filePath: string): Promise<void> {
     await fsp.unlink(filePath).catch(() => undefined);
+  }
+
+  private static readonly TERMINAL_AUTH_ERROR_KEYWORDS = [
+    "session has been invalidated",
+    "sessions for the user are not allowed because the user is not a confirmed user",
+    "user access is restricted",
+    "error validating access token",
+  ];
+
+  protected getErrorMessage(error: any): string {
+    return extractPlatformError(error).message;
+  }
+
+  protected isTerminalAuthError(error: any): boolean {
+    const platformError = extractPlatformError(error);
+    const graphError = (platformError.data as any)?.error;
+    const code = graphError?.code;
+    const message = platformError.message.toLowerCase();
+
+    const hasTerminalKeyword = PostClient.TERMINAL_AUTH_ERROR_KEYWORDS.some(
+      (kw) => message.includes(kw),
+    );
+
+    return (
+      platformError.status === 401 ||
+      code === 190 ||
+      hasTerminalKeyword
+    );
+  }
+
+  protected buildAuthErrorMessage(error: any): string {
+    return `Account needs to be reconnected: ${this.getErrorMessage(error)}`;
   }
 }

@@ -35,7 +35,7 @@ export class SocialPostDto {
   status: PostStatus;
 
   @ApiProperty({
-    description: 'Scheduled date and time for the post',
+    description: 'Scheduled date and time for the post in UTC (ISO 8601)',
     nullable: true,
     type: String,
   })
@@ -71,9 +71,13 @@ export class SocialPostDto {
   })
   social_accounts: SocialAccountDto[];
 
-  @ApiProperty({ description: 'Timestamp when the post was created' })
+  @ApiProperty({
+    description: 'Timestamp when the post was created, in UTC (ISO 8601)',
+  })
   created_at: string;
 
-  @ApiProperty({ description: 'Timestamp when the post was last updated' })
+  @ApiProperty({
+    description: 'Timestamp when the post was last updated, in UTC (ISO 8601)',
+  })
   updated_at: string;
 }

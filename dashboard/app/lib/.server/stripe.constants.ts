@@ -37,6 +37,8 @@ export const NEW_PRICING_TIER_PRODUCT_IDS = [
 ].filter(Boolean); // Filter out empty strings
 
 // Pricing tier configuration
+// Keep in sync with trigger/process-usage-limits.ts — same env vars, same
+// shape, same filter.
 export const PRICING_TIERS = [
   {
     productId: STRIPE_PRICING_TIER_1K_PRODUCT_ID,

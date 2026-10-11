@@ -15,6 +15,7 @@ import {
   SocialAccountMetadata,
 } from './dto/create-social-account.dto';
 import { Database } from '../../supabase';
+import { normalizePlatform } from '../lib/platform.utils';
 
 type ProviderEnum = Database['public']['Enums']['social_provider'];
 
@@ -59,7 +60,7 @@ export class SocialAccountsService {
 
       query.in(
         'provider',
-        values.map((provider) => provider as ProviderEnum),
+        values.map((provider) => normalizePlatform(provider) as ProviderEnum),
       );
     }
 
@@ -226,6 +227,7 @@ export class SocialAccountsService {
     externalId,
     redirectUrlOverride,
     permissions,
+    forceReauth,
     isSystem,
   }: {
     projectId: string;
@@ -234,6 +236,7 @@ export class SocialAccountsService {
     externalId: string | undefined;
     redirectUrlOverride: string | undefined | null;
     permissions: string[];
+    forceReauth: boolean | undefined;
     isSystem: boolean;
   }): Promise<string | undefined> {
     const authUrl = await generateAuthUrl({
@@ -246,6 +249,7 @@ export class SocialAccountsService {
       externalId,
       redirectUrlOverride,
       permissions,
+      forceReauth,
     });
 
     return authUrl;
@@ -257,24 +261,21 @@ export class SocialAccountsService {
   }: {
     id: string;
     projectId: string;
-  }): Promise<DeleteEntityResponseDto> {
-    const { data, error } = await this.supabaseService.supabaseClient
-      .from('social_provider_connections')
-      .delete()
-      .eq('id', id)
-      .eq('project_id', projectId)
-      .select('id')
-      .maybeSingle();
+  }): Promise<
+    DeleteEntityResponseDto & {
+      deletedPosts: Database['public']['Functions']['delete_social_account']['Returns'];
+    }
+  > {
+    const { data, error } = await this.supabaseService.supabaseServiceRole.rpc(
+      'delete_social_account',
+      { p_id: id, p_project_id: projectId },
+    );
 
     if (error) {
       throw new Error(error.message);
     }
 
-    if (!data) {
-      throw new Error('Social account not found');
-    }
-
-    return { success: true };
+    return { success: true, deletedPosts: data ?? [] };
   }
 
   async createSocialAccount({
@@ -295,7 +296,7 @@ export class SocialAccountsService {
       .upsert(
         {
           project_id: projectId,
-          provider: socialAccount.platform,
+          provider: normalizePlatform(socialAccount.platform) as ProviderEnum,
           social_provider_user_name: socialAccount.username,
           social_provider_user_id: socialAccount.user_id,
           external_id: socialAccount.external_id,
