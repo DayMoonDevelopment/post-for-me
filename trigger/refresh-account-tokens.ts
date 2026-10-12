@@ -128,13 +128,7 @@ export const refreshAccountTokens = schedules.task({
         .from("social_provider_connections")
         .select("*")
         .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
-        .in("provider", [
-          "facebook",
-          "instagram",
-          "threads",
-          "pinterest",
-          "youtube",
-        ])
+        .in("provider", ["facebook", "instagram", "threads", "pinterest"])
         .order("access_token_expires_at", { ascending: true })
         .limit(50);
 
@@ -168,10 +162,7 @@ export const refreshAccountTokens = schedules.task({
       );
     }
 
-    const accounts = [
-      ...(standardAccounts || []),
-      ...(xOAuth2Accounts || []),
-    ];
+    const accounts = [...(standardAccounts || []), ...(xOAuth2Accounts || [])];
 
     if (!accounts || accounts.length === 0) {
       logger.info("No accounts need token refresh");
