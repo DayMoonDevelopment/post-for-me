@@ -16,6 +16,7 @@ import {
   RefreshTokenResult,
   SocialAccount,
   YoutubeConfiguration,
+  YoutubeLocalization,
 } from "../post.types";
 
 export function isRetriableYouTubeSessionInitError(
@@ -74,6 +75,45 @@ export function sanitizeYouTubeDescription(description: string): {
   const value = truncateToUtf8Bytes(sanitized, YOUTUBE_MAX_DESCRIPTION_BYTES);
 
   return { value, truncated: value.length < sanitized.length, originalBytes };
+}
+
+export function sanitizeYouTubeLocalizations(
+  localizations: Record<string, YoutubeLocalization> | null | undefined,
+): Record<string, YoutubeLocalization> | undefined {
+  if (localizations == null) return undefined;
+
+  return Object.fromEntries(
+    Object.entries(localizations).map(([language, localization]) => {
+      // Truncate by code point so emoji and surrogate pairs are never split
+      const title = Array.from(
+        (localization?.title ?? "")
+          .replace(/[<>]/g, "")
+          .replace(/\n/g, " ")
+          .trim(),
+      )
+        .slice(0, YOUTUBE_MAX_TITLE_CHARS)
+        .join("");
+      const description = localization?.description
+        ? sanitizeYouTubeDescription(localization.description)
+        : null;
+
+      if (description?.truncated) {
+        logger.warn("YouTube localized description truncated", {
+          language,
+          originalBytes: description.originalBytes,
+          limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
+        });
+      }
+
+      return [
+        language,
+        {
+          ...(title ? { title } : {}),
+          ...(description?.value ? { description: description.value } : {}),
+        },
+      ];
+    }),
+  );
 }
 
 export class YouTubePostClient extends PostClient {
@@ -224,8 +264,8 @@ export class YouTubePostClient extends PostClient {
               publishAt: platformConfig.publish_at,
             }),
           },
-          ...(platformConfig?.localizations !== undefined && {
-            localizations: this.#sanitizeLocalizations(
+          ...(platformConfig?.localizations != null && {
+            localizations: sanitizeYouTubeLocalizations(
               platformConfig.localizations,
             ),
           }),
@@ -1204,38 +1244,5 @@ export class YouTubePostClient extends PostClient {
     if (!match) return null;
     const total = Number(match[1]);
     return Number.isFinite(total) ? total : null;
-  }
-
-  #sanitizeLocalizations(
-    localizations: NonNullable<YoutubeConfiguration["localizations"]>,
-  ) {
-    return Object.fromEntries(
-      Object.entries(localizations).map(([language, localization]) => {
-        const title = localization?.title
-          ?.replace(/[<>]/g, "")
-          .replace(/\n/g, " ")
-          .trim()
-          .slice(0, YOUTUBE_MAX_TITLE_CHARS);
-        const description = localization?.description
-          ? sanitizeYouTubeDescription(localization.description)
-          : null;
-
-        if (description?.truncated) {
-          logger.warn("YouTube localized description truncated", {
-            language,
-            originalBytes: description.originalBytes,
-            limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
-          });
-        }
-
-        return [
-          language,
-          {
-            ...(title ? { title } : {}),
-            ...(description?.value ? { description: description.value } : {}),
-          },
-        ];
-      }),
-    );
   }
 }

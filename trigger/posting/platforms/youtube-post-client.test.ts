@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   isRetriableYouTubeSessionInitError,
   sanitizeYouTubeDescription,
+  sanitizeYouTubeLocalizations,
   truncateToUtf8Bytes,
   YOUTUBE_MAX_DESCRIPTION_BYTES,
 } from "./youtube-post-client";
@@ -102,5 +103,28 @@ describe("truncateToUtf8Bytes", () => {
 
   test("returns short text unchanged", () => {
     expect(truncateToUtf8Bytes("hello", 5000)).toBe("hello");
+  });
+});
+
+describe("sanitizeYouTubeLocalizations", () => {
+  test("returns undefined for null or undefined instead of throwing", () => {
+    expect(sanitizeYouTubeLocalizations(null)).toBeUndefined();
+    expect(sanitizeYouTubeLocalizations(undefined)).toBeUndefined();
+  });
+
+  test("does not split an emoji at the 100-character title limit", () => {
+    const title = "a".repeat(99) + "😀";
+    const result = sanitizeYouTubeLocalizations({ fr: { title } });
+    expect(result?.fr.title).toBe(title);
+
+    const longer = sanitizeYouTubeLocalizations({ fr: { title: title + "b" } });
+    expect(longer?.fr.title).toBe(title);
+  });
+
+  test("caps localized descriptions at 5,000 bytes", () => {
+    const result = sanitizeYouTubeLocalizations({
+      es: { description: "a".repeat(6000) },
+    });
+    expect(result?.es.description?.length).toBe(YOUTUBE_MAX_DESCRIPTION_BYTES);
   });
 });
