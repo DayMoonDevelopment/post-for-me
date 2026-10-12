@@ -325,7 +325,8 @@ export class YoutubeLocalizationDto {
   title?: string;
 
   @ApiProperty({
-    description: 'Localized description for the video',
+    description:
+      'Localized description for the video. Maximum 5,000 bytes (UTF-8); longer values are truncated.',
     required: false,
     nullable: true,
   })
@@ -342,7 +343,7 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
   @ApiProperty({
     description:
-      'Description for the YouTube video (maps to snippet.description). Falls back to the post caption when not provided.',
+      'Description for the YouTube video (maps to snippet.description). Falls back to the post caption when not provided. Maximum 5,000 bytes (UTF-8); longer values are truncated.',
     nullable: true,
     required: false,
   })
