@@ -399,6 +399,7 @@ export class InstagramPostClient extends PostClient {
       user_tags?: any[];
       audio_name?: string;
       alt_text?: string;
+      is_ai_generated?: boolean;
       trial_params?: {
         graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
       };
@@ -410,6 +411,10 @@ export class InstagramPostClient extends PostClient {
 
     if (medium.alt_text) {
       createMediaParams.alt_text = medium.alt_text;
+    }
+
+    if (platformConfig?.is_ai_generated != null) {
+      createMediaParams.is_ai_generated = platformConfig.is_ai_generated;
     }
 
     switch (platformConfig?.placement) {
@@ -590,12 +595,18 @@ export class InstagramPostClient extends PostClient {
       access_token: string;
       collaborators?: string[];
       location_id?: string;
+      is_ai_generated?: boolean;
     } = {
       media_type: "CAROUSEL",
       children: containerIds,
       caption: caption,
       access_token: account.access_token,
     };
+
+    // Meta rejects this parameter on carousel children; set it only on the parent.
+    if (platformConfig?.is_ai_generated != null) {
+      carouselPayload.is_ai_generated = platformConfig.is_ai_generated;
+    }
 
     if (
       platformConfig?.collaborators &&
