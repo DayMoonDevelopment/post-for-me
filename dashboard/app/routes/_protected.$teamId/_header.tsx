@@ -30,7 +30,7 @@ export function Header() {
       const handle = match.handle as MatchHandle;
 
       return {
-        name: get(match.data, `${handle?.breadcrumb}`, `${handle?.breadcrumb}`),
+        name: get(match.loaderData, `${handle?.breadcrumb}`, `${handle?.breadcrumb}`),
         href: match.pathname,
       };
     });

@@ -9,12 +9,17 @@ import {
   SocialAccount,
 } from "../post.types";
 
+// https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/documents-api
+// "The file size can't exceed 100MB and 300 pages."
+const LINKEDIN_MAX_DOCUMENT_BYTES = 100 * 1024 * 1024;
+
 export class LinkedInPostClient extends PostClient {
+  supportedMediaTypes = ["image", "video", "document"];
+
   #clientId: string;
   #clientSecret: string;
   #maxImages = 20;
-  #requests: any[] = [];
-  #responses: any[] = [];
+  #apiVersion = process.env.LINKEDIN_API_VERSION || "202601";
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -29,7 +34,7 @@ export class LinkedInPostClient extends PostClient {
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
-    this.#requests.push({ refreshRequest: tokenUrl });
+    this.requests.push({ refreshRequest: tokenUrl });
     const response = await fetch(tokenUrl, {
       method: "POST",
       headers: {
@@ -45,7 +50,7 @@ export class LinkedInPostClient extends PostClient {
 
     const data = await response.json();
 
-    this.#responses.push({ refreshResponse: data });
+    this.responses.push({ refreshResponse: data });
 
     if (!response.ok) {
       throw new Error(
@@ -78,8 +83,31 @@ export class LinkedInPostClient extends PostClient {
     try {
       const authorUrn =
         account.social_provider_metadata?.connection_type === "page"
-          ? `urn:li:company:${account.social_provider_user_id}`
+          ? `urn:li:organization:${account.social_provider_user_id}`
           : `urn:li:person:${account.social_provider_user_id}`;
+
+      if (!platformConfig?.reshare_post_id) {
+        const documentMedium =
+          media.length === 1 && media[0].type === "document"
+            ? media[0]
+            : null;
+
+        if (!documentMedium && media.some((m) => m.type === "document")) {
+          throw new Error(
+            "LinkedIn document posts support exactly one PDF and no other media",
+          );
+        }
+
+        if (documentMedium) {
+          return await this.#postDocument({
+            postId,
+            account,
+            caption,
+            medium: documentMedium,
+            authorUrn,
+          });
+        }
+      }
 
       const postBody: Record<string, any> = {
         author: authorUrn,
@@ -124,7 +152,7 @@ export class LinkedInPostClient extends PostClient {
         }
       }
 
-      this.#requests.push({ postRequest: postBody });
+      this.requests.push({ postRequest: postBody });
       const response = await fetch(`https://api.linkedin.com/v2/ugcPosts`, {
         method: "POST",
         headers: {
@@ -146,7 +174,7 @@ export class LinkedInPostClient extends PostClient {
       const providerPostId =
         result.id || response.headers.get("x-restli-id") || undefined;
 
-      this.#responses.push({ postResponse: result });
+      this.responses.push({ postResponse: result });
       return {
         success: true,
         provider_connection_id: account.id,
@@ -156,8 +184,8 @@ export class LinkedInPostClient extends PostClient {
           ? `https://www.linkedin.com/feed/update/${providerPostId}`
           : undefined,
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -172,8 +200,8 @@ export class LinkedInPostClient extends PostClient {
         error_message: `Failed to post to LinkedIn: ${error.message}`,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -199,6 +227,221 @@ export class LinkedInPostClient extends PostClient {
       : `urn:li:ugcPost:${ugcPostId}`;
   }
 
+  #versionedHeaders(accessToken: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Linkedin-Version": this.#apiVersion,
+      "X-Restli-Protocol-Version": "2.0.0",
+    };
+  }
+
+  // Safely parses a LinkedIn response body as JSON without throwing on a
+  // non-JSON (e.g. plain-text or empty) error body, so callers can still
+  // inspect `response.ok`/status and raise their own descriptive error.
+  async #parseJsonSafe(response: Response): Promise<any> {
+    const text = await response.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {};
+    }
+  }
+
+  // Shared by #createDocumentMedia and #createMedia: streams a downloaded
+  // file's body to a LinkedIn upload URL without buffering it into memory.
+  async #streamUploadFile({
+    uploadUrl,
+    method,
+    fileRes,
+    accessToken,
+    contentType,
+  }: {
+    uploadUrl: string;
+    method: "PUT" | "POST";
+    fileRes: Response;
+    accessToken: string;
+    contentType: string;
+  }): Promise<Response> {
+    const contentLength = fileRes.headers.get("content-length");
+
+    return fetch(uploadUrl, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": contentType,
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
+      },
+      body: fileRes.body,
+      // Required by Node/undici fetch for streaming request bodies.
+      duplex: "half",
+    });
+  }
+
+  // LinkedIn document (PDF) posts have no representation in the legacy
+  // /v2/ugcPosts share model, so they're published through LinkedIn's
+  // versioned Documents + Posts API instead, independent of the legacy
+  // image/video/article flow below.
+  async #createDocumentMedia({
+    medium,
+    authorUrn,
+    account,
+  }: {
+    medium: PostMedia;
+    authorUrn: string;
+    account: SocialAccount;
+  }): Promise<string> {
+    this.requests.push({
+      initializeUploadRequest: { owner: authorUrn },
+    });
+
+    // The file download doesn't depend on the initializeUpload result, so
+    // run them concurrently rather than paying both round trips serially.
+    const [initializeResponse, fileRes] = await Promise.all([
+      fetch("https://api.linkedin.com/rest/documents?action=initializeUpload", {
+        method: "POST",
+        headers: this.#versionedHeaders(account.access_token),
+        body: JSON.stringify({
+          initializeUploadRequest: { owner: authorUrn },
+        }),
+      }),
+      fetch(medium.url),
+    ]);
+
+    const initializeData = await this.#parseJsonSafe(initializeResponse);
+    this.responses.push({ initializeDocumentUploadResponse: initializeData });
+
+    const uploadUrl = initializeData?.value?.uploadUrl;
+    const documentUrn = initializeData?.value?.document;
+
+    if (!initializeResponse.ok || !uploadUrl || !documentUrn) {
+      // The download raced initializeUpload and may have already resolved;
+      // release it rather than leaving the connection/socket open.
+      await fileRes.body?.cancel().catch(() => undefined);
+      throw new Error(
+        `Failed to initialize LinkedIn document upload: ${initializeResponse.status} ${initializeResponse.statusText}`,
+      );
+    }
+
+    if (!fileRes.ok || !fileRes.body) {
+      await fileRes.body?.cancel().catch(() => undefined);
+      throw new Error(
+        `Failed to download document for upload: ${fileRes.status} ${fileRes.statusText}`,
+      );
+    }
+
+    // LinkedIn's Documents API rejects files over 100MB. `fileRes` already
+    // has headers (fetch resolves once headers arrive, before the body is
+    // read), so this check needs no extra round trip.
+    const contentLength = fileRes.headers.get("content-length");
+    if (contentLength && Number(contentLength) > LINKEDIN_MAX_DOCUMENT_BYTES) {
+      await fileRes.body.cancel().catch(() => undefined);
+      throw new Error(
+        `Document exceeds LinkedIn's 100MB upload limit (${contentLength} bytes)`,
+      );
+    }
+
+    const contentType = fileRes.headers.get("content-type") || "application/pdf";
+
+    const uploadResponse = await this.#streamUploadFile({
+      uploadUrl,
+      method: "PUT",
+      fileRes,
+      accessToken: account.access_token,
+      contentType,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(
+        `Failed to upload document: ${uploadResponse.status} ${uploadResponse.statusText}`,
+      );
+    }
+
+    this.responses.push({ uploadDocumentResponse: uploadResponse.status });
+
+    return documentUrn;
+  }
+
+  async #postDocument({
+    postId,
+    account,
+    caption,
+    medium,
+    authorUrn,
+  }: {
+    postId: string;
+    account: SocialAccount;
+    caption: string;
+    medium: PostMedia;
+    authorUrn: string;
+  }): Promise<PostResult> {
+    const documentUrn = await this.#createDocumentMedia({
+      medium,
+      authorUrn,
+      account,
+    });
+
+    // LinkedIn's Posts API rejects a blank `commentary` (INVALID_VALUE_BLANK_FIELD),
+    // so a document posted with no caption needs a non-empty fallback.
+    const trimmedCaption = caption?.trim();
+    const documentTitle = trimmedCaption
+      ? trimmedCaption.slice(0, 200)
+      : "Document";
+
+    const postBody = {
+      author: authorUrn,
+      commentary: trimmedCaption || documentTitle,
+      visibility: "PUBLIC",
+      distribution: {
+        feedDistribution: "MAIN_FEED",
+        targetEntities: [],
+        thirdPartyDistributionChannels: [],
+      },
+      content: {
+        media: {
+          id: documentUrn,
+          // Without an explicit title, LinkedIn falls back to the storage
+          // filename (an opaque UUID) as the document card's display name.
+          title: documentTitle,
+        },
+      },
+      lifecycleState: "PUBLISHED",
+      isReshareDisabledByAuthor: false,
+    };
+
+    this.requests.push({ postRequest: postBody });
+
+    const response = await fetch("https://api.linkedin.com/rest/posts", {
+      method: "POST",
+      headers: this.#versionedHeaders(account.access_token),
+      body: JSON.stringify(postBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `LinkedIn API error: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const providerPostId = response.headers.get("x-restli-id") || undefined;
+    this.responses.push({ postResponse: { status: response.status } });
+
+    return {
+      success: true,
+      provider_connection_id: account.id,
+      post_id: postId,
+      provider_post_id: providerPostId,
+      provider_post_url: providerPostId
+        ? `https://www.linkedin.com/feed/update/${providerPostId}`
+        : undefined,
+      details: {
+        requests: this.requests,
+        responses: this.responses,
+      },
+    };
+  }
+
   async #createMedia({
     medium,
     caption,
@@ -212,7 +455,7 @@ export class LinkedInPostClient extends PostClient {
   }): Promise<any> {
     const isVideo = medium.type === "video";
 
-    this.#requests.push({
+    this.requests.push({
       registerRequest: {
         registerUploadRequest: {
           recipes: [
@@ -260,7 +503,13 @@ export class LinkedInPostClient extends PostClient {
 
     const registerData = await registerResponse.json();
 
-    this.#responses.push({ registerResponse: registerData });
+    this.responses.push({ registerResponse: registerData });
+
+    if (!registerResponse.ok || !registerData.value) {
+      throw new Error(
+        `Failed to register LinkedIn media upload: ${registerResponse.status} ${JSON.stringify(registerData)}`,
+      );
+    }
 
     const uploadUrl =
       registerData.value.uploadMechanism[
@@ -279,18 +528,13 @@ export class LinkedInPostClient extends PostClient {
     const contentType =
       fileRes.headers.get("content-type") ||
       (isVideo ? "video/mp4" : "image/jpeg");
-    const contentLength = fileRes.headers.get("content-length");
 
-    const uploadResponse = await fetch(uploadUrl, {
+    const uploadResponse = await this.#streamUploadFile({
+      uploadUrl,
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${account.access_token}`,
-        "Content-Type": contentType,
-        ...(contentLength ? { "Content-Length": contentLength } : {}),
-      },
-      body: fileRes.body,
-      // Required by Node/undici fetch for streaming request bodies.
-      duplex: "half",
+      fileRes,
+      accessToken: account.access_token,
+      contentType,
     });
 
     if (!uploadResponse.ok) {
@@ -299,7 +543,7 @@ export class LinkedInPostClient extends PostClient {
       );
     }
 
-    this.#responses.push({ uploadResponse: uploadResponse.status });
+    this.responses.push({ uploadResponse: uploadResponse.status });
 
     const mediaObject: any = {
       status: "READY",
@@ -343,7 +587,7 @@ export class LinkedInPostClient extends PostClient {
         mediaCategory = "IMAGE";
         for (let i = 0; i < allowedMedia.length; i++) {
           const medium = allowedMedia[i];
-          this.#requests.push({ processMedia: medium });
+          this.requests.push({ processMedia: medium });
           uploadedMedia.push(
             await this.#createMedia({
               medium,

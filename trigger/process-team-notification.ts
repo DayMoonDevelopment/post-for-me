@@ -15,15 +15,22 @@ type LoopsMetadata = {
 type TeamNotificationMetadata = {
   // Stamped by the producing task (e.g. process-usage-limits) so the generic
   // `notification_sent` analytics event can be fired on delivery without
-  // reverse-mapping the Loops template id. The channel + provider are added by
-  // this consumer. Absent for untracked notifications.
+  // reverse-mapping the Loops template id. The communication bucket is the
+  // row's own notification_type (usage_alert = informational threshold
+  // warning, subscription_alert = the subscription was actually updated).
+  // The root level is sacred — all read-only audit context lives under
+  // `tracking`: `threshold` carries the crossed percent on warnings,
+  // `new_plan_post_limit` the plan a subscription_alert's update landed on.
+  // The channel + provider are added by this consumer. Absent for untracked
+  // notifications.
   notification_category?: string;
-  notification_template?: string;
   tracking?: {
+    threshold?: number;
     usage_count?: number;
     current_limit?: number;
     plan_post_limit?: number | null;
     suggested_plan_post_limit?: number | null;
+    new_plan_post_limit?: number | null;
     period_start?: string;
   };
   data?: {
@@ -236,9 +243,9 @@ async function sendEmailNotification(
 /**
  * Fire `notification_sent` once a channel confirms delivery. One generic event
  * spans every outbound notification: `channel`, `notification_category`,
- * `notification_type`, and `notification_template` are top-level properties,
- * while channel-specific details are namespaced by channel (`email_*` here) —
- * so adding SMS/push later means a new `channel` value and a `sms_*`/`push_*`
+ * `notification_type`, and `threshold` are top-level properties, while
+ * channel-specific details are namespaced by channel (`email_*` here) — so
+ * adding SMS/push later means a new `channel` value and a `sms_*`/`push_*`
  * namespace, never a new event. `system_triggered: true` marks automation.
  * Best-effort: never throws into the delivery path.
  *
@@ -250,9 +257,10 @@ async function sendEmailNotification(
  * way the `team` group is attached — team-level reporting is group-aggregated
  * regardless of which person received the message.
  *
- * Dedupe is team + channel + template + billing period + suggested tier, so a
- * retried cron pass collapses while a genuine escalation to a higher tier (or a
- * second channel) still counts.
+ * Dedupe is team + channel + notification type + threshold + billing period +
+ * suggested tier, so a retried cron pass collapses while a genuine escalation
+ * to a higher tier, a higher threshold crossing (or a second channel) still
+ * counts.
  */
 async function trackNotificationSent({
   notification,
@@ -269,11 +277,11 @@ async function trackNotificationSent({
 }): Promise<void> {
   try {
     const metadata = (notification.meta_data as TeamNotificationMetadata) || {};
-    const template = metadata.notification_template;
 
-    if (!template) {
-      // Only typed notifications (usage emails today) emit this event; skip
-      // anything untyped rather than firing an unattributable event.
+    if (!metadata.notification_category) {
+      // Only categorized notifications (usage emails today) emit this event;
+      // skip anything uncategorized rather than firing an unattributable
+      // event.
       return;
     }
 
@@ -302,17 +310,18 @@ async function trackNotificationSent({
         recipient_is_user: Boolean(recipientUser),
         notification_id: notification.id,
         notification_type: notification.notification_type,
-        notification_category: metadata.notification_category ?? null,
-        notification_template: template,
+        notification_category: metadata.notification_category,
+        threshold: tracking.threshold ?? null,
         system_triggered: true,
         usage_count: tracking.usage_count ?? null,
         current_limit: tracking.current_limit ?? null,
         plan_post_limit: tracking.plan_post_limit ?? null,
         suggested_plan_post_limit: tracking.suggested_plan_post_limit ?? null,
+        new_plan_post_limit: tracking.new_plan_post_limit ?? null,
         ...channelProperties,
       },
       dedupeKey: deterministicUuid(
-        `notification_sent:${notification.team_id}:${channel}:${template}:${periodStart}:${tracking.suggested_plan_post_limit ?? ""}`,
+        `notification_sent:${notification.team_id}:${channel}:${notification.notification_type}:${tracking.threshold ?? ""}:${periodStart}:${tracking.new_plan_post_limit ?? tracking.suggested_plan_post_limit ?? ""}`,
       ),
     });
   } catch (error) {
@@ -413,9 +422,13 @@ export const processTeamNotification = task({
         totalResultCount: results.length + deliveryResults.length,
       });
 
+      // Upsert on the notification id: a first attempt inserts the row, and
+      // a retried attempt (the producer re-dispatches the same row when a
+      // prior delivery never succeeded) appends its results to that same
+      // record instead of minting a duplicate row per attempt.
       const { data: insertedNotification, error } = await supabaseClient
         .from("team_notifications")
-        .insert(payloadToInsert)
+        .upsert(payloadToInsert)
         .select()
         .single();
 

@@ -5,6 +5,10 @@ import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
 import {
+  compressJpegToLimit,
+  shouldSkipProcessing,
+} from "../image-processing-utils";
+import {
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -27,6 +31,12 @@ export class TikTokPostClient extends PostClient {
   ];
   #maxItems = 32;
   #titleLength = 85;
+  #privacyLevelMap: Record<string, string> = {
+    public: "PUBLIC_TO_EVERYONE",
+    private: "SELF_ONLY",
+    followers: "FOLLOWER_OF_CREATOR",
+    friends: "MUTUAL_FOLLOW_FRIENDS",
+  };
   #clientKey: string;
   #clientSecret: string;
   #localSupabaseClient;
@@ -38,8 +48,6 @@ export class TikTokPostClient extends PostClient {
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
   #addedMedia: any[] = [];
-  #requests: any[] = [];
-  #responses: any[] = [];
   #bucket: string = "post-media";
 
   constructor(
@@ -63,7 +71,7 @@ export class TikTokPostClient extends PostClient {
     formData.append("grant_type", "refresh_token");
     formData.append("refresh_token", account.refresh_token!);
 
-    this.#requests.push({ refreshRequest: { url: this.#tokenUrl } });
+    this.requests.push({ refreshRequest: { url: this.#tokenUrl } });
     const refreshResponse = await axios.post(this.#tokenUrl, formData, {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -71,7 +79,7 @@ export class TikTokPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     if (refreshResponse.data.error) {
       throw new Error(
@@ -132,6 +140,7 @@ export class TikTokPostClient extends PostClient {
           coverTimestamp: medium.thumbnail_timestamp_ms || undefined,
           account,
           platformData: platformConfig,
+          creatorInfoResponse,
         });
       } else {
         publishId = await this.#processImages({
@@ -140,6 +149,7 @@ export class TikTokPostClient extends PostClient {
           title: platformConfig?.title,
           account,
           platformData: platformConfig,
+          creatorInfoResponse,
         });
       }
 
@@ -158,8 +168,8 @@ export class TikTokPostClient extends PostClient {
             message:
               "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
             publish_id: publishId,
           },
@@ -184,8 +194,8 @@ export class TikTokPostClient extends PostClient {
             message:
               "Still Proccessing, check TikTok account to confirm status",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
             publish_id: publishId,
           },
@@ -202,8 +212,8 @@ export class TikTokPostClient extends PostClient {
         details: {
           status: "Published successfully",
           addedMedia: this.#addedMedia,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
           username: creatorInfoResponse.data.data.creator_username,
           publish_id: publishId,
         },
@@ -212,23 +222,55 @@ export class TikTokPostClient extends PostClient {
     } catch (error) {
       console.error("Error in postToTikTok:", error.message);
       const errorDetails = await this.#getErrorDetails(error);
+      const tiktokErrorCode = error.response?.data?.error?.code;
+
+      const errorMessage =
+        tiktokErrorCode === "reached_active_user_cap"
+          ? "TikTok has temporarily reached its daily cap on new active users for our app (this is a limit TikTok imposes). This resets automatically within 24 hours; please try posting again later or posting as a draft."
+          : "Failed to post to TikTok";
 
       return {
         success: false,
         post_id: postId,
         provider_connection_id: account.id,
-        error_message: "Failed to post to TikTok",
+        error_message: errorMessage,
         details: {
           error: errorDetails,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
   }
 
+  #resolvePrivacyLevel({
+    platformData,
+    creatorInfoResponse,
+  }: {
+    platformData: TiktokConfiguration;
+    creatorInfoResponse: any;
+  }): string {
+    const requestedLevel =
+      this.#privacyLevelMap[platformData.privacy_status ?? "public"] ??
+      "PUBLIC_TO_EVERYONE";
+
+    const allowedLevels: string[] | undefined =
+      creatorInfoResponse?.data?.data?.privacy_level_options;
+
+    if (allowedLevels?.length && !allowedLevels.includes(requestedLevel)) {
+      // The creator's account doesn't support the requested privacy level
+      // (e.g. TikTok hides MUTUAL_FOLLOW_FRIENDS/FOLLOWER_OF_CREATOR for some
+      // accounts) - fall back to the most restrictive option TikTok will allow.
+      return allowedLevels.includes("SELF_ONLY")
+        ? "SELF_ONLY"
+        : allowedLevels[0];
+    }
+
+    return requestedLevel;
+  }
+
   async #getCreatorInfo(account: SocialAccount) {
-    this.#requests.push({
+    this.requests.push({
       creatorRequest:
         "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
     });
@@ -244,7 +286,7 @@ export class TikTokPostClient extends PostClient {
       },
     );
 
-    this.#responses.push({ creatorResponse: response.data });
+    this.responses.push({ creatorResponse: response.data });
 
     return response;
   }
@@ -275,7 +317,7 @@ export class TikTokPostClient extends PostClient {
           publicPostIdAttempts < maxPublicPostIdAttempts)) &&
       attempts < maxAttempts
     ) {
-      this.#requests.push({
+      this.requests.push({
         statusRequest: {
           url: "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
           params: {
@@ -301,7 +343,7 @@ export class TikTokPostClient extends PostClient {
         statusResponse.data,
       );
 
-      this.#responses.push({ statusResponse: parsedStatusResponse.data });
+      this.responses.push({ statusResponse: parsedStatusResponse.data });
 
       status = parsedStatusResponse.data.data.status;
       failReason = parsedStatusResponse.data.data.fail_reason;
@@ -388,7 +430,7 @@ export class TikTokPostClient extends PostClient {
     payload: any;
     account: SocialAccount;
   }): Promise<{ publishId: string; uploadUrl?: string }> {
-    this.#requests.push({
+    this.requests.push({
       publishIdRequest: {
         postUrl: postUrl,
         payload: payload,
@@ -402,7 +444,7 @@ export class TikTokPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({
+    this.responses.push({
       publishIdResponse: initResponse.data,
     });
 
@@ -497,7 +539,7 @@ export class TikTokPostClient extends PostClient {
       const end = isLastChunk ? size - 1 : start + chunkSize - 1;
       const contentRange = `bytes ${start}-${end}/${size}`;
 
-      this.#requests.push({
+      this.requests.push({
         videoUploadRequest: { chunkIndex, totalChunkCount, contentRange },
       });
 
@@ -515,7 +557,7 @@ export class TikTokPostClient extends PostClient {
         },
       );
 
-      this.#responses.push({
+      this.responses.push({
         videoUploadResponse: { chunkIndex, status: uploadResponse.status },
       });
     }
@@ -527,12 +569,14 @@ export class TikTokPostClient extends PostClient {
     coverTimestamp,
     account,
     platformData,
+    creatorInfoResponse,
   }: {
     medium: PostMedia;
     caption: string;
     platformData: TiktokConfiguration;
     coverTimestamp: number | undefined;
     account: SocialAccount;
+    creatorInfoResponse: any;
   }) {
     const { filePath, mimeType, size } = await this.downloadToTempFile(
       medium.url,
@@ -577,10 +621,10 @@ export class TikTokPostClient extends PostClient {
           payload: {
             post_info: {
               title: caption,
-              privacy_level:
-                platformData.privacy_status == "private"
-                  ? "SELF_ONLY"
-                  : "PUBLIC_TO_EVERYONE",
+              privacy_level: this.#resolvePrivacyLevel({
+                platformData,
+                creatorInfoResponse,
+              }),
               disable_duet:
                 platformData.allow_duet === undefined
                   ? false
@@ -635,12 +679,14 @@ export class TikTokPostClient extends PostClient {
     title,
     account,
     platformData,
+    creatorInfoResponse,
   }: {
     media: PostMedia[];
     caption: string;
     title: string | undefined;
     account: SocialAccount;
     platformData: TiktokConfiguration;
+    creatorInfoResponse: any;
   }) {
     const allowedMedia = media.slice(0, this.#maxItems);
 
@@ -659,10 +705,10 @@ export class TikTokPostClient extends PostClient {
         post_info: {
           title: (title ?? "").slice(0, this.#titleLength),
           description: caption,
-          privacy_level:
-            platformData.privacy_status == "private"
-              ? "SELF_ONLY"
-              : "PUBLIC_TO_EVERYONE",
+          privacy_level: this.#resolvePrivacyLevel({
+            platformData,
+            creatorInfoResponse,
+          }),
           disable_comment:
             platformData.allow_comment === undefined
               ? false
@@ -717,6 +763,10 @@ export class TikTokPostClient extends PostClient {
   async #transformImage(medium: PostMedia): Promise<string> {
     const signedUrl = await this.getSignedUrlForFile(medium);
 
+    if (shouldSkipProcessing(medium)) {
+      return signedUrl;
+    }
+
     const response = await axios({
       url: signedUrl,
       method: "GET",
@@ -759,17 +809,10 @@ export class TikTokPostClient extends PostClient {
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    if (processedImage.length > this.#maxFileSize) {
-      processedImage = await sharp(processedImage)
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      if (processedImage.length > this.#maxFileSize) {
-        processedImage = await sharp(processedImage)
-          .jpeg({ quality: 60 })
-          .toBuffer();
-      }
-    }
+    processedImage = await compressJpegToLimit(
+      processedImage,
+      this.#maxFileSize,
+    );
 
     const key =
       this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";

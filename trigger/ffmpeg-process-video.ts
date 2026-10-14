@@ -112,6 +112,7 @@ type ProcessPostVideoMedium = {
   type: string;
   tags?: UserTag[] | null;
   skip_processing?: boolean | null;
+  position: number;
 };
 
 export const ffmpegProcessVideo = task({

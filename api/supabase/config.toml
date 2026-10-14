@@ -104,7 +104,7 @@ file_size_limit = "50MiB"
 [storage.buckets.post-media]
 public = true
 file_size_limit = "150MB"
-allowed_mime_types = ["image/*", "video/*", "text/plain"]
+allowed_mime_types = ["image/*", "video/*", "text/plain", "application/pdf"]
 # objects_path = "./storage/files"
 
 [auth]

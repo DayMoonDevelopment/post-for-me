@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateSocialPostPreviewDto } from './dto/create-post-preview.dto';
 import { SocialPostPreviewDto } from './dto/post-preview.dto';
 import { PlatformConfiguration } from '../social-posts/dto/post-configurations.dto';
+import { normalizePlatform } from '../lib/platform.utils';
 
 @Injectable()
 export class SocialPostPreviewsService {
@@ -12,12 +13,13 @@ export class SocialPostPreviewsService {
   ): SocialPostPreviewDto[] {
     const previews: SocialPostPreviewDto[] =
       createPreviewInput.preview_social_accounts.map((account) => {
+        const platform = normalizePlatform(account.platform);
         const accountConfig = createPreviewInput.account_configurations
           ?.filter((config) => config.social_account_id == account.id)
           ?.flatMap((config) => config.configuration)?.[0];
 
         const platformConfig = createPreviewInput.platform_configurations?.[
-          account.platform as
+          platform as
             | 'facebook'
             | 'instagram'
             | 'x'
@@ -46,7 +48,7 @@ export class SocialPostPreviewsService {
         };
 
         return {
-          platform: account.platform,
+          platform,
           social_account_id: account.id,
           social_account_username: account.username,
           caption,

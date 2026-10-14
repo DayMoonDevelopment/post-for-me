@@ -1,6 +1,7 @@
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
 import { SupabaseClient } from "@supabase/supabase-js";
@@ -26,8 +27,6 @@ export class BlueskyPostClient extends PostClient {
   #videoStatusInitialDelayMs = 5000;
   #videoStatusRetryBackoffMultiplier = 1.5;
   #maxRetryDelayMs = 60000;
-  #requests: any[] = [];
-  #responses: any[] = [];
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -43,7 +42,7 @@ export class BlueskyPostClient extends PostClient {
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     try {
-      this.#requests.push({ refreshRequest: "Resuming Session" });
+      this.requests.push({ refreshRequest: "Resuming Session" });
       await this.#agent.resumeSession({
         accessJwt: account.access_token,
         refreshJwt: account.refresh_token!,
@@ -52,7 +51,7 @@ export class BlueskyPostClient extends PostClient {
         active: true,
       });
 
-      this.#responses.push({ refreshResponse: "Resumed Session" });
+      this.responses.push({ refreshResponse: "Resumed Session" });
       return {
         access_token: account.access_token,
         refresh_token: account.refresh_token,
@@ -65,7 +64,7 @@ export class BlueskyPostClient extends PostClient {
         password: account.social_provider_metadata.bluesky_app_password!,
       });
 
-      this.#responses.push({ refreshResponse: "New Session Created" });
+      this.responses.push({ refreshResponse: "New Session Created" });
       return {
         access_token: this.#agent.session?.accessJwt,
         refresh_token: this.#agent.session?.refreshJwt,
@@ -189,11 +188,11 @@ export class BlueskyPostClient extends PostClient {
         postPayload.embed = embed;
       }
 
-      this.#requests.push({ postRequest: postPayload });
+      this.requests.push({ postRequest: postPayload });
 
       const response = await this.#agent.post(postPayload);
 
-      this.#responses.push({ postResponse: response });
+      this.responses.push({ postResponse: response });
       return {
         post_id: postId,
         provider_connection_id: account.id,
@@ -204,8 +203,8 @@ export class BlueskyPostClient extends PostClient {
         }/post/${response.uri.split("/").pop()}`,
         details: {
           trimmed: caption.length > trimmedCaption.length,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -217,8 +216,8 @@ export class BlueskyPostClient extends PostClient {
         error_message: error.message,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -283,7 +282,7 @@ export class BlueskyPostClient extends PostClient {
       uploadUrl.searchParams.append("did", this.#agent.session!.did);
       uploadUrl.searchParams.append("name", remoteName);
 
-      this.#requests.push({ uploadVideoRequest: uploadUrl });
+      this.requests.push({ uploadVideoRequest: uploadUrl });
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
         headers: {
@@ -299,7 +298,7 @@ export class BlueskyPostClient extends PostClient {
       await this.unlinkQuiet(inputPath);
     }
 
-    this.#responses.push({ uploadVideoResponse: uploadResponseData });
+    this.responses.push({ uploadVideoResponse: uploadResponseData });
 
     const jobStatus = uploadResponseData as AppBskyVideoDefs.JobStatus;
 
@@ -324,7 +323,7 @@ export class BlueskyPostClient extends PostClient {
         `Checking Bluesky video status, attempt ${attempt}/${this.#videoStatusMaxAttempts}`,
       );
 
-      this.#requests.push({
+      this.requests.push({
         videoStatusRequest: {
           jobId: jobStatus.jobId,
           attempt,
@@ -337,7 +336,7 @@ export class BlueskyPostClient extends PostClient {
 
       lastJobStatus = status.jobStatus;
 
-      this.#responses.push({
+      this.responses.push({
         videoStatusResponse: status.jobStatus,
         attempt,
       });
@@ -451,41 +450,47 @@ export class BlueskyPostClient extends PostClient {
       const file = await this.getFile(medium);
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      let sharpBuffer = await sharp(buffer).toBuffer();
-      const metadata = await sharp(sharpBuffer).metadata();
+      const metadata = await sharp(buffer).metadata();
       const { width, height } = metadata;
-      // Resize image if needed
-      if (buffer.length > this.#maxFileSize) {
-        sharpBuffer = await sharp(sharpBuffer)
-          .rotate() // Add this to automatically rotate based on EXIF data
-          .resize(2000, 2000, {
-            fit: "inside",
-            withoutEnlargement: true,
-          })
-          .jpeg({
-            quality: 80,
-          })
-          .toBuffer();
 
-        console.log(`Resized to ${sharpBuffer.length} bytes`);
-
-        // If still too large, reduce quality further
-        if (sharpBuffer.length > this.#maxFileSize) {
+      let sharpBuffer: Buffer = buffer;
+      let encoding = file.type || "image/jpeg";
+      if (!shouldSkipProcessing(medium)) {
+        sharpBuffer = await sharp(buffer).toBuffer();
+        // Resize image if needed
+        if (buffer.length > this.#maxFileSize) {
           sharpBuffer = await sharp(sharpBuffer)
+            .rotate() // Add this to automatically rotate based on EXIF data
+            .resize(2000, 2000, {
+              fit: "inside",
+              withoutEnlargement: true,
+            })
             .jpeg({
-              quality: 60,
+              quality: 80,
             })
             .toBuffer();
-          console.log(`Further compressed to ${sharpBuffer.length} bytes`);
+          encoding = "image/jpeg";
+
+          console.log(`Resized to ${sharpBuffer.length} bytes`);
+
+          // If still too large, reduce quality further
+          if (sharpBuffer.length > this.#maxFileSize) {
+            sharpBuffer = await sharp(sharpBuffer)
+              .jpeg({
+                quality: 60,
+              })
+              .toBuffer();
+            console.log(`Further compressed to ${sharpBuffer.length} bytes`);
+          }
         }
       }
 
       const uploadResult = await this.#agent.uploadBlob(sharpBuffer, {
-        encoding: "image/jpeg",
+        encoding,
       });
 
       images.push({
-        alt: caption || "Image",
+        alt: medium.alt_text || caption || "Image",
         image: uploadResult.data.blob,
         aspectRatio: {
           width,

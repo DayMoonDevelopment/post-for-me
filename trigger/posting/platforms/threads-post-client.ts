@@ -9,6 +9,11 @@ import {
   PostResult,
   PlatformAppCredentials,
 } from "../post.types";
+import {
+  extractPlatformError,
+  wrapPlatformError,
+  wrapResponseDataError,
+} from "../platform-error";
 
 interface TokenRefreshResult {
   access_token: string;
@@ -31,8 +36,6 @@ interface ThreadsPostParams {
 export class ThreadsPostClient extends PostClient {
   #maxItems = 4;
   #containerUrl = "https://graph.threads.net/v1.0/me/threads";
-  #requests: any[] = [];
-  #responses: any[] = [];
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -44,7 +47,7 @@ export class ThreadsPostClient extends PostClient {
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<TokenRefreshResult> {
-    this.#requests.push({
+    this.requests.push({
       refreshRequest: "https://graph.threads.net/refresh_access_token",
     });
 
@@ -58,7 +61,7 @@ export class ThreadsPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     const { access_token, expires_in } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
@@ -112,12 +115,13 @@ export class ThreadsPostClient extends PostClient {
       }
 
       let platformId: string | null = null;
+      let lastPublishError: unknown;
       const maxPublishAttempts = 10;
       let publishAttempts = 0;
       while (!platformId && publishAttempts < maxPublishAttempts) {
         try {
           console.log(`Publish attempt #${publishAttempts + 1}`);
-          this.#requests.push({
+          this.requests.push({
             postRequest: {
               url: `https://graph.threads.net/v1.0/me/threads_publish`,
               params: {
@@ -139,11 +143,17 @@ export class ThreadsPostClient extends PostClient {
               },
             );
 
-          this.#responses.push({ publishResponse: publishResponse.data });
+          this.responses.push({ publishResponse: publishResponse.data });
 
           platformId = publishResponse.data.id;
         } catch (error: any) {
           if (error.response?.status === 400) {
+            lastPublishError = error;
+
+            if (this.isTerminalAuthError(error)) {
+              throw error;
+            }
+
             console.log(
               `Bad Request With Error: ${error.response?.data?.error?.message || "Unknown error"}`,
             );
@@ -159,6 +169,13 @@ export class ThreadsPostClient extends PostClient {
       }
 
       if (!platformId) {
+        if (lastPublishError) {
+          throw wrapPlatformError(
+            lastPublishError,
+            "Unable to publish media, please try again",
+          );
+        }
+
         throw new Error(
           "Unknown Error: Unable to publish media, please try again.",
         );
@@ -172,25 +189,28 @@ export class ThreadsPostClient extends PostClient {
         provider_post_id: platformId,
         provider_post_url: platformUrl,
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error: any) {
       console.error("Error posting to Threads:", error.response?.data || error);
 
+      const platformError = extractPlatformError(error);
+      const errorDetails = {
+        error: platformError.data ?? { message: platformError.message },
+        requests: this.requests,
+        responses: this.responses,
+      };
+
       // Handle specific error cases
-      if (error.response?.status === 401) {
+      if (this.isTerminalAuthError(error)) {
         return {
           success: false,
           provider_connection_id: account.id,
           post_id: postId,
-          error_message: "Account needs to be reconnected",
-          details: {
-            error,
-            requests: this.#requests,
-            responses: this.#responses,
-          },
+          error_message: this.buildAuthErrorMessage(error),
+          details: errorDetails,
         };
       }
 
@@ -198,15 +218,8 @@ export class ThreadsPostClient extends PostClient {
         success: false,
         provider_connection_id: account.id,
         post_id: postId,
-        error_message:
-          error.isAxiosError && !error.response
-            ? "Failed to post to Threads"
-            : error.message,
-        details: {
-          error: error.response?.data || error.message,
-          requests: this.#requests,
-          responses: this.#responses,
-        },
+        error_message: `Failed to post to Threads: ${platformError.message}`,
+        details: errorDetails,
       };
     }
   }
@@ -215,7 +228,7 @@ export class ThreadsPostClient extends PostClient {
     account: SocialAccount,
     caption: string,
   ): Promise<string | null> {
-    this.#requests.push({
+    this.requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
         params: {
@@ -239,7 +252,7 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-    this.#responses.push({
+    this.responses.push({
       createContainerResponse: createContainerResponse.data,
     });
 
@@ -261,7 +274,7 @@ export class ThreadsPostClient extends PostClient {
     const signedUrl = await this.getSignedUrlForFile(medium);
     const isVideo = medium.type === "video";
 
-    this.#requests.push({
+    this.requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
         params: {
@@ -272,6 +285,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
       },
@@ -288,6 +302,7 @@ export class ThreadsPostClient extends PostClient {
                 ? "VIDEO"
                 : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           text: caption,
         },
         {
@@ -297,7 +312,7 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-    this.#responses.push({
+    this.responses.push({
       createContainerResponse: createContainerResponse.data,
     });
 
@@ -328,7 +343,7 @@ export class ThreadsPostClient extends PostClient {
 
     while (attempts < maxStatusChecks) {
       try {
-        this.#requests.push({
+        this.requests.push({
           checkContainerStatusRequest: {
             url: `https://graph.threads.net/v1.0/${containerId}`,
             params: {
@@ -346,7 +361,7 @@ export class ThreadsPostClient extends PostClient {
             },
           });
 
-        this.#responses.push({
+        this.responses.push({
           checkContainerStatusResponse: statusResponse.data,
         });
 
@@ -373,6 +388,10 @@ export class ThreadsPostClient extends PostClient {
         attempts++;
       } catch (error: any) {
         if (error.response?.status === 400) {
+          if (this.isTerminalAuthError(error)) {
+            throw error;
+          }
+
           // If we get a 400 error, the media might be ready
           break;
         }
@@ -397,12 +416,13 @@ export class ThreadsPostClient extends PostClient {
       const signedUrl = await this.getSignedUrlForFile(medium);
       const isVideo = medium.type === "video";
 
-      this.#requests.push({
+      this.requests.push({
         carouselItemRequest: {
           url: this.#containerUrl,
           params: {
             media_type: isVideo ? "VIDEO" : "IMAGE",
             [isVideo ? "video_url" : "image_url"]: signedUrl,
+            alt_text: medium.alt_text,
             is_carousel_item: true,
           },
         },
@@ -414,6 +434,7 @@ export class ThreadsPostClient extends PostClient {
         {
           media_type: isVideo ? "VIDEO" : "IMAGE",
           [isVideo ? "video_url" : "image_url"]: signedUrl,
+          alt_text: medium.alt_text,
           is_carousel_item: true,
         },
         {
@@ -423,7 +444,7 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-      this.#responses.push({
+      this.responses.push({
         carouselItemResponse: itemResponse.data,
       });
 
@@ -437,7 +458,7 @@ export class ThreadsPostClient extends PostClient {
       });
     }
 
-    this.#requests.push({
+    this.requests.push({
       createCarouselRequest: {
         url: this.#containerUrl,
         params: {
@@ -463,7 +484,7 @@ export class ThreadsPostClient extends PostClient {
       },
     );
 
-    this.#responses.push({
+    this.responses.push({
       createCarouselResponse: carouselResponse.data,
     });
 
@@ -480,7 +501,7 @@ export class ThreadsPostClient extends PostClient {
 
   async #getPostUrl(account: SocialAccount, postId: string): Promise<string> {
     // After successful publish, fetch the media object to get the permalink
-    this.#requests.push({
+    this.requests.push({
       getPostUrlRequest: { url: `https://graph.threads.net/v1.0/${postId}` },
     });
 
@@ -494,11 +515,12 @@ export class ThreadsPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ getPostUrlResponse: mediaResponse.data });
+    this.responses.push({ getPostUrlResponse: mediaResponse.data });
 
     if (mediaResponse.data.error) {
-      throw new Error(
-        `Failed to fetch media details: ${mediaResponse.data.error.message}`,
+      throw wrapResponseDataError(
+        mediaResponse.data,
+        "Failed to fetch media details",
       );
     }
 

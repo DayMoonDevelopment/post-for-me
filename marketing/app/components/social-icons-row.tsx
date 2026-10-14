@@ -34,7 +34,11 @@ export function SocialIconsRow({
       {icons.map((Icon, index) => (
         <Icon
           key={index}
-          className={cn("size-4 text-foreground", iconClassName)}
+          className={
+            Icon === YouTubeBrandIcon
+              ? "h-6 w-[34.25px] shrink-0"
+              : cn("size-4 text-foreground", iconClassName)
+          }
         />
       ))}
     </div>

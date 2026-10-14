@@ -60,6 +60,8 @@ export interface PlatformPost {
   posted_at?: string;
   media: { url: string; thumbnail_url?: string }[];
   platform_data?: YouTubePostPlatformDataDto;
+  // Facebook only — the video/reel media-node id backing this feed post.
+  video_target_id?: string;
   metrics?:
     | FacebookPostMetricsDto
     | TikTokBusinessMetricsDto
