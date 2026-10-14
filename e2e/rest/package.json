@@ -1,0 +1,19 @@
+{
+  "name": "@post-for-me/e2e-rest",
+  "version": "0.0.1",
+  "description": "Raw-HTTP REST tests for every public Post for Me endpoint.",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
