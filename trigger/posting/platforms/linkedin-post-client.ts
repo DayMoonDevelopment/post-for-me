@@ -20,8 +20,6 @@ export class LinkedInPostClient extends PostClient {
   #clientSecret: string;
   #maxImages = 20;
   #apiVersion = process.env.LINKEDIN_API_VERSION || "202601";
-  #requests: any[] = [];
-  #responses: any[] = [];
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -36,7 +34,7 @@ export class LinkedInPostClient extends PostClient {
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
     const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
-    this.#requests.push({ refreshRequest: tokenUrl });
+    this.requests.push({ refreshRequest: tokenUrl });
     const response = await fetch(tokenUrl, {
       method: "POST",
       headers: {
@@ -52,7 +50,7 @@ export class LinkedInPostClient extends PostClient {
 
     const data = await response.json();
 
-    this.#responses.push({ refreshResponse: data });
+    this.responses.push({ refreshResponse: data });
 
     if (!response.ok) {
       throw new Error(
@@ -154,7 +152,7 @@ export class LinkedInPostClient extends PostClient {
         }
       }
 
-      this.#requests.push({ postRequest: postBody });
+      this.requests.push({ postRequest: postBody });
       const response = await fetch(`https://api.linkedin.com/v2/ugcPosts`, {
         method: "POST",
         headers: {
@@ -176,7 +174,7 @@ export class LinkedInPostClient extends PostClient {
       const providerPostId =
         result.id || response.headers.get("x-restli-id") || undefined;
 
-      this.#responses.push({ postResponse: result });
+      this.responses.push({ postResponse: result });
       return {
         success: true,
         provider_connection_id: account.id,
@@ -186,8 +184,8 @@ export class LinkedInPostClient extends PostClient {
           ? `https://www.linkedin.com/feed/update/${providerPostId}`
           : undefined,
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -202,8 +200,8 @@ export class LinkedInPostClient extends PostClient {
         error_message: `Failed to post to LinkedIn: ${error.message}`,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -294,7 +292,7 @@ export class LinkedInPostClient extends PostClient {
     authorUrn: string;
     account: SocialAccount;
   }): Promise<string> {
-    this.#requests.push({
+    this.requests.push({
       initializeUploadRequest: { owner: authorUrn },
     });
 
@@ -312,7 +310,7 @@ export class LinkedInPostClient extends PostClient {
     ]);
 
     const initializeData = await this.#parseJsonSafe(initializeResponse);
-    this.#responses.push({ initializeDocumentUploadResponse: initializeData });
+    this.responses.push({ initializeDocumentUploadResponse: initializeData });
 
     const uploadUrl = initializeData?.value?.uploadUrl;
     const documentUrn = initializeData?.value?.document;
@@ -360,7 +358,7 @@ export class LinkedInPostClient extends PostClient {
       );
     }
 
-    this.#responses.push({ uploadDocumentResponse: uploadResponse.status });
+    this.responses.push({ uploadDocumentResponse: uploadResponse.status });
 
     return documentUrn;
   }
@@ -412,7 +410,7 @@ export class LinkedInPostClient extends PostClient {
       isReshareDisabledByAuthor: false,
     };
 
-    this.#requests.push({ postRequest: postBody });
+    this.requests.push({ postRequest: postBody });
 
     const response = await fetch("https://api.linkedin.com/rest/posts", {
       method: "POST",
@@ -427,7 +425,7 @@ export class LinkedInPostClient extends PostClient {
     }
 
     const providerPostId = response.headers.get("x-restli-id") || undefined;
-    this.#responses.push({ postResponse: { status: response.status } });
+    this.responses.push({ postResponse: { status: response.status } });
 
     return {
       success: true,
@@ -438,8 +436,8 @@ export class LinkedInPostClient extends PostClient {
         ? `https://www.linkedin.com/feed/update/${providerPostId}`
         : undefined,
       details: {
-        requests: this.#requests,
-        responses: this.#responses,
+        requests: this.requests,
+        responses: this.responses,
       },
     };
   }
@@ -457,7 +455,7 @@ export class LinkedInPostClient extends PostClient {
   }): Promise<any> {
     const isVideo = medium.type === "video";
 
-    this.#requests.push({
+    this.requests.push({
       registerRequest: {
         registerUploadRequest: {
           recipes: [
@@ -505,7 +503,7 @@ export class LinkedInPostClient extends PostClient {
 
     const registerData = await registerResponse.json();
 
-    this.#responses.push({ registerResponse: registerData });
+    this.responses.push({ registerResponse: registerData });
 
     if (!registerResponse.ok || !registerData.value) {
       throw new Error(
@@ -545,7 +543,7 @@ export class LinkedInPostClient extends PostClient {
       );
     }
 
-    this.#responses.push({ uploadResponse: uploadResponse.status });
+    this.responses.push({ uploadResponse: uploadResponse.status });
 
     const mediaObject: any = {
       status: "READY",
@@ -589,7 +587,7 @@ export class LinkedInPostClient extends PostClient {
         mediaCategory = "IMAGE";
         for (let i = 0; i < allowedMedia.length; i++) {
           const medium = allowedMedia[i];
-          this.#requests.push({ processMedia: medium });
+          this.requests.push({ processMedia: medium });
           uploadedMedia.push(
             await this.#createMedia({
               medium,

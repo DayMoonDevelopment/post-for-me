@@ -16,6 +16,7 @@ import {
 import { Database, Json } from '../../supabase';
 import { PostValidation } from './dto/post-validation.dto';
 import { SocialPostMetersService } from '../social-post-meters/social-post-meters.service';
+import { normalizePlatform } from '../lib/platform.utils';
 
 type ProviderTypeEnum = Database['public']['Enums']['social_provider'];
 
@@ -214,24 +215,6 @@ export class SocialPostsService {
     return [];
   }
 
-  validatePostCaptionLength({
-    caption,
-    platform,
-  }: {
-    caption: string;
-    platform: string;
-  }): { isValid: boolean; error: string } {
-    const maxCaptionLength = 2200;
-
-    switch (platform) {
-      default:
-        return {
-          isValid: caption.length <= maxCaptionLength,
-          error: `caption must be less than ${maxCaptionLength} characters`,
-        };
-    }
-  }
-
   async createPost({
     post,
     projectId,
@@ -302,6 +285,7 @@ export class SocialPostsService {
       post_id: string;
       provider_connection_id?: string | undefined;
       provider?: Provider;
+      alt_text?: string | null;
       skip_processing?: boolean | null;
       index: number;
     }[] = [];
@@ -322,6 +306,7 @@ export class SocialPostsService {
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
             post_id: data.id,
+            alt_text: media.alt_text,
             tags: media.tags,
             skip_processing: media.skip_processing,
             index: media.index ?? i,
@@ -339,6 +324,7 @@ export class SocialPostsService {
               url: string;
               thumbnail_url?: string;
               thumbnail_timestamp_ms?: number;
+              alt_text?: string | null;
               tags: any[];
               skip_processing?: boolean | null;
               index?: number | null;
@@ -351,6 +337,7 @@ export class SocialPostsService {
                 url: media.url,
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+                alt_text: media.alt_text,
                 tags: media.tags,
                 skip_processing: media.skip_processing,
                 post_id: data.id,
@@ -361,6 +348,7 @@ export class SocialPostsService {
                 thumbnail_url?: string;
                 thumbnail_timestamp_ms?: number;
                 post_id: string;
+                alt_text?: string | null;
                 tags: any[];
                 skip_processing?: boolean | null;
                 provider: Provider;
@@ -395,6 +383,7 @@ export class SocialPostsService {
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
               post_id: data.id,
               provider_connection_id: accountConfig.social_account_id,
+              alt_text: media.alt_text,
               tags: media.tags,
               skip_processing: media.skip_processing,
               index: media.index ?? i,
@@ -513,6 +502,7 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
+          alt_text,
           tags,
           skip_processing,
           index
@@ -581,6 +571,7 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
+          alt_text,
           tags,
           skip_processing,
           index
@@ -616,7 +607,7 @@ export class SocialPostsService {
 
       query.in(
         'social_post_provider_connections.social_provider_connections.provider',
-        values.map((v) => v as ProviderTypeEnum),
+        values.map((v) => normalizePlatform(v) as ProviderTypeEnum),
       );
     }
 
@@ -812,6 +803,7 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
+          alt_text,
           tags,
           skip_processing,
           index
@@ -871,6 +863,7 @@ export class SocialPostsService {
 
       provider: Provider | null;
       provider_connection_id: string | null;
+      alt_text: string | null;
       tags: Json;
       skip_processing: boolean | null;
       index: number;
@@ -889,6 +882,7 @@ export class SocialPostsService {
         url: media.url,
         thumbnail_url: media.thumbnail_url,
         thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+        alt_text: media.alt_text,
         tags: media.tags as any[],
         skip_processing: media.skip_processing,
         index: media.index,
@@ -914,6 +908,7 @@ export class SocialPostsService {
                 url: media.url,
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+                alt_text: media.alt_text,
                 tags: media.tags as any[],
                 skip_processing: media.skip_processing,
                 index: media.index,
@@ -948,6 +943,7 @@ export class SocialPostsService {
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+              alt_text: media.alt_text,
               tags: media.tags as any[],
               skip_processing: media.skip_processing,
               index: media.index,

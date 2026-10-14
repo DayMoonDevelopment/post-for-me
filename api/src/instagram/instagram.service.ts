@@ -1,4 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -19,14 +20,30 @@ import type {
   InstagramInsight,
 } from './instagram.types';
 import { mapWithConcurrency } from '../lib/async.utils';
+import {
+  getFacebookApiVersion,
+  getInstagramApiVersion,
+} from '../lib/graph-api-version.util';
 
 const INSTAGRAM_METRICS_CONCURRENCY = 3;
+const GRAPH_INSTAGRAM_DOMAIN = 'https://graph.instagram.com';
 
 @Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private get facebookApiVersion(): string {
+    return getFacebookApiVersion(this.configService);
+  }
+
+  private get instagramApiVersion(): string {
+    return getInstagramApiVersion(this.configService);
+  }
 
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
@@ -37,9 +54,9 @@ export class InstagramService implements SocialPlatformService {
       accountMetaData?.connection_type === 'instagram' ||
       (account.access_token && account.access_token.startsWith('IG'))
     ) {
-      return 'https://graph.instagram.com/v23.0';
+      return `${GRAPH_INSTAGRAM_DOMAIN}/${this.instagramApiVersion}`;
     }
-    return 'https://graph.facebook.com/v23.0';
+    return `https://graph.facebook.com/${this.facebookApiVersion}`;
   }
 
   async initService(projectId: string): Promise<void> {
@@ -93,7 +110,7 @@ export class InstagramService implements SocialPlatformService {
 
       if (accountMetaData?.connection_type === 'instagram') {
         const response = await axios.get<InstagramRefreshTokenResponse>(
-          'https://graph.instagram.com/refresh_access_token',
+          `${GRAPH_INSTAGRAM_DOMAIN}/refresh_access_token`,
           {
             params: {
               grant_type: 'ig_refresh_token',
@@ -114,7 +131,7 @@ export class InstagramService implements SocialPlatformService {
         }
       } else {
         const response = await axios.get<FacebookRefreshTokenResponse>(
-          'https://graph.facebook.com/v20.0/oauth/access_token',
+          `https://graph.facebook.com/${this.facebookApiVersion}/oauth/access_token`,
           {
             params: {
               grant_type: 'fb_exchange_token',

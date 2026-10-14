@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsEnum } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { BasePaginatedQueryDto } from '../../pagination/base-paginated-query.dto';
 import { PostStatus } from './post.dto';
+import { normalizePlatform } from '../../lib/platform.utils';
 
 export enum Platform {
   BLUESKY = 'bluesky',
@@ -24,6 +26,17 @@ export class SocialPostQueryDto extends BasePaginatedQueryDto {
   })
   @IsEnum(Platform, { each: true })
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value === 'string') {
+      return normalizePlatform(value);
+    }
+    if (Array.isArray(value)) {
+      return value.map((item: unknown) =>
+        typeof item === 'string' ? normalizePlatform(item) : item,
+      );
+    }
+    return value;
+  })
   platform?: string[];
 
   @ApiProperty({

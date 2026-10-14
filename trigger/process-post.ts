@@ -45,6 +45,7 @@ const transformPostData = (data: {
     thumbnail_timestamp_ms: number | null;
     provider: string | null;
     provider_connection_id: string | null;
+    alt_text?: string | null;
     tags?: Json;
     index: number;
   }[];
@@ -61,6 +62,7 @@ const transformPostData = (data: {
       url: media.url,
       thumbnail_url: media.thumbnail_url,
       thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+      alt_text: media.alt_text,
       tags: media.tags as any[],
       index: media.index,
     }));
@@ -84,6 +86,7 @@ const transformPostData = (data: {
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+              alt_text: media.alt_text,
               tags: media.tags as any[],
               index: media.index,
             })),
@@ -105,6 +108,7 @@ const transformPostData = (data: {
             url: media.url,
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+            alt_text: media.alt_text,
             tags: media.tags as any[],
             index: media.index,
           })),
@@ -157,6 +161,7 @@ export type ProcessedMedium = {
   thumbnail_url: string;
   thumbnail_timestamp_ms?: number | null;
   type: string;
+  alt_text?: string | null;
   tags?: UserTag[] | null;
   skip_processing?: boolean | null;
   position: number;
@@ -305,6 +310,7 @@ export const processPost = task({
                 url: medium.url,
                 thumbnail_url: medium.thumbnail_url,
                 thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
+                alt_text: medium.alt_text,
                 tags: medium.tags,
                 skip_processing: medium.skip_processing,
                 position: medium.index,
@@ -631,6 +637,7 @@ export const processPost = task({
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
+          alt_text,
           tags,
           index
         ),
