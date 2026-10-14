@@ -88,6 +88,7 @@
     "vitest": "^2.1.8"
   },
   "trustedDependencies": [
-    "@sentry/cli"
+    "@sentry/cli",
+    "supabase"
   ]
 }
