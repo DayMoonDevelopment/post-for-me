@@ -1,0 +1,35 @@
+/*
+ * style-nova — the per-style avatar surface for user-avatar (circle) and
+ * platform-avatar (rounded square). Only OUR style-adaptive components use these:
+ *   cn-avatar-fill    the fallback surface (fill + text) — always a token DISTINCT from
+ *                     bg-background (never bg-card, which equals background in most themes),
+ *                     so the avatar reads as a filled object, not a bare ring
+ *   cn-avatar-ring    the border ring color (after:) — bordered vs borderless per style
+ *   cn-avatar-radius  the corner radius var (--ar), scaled per size by platform-avatar
+ *   cn-badge-inset     user-badge padding: py (notch clearance) + ps snug / pe wider (chip gutter)
+ *   cn-badge-radius    user-badge corner — pill in round styles, sharp in sera/lyra
+ *   cn-control-radius  select/input-like control corner — rounded, sharp in sera/lyra
+ * Colors are semantic tokens (adapt to the theme); sizing stays with the Avatar primitive.
+ * scripts/build-registry.ts (transformStyle) inlines these per style into shipped items;
+ * the showcase resolves them live via the `.style-nova` wrapper.
+ */
+.style-nova {
+  .cn-avatar-fill {
+    @apply bg-muted text-foreground;
+  }
+  .cn-avatar-ring {
+    @apply after:border-transparent;
+  }
+  .cn-avatar-radius {
+    @apply [--ar:var(--radius)];
+  }
+  .cn-badge-inset {
+    @apply py-1.5 ps-1.5 pe-2.5;
+  }
+  .cn-badge-radius {
+    @apply rounded-full;
+  }
+  .cn-control-radius {
+    @apply rounded-md;
+  }
+}
