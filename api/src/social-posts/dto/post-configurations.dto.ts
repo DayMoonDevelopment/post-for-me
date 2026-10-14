@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsEnum, IsOptional, ValidateNested } from 'class-validator';
 import { SocialPostMediaDto } from './post-media.dto';
 
 export enum TiktokPrivacyStatus {
@@ -57,6 +58,8 @@ export class BaseConfigurationDto {
     required: false,
     isArray: true,
   })
+  @ValidateNested({ each: true })
+  @Type(() => SocialPostMediaDto)
   media?: SocialPostMediaDto[];
 }
 
@@ -526,6 +529,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => PinterestConfigurationDto)
   pinterest?: PinterestConfigurationDto;
 
   @ApiProperty({
@@ -534,6 +539,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => InstagramConfigurationDto)
   instagram?: InstagramConfigurationDto;
 
   @ApiProperty({
@@ -542,6 +549,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => TiktokConfigurationDto)
   tiktok?: TiktokConfigurationDto;
 
   @ApiProperty({
@@ -550,6 +559,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => TwitterConfigurationDto)
   x?: TwitterConfigurationDto;
 
   @ApiProperty({
@@ -558,6 +569,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => YoutubeConfigurationDto)
   youtube?: YoutubeConfigurationDto;
 
   @ApiProperty({
@@ -566,6 +579,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => FacebookConfigurationDto)
   facebook?: FacebookConfigurationDto;
 
   @ApiProperty({
@@ -574,6 +589,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => LinkedinConfigurationDto)
   linkedin?: LinkedinConfigurationDto;
 
   @ApiProperty({
@@ -582,6 +599,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => BlueskyConfigurationDto)
   bluesky?: BlueskyConfigurationDto;
 
   @ApiProperty({
@@ -590,6 +609,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => ThreadsConfigurationDto)
   threads?: ThreadsConfigurationDto;
 
   @ApiProperty({
@@ -598,6 +619,8 @@ export class PlatformConfigurationsDto {
     required: false,
     nullable: true,
   })
+  @ValidateNested()
+  @Type(() => TiktokBusinessConfigurationDto)
   tiktok_business?: TiktokBusinessConfigurationDto;
 }
 //
@@ -617,6 +640,8 @@ export class AccountConfigurationDetailsDto {
     required: false,
     isArray: true,
   })
+  @ValidateNested({ each: true })
+  @Type(() => SocialPostMediaDto)
   media?: SocialPostMediaDto[];
 
   @ApiProperty({
@@ -932,5 +957,7 @@ export class AccountConfigurationDto {
     required: true,
     type: AccountConfigurationDetailsDto,
   })
+  @ValidateNested()
+  @Type(() => AccountConfigurationDetailsDto)
   configuration: PlatformConfiguration;
 }

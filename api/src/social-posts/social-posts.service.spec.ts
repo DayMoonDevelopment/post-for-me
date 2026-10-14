@@ -488,7 +488,20 @@ describe('SocialPostsService', () => {
             url: 'https://example.com/global.png',
             thumbnail_url: null,
             thumbnail_timestamp_ms: null,
+            alt_text: null,
+            index: 0,
             provider: null,
+            provider_connection_id: null,
+            tags: null,
+            skip_processing: null,
+          },
+          {
+            url: 'https://example.com/platform.png',
+            thumbnail_url: null,
+            thumbnail_timestamp_ms: null,
+            alt_text: null,
+            index: 0,
+            provider: 'facebook',
             provider_connection_id: null,
             tags: null,
             skip_processing: null,
@@ -497,6 +510,8 @@ describe('SocialPostsService', () => {
             url: 'https://example.com/account.png',
             thumbnail_url: null,
             thumbnail_timestamp_ms: null,
+            alt_text: null,
+            index: 0,
             provider: null,
             provider_connection_id: 'conn-1',
             tags: null,
@@ -528,6 +543,8 @@ describe('SocialPostsService', () => {
           url: 'https://example.com/global.png',
           thumbnail_url: null,
           thumbnail_timestamp_ms: null,
+          alt_text: null,
+          index: 0,
           tags: null,
           skip_processing: null,
         },
@@ -538,7 +555,7 @@ describe('SocialPostsService', () => {
       );
       expect(result?.platform_configurations?.facebook?.media).toHaveLength(1);
       expect(result?.platform_configurations?.facebook?.media?.[0].url).toBe(
-        'https://example.com/account.png',
+        'https://example.com/platform.png',
       );
 
       expect(result?.account_configurations).toHaveLength(1);
@@ -548,6 +565,12 @@ describe('SocialPostsService', () => {
       expect(result?.account_configurations?.[0].configuration.caption).toBe(
         'acct caption',
       );
+      expect(
+        result?.account_configurations?.[0].configuration.media,
+      ).toHaveLength(1);
+      expect(
+        result?.account_configurations?.[0].configuration.media?.[0].url,
+      ).toBe('https://example.com/account.png');
 
       const socialAccount = result?.social_accounts[0];
       expect(socialAccount?.access_token).toBe('');
