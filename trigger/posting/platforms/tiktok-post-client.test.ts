@@ -21,6 +21,7 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
         "PUBLISH_SUCCESS",
         "SEND_TO_USER_INBOX",
         "FAILED",
+        "UNKNOWN",
       ]) {
         test(`${isDraft ? "draft" : "direct post"} with status ${status}`, async () => {
           const client = new Client({} as SupabaseClient, {
@@ -83,7 +84,7 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
 
           const isProcessing = status.startsWith("PROCESSING");
           expect(result.success).toBe(
-            !isProcessing && status !== "FAILED" &&
+            !isProcessing && status !== "FAILED" && status !== "UNKNOWN" &&
               (isDraft || status !== "SEND_TO_USER_INBOX"),
           );
           if (isProcessing) {
@@ -93,6 +94,10 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
             expect(result.error_message).toContain("Check with TikTok");
             expect(result.details.status).toBe("Processing");
             expect(result.details.publish_id).toBe("publish-id");
+          } else if (!result.success) {
+            expect(result.error_message).toContain(status);
+            expect(result.details.status).toBe(status);
+            expect(result.details.fail_reason).toBe("invalid_media");
           }
         });
       }
