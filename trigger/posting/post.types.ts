@@ -6,7 +6,6 @@ export interface PostResult {
   provider_post_url?: string;
   provider_post_id?: string;
   details?: any;
-  is_processing?: boolean;
 }
 
 export interface UserTag {

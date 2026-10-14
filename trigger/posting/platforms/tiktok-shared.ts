@@ -1,5 +1,0 @@
-export const TIKTOK_PROCESSING_STATUSES: readonly string[] = [
-  "PROCESSING",
-  "PROCESSING_DOWNLOAD",
-  "PROCESSING_UPLOAD",
-];

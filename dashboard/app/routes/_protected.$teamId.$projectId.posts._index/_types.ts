@@ -35,11 +35,10 @@ export interface PostWithConnections extends Post {
   media: PostMedia[];
   /**
    * Per-platform result status derived from social_post_results.
-   * `"failed"` if any account on that platform failed, else `"processing"` if
-   * any account is still processing, else `"success"`. Absent when the post
-   * has no results yet.
+   * `true` = every account on that platform succeeded, `false` = at least one
+   * failed (failure is prioritized). Absent when the post has no results yet.
    */
-  provider_status?: Record<string, "success" | "failed" | "processing">;
+  provider_status?: Record<string, boolean>;
 }
 
 export interface LoaderData {
