@@ -16,6 +16,7 @@ import {
   RefreshTokenResult,
   SocialAccount,
   YoutubeConfiguration,
+  YoutubeLocalization,
 } from "../post.types";
 
 export function isRetriableYouTubeSessionInitError(
@@ -32,6 +33,87 @@ export function isRetriableYouTubeSessionInitError(
     }
   }
   return false;
+}
+
+// YouTube limits snippet.description to 5,000 bytes (UTF-8), not characters.
+export const YOUTUBE_MAX_DESCRIPTION_BYTES = 5000;
+const YOUTUBE_MAX_TITLE_CHARS = 100;
+
+/**
+ * Truncates text to at most `maxBytes` of UTF-8, cutting only on code point
+ * boundaries so multi-byte characters and surrogate pairs are never split.
+ */
+export function truncateToUtf8Bytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+
+  let bytes = 0;
+  let end = 0;
+  for (const codePoint of text) {
+    const size = Buffer.byteLength(codePoint, "utf8");
+    if (bytes + size > maxBytes) break;
+    bytes += size;
+    end += codePoint.length;
+  }
+  return text.slice(0, end);
+}
+
+export function sanitizeYouTubeDescription(description: string): {
+  value: string | null;
+  truncated: boolean;
+  originalBytes: number;
+} {
+  // Remove invalid characters (e.g., '<', '>') but keep newlines, and any
+  // leading/trailing whitespace while keeping internal whitespace
+  const sanitized = description.replace(/[<>]/g, "").trim();
+
+  // If the description is empty after sanitization, there is nothing to send
+  if (sanitized.length === 0) {
+    return { value: null, truncated: false, originalBytes: 0 };
+  }
+
+  const originalBytes = Buffer.byteLength(sanitized, "utf8");
+  const value = truncateToUtf8Bytes(sanitized, YOUTUBE_MAX_DESCRIPTION_BYTES);
+
+  return { value, truncated: value.length < sanitized.length, originalBytes };
+}
+
+export function sanitizeYouTubeLocalizations(
+  localizations: Record<string, YoutubeLocalization> | null | undefined,
+): Record<string, YoutubeLocalization> | undefined {
+  if (localizations == null) return undefined;
+
+  return Object.fromEntries(
+    Object.entries(localizations).map(([language, localization]) => {
+      // Truncate by code point so emoji and surrogate pairs are never split
+      const title = Array.from(
+        (localization?.title ?? "")
+          .replace(/[<>]/g, "")
+          .replace(/\n/g, " ")
+          .trim(),
+      )
+        .slice(0, YOUTUBE_MAX_TITLE_CHARS)
+        .join("");
+      const description = localization?.description
+        ? sanitizeYouTubeDescription(localization.description)
+        : null;
+
+      if (description?.truncated) {
+        logger.warn("YouTube localized description truncated", {
+          language,
+          originalBytes: description.originalBytes,
+          limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
+        });
+      }
+
+      return [
+        language,
+        {
+          ...(title ? { title } : {}),
+          ...(description?.value ? { description: description.value } : {}),
+        },
+      ];
+    }),
+  );
 }
 
 export class YouTubePostClient extends PostClient {
@@ -108,6 +190,7 @@ export class YouTubePostClient extends PostClient {
     platformConfig?: YoutubeConfiguration;
   }): Promise<PostResult> {
     let stagedFilePath: string | null = null;
+    let warning: string | null = null;
 
     try {
       const medium = media[0];
@@ -125,6 +208,17 @@ export class YouTubePostClient extends PostClient {
         auth: this.#oauth2Client,
       }) as youtube_v3.Youtube;
 
+      const description = sanitizeYouTubeDescription(
+        platformConfig?.description || caption,
+      );
+      if (description.truncated) {
+        warning = `Description was truncated to ${YOUTUBE_MAX_DESCRIPTION_BYTES} bytes (was ${description.originalBytes})`;
+        logger.warn("YouTube description truncated", {
+          originalBytes: description.originalBytes,
+          limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
+        });
+      }
+
       const parts = new Set(["snippet", "status"]);
       if (platformConfig?.localizations) parts.add("localizations");
       if (platformConfig?.recording_date) parts.add("recordingDetails");
@@ -136,9 +230,7 @@ export class YouTubePostClient extends PostClient {
             title: this.#sanitizeYouTubeCaption(
               platformConfig?.title || caption,
             ),
-            description: this.#sanitizeYouTubeDescription(
-              platformConfig?.description || caption,
-            ),
+            description: description.value,
             ...(platformConfig?.tags !== undefined && {
               tags: platformConfig.tags,
             }),
@@ -172,8 +264,10 @@ export class YouTubePostClient extends PostClient {
               publishAt: platformConfig.publish_at,
             }),
           },
-          ...(platformConfig?.localizations !== undefined && {
-            localizations: platformConfig.localizations,
+          ...(platformConfig?.localizations != null && {
+            localizations: sanitizeYouTubeLocalizations(
+              platformConfig.localizations,
+            ),
           }),
           ...(platformConfig?.recording_date !== undefined && {
             recordingDetails: {
@@ -264,6 +358,7 @@ export class YouTubePostClient extends PostClient {
           provider_post_url: videoUrl,
           error_message: processingResult.message,
           details: {
+            warning,
             requests: this.requests,
             responses: this.responses,
           },
@@ -278,6 +373,7 @@ export class YouTubePostClient extends PostClient {
         provider_post_url: videoUrl,
         details: {
           message: processingResult.message,
+          warning,
           requests: this.requests,
           responses: this.responses,
         },
@@ -1148,21 +1244,5 @@ export class YouTubePostClient extends PostClient {
     if (!match) return null;
     const total = Number(match[1]);
     return Number.isFinite(total) ? total : null;
-  }
-
-  #sanitizeYouTubeDescription(description: string): string | null {
-    // Remove invalid characters (e.g., '<', '>') but keep newlines
-    let sanitized = description.replace(/[<>]/g, "");
-
-    // Remove any leading/trailing whitespace but keep internal whitespace
-    sanitized = sanitized.trim();
-
-    // If the description is empty after sanitization, return null
-    if (sanitized.length === 0) {
-      return null;
-    }
-
-    // Trim to 2200 characters
-    return sanitized.slice(0, 2200);
   }
 }
