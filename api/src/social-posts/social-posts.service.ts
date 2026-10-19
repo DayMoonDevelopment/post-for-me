@@ -406,7 +406,7 @@ export class SocialPostsService {
         .insert(postMedia);
 
     if (insertPostMediaError) {
-      throw new Error(insertPostMediaError.message);
+      console.error(insertPostMediaError);
     }
 
     const { error: insertPostConfigurationsError } =
