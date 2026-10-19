@@ -96,7 +96,7 @@ describe('SocialPostsService', () => {
     return new ValidationPipe({ transform: true }).transform(payload, {
       type: 'body',
       metatype: CreateSocialPostDto,
-    });
+    }) as Promise<CreateSocialPostDto>;
   }
 
   describe('validateMediaUrl (pure, exercised via bracket access)', () => {
@@ -431,7 +431,7 @@ describe('SocialPostsService', () => {
             : [],
         );
         expect(mediaQuery.insert).toHaveBeenCalledWith(
-          facebook?.media?.map((media, i) =>
+          facebook?.media?.map((media, i): unknown =>
             expect.objectContaining({
               url: media.url,
               provider: 'facebook',
