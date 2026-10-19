@@ -111,9 +111,6 @@ export class SocialPostsService {
       for (const [provider, config] of Object.entries(
         post.platform_configurations,
       )) {
-        if (!config) {
-          continue;
-        }
         const platformConfig = config as PlatformConfiguration;
         if (platformConfig.media) {
           for (const media of platformConfig.media) {
@@ -334,9 +331,6 @@ export class SocialPostsService {
             }[];
           },
         ]) => {
-          if (!config) {
-            return;
-          }
           if (config.media) {
             postMedia.push(
               ...(config.media.map((media, i) => ({
