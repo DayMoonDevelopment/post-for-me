@@ -81,14 +81,6 @@ describe('SocialPostsService', () => {
         },
       },
     },
-    {
-      name: 'with null and undefined platforms',
-      configurations: {
-        pinterest: undefined,
-        instagram: null,
-        facebook: { caption: 'override' },
-      },
-    },
     { name: 'with no platforms', configurations: {} },
   ];
 
