@@ -26,7 +26,6 @@ export class CreateSocialPostDto {
     required: false,
     type: PlatformConfigurationsDto,
   })
-  @Type(() => PlatformConfigurationsDto)
   platform_configurations?: PlatformConfigurationsDto | null;
 
   @ApiProperty({
