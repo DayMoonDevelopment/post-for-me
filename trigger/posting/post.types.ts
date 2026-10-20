@@ -133,6 +133,7 @@ export interface InstagramConfiguration {
   location?: string;
   trial_reel_type?: string;
   audio_name?: string;
+  is_ai_generated?: boolean;
 }
 
 export interface TiktokConfiguration {
