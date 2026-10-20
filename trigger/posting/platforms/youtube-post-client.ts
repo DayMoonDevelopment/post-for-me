@@ -222,6 +222,9 @@ export class YouTubePostClient extends PostClient {
       const parts = new Set(["snippet", "status"]);
       if (platformConfig?.localizations) parts.add("localizations");
       if (platformConfig?.recording_date) parts.add("recordingDetails");
+      if (platformConfig?.has_paid_product_placement !== undefined) {
+        parts.add("paidProductPlacementDetails");
+      }
 
       const videoRequest = {
         part: [...parts],
@@ -272,6 +275,12 @@ export class YouTubePostClient extends PostClient {
           ...(platformConfig?.recording_date !== undefined && {
             recordingDetails: {
               recordingDate: platformConfig.recording_date,
+            },
+          }),
+          ...(platformConfig?.has_paid_product_placement !== undefined && {
+            paidProductPlacementDetails: {
+              hasPaidProductPlacement:
+                platformConfig.has_paid_product_placement,
             },
           }),
         },
