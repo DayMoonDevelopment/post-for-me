@@ -499,6 +499,15 @@ export class FacebookConfigurationDto extends BaseConfigurationDto {
 export class LinkedinConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
     description:
+      'Title displayed in the LinkedIn PDF document viewer, limited to 200 characters. If omitted or blank, uses the trimmed caption (up to 200 characters), or "Document" when the caption is blank. Only applies to document posts.',
+    nullable: true,
+    required: false,
+    maxLength: 200,
+  })
+  title?: string;
+
+  @ApiProperty({
+    description:
       'LinkedIn UGC post id to reshare. The caption is used as the reshare commentary.',
     nullable: true,
     required: false,
