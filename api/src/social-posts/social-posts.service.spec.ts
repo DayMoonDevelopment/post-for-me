@@ -1,3 +1,4 @@
+import { ValidationPipe } from '@nestjs/common';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { describe, expect, it, vi, type Mock } from 'vitest';
 
@@ -8,7 +9,7 @@ import {
   type MockQueryResult,
   type SupabaseQueryMock,
 } from '../test-utils/supabase-query-mock';
-import type { CreateSocialPostDto } from './dto/create-post.dto';
+import { CreateSocialPostDto } from './dto/create-post.dto';
 import { SocialPostsService } from './social-posts.service';
 
 vi.mock('@trigger.dev/sdk/v3', () => ({
@@ -62,6 +63,33 @@ describe('SocialPostsService', () => {
     external_id: null,
     isDraft: null,
   };
+
+  const platformConfigurationCases = [
+    {
+      name: 'without media',
+      configurations: { facebook: { caption: 'override' } },
+    },
+    {
+      name: 'with media indices',
+      configurations: {
+        facebook: {
+          media: [
+            { url: 'https://example.com/first.png', index: 2 },
+            { url: 'https://example.com/second.png', index: 0 },
+            { url: 'https://example.com/third.png' },
+          ],
+        },
+      },
+    },
+    { name: 'with no platforms', configurations: {} },
+  ];
+
+  async function transformPost(payload: unknown): Promise<CreateSocialPostDto> {
+    return new ValidationPipe({ transform: true }).transform(payload, {
+      type: 'body',
+      metatype: CreateSocialPostDto,
+    }) as Promise<CreateSocialPostDto>;
+  }
 
   describe('validateMediaUrl (pure, exercised via bracket access)', () => {
     // validateMediaUrl is a private instance method with no `this` usage,
@@ -131,6 +159,25 @@ describe('SocialPostsService', () => {
   });
 
   describe('validatePost', () => {
+    it.each(platformConfigurationCases)(
+      'validates transformed platform configurations $name',
+      async ({ configurations }) => {
+        const { service, client } = buildService();
+        queueFromResults(client, [
+          { data: [{ id: 'conn-1', provider: 'facebook' }], error: null },
+        ]);
+        const post = await transformPost({
+          ...basePost,
+          platform_configurations: configurations,
+        });
+
+        expect(post.platform_configurations).toEqual(configurations);
+        await expect(
+          service.validatePost({ post, projectId: 'project-1' }),
+        ).resolves.toEqual({ isValid: true, errors: [] });
+      },
+    );
+
     it('returns invalid when no post body is provided', async () => {
       const { service } = buildService();
 
@@ -335,6 +382,57 @@ describe('SocialPostsService', () => {
       social_post_media: [],
       social_post_configurations: [],
     };
+
+    it.each(platformConfigurationCases)(
+      'creates a post with transformed platform configurations $name',
+      async ({ configurations }) => {
+        const { service, client } = buildService();
+        const [, , mediaQuery, configurationsQuery] = queueFromResults(client, [
+          { data: { ...insertedPost, status: 'draft' }, error: null },
+          insertedAccounts,
+          { error: null },
+          { error: null },
+          { data: finalPostRow, error: null },
+        ]);
+        const post = await transformPost({
+          ...basePost,
+          isDraft: true,
+          platform_configurations: configurations,
+        });
+
+        await expect(
+          service.createPost({
+            post,
+            projectId: 'project-1',
+            apiKey: 'key-1',
+            teamId: 'team-1',
+            isSystem: false,
+          }),
+        ).resolves.toMatchObject({ id: 'post-1' });
+
+        const facebook = post.platform_configurations?.facebook;
+        expect(configurationsQuery.insert).toHaveBeenCalledWith(
+          facebook
+            ? [
+                expect.objectContaining({
+                  post_id: 'post-1',
+                  provider: 'facebook',
+                  provider_data: facebook,
+                }),
+              ]
+            : [],
+        );
+        expect(mediaQuery.insert).toHaveBeenCalledWith(
+          facebook?.media?.map((media, i): unknown =>
+            expect.objectContaining({
+              url: media.url,
+              provider: 'facebook',
+              index: media.index ?? i,
+            }),
+          ) ?? [],
+        );
+      },
+    );
 
     it('creates a draft post when isDraft is true, without triggering or incrementing meters', async () => {
       const { service, client, incrementSocialPostMeter } = buildService();
