@@ -1,6 +1,5 @@
 import { Outlet } from "react-router";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { PaperPlaneIcon } from "~/components/icons";
 
 import { useForm as useFormFetcher } from "~/hooks/use-form";
@@ -11,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "~/ui/form";
 import { Textarea } from "~/ui/textarea";
 import { Button } from "~/ui/button";
 
-import { formSchema } from "./schema";
+import { formResolver } from "./schema";
 import { Media } from "./_media";
 import { Tabs } from "./_tabs";
 
@@ -25,7 +24,7 @@ export function Component() {
   const { isSubmitting, fetcher } = useFormFetcher();
 
   const form = useForm<FormSchema>({
-    resolver: zodResolver(formSchema),
+    resolver: formResolver,
     defaultValues: {
       caption: "",
       media: [],
