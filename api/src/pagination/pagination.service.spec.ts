@@ -7,15 +7,26 @@ import { SocialAccountFeedsService } from '../social-account-feeds/social-accoun
 import { PaginationService } from './pagination.service';
 
 describe('public pagination URLs', () => {
-  it.each([true, false])(
-    'preserves public origin, path and query (proxied=%s)',
-    async (proxied) => {
+  it.each([
+    { baseUrl: undefined, origin: 'https://api.postforme.dev' },
+    { baseUrl: 'http://localhost:3000', origin: 'http://localhost:3000' },
+    {
+      baseUrl: 'https://staging.postforme.dev/',
+      origin: 'https://staging.postforme.dev',
+    },
+  ])(
+    'uses configured origin and preserves path and query (baseUrl=$baseUrl)',
+    async ({ baseUrl, origin }) => {
+      const configService = {
+        get: vi.fn((key: string) =>
+          key === 'API_BASE_URL' ? baseUrl : undefined,
+        ),
+      } as unknown as ConfigService;
       const app = express();
-      app.set('trust proxy', 1);
       app.get('/v1/items', (req, res) => {
-        const pagination = new PaginationService(req);
+        const pagination = new PaginationService(req, configService);
         const feeds = new SocialAccountFeedsService(
-          { get: vi.fn() } as unknown as ConfigService,
+          configService,
           {} as SupabaseService,
           req,
           {} as never,
@@ -49,28 +60,27 @@ describe('public pagination URLs', () => {
         });
       });
 
-      const request = supertest(app)
-        .get('/v1/items')
-        .set('Host', 'localhost:3000');
-      if (proxied) {
-        request
-          .set('X-Forwarded-Proto', 'https')
-          .set('X-Forwarded-Host', 'api.postforme.dev');
+      for (const forwarded of [false, true]) {
+        const request = supertest(app)
+          .get('/v1/items')
+          .set('Host', 'untrusted.example');
+        if (forwarded) {
+          request
+            .set('X-Forwarded-Proto', 'http')
+            .set('X-Forwarded-Host', 'forwarded.example');
+        }
+        const response = await request.expect(200);
+        const body = response.body as Record<string, string | null>;
+        expect(body.offsetNext).toBe(
+          `${origin}/v1/items?platform=linkedin&limit=20&offset=20`,
+        );
+        expect(body.feedNext).toBe(
+          `${origin}/v1/items?cursor=20&limit=100&expand=metrics`,
+        );
+        expect(body.zeroCursor).toBe(`${origin}/v1/items?cursor=0&limit=20`);
+        expect(body.offsetLast).toBeNull();
+        expect(body.feedLast).toBeNull();
       }
-      const response = await request.expect(200);
-      const body = response.body as Record<string, string | null>;
-      const origin = proxied
-        ? 'https://api.postforme.dev'
-        : 'http://localhost:3000';
-      expect(body.offsetNext).toBe(
-        `${origin}/v1/items?platform=linkedin&limit=20&offset=20`,
-      );
-      expect(body.feedNext).toBe(
-        `${origin}/v1/items?cursor=20&limit=100&expand=metrics`,
-      );
-      expect(body.zeroCursor).toBe(`${origin}/v1/items?cursor=0&limit=20`);
-      expect(body.offsetLast).toBeNull();
-      expect(body.feedLast).toBeNull();
     },
   );
 });

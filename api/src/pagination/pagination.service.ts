@@ -1,5 +1,6 @@
 import { Injectable, Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import {
   PaginationMeta,
@@ -10,7 +11,10 @@ import { BasePaginatedQueryDto } from './base-paginated-query.dto';
 
 @Injectable({ scope: Scope.REQUEST })
 export class PaginationService {
-  constructor(@Inject(REQUEST) private request: Request) {}
+  constructor(
+    @Inject(REQUEST) private request: Request,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * Generates the 'next' URL for pagination based on current request and metadata.
@@ -30,7 +34,9 @@ export class PaginationService {
 
     const nextOffset = meta.offset + meta.limit;
     const url = new URL(
-      `${this.request.protocol}://${this.request.host}${this.request.path}`,
+      this.request.path,
+      this.configService.get<string>('API_BASE_URL') ??
+        'https://api.postforme.dev/',
     );
 
     for (const key in currentQuery) {

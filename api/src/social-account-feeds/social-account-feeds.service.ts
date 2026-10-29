@@ -97,7 +97,9 @@ export class SocialAccountFeedsService {
     }
 
     const url = new URL(
-      `${this.request.protocol}://${this.request.host}${this.request.path}`,
+      this.request.path,
+      this.configService.get<string>('API_BASE_URL') ??
+        'https://api.postforme.dev/',
     );
 
     if (cursor) {
