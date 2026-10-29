@@ -4,6 +4,7 @@ import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import ffmpeg from "fluent-ffmpeg";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -17,19 +18,116 @@ import {
   RefreshTokenResult,
   SocialAccount,
   YoutubeConfiguration,
+  YoutubeLocalization,
 } from "../post.types";
+
+export function isRetriableYouTubeSessionInitError(
+  status: number,
+  bodyText: string,
+): boolean {
+  if (status === 429 || (status >= 500 && status <= 599)) return true;
+  if (status === 409) {
+    try {
+      const parsed = JSON.parse(bodyText);
+      return parsed?.error?.errors?.[0]?.reason === "alreadyExists";
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+// YouTube limits snippet.description to 5,000 bytes (UTF-8), not characters.
+export const YOUTUBE_MAX_DESCRIPTION_BYTES = 5000;
+const YOUTUBE_MAX_TITLE_CHARS = 100;
+
+/**
+ * Truncates text to at most `maxBytes` of UTF-8, cutting only on code point
+ * boundaries so multi-byte characters and surrogate pairs are never split.
+ */
+export function truncateToUtf8Bytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+
+  let bytes = 0;
+  let end = 0;
+  for (const codePoint of text) {
+    const size = Buffer.byteLength(codePoint, "utf8");
+    if (bytes + size > maxBytes) break;
+    bytes += size;
+    end += codePoint.length;
+  }
+  return text.slice(0, end);
+}
+
+export function sanitizeYouTubeDescription(description: string): {
+  value: string | null;
+  truncated: boolean;
+  originalBytes: number;
+} {
+  // Remove invalid characters (e.g., '<', '>') but keep newlines, and any
+  // leading/trailing whitespace while keeping internal whitespace
+  const sanitized = description.replace(/[<>]/g, "").trim();
+
+  // If the description is empty after sanitization, there is nothing to send
+  if (sanitized.length === 0) {
+    return { value: null, truncated: false, originalBytes: 0 };
+  }
+
+  const originalBytes = Buffer.byteLength(sanitized, "utf8");
+  const value = truncateToUtf8Bytes(sanitized, YOUTUBE_MAX_DESCRIPTION_BYTES);
+
+  return { value, truncated: value.length < sanitized.length, originalBytes };
+}
+
+export function sanitizeYouTubeLocalizations(
+  localizations: Record<string, YoutubeLocalization> | null | undefined,
+): Record<string, YoutubeLocalization> | undefined {
+  if (localizations == null) return undefined;
+
+  return Object.fromEntries(
+    Object.entries(localizations).map(([language, localization]) => {
+      // Truncate by code point so emoji and surrogate pairs are never split
+      const title = Array.from(
+        (localization?.title ?? "")
+          .replace(/[<>]/g, "")
+          .replace(/\n/g, " ")
+          .trim(),
+      )
+        .slice(0, YOUTUBE_MAX_TITLE_CHARS)
+        .join("");
+      const description = localization?.description
+        ? sanitizeYouTubeDescription(localization.description)
+        : null;
+
+      if (description?.truncated) {
+        logger.warn("YouTube localized description truncated", {
+          language,
+          originalBytes: description.originalBytes,
+          limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
+        });
+      }
+
+      return [
+        language,
+        {
+          ...(title ? { title } : {}),
+          ...(description?.value ? { description: description.value } : {}),
+        },
+      ];
+    }),
+  );
+}
 
 export class YouTubePostClient extends PostClient {
   #oauth2Client: any;
   #googleClientId: string;
   #googleClientSecret: string;
-  #requests: any[] = [];
-  #responses: any[] = [];
 
   // Must be a multiple of 256KB per YouTube resumable upload guidance.
   static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
   static readonly MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
   static readonly MAX_RESUMABLE_UPLOAD_ATTEMPTS = 5;
+  static readonly MAX_SESSION_INIT_ATTEMPTS = 3;
   static readonly MAX_PROCESSING_POLL_ATTEMPTS = 20;
   static readonly MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS = 1_000;
   static readonly PROCESSING_POLL_INITIAL_DELAY_MS = 5_000;
@@ -48,7 +146,7 @@ export class YouTubePostClient extends PostClient {
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<RefreshTokenResult> {
-    this.#requests.push({ refreshRequest: "refreshing access token" });
+    this.requests.push({ refreshRequest: "refreshing access token" });
     this.#oauth2Client = new google.auth.OAuth2(
       this.#googleClientId,
       this.#googleClientSecret,
@@ -58,12 +156,12 @@ export class YouTubePostClient extends PostClient {
     this.#oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
-      expiry_date: new Date(account.refresh_token_expires_at!).getTime(),
+      expiry_date: new Date(account.access_token_expires_at!).getTime(),
     });
 
     const { credentials } = await this.#oauth2Client.refreshAccessToken();
 
-    this.#responses.push({
+    this.responses.push({
       refreshResponse: {
         scope: credentials.scope,
         token_type: credentials.token_type,
@@ -94,6 +192,7 @@ export class YouTubePostClient extends PostClient {
     platformConfig?: YoutubeConfiguration;
   }): Promise<PostResult> {
     let stagedFilePath: string | null = null;
+    let warning: string | null = null;
 
     try {
       const medium = media[0];
@@ -111,9 +210,23 @@ export class YouTubePostClient extends PostClient {
         auth: this.#oauth2Client,
       }) as youtube_v3.Youtube;
 
+      const description = sanitizeYouTubeDescription(
+        platformConfig?.description || caption,
+      );
+      if (description.truncated) {
+        warning = `Description was truncated to ${YOUTUBE_MAX_DESCRIPTION_BYTES} bytes (was ${description.originalBytes})`;
+        logger.warn("YouTube description truncated", {
+          originalBytes: description.originalBytes,
+          limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
+        });
+      }
+
       const parts = new Set(["snippet", "status"]);
       if (platformConfig?.localizations) parts.add("localizations");
       if (platformConfig?.recording_date) parts.add("recordingDetails");
+      if (platformConfig?.has_paid_product_placement !== undefined) {
+        parts.add("paidProductPlacementDetails");
+      }
 
       const videoRequest = {
         part: [...parts],
@@ -122,9 +235,7 @@ export class YouTubePostClient extends PostClient {
             title: this.#sanitizeYouTubeCaption(
               platformConfig?.title || caption,
             ),
-            description: this.#sanitizeYouTubeDescription(
-              platformConfig?.description || caption,
-            ),
+            description: description.value,
             ...(platformConfig?.tags !== undefined && {
               tags: platformConfig.tags,
             }),
@@ -158,18 +269,26 @@ export class YouTubePostClient extends PostClient {
               publishAt: platformConfig.publish_at,
             }),
           },
-          ...(platformConfig?.localizations !== undefined && {
-            localizations: platformConfig.localizations,
+          ...(platformConfig?.localizations != null && {
+            localizations: sanitizeYouTubeLocalizations(
+              platformConfig.localizations,
+            ),
           }),
           ...(platformConfig?.recording_date !== undefined && {
             recordingDetails: {
               recordingDate: platformConfig.recording_date,
             },
           }),
+          ...(platformConfig?.has_paid_product_placement !== undefined && {
+            paidProductPlacementDetails: {
+              hasPaidProductPlacement:
+                platformConfig.has_paid_product_placement,
+            },
+          }),
         },
       };
 
-      this.#requests.push({
+      this.requests.push({
         postRequest: {
           ...videoRequest,
           media: medium,
@@ -203,19 +322,36 @@ export class YouTubePostClient extends PostClient {
         chunkSizeBytes: YouTubePostClient.DEFAULT_CHUNK_SIZE_BYTES,
       });
 
-      this.#responses.push({ postResponse: uploadedVideo });
+      this.responses.push({ postResponse: uploadedVideo });
 
       const videoId = uploadedVideo.id!;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       console.log("Video uploaded. ID:", videoId, "URL:", videoUrl);
 
-      // Upload custom thumbnail if provided
+      // Upload custom thumbnail if provided: explicit image URL takes precedence
+      // over a timestamp, since a URL is an unambiguous, already-rendered image
+      // while a timestamp requires local extraction from the video we just staged.
       if (medium.thumbnail_url) {
         try {
-          await this.#uploadThumbnail(youtube, videoId, medium);
+          await this.#uploadThumbnailFromUrl(youtube, videoId, medium);
         } catch (thumbnailError) {
           console.error("Failed to upload thumbnail:", thumbnailError);
           // Don't fail the entire post if thumbnail upload fails
+        }
+      } else if (medium.thumbnail_timestamp_ms != null && stagedFilePath) {
+        try {
+          await this.#uploadThumbnailFromTimestamp(
+            youtube,
+            videoId,
+            medium,
+            stagedFilePath,
+          );
+        } catch (thumbnailError) {
+          console.error(
+            "Failed to upload thumbnail from timestamp:",
+            thumbnailError,
+          );
+          // Don't fail the entire post if thumbnail extraction/upload fails
         }
       }
 
@@ -233,8 +369,9 @@ export class YouTubePostClient extends PostClient {
           provider_post_url: videoUrl,
           error_message: processingResult.message,
           details: {
-            requests: this.#requests,
-            responses: this.#responses,
+            warning,
+            requests: this.requests,
+            responses: this.responses,
           },
         };
       }
@@ -247,8 +384,9 @@ export class YouTubePostClient extends PostClient {
         provider_post_url: videoUrl,
         details: {
           message: processingResult.message,
-          requests: this.#requests,
-          responses: this.#responses,
+          warning,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error: any) {
@@ -264,8 +402,8 @@ export class YouTubePostClient extends PostClient {
         error_message: `Failed to post to Youtube: ${error.message}`,
         details: {
           error: error?.response?.data || error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } finally {
@@ -287,7 +425,7 @@ export class YouTubePostClient extends PostClient {
       const pollRequest = {
         processingStatusPollRequest: { videoId, attempt },
       };
-      this.#requests.push(pollRequest);
+      this.requests.push(pollRequest);
       console.log(
         `Polling YouTube processing status for video ${videoId} (attempt ${attempt}/${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS})`,
       );
@@ -301,7 +439,7 @@ export class YouTubePostClient extends PostClient {
       const processingDetails = video?.processingDetails;
       const processingStatus = processingDetails?.processingStatus;
 
-      this.#responses.push({
+      this.responses.push({
         processingStatusPollResponse: {
           attempt,
           videoId,
@@ -340,7 +478,7 @@ export class YouTubePostClient extends PostClient {
         console.log(
           `Video ${videoId} still processing (status: ${processingStatus}); waiting ${waitMs}ms before next poll`,
         );
-        this.#responses.push({
+        this.responses.push({
           processingStatusPollWait: { attempt, processingStatus, waitMs },
         });
         await this.#sleep(waitMs);
@@ -379,39 +517,81 @@ export class YouTubePostClient extends PostClient {
       part: videoRequest.part,
     });
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Length": String(fileSize),
-        "X-Upload-Content-Type": mimeType,
-      },
-      body: JSON.stringify(videoRequest.requestBody ?? {}),
-    });
+    for (
+      let attempt = 1;
+      attempt <= YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS;
+      attempt += 1
+    ) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Length": String(fileSize),
+          "X-Upload-Content-Type": mimeType,
+        },
+        body: JSON.stringify(videoRequest.requestBody ?? {}),
+      });
 
-    const location = res.headers.get("location") || res.headers.get("Location");
-    if (!res.ok || !location) {
+      const location =
+        res.headers.get("location") || res.headers.get("Location");
+      if (res.ok && location) {
+        this.responses.push({
+          resumableSession: {
+            status: res.status,
+            location,
+          },
+        });
+
+        logger.info("Started YouTube resumable upload session", {
+          status: res.status,
+          fileSize,
+          mimeType,
+        });
+
+        return location;
+      }
+
       const bodyText = await this.#safeReadText(res);
+      const retriable = isRetriableYouTubeSessionInitError(
+        res.status,
+        bodyText,
+      );
+
+      if (
+        retriable &&
+        attempt < YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS
+      ) {
+        const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
+        this.responses.push({
+          sessionInitRetry: {
+            attempt,
+            maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
+            status: res.status,
+            waitMs,
+          },
+        });
+        logger.warn("Retrying YouTube resumable upload session init", {
+          attempt,
+          maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
+          status: res.status,
+          statusText: res.statusText,
+          waitMs,
+        });
+        await this.#sleep(waitMs);
+        continue;
+      }
+
       throw new Error(
         `Failed to start YouTube resumable upload session: ${res.status} ${res.statusText}. ${bodyText}`,
       );
     }
 
-    this.#responses.push({
-      resumableSession: {
-        status: res.status,
-        location,
-      },
-    });
-
-    logger.info("Started YouTube resumable upload session", {
-      status: res.status,
-      fileSize,
-      mimeType,
-    });
-
-    return location;
+    // Unreachable: every loop iteration above returns or throws. Present only
+    // because TS can't prove that and requires a return on this code path.
+    throw new Error(
+      "Failed to start YouTube resumable upload session: exhausted retry attempts",
+    );
   }
 
   async #downloadRemoteFileToTemp({
@@ -484,7 +664,7 @@ export class YouTubePostClient extends PostClient {
           tempPath,
         });
 
-        this.#responses.push({
+        this.responses.push({
           mediaStagedForYoutube: {
             attempt,
             size: stat.size,
@@ -505,7 +685,7 @@ export class YouTubePostClient extends PostClient {
           YouTubePostClient.MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS *
             2 ** (attempt - 1),
         );
-        this.#responses.push({
+        this.responses.push({
           mediaStageRetry: {
             attempt,
             maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
@@ -631,7 +811,7 @@ export class YouTubePostClient extends PostClient {
 
               nextStart = lastByte + 1;
 
-              this.#responses.push({
+              this.responses.push({
                 resumableChunk: {
                   status: res.status,
                   contentRange,
@@ -663,7 +843,7 @@ export class YouTubePostClient extends PostClient {
                 );
               }
 
-              this.#responses.push({
+              this.responses.push({
                 resumableComplete: {
                   status: res.status,
                   contentRange,
@@ -712,7 +892,7 @@ export class YouTubePostClient extends PostClient {
           }
 
           const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
-          this.#responses.push({
+          this.responses.push({
             resumableChunkRetry: {
               attempt,
               maxAttempts: YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS,
@@ -814,7 +994,7 @@ export class YouTubePostClient extends PostClient {
         const res = await fetch(url, init);
         if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
           // Retry throttling/transient server errors.
-          this.#responses.push({
+          this.responses.push({
             resumableRetry: {
               attempt,
               status: res.status,
@@ -828,7 +1008,7 @@ export class YouTubePostClient extends PostClient {
         return res;
       } catch (err) {
         lastErr = err;
-        this.#responses.push({
+        this.responses.push({
           resumableRetry: {
             attempt,
             error: String(err),
@@ -878,7 +1058,7 @@ export class YouTubePostClient extends PostClient {
     return sanitized.slice(0, 100);
   }
 
-  async #uploadThumbnail(
+  async #uploadThumbnailFromUrl(
     youtube: youtube_v3.Youtube,
     videoId: string,
     medium: PostMedia,
@@ -887,24 +1067,57 @@ export class YouTubePostClient extends PostClient {
       return;
     }
 
+    const res = await fetch(medium.thumbnail_url);
+    if (!res.ok) {
+      const bodyText = await this.#safeReadText(res);
+      throw new Error(
+        `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
+      );
+    }
+
+    const imageBuffer = Buffer.from(await res.arrayBuffer());
+
+    const rawContentType = res.headers.get("content-type") ?? "image/jpeg";
+    const mimeType = rawContentType.split(";")[0].trim() || "image/jpeg";
+
+    await this.#setThumbnail(youtube, videoId, imageBuffer, mimeType, {
+      thumbnailUrl: medium.thumbnail_url,
+    });
+  }
+
+  async #uploadThumbnailFromTimestamp(
+    youtube: youtube_v3.Youtube,
+    videoId: string,
+    medium: PostMedia,
+    stagedFilePath: string,
+  ): Promise<void> {
+    if (medium.thumbnail_timestamp_ms == null) {
+      return;
+    }
+
+    const { buffer, mimeType } = await this.#extractFrameAtTimestamp({
+      videoFilePath: stagedFilePath,
+      timestampMs: medium.thumbnail_timestamp_ms,
+      mediaId: medium.id,
+    });
+
+    await this.#setThumbnail(youtube, videoId, buffer, mimeType, {
+      thumbnailTimestampMs: medium.thumbnail_timestamp_ms,
+    });
+  }
+
+  async #setThumbnail(
+    youtube: youtube_v3.Youtube,
+    videoId: string,
+    imageBuffer: Buffer,
+    mimeType: string,
+    source: { thumbnailUrl?: string; thumbnailTimestampMs?: number },
+  ): Promise<void> {
     try {
-      const res = await fetch(medium.thumbnail_url);
-      if (!res.ok) {
-        const bodyText = await this.#safeReadText(res);
-        throw new Error(
-          `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
-        );
-      }
-
-      const imageBuffer = Buffer.from(await res.arrayBuffer());
-
-      const rawContentType = res.headers.get("content-type") ?? "image/jpeg";
-      const mimeType = rawContentType.split(";")[0].trim() || "image/jpeg";
-
-      this.#requests.push({
+      this.requests.push({
         thumbnailUploadRequest: {
           videoId,
-          thumbnail: medium.thumbnail_url,
+          ...source,
           mimeType,
           sizeBytes: imageBuffer.length,
         },
@@ -918,18 +1131,67 @@ export class YouTubePostClient extends PostClient {
         },
       });
 
-      this.#responses.push({ thumbnailResponse: thumbnailResponse.data });
+      this.responses.push({ thumbnailResponse: thumbnailResponse.data });
       console.log("Thumbnail uploaded successfully for video:", videoId);
     } catch (error) {
       console.error("Error uploading thumbnail:", error);
-      this.#responses.push({
+      this.responses.push({
         thumbnailError: {
           videoId,
-          thumbnail: medium.thumbnail_url,
+          ...source,
           error: error instanceof Error ? error.message : String(error),
         },
       });
       throw error;
+    }
+  }
+
+  async #extractFrameAtTimestamp({
+    videoFilePath,
+    timestampMs,
+    mediaId,
+  }: {
+    videoFilePath: string;
+    timestampMs: number;
+    mediaId: string;
+  }): Promise<{ buffer: Buffer; mimeType: string }> {
+    const safeMediaId = mediaId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const outputPath = path.join(
+      os.tmpdir(),
+      `youtube_thumb_${safeMediaId}_${Date.now()}.jpg`,
+    );
+
+    try {
+      logger.info("Extracting YouTube thumbnail frame", {
+        mediaId,
+        timestampMs,
+        videoFilePath,
+        outputPath,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(videoFilePath)
+          .on("end", () => resolve())
+          .on("error", (err) => reject(err))
+          .screenshots({
+            timestamps: [timestampMs / 1000],
+            filename: path.basename(outputPath),
+            folder: path.dirname(outputPath),
+          });
+      });
+
+      const buffer = await fs.readFile(outputPath);
+
+      logger.info("Extracted YouTube thumbnail frame", {
+        mediaId,
+        timestampMs,
+        outputPath,
+        sizeBytes: buffer.length,
+      });
+
+      return { buffer, mimeType: "image/jpeg" };
+    } finally {
+      await fs.unlink(outputPath).catch(() => undefined);
     }
   }
 
@@ -993,21 +1255,5 @@ export class YouTubePostClient extends PostClient {
     if (!match) return null;
     const total = Number(match[1]);
     return Number.isFinite(total) ? total : null;
-  }
-
-  #sanitizeYouTubeDescription(description: string): string | null {
-    // Remove invalid characters (e.g., '<', '>') but keep newlines
-    let sanitized = description.replace(/[<>]/g, "");
-
-    // Remove any leading/trailing whitespace but keep internal whitespace
-    sanitized = sanitized.trim();
-
-    // If the description is empty after sanitization, return null
-    if (sanitized.length === 0) {
-      return null;
-    }
-
-    // Trim to 2200 characters
-    return sanitized.slice(0, 2200);
   }
 }

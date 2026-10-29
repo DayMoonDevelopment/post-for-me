@@ -177,6 +177,7 @@ export async function addSocialAccountConnections({
   if (connectionsError) {
     console.error(connectionsError);
   }
+
   return {
     successConnections: insertedConnections?.map((i) => i.id) || [],
     failedConnections,

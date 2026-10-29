@@ -49,8 +49,6 @@ export class TikTokPostClient extends PostClient {
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
   #addedMedia: any[] = [];
-  #requests: any[] = [];
-  #responses: any[] = [];
   #bucket: string = "post-media";
 
   constructor(
@@ -74,7 +72,7 @@ export class TikTokPostClient extends PostClient {
     formData.append("grant_type", "refresh_token");
     formData.append("refresh_token", account.refresh_token!);
 
-    this.#requests.push({ refreshRequest: { url: this.#tokenUrl } });
+    this.requests.push({ refreshRequest: { url: this.#tokenUrl } });
     const refreshResponse = await axios.post(this.#tokenUrl, formData, {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -82,7 +80,7 @@ export class TikTokPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     if (refreshResponse.data.error) {
       throw new Error(
@@ -156,23 +154,54 @@ export class TikTokPostClient extends PostClient {
         });
       }
 
-      if (platformConfig?.is_draft) {
-        const { status } = await this.#getPublishStatus({ publishId, account });
+      const { status, failReason, publicPostId } = await this.#getPublishStatus({
+        publishId,
+        account,
+        waitForPublicPostId: !platformConfig?.is_draft,
+      });
 
+      if (
+        (!this.#processedStatuses.includes(status) &&
+          !this.#processingStatuses.includes(status)) ||
+        (!platformConfig?.is_draft && status === "SEND_TO_USER_INBOX")
+      ) {
         return {
-          success: true,
+          success: false,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message: this.#processingStatuses.includes(status)
-            ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
+          error_message: `TikTok publication could not be confirmed. Status: ${status}.${
+            failReason ? ` Fail reason: ${failReason}` : ""
+          }`,
+          details: {
+            status,
+            fail_reason: failReason,
+            publish_id: publishId,
+            addedMedia: this.#addedMedia,
+            requests: this.requests,
+            responses: this.responses,
+          },
+          provider_post_id: publicPostId ?? publishId,
+        };
+      }
+
+      if (platformConfig?.is_draft) {
+        const isProcessing = this.#processingStatuses.includes(status);
+
+        return {
+          success: !isProcessing,
+          post_id: postId,
+          provider_connection_id: account.id,
+          error_message: isProcessing
+            ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
             : undefined,
           details: {
-            status: "Saved as draft",
-            message:
-              "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
+            status: isProcessing ? "Processing" : "Saved as draft",
+            message: isProcessing
+              ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
+              : "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
             publish_id: publishId,
           },
@@ -181,24 +210,20 @@ export class TikTokPostClient extends PostClient {
         };
       }
 
-      const { status, publicPostId } = await this.#getPublishStatus({
-        publishId,
-        account,
-        waitForPublicPostId: true,
-      });
-
       if (this.#processingStatuses.includes(status)) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
+          error_message:
+            "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
           details: {
             status: "Processing",
             message:
-              "Still Proccessing, check TikTok account to confirm status",
+              "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
             publish_id: publishId,
           },
@@ -215,8 +240,8 @@ export class TikTokPostClient extends PostClient {
         details: {
           status: "Published successfully",
           addedMedia: this.#addedMedia,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
           username: creatorInfoResponse.data.data.creator_username,
           publish_id: publishId,
         },
@@ -239,8 +264,8 @@ export class TikTokPostClient extends PostClient {
         error_message: errorMessage,
         details: {
           error: errorDetails,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -273,7 +298,7 @@ export class TikTokPostClient extends PostClient {
   }
 
   async #getCreatorInfo(account: SocialAccount) {
-    this.#requests.push({
+    this.requests.push({
       creatorRequest:
         "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
     });
@@ -289,7 +314,7 @@ export class TikTokPostClient extends PostClient {
       },
     );
 
-    this.#responses.push({ creatorResponse: response.data });
+    this.responses.push({ creatorResponse: response.data });
 
     return response;
   }
@@ -320,7 +345,7 @@ export class TikTokPostClient extends PostClient {
           publicPostIdAttempts < maxPublicPostIdAttempts)) &&
       attempts < maxAttempts
     ) {
-      this.#requests.push({
+      this.requests.push({
         statusRequest: {
           url: "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
           params: {
@@ -346,7 +371,7 @@ export class TikTokPostClient extends PostClient {
         statusResponse.data,
       );
 
-      this.#responses.push({ statusResponse: parsedStatusResponse.data });
+      this.responses.push({ statusResponse: parsedStatusResponse.data });
 
       status = parsedStatusResponse.data.data.status;
       failReason = parsedStatusResponse.data.data.fail_reason;
@@ -373,24 +398,6 @@ export class TikTokPostClient extends PostClient {
           : initialDelayMs * Math.pow(1.5, attempts - 1);
         await wait.for({ seconds: delay / 1000 });
       }
-    }
-
-    if (
-      !this.#processedStatuses.includes(status) &&
-      !this.#processingStatuses.includes(status)
-    ) {
-      if (failReason) {
-        console.error("TikTok upload failed", {
-          status,
-          fail_reason: failReason,
-        });
-      }
-
-      throw new Error(
-        `Upload failed with status: ${status}.${
-          failReason ? ` Fail reason: ${failReason}` : ""
-        }`,
-      );
     }
 
     return { status, failReason, publicPostId };
@@ -433,7 +440,7 @@ export class TikTokPostClient extends PostClient {
     payload: any;
     account: SocialAccount;
   }): Promise<{ publishId: string; uploadUrl?: string }> {
-    this.#requests.push({
+    this.requests.push({
       publishIdRequest: {
         postUrl: postUrl,
         payload: payload,
@@ -447,7 +454,7 @@ export class TikTokPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({
+    this.responses.push({
       publishIdResponse: initResponse.data,
     });
 
@@ -542,7 +549,7 @@ export class TikTokPostClient extends PostClient {
       const end = isLastChunk ? size - 1 : start + chunkSize - 1;
       const contentRange = `bytes ${start}-${end}/${size}`;
 
-      this.#requests.push({
+      this.requests.push({
         videoUploadRequest: { chunkIndex, totalChunkCount, contentRange },
       });
 
@@ -560,7 +567,7 @@ export class TikTokPostClient extends PostClient {
         },
       );
 
-      this.#responses.push({
+      this.responses.push({
         videoUploadResponse: { chunkIndex, status: uploadResponse.status },
       });
     }

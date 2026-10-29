@@ -34,6 +34,7 @@ function makeSupabaseChain(result: { data?: unknown; error?: unknown }) {
     eq: vi.fn(() => chain),
     in: vi.fn(() => chain),
     update: vi.fn(() => chain),
+    single: vi.fn(() => chain),
     then: (resolve: (value: typeof result) => unknown) => resolve(result),
   };
   return chain;
@@ -53,6 +54,7 @@ function makePost(overrides: Partial<PlatformPost> = {}): PlatformPost {
 
 function makeService(
   fromMock: ReturnType<typeof vi.fn>,
+  request: Request = {} as Request,
 ): SocialAccountFeedsService {
   const supabaseService = {
     supabaseClient: { from: fromMock },
@@ -62,7 +64,7 @@ function makeService(
   return new SocialAccountFeedsService(
     configService,
     supabaseService,
-    {} as Request,
+    request,
     {} as never,
     {} as never,
     {} as never,
@@ -77,6 +79,57 @@ function makeService(
 }
 
 describe('SocialAccountFeedsService', () => {
+  it('reports the clamped LinkedIn limit in the adapter call, metadata, and next URL', async () => {
+    const fromMock = vi.fn().mockImplementation((table: string) =>
+      makeSupabaseChain({
+        data:
+          table === 'social_provider_connections'
+            ? {
+                id: 'spc_test',
+                provider: 'linkedin',
+                social_provider_user_id: '12345',
+                access_token: 'test',
+                access_token_expires_at: '2099-01-01',
+              }
+            : [],
+      }),
+    );
+    const service = makeService(fromMock, {
+      protocol: 'https',
+      host: 'api.postforme.dev',
+      path: '/v1/social-account-feeds/spc_test',
+    } as Request);
+    const getAccountPosts = vi.fn().mockResolvedValue({
+      posts: [makePost({ provider: 'linkedin', account_id: '12345' })],
+      count: 1,
+      cursor: '1',
+      has_more: true,
+    });
+    vi.spyOn(service, 'getPlatformService').mockResolvedValue({
+      getAccountPosts,
+    } as never);
+
+    const result = await service.getPlatformPosts({
+      accountId: 'spc_test',
+      projectId: 'project_test',
+      queryParams: { limit: 200 },
+    });
+
+    expect(getAccountPosts).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 100 }),
+    );
+    expect(result.meta).toMatchObject({
+      limit: 100,
+      cursor: '1',
+      has_more: true,
+    });
+    expect(new URL(result.meta.next!).searchParams.get('limit')).toBe('100');
+    expect(result.data[0]).toMatchObject({
+      platform_account_id: '12345',
+      social_account_id: 'spc_test',
+    });
+  });
+
   describe('reconcileFacebookProviderPostIds', () => {
     it('joins an unmatched video post to its stale row and rewrites provider_post_id', async () => {
       const candidateRow = {

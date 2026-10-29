@@ -49,6 +49,7 @@ const transformPostData = (data: {
     provider_connection_id: string | null;
     alt_text?: string | null;
     tags?: Json;
+    index: number;
   }[];
   social_post_configurations: {
     caption: string | null;
@@ -65,6 +66,7 @@ const transformPostData = (data: {
       thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
       alt_text: media.alt_text,
       tags: media.tags as any[],
+      index: media.index,
     }));
 
   const accountConfigurations = data.social_post_configurations
@@ -78,13 +80,17 @@ const transformPostData = (data: {
         configuration: {
           caption: config.caption,
           media: data.social_post_media
-            .filter((media) => media.provider_connection_id)
+            .filter(
+              (media) =>
+                media.provider_connection_id === config.provider_connection_id,
+            )
             .map((media) => ({
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
               alt_text: media.alt_text,
               tags: media.tags as any[],
+              index: media.index,
             })),
           ...configData,
         },
@@ -99,13 +105,14 @@ const transformPostData = (data: {
       platformConfigurations[config.provider!] = {
         caption: config.caption,
         media: data.social_post_media
-          .filter((media) => media.provider_connection_id)
+          .filter((media) => media.provider === config.provider)
           .map((media) => ({
             url: media.url,
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
             alt_text: media.alt_text,
             tags: media.tags as any[],
+            index: media.index,
           })),
         ...(config.provider_data as PlatformConfiguration),
       };
@@ -167,6 +174,9 @@ export type ProcessedMedium = {
 // re-sorts by `position` via `orderProcessedMedia` once processing
 // completes. See PFM-1141/1129/1131: concatenating images-then-videos
 // silently discarded the original interleaving of mixed-media posts.
+// `position` is seeded from the persisted `social_post_media.index` column
+// (not array read order) so ordering is stable even for an all-image or
+// all-video carousel, where the split above is a no-op.
 export function splitLocalizedMediaForProcessing(
   succesfulMedia: ProcessedMedium[],
 ): { readyMedia: ProcessedMedium[]; videosToProcess: ProcessedMedium[] } {
@@ -293,7 +303,7 @@ export const processPost = task({
 
         const localizedMedia = await tasks.batchTriggerAndWait(
           "process-post-medium",
-          post.social_post_media.map((medium, position) => ({
+          post.social_post_media.map((medium) => ({
             payload: {
               medium: {
                 id: medium.id,
@@ -305,7 +315,7 @@ export const processPost = task({
                 alt_text: medium.alt_text,
                 tags: medium.tags,
                 skip_processing: medium.skip_processing,
-                position,
+                position: medium.index,
               },
             },
           })),
@@ -639,7 +649,8 @@ export const processPost = task({
           provider,
           provider_connection_id,
           alt_text,
-          tags
+          tags,
+          index
         ),
         social_post_configurations (
          caption,
@@ -649,6 +660,7 @@ export const processPost = task({
         )
         `,
         )
+        .order("index", { referencedTable: "social_post_media" })
         .single();
 
       if (updatePostError) {
