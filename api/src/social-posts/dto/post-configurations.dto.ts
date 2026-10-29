@@ -332,7 +332,8 @@ export class YoutubeLocalizationDto {
   title?: string;
 
   @ApiProperty({
-    description: 'Localized description for the video',
+    description:
+      'Localized description for the video. Maximum 5,000 bytes (UTF-8); longer values are truncated.',
     required: false,
     nullable: true,
   })
@@ -349,7 +350,7 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
   @ApiProperty({
     description:
-      'Description for the YouTube video (maps to snippet.description). Falls back to the post caption when not provided.',
+      'Description for the YouTube video (maps to snippet.description). Falls back to the post caption when not provided. Maximum 5,000 bytes (UTF-8); longer values are truncated.',
     nullable: true,
     required: false,
   })
@@ -460,6 +461,14 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
   @ApiProperty({
     description:
+      'Whether the YouTube video contains paid product placement, sponsorships, or endorsements (maps to paidProductPlacementDetails.hasPaidProductPlacement). If omitted, YouTube defaults to false.',
+    nullable: true,
+    required: false,
+  })
+  has_paid_product_placement?: boolean;
+
+  @ApiProperty({
+    description:
       'ISO 8601 date (YYYY-MM-DD) or UTC datetime when the video was recorded (maps to recordingDetails.recordingDate).',
     nullable: true,
     required: false,
@@ -503,6 +512,15 @@ export class FacebookConfigurationDto extends BaseConfigurationDto {
 }
 
 export class LinkedinConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description:
+      'Title displayed in the LinkedIn PDF document viewer, limited to 200 characters. If omitted or blank, uses the trimmed caption (up to 200 characters), or "Document" when the caption is blank. Only applies to document posts.',
+    nullable: true,
+    required: false,
+    maxLength: 200,
+  })
+  title?: string;
+
   @ApiProperty({
     description:
       'LinkedIn UGC post id to reshare. The caption is used as the reshare commentary.',
@@ -683,6 +701,14 @@ export class AccountConfigurationDetailsDto {
     required: false,
   })
   contains_synthetic_media?: boolean;
+
+  @ApiProperty({
+    description:
+      'Whether the YouTube video contains paid product placement, sponsorships, or endorsements (maps to paidProductPlacementDetails.hasPaidProductPlacement). If omitted, YouTube defaults to false.',
+    nullable: true,
+    required: false,
+  })
+  has_paid_product_placement?: boolean;
 
   @ApiProperty({
     description: 'YouTube video tags',

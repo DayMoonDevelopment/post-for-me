@@ -386,6 +386,7 @@ export type Database = {
           created_at: string
           external_id: string | null
           id: string
+          index: number
           meta_data: Json | null
           post_id: string
           provider: Database["public"]["Enums"]["social_provider"] | null
@@ -402,6 +403,7 @@ export type Database = {
           created_at?: string
           external_id?: string | null
           id?: string
+          index?: number
           meta_data?: Json | null
           post_id: string
           provider?: Database["public"]["Enums"]["social_provider"] | null
@@ -418,6 +420,7 @@ export type Database = {
           created_at?: string
           external_id?: string | null
           id?: string
+          index?: number
           meta_data?: Json | null
           post_id?: string
           provider?: Database["public"]["Enums"]["social_provider"] | null
