@@ -135,6 +135,13 @@ export class InstagramConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   audio_name?: string;
+
+  @ApiProperty({
+    description: 'Flag content as AI generated on Instagram',
+    nullable: true,
+    required: false,
+  })
+  is_ai_generated?: boolean;
 }
 
 export class TiktokConfigurationDto extends BaseConfigurationDto {
