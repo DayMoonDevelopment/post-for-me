@@ -454,6 +454,14 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
   @ApiProperty({
     description:
+      'Whether the YouTube video contains paid product placement, sponsorships, or endorsements (maps to paidProductPlacementDetails.hasPaidProductPlacement). If omitted, YouTube defaults to false.',
+    nullable: true,
+    required: false,
+  })
+  has_paid_product_placement?: boolean;
+
+  @ApiProperty({
+    description:
       'ISO 8601 date (YYYY-MM-DD) or UTC datetime when the video was recorded (maps to recordingDetails.recordingDate).',
     nullable: true,
     required: false,
@@ -686,6 +694,14 @@ export class AccountConfigurationDetailsDto {
     required: false,
   })
   contains_synthetic_media?: boolean;
+
+  @ApiProperty({
+    description:
+      'Whether the YouTube video contains paid product placement, sponsorships, or endorsements (maps to paidProductPlacementDetails.hasPaidProductPlacement). If omitted, YouTube defaults to false.',
+    nullable: true,
+    required: false,
+  })
+  has_paid_product_placement?: boolean;
 
   @ApiProperty({
     description: 'YouTube video tags',
