@@ -105,6 +105,7 @@ export class LinkedInPostClient extends PostClient {
             caption,
             medium: documentMedium,
             authorUrn,
+            title: platformConfig?.title,
           });
         }
       }
@@ -369,12 +370,14 @@ export class LinkedInPostClient extends PostClient {
     caption,
     medium,
     authorUrn,
+    title,
   }: {
     postId: string;
     account: SocialAccount;
     caption: string;
     medium: PostMedia;
     authorUrn: string;
+    title?: string;
   }): Promise<PostResult> {
     const documentUrn = await this.#createDocumentMedia({
       medium,
@@ -385,9 +388,10 @@ export class LinkedInPostClient extends PostClient {
     // LinkedIn's Posts API rejects a blank `commentary` (INVALID_VALUE_BLANK_FIELD),
     // so a document posted with no caption needs a non-empty fallback.
     const trimmedCaption = caption?.trim();
-    const documentTitle = trimmedCaption
-      ? trimmedCaption.slice(0, 200)
-      : "Document";
+    const documentTitle = (title?.trim() || trimmedCaption || "Document").slice(
+      0,
+      200,
+    );
 
     const postBody = {
       author: authorUrn,
