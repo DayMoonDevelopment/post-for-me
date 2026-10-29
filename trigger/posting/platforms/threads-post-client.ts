@@ -323,7 +323,25 @@ export class ThreadsPostClient extends PostClient {
 
     const containerId = createContainerResponse.data.id;
 
-    // Step 2: Check container status until ready
+    await this.#waitForContainerStatus({
+      account,
+      containerId,
+      mediaLabel: isVideo ? "video media" : "image media",
+    });
+
+    return containerId;
+  }
+
+  async #waitForContainerStatus({
+    account,
+    containerId,
+    mediaLabel,
+  }: {
+    account: SocialAccount;
+    containerId: string;
+    mediaLabel: string;
+  }): Promise<void> {
+    // Check container status until ready
     let status: string = "IN_PROGRESS";
     let attempts = 0;
     const maxStatusChecks = 10; // 5 minutes with 10-second intervals
@@ -356,15 +374,17 @@ export class ThreadsPostClient extends PostClient {
 
         switch (status) {
           case "FINISHED":
-            return containerId;
+            return;
           case "ERROR":
             throw new Error(
-              `Container processing failed: ${
+              `Container processing failed for ${mediaLabel}: ${
                 statusResponse.data.error_message || "Unknown error"
               }`,
             );
           case "EXPIRED":
-            throw new Error("Container expired before publishing");
+            throw new Error(
+              `Container expired before publishing for ${mediaLabel}`,
+            );
           default:
             break;
         }
@@ -385,10 +405,8 @@ export class ThreadsPostClient extends PostClient {
     }
 
     if (status !== "FINISHED" && attempts >= maxStatusChecks) {
-      throw new Error("Container processing timed out");
+      throw new Error(`Container processing timed out for ${mediaLabel}`);
     }
-
-    return containerId;
   }
 
   async #processCarousel(
@@ -438,8 +456,11 @@ export class ThreadsPostClient extends PostClient {
       const containerId = itemResponse.data.id;
       containerIds.push(containerId);
 
-      // Wait for item processing
-      await wait.for({ seconds: 2 });
+      await this.#waitForContainerStatus({
+        account,
+        containerId,
+        mediaLabel: `carousel ${isVideo ? "video" : "image"} item ${containerIds.length}`,
+      });
     }
 
     this.requests.push({
@@ -474,8 +495,11 @@ export class ThreadsPostClient extends PostClient {
 
     const carouselContainerId = carouselResponse.data.id;
 
-    // Wait for carousel processing
-    await wait.for({ seconds: 5 });
+    await this.#waitForContainerStatus({
+      account,
+      containerId: carouselContainerId,
+      mediaLabel: "carousel container",
+    });
 
     return carouselContainerId;
   }

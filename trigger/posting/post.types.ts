@@ -62,6 +62,7 @@ export interface Post {
     alt_text: string | null;
     tags: UserTag[] | null;
     skip_processing: boolean | null;
+    index: number;
   }[];
   social_post_configurations: {
     caption: string | null;
