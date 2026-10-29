@@ -48,8 +48,6 @@ export class TikTokBusinessPostClient extends PostClient {
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
   #addedMedia: any[] = [];
-  #requests: any[] = [];
-  #responses: any[] = [];
   #bucket: string = "post-media";
   #maxRequestRetries = 3;
   #requestRetryInitialDelayMs = 2000;
@@ -80,7 +78,7 @@ export class TikTokBusinessPostClient extends PostClient {
     const refreshData = await this.#withTikTokRetry({
       operation: "refreshing business access token",
       run: async (attempt) => {
-        this.#requests.push({
+        this.requests.push({
           refreshRequest: { url: this.#tokenUrl },
           attempt,
         });
@@ -95,10 +93,7 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({
-          refreshResponse: refreshResponse.data,
-          attempt,
-        });
+        this.responses.push({ refreshResponse: refreshResponse.data, attempt });
 
         if (refreshResponse.data.code !== 0) {
           const refreshError = new Error(
@@ -177,23 +172,54 @@ export class TikTokBusinessPostClient extends PostClient {
         });
       }
 
-      if (platformConfig?.is_draft) {
-        const { status } = await this.#getPublishStatus({ publishId, account });
+      const { status, failReason, publicPostId } = await this.#getPublishStatus({
+        publishId,
+        account,
+        waitForPublicPostId: !platformConfig?.is_draft,
+      });
 
+      if (
+        (!this.#processedStatuses.includes(status) &&
+          !this.#processingStatuses.includes(status)) ||
+        (!platformConfig?.is_draft && status === "SEND_TO_USER_INBOX")
+      ) {
         return {
-          success: true,
+          success: false,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message: this.#processingStatuses.includes(status)
-            ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
+          error_message: `TikTok publication could not be confirmed. Status: ${status}.${
+            failReason ? ` Fail reason: ${failReason}` : ""
+          }`,
+          details: {
+            status,
+            fail_reason: failReason,
+            publish_id: publishId,
+            addedMedia: this.#addedMedia,
+            requests: this.requests,
+            responses: this.responses,
+          },
+          provider_post_id: publicPostId ?? publishId,
+        };
+      }
+
+      if (platformConfig?.is_draft) {
+        const isProcessing = this.#processingStatuses.includes(status);
+
+        return {
+          success: !isProcessing,
+          post_id: postId,
+          provider_connection_id: account.id,
+          error_message: isProcessing
+            ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
             : undefined,
           details: {
-            status: "Saved as draft",
-            message:
-              "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
+            status: isProcessing ? "Processing" : "Saved as draft",
+            message: isProcessing
+              ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
+              : "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.username,
             publish_id: publishId,
           },
@@ -202,24 +228,20 @@ export class TikTokBusinessPostClient extends PostClient {
         };
       }
 
-      const { status, publicPostId } = await this.#getPublishStatus({
-        publishId,
-        account,
-        waitForPublicPostId: true,
-      });
-
       if (this.#processingStatuses.includes(status)) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
+          error_message:
+            "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
           details: {
             status: "Processing",
             message:
-              "Still Proccessing, check TikTok account to confirm status",
+              "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
             addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.username,
             publish_id: publishId,
           },
@@ -236,8 +258,8 @@ export class TikTokBusinessPostClient extends PostClient {
         details: {
           status: "Published successfully",
           addedMedia: this.#addedMedia,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
           username: creatorInfoResponse.data.data.username,
           publish_id: publishId,
         },
@@ -254,8 +276,8 @@ export class TikTokBusinessPostClient extends PostClient {
         error_message: "Failed to post to TikTok",
         details: {
           error: errorDetails,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -268,7 +290,7 @@ export class TikTokBusinessPostClient extends PostClient {
     return await this.#withTikTokRetry({
       operation: "fetching business creator info",
       run: async (attempt) => {
-        this.#requests.push({
+        this.requests.push({
           creatorRequest: creatorInfoUrl,
           attempt,
         });
@@ -282,7 +304,7 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ creatorResponse: response.data, attempt });
+        this.responses.push({ creatorResponse: response.data, attempt });
 
         if (response.data.code !== 0) {
           const creatorInfoError = new Error(
@@ -333,7 +355,7 @@ export class TikTokBusinessPostClient extends PostClient {
       const parsedStatusResponse = await this.#withTikTokRetry({
         operation: "fetching publish status",
         run: async (requestAttempt) => {
-          this.#requests.push({
+          this.requests.push({
             statusRequest: {
               url: statusUrl,
               params: {
@@ -356,7 +378,7 @@ export class TikTokBusinessPostClient extends PostClient {
 
           const parsedResponse = JSON.parse(statusResponse.data);
 
-          this.#responses.push({
+          this.responses.push({
             statusResponse: parsedResponse,
             attempt: attempts + 1,
             requestAttempt,
@@ -421,24 +443,6 @@ export class TikTokBusinessPostClient extends PostClient {
       }
     }
 
-    if (
-      !this.#processedStatuses.includes(status) &&
-      !this.#processingStatuses.includes(status)
-    ) {
-      if (failReason) {
-        console.error("TikTok Business upload failed", {
-          status,
-          fail_reason: failReason,
-        });
-      }
-
-      throw new Error(
-        `Upload failed with status: ${status}.${
-          failReason ? ` Fail reason: ${failReason}` : ""
-        }`,
-      );
-    }
-
     return { status, failReason, publicPostId };
   }
 
@@ -454,7 +458,7 @@ export class TikTokBusinessPostClient extends PostClient {
     return await this.#withTikTokRetry({
       operation: "publishing media",
       run: async (attempt) => {
-        this.#requests.push({
+        this.requests.push({
           publishIdRequest: {
             postUrl: postUrl,
             payload: payload,
@@ -469,7 +473,7 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         });
 
-        this.#responses.push({
+        this.responses.push({
           publishIdResponse: initResponse.data,
           attempt,
         });

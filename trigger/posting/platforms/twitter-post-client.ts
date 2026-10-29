@@ -8,6 +8,8 @@ import {
 import { readFile } from "fs/promises";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import * as twitterText from "twitter-text";
+import type { ParseTweetOptions } from "twitter-text";
 import {
   compressJpegToLimit,
   shouldSkipProcessing,
@@ -20,14 +22,69 @@ import {
   TwitterConfiguration,
 } from "../post.types";
 
+const { parseTweet } = twitterText;
+
+// `configs` isn't part of twitter-text's typed public API
+// (@types/twitter-text doesn't declare it), but the package does export it
+// at runtime alongside `parseTweet`. Sourcing the v3 weighting config
+// directly from the installed package - instead of hand-copying its ranges -
+// keeps our weighting in sync with whatever version of twitter-text we ship.
+const TWITTER_TEXT_V3_CONFIG = (
+  twitterText as unknown as {
+    configs: { version3: ParseTweetOptions };
+  }
+).configs.version3;
+
+export function getAllowedCaption(
+  caption: string,
+  characterLimit: number,
+): { allowedCaption: string; trimmed: boolean } {
+  if (!caption) return { allowedCaption: caption, trimmed: false };
+
+  const parseOptions = {
+    ...TWITTER_TEXT_V3_CONFIG,
+    maxWeightedTweetLength: characterLimit,
+  };
+
+  const parsed = parseTweet(caption, parseOptions);
+
+  if (parsed.weightedLength <= characterLimit) {
+    return { allowedCaption: caption, trimmed: false };
+  }
+
+  // Binary search for the longest prefix (by Unicode code point, so we
+  // never split a surrogate pair) whose weighted length fits the limit.
+  // We can't use `validRangeEnd` here: twitter-text freezes it at the first
+  // character it considers "invalid" (e.g. a stray BOM) and never advances
+  // it again even as weightedLength keeps growing past the limit, which
+  // can collapse a caption down to just a few characters.
+  const codePoints = Array.from(caption);
+  let low = 0;
+  let high = codePoints.length;
+
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = codePoints.slice(0, mid).join("");
+
+    if (parseTweet(candidate, parseOptions).weightedLength <= characterLimit) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return {
+    allowedCaption: codePoints.slice(0, low).join(""),
+    trimmed: true,
+  };
+}
+
 export class TwitterPostClient extends PostClient {
   #IMAGE_LIMIT = 4;
   #PREMIUM_CHARACTER_LIMIT = 2200;
   #CHARACTER_LIMIT = 280;
   #appKey;
   #appSecret;
-  #requests: any[] = [];
-  #responses: any[] = [];
   #maxFileSize = 5 * 1024 * 1024;
   #uploadChunkSize = 5 * 1024 * 1024;
 
@@ -105,11 +162,13 @@ export class TwitterPostClient extends PostClient {
         isOAuth2,
       });
 
-      const allowedCaption = caption.slice(
-        0,
-        account.social_provider_metadata?.has_platform_premium
-          ? this.#PREMIUM_CHARACTER_LIMIT
-          : this.#CHARACTER_LIMIT,
+      const characterLimit = account.social_provider_metadata?.has_platform_premium
+        ? this.#PREMIUM_CHARACTER_LIMIT
+        : this.#CHARACTER_LIMIT;
+
+      const { allowedCaption, trimmed } = getAllowedCaption(
+        caption,
+        characterLimit,
       );
 
       const postPayload: SendTweetV2Params = {
@@ -145,13 +204,13 @@ export class TwitterPostClient extends PostClient {
         postPayload.quote_tweet_id = platformConfig.quote_tweet_id;
       }
 
-      this.#requests.push({
+      this.requests.push({
         postRequest: postPayload,
       });
 
       const tweet = await twitterClient.v2.tweet(postPayload);
 
-      this.#responses.push({
+      this.responses.push({
         postResponse: tweet,
       });
 
@@ -162,9 +221,9 @@ export class TwitterPostClient extends PostClient {
         provider_post_id: tweet.data.id,
         provider_post_url: `https://twitter.com/user/status/${tweet.data.id}`,
         details: {
-          trimmed: caption.length > allowedCaption.length,
-          requests: this.#requests,
-          responses: this.#responses,
+          trimmed,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -185,8 +244,8 @@ export class TwitterPostClient extends PostClient {
         error_message: `Failed to post to Twitter: ${error.message}`,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -204,7 +263,7 @@ export class TwitterPostClient extends PostClient {
     const mediaIds: string[] = [];
     if (media.length == 1) {
       const medium = media[0];
-      this.#requests.push({ uploadRequest: { file: medium } });
+      this.requests.push({ uploadRequest: { file: medium } });
       const isVideo = medium.type === "video";
 
       let mediaId: string;
@@ -235,7 +294,7 @@ export class TwitterPostClient extends PostClient {
         });
       }
 
-      this.#responses.push({ uploadResponse: { mediaId } });
+      this.responses.push({ uploadResponse: { mediaId } });
       mediaIds.push(mediaId);
 
       if (medium.alt_text) {
@@ -250,7 +309,7 @@ export class TwitterPostClient extends PostClient {
       const allowedMedia = media.slice(0, this.#IMAGE_LIMIT);
       for (const medium of allowedMedia) {
         if (medium.type === "video") continue;
-        this.#requests.push({ uploadRequest: { file: medium } });
+        this.requests.push({ uploadRequest: { file: medium } });
         const file = await this.getFile(medium);
         const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -262,7 +321,7 @@ export class TwitterPostClient extends PostClient {
           skipProcessing: shouldSkipProcessing(medium),
         });
 
-        this.#responses.push({ uploadResponse: { mediaId } });
+        this.responses.push({ uploadResponse: { mediaId } });
         mediaIds.push(mediaId);
 
         if (medium.alt_text) {

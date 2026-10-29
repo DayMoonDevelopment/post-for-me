@@ -75,6 +75,7 @@ ALLOWED_HOST=my-tunnel.ngrok-free.app
 ```
 
 Notes:
+
 - Prefer an explicit list; `ALLOWED_HOST=true` / `*` will allow any host and is not recommended.
 - You can put `ALLOWED_HOST=...` in `.env.local` or export it in your shell before running `bun run dev` / `bun run dev:dashboard`.
 
@@ -141,15 +142,14 @@ bun run typecheck
 
 ## Deployment
 
-
 ### Platform Deployment
 
 The dashboard can be deployed to:
+
 - Vercel (recommended for React Router apps)
 - Netlify
 - AWS Amplify
 - Google Cloud Run
-- Railway
 - Fly.io
 
 Make sure to set the appropriate environment variables for your deployment platform.

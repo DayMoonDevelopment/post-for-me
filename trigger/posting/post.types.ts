@@ -62,6 +62,7 @@ export interface Post {
     alt_text: string | null;
     tags: UserTag[] | null;
     skip_processing: boolean | null;
+    index: number;
   }[];
   social_post_configurations: {
     caption: string | null;
@@ -132,6 +133,7 @@ export interface InstagramConfiguration {
   location?: string;
   trial_reel_type?: string;
   audio_name?: string;
+  is_ai_generated?: boolean;
 }
 
 export interface TiktokConfiguration {
@@ -180,6 +182,8 @@ export interface YoutubeConfiguration {
   publish_at?: string;
   made_for_kids?: boolean;
   contains_synthetic_media?: boolean;
+  // paidProductPlacementDetails fields
+  has_paid_product_placement?: boolean;
   // recordingDetails fields
   recording_date?: string;
   media?: PostMedia[];
@@ -196,6 +200,7 @@ export interface FacebookConfiguration {
 
 export interface LinkedinConfiguration {
   caption?: string;
+  title?: string;
   media?: PostMedia[];
   reshare_post_id?: string;
 }

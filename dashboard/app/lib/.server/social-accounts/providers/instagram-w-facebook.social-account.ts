@@ -2,6 +2,10 @@ import type {
   SocialProviderConnection,
   SocialProviderInfo,
 } from "../social-account.types";
+import {
+  FACEBOOK_API_VERSION,
+  FACEBOOK_GRAPH_API_URL,
+} from "../social-account.constants";
 
 export async function getInstagramWFacebookSocialProviderConnection({
   redirectUri,
@@ -16,7 +20,7 @@ export async function getInstagramWFacebookSocialProviderConnection({
     throw Error("No code provided");
   }
 
-  const tokenUrl = `https://graph.facebook.com/v23.0/oauth/access_token`;
+  const tokenUrl = `${FACEBOOK_GRAPH_API_URL}/${FACEBOOK_API_VERSION}/oauth/access_token`;
   const tokenParams = new URLSearchParams([
     ["client_id", appCredentials.appId!],
     ["client_secret", appCredentials.appSecret!],
@@ -57,6 +61,19 @@ export async function getInstagramWFacebookSocialProviderConnection({
 
   const accessToken = longLivedData.access_token;
 
+  // Identifies which Facebook login this grant came from, so re-auth
+  // reconciliation only ever touches accounts granted by the same login.
+  let facebookUserId: string | undefined;
+  try {
+    const meResponse = await fetch(
+      `${FACEBOOK_GRAPH_API_URL}/${FACEBOOK_API_VERSION}/me?fields=id&access_token=${accessToken}`,
+    );
+    const meData = await meResponse.json();
+    facebookUserId = meData?.id;
+  } catch (error) {
+    console.error("Error fetching Facebook user id:", error);
+  }
+
   const allPages: {
     instagram_business_account: {
       id: string;
@@ -65,7 +82,7 @@ export async function getInstagramWFacebookSocialProviderConnection({
       profile_picture_url: string;
     };
   }[] = [];
-  let pagesUrl = `https://graph.facebook.com/v23.0/me/accounts?fields=name,access_token,instagram_business_account{id,name,username,profile_picture_url}&limit=100&access_token=${accessToken}`;
+  let pagesUrl = `${FACEBOOK_GRAPH_API_URL}/${FACEBOOK_API_VERSION}/me/accounts?fields=name,access_token,instagram_business_account{id,name,username,profile_picture_url}&limit=100&access_token=${accessToken}`;
 
   try {
     while (pagesUrl) {
@@ -101,6 +118,7 @@ export async function getInstagramWFacebookSocialProviderConnection({
           page.instagram_business_account.profile_picture_url,
         social_provider_metadata: {
           connection_type: "facebook",
+          facebook_user_id: facebookUserId,
         },
       });
     }

@@ -34,10 +34,9 @@ interface ThreadsPostParams {
 }
 
 export class ThreadsPostClient extends PostClient {
-  #maxItems = 4;
+  // https://developers.facebook.com/documentation/threads/posts#carousel-posts
+  #maxItems = 20;
   #containerUrl = "https://graph.threads.net/v1.0/me/threads";
-  #requests: any[] = [];
-  #responses: any[] = [];
 
   constructor(
     supabaseClient: SupabaseClient,
@@ -49,7 +48,7 @@ export class ThreadsPostClient extends PostClient {
   async refreshAccessToken(
     account: SocialAccount,
   ): Promise<TokenRefreshResult> {
-    this.#requests.push({
+    this.requests.push({
       refreshRequest: "https://graph.threads.net/refresh_access_token",
     });
 
@@ -63,7 +62,7 @@ export class ThreadsPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     const { access_token, expires_in } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
@@ -123,7 +122,7 @@ export class ThreadsPostClient extends PostClient {
       while (!platformId && publishAttempts < maxPublishAttempts) {
         try {
           console.log(`Publish attempt #${publishAttempts + 1}`);
-          this.#requests.push({
+          this.requests.push({
             postRequest: {
               url: `https://graph.threads.net/v1.0/me/threads_publish`,
               params: {
@@ -145,7 +144,7 @@ export class ThreadsPostClient extends PostClient {
               },
             );
 
-          this.#responses.push({ publishResponse: publishResponse.data });
+          this.responses.push({ publishResponse: publishResponse.data });
 
           platformId = publishResponse.data.id;
         } catch (error: any) {
@@ -191,8 +190,12 @@ export class ThreadsPostClient extends PostClient {
         provider_post_id: platformId,
         provider_post_url: platformUrl,
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          warning:
+            media.length > this.#maxItems
+              ? `Only first ${this.#maxItems} items were posted`
+              : null,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error: any) {
@@ -201,8 +204,8 @@ export class ThreadsPostClient extends PostClient {
       const platformError = extractPlatformError(error);
       const errorDetails = {
         error: platformError.data ?? { message: platformError.message },
-        requests: this.#requests,
-        responses: this.#responses,
+        requests: this.requests,
+        responses: this.responses,
       };
 
       // Handle specific error cases
@@ -230,7 +233,7 @@ export class ThreadsPostClient extends PostClient {
     account: SocialAccount,
     caption: string,
   ): Promise<string | null> {
-    this.#requests.push({
+    this.requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
         params: {
@@ -254,7 +257,7 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-    this.#responses.push({
+    this.responses.push({
       createContainerResponse: createContainerResponse.data,
     });
 
@@ -276,7 +279,7 @@ export class ThreadsPostClient extends PostClient {
     const signedUrl = await this.getSignedUrlForFile(medium);
     const isVideo = medium.type === "video";
 
-    this.#requests.push({
+    this.requests.push({
       createContainerRequest: {
         url: this.#containerUrl,
         params: {
@@ -314,20 +317,38 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-    this.#responses.push({
+    this.responses.push({
       createContainerResponse: createContainerResponse.data,
     });
 
     const containerId = createContainerResponse.data.id;
 
-    // Step 2: Check container status until ready
+    await this.#waitForContainerStatus({
+      account,
+      containerId,
+      mediaLabel: isVideo ? "video media" : "image media",
+    });
+
+    return containerId;
+  }
+
+  async #waitForContainerStatus({
+    account,
+    containerId,
+    mediaLabel,
+  }: {
+    account: SocialAccount;
+    containerId: string;
+    mediaLabel: string;
+  }): Promise<void> {
+    // Check container status until ready
     let status: string = "IN_PROGRESS";
     let attempts = 0;
     const maxStatusChecks = 10; // 5 minutes with 10-second intervals
 
     while (attempts < maxStatusChecks) {
       try {
-        this.#requests.push({
+        this.requests.push({
           checkContainerStatusRequest: {
             url: `https://graph.threads.net/v1.0/${containerId}`,
             params: {
@@ -345,7 +366,7 @@ export class ThreadsPostClient extends PostClient {
             },
           });
 
-        this.#responses.push({
+        this.responses.push({
           checkContainerStatusResponse: statusResponse.data,
         });
 
@@ -353,15 +374,17 @@ export class ThreadsPostClient extends PostClient {
 
         switch (status) {
           case "FINISHED":
-            return containerId;
+            return;
           case "ERROR":
             throw new Error(
-              `Container processing failed: ${
+              `Container processing failed for ${mediaLabel}: ${
                 statusResponse.data.error_message || "Unknown error"
               }`,
             );
           case "EXPIRED":
-            throw new Error("Container expired before publishing");
+            throw new Error(
+              `Container expired before publishing for ${mediaLabel}`,
+            );
           default:
             break;
         }
@@ -382,10 +405,8 @@ export class ThreadsPostClient extends PostClient {
     }
 
     if (status !== "FINISHED" && attempts >= maxStatusChecks) {
-      throw new Error("Container processing timed out");
+      throw new Error(`Container processing timed out for ${mediaLabel}`);
     }
-
-    return containerId;
   }
 
   async #processCarousel(
@@ -400,7 +421,7 @@ export class ThreadsPostClient extends PostClient {
       const signedUrl = await this.getSignedUrlForFile(medium);
       const isVideo = medium.type === "video";
 
-      this.#requests.push({
+      this.requests.push({
         carouselItemRequest: {
           url: this.#containerUrl,
           params: {
@@ -428,18 +449,21 @@ export class ThreadsPostClient extends PostClient {
         },
       );
 
-      this.#responses.push({
+      this.responses.push({
         carouselItemResponse: itemResponse.data,
       });
 
       const containerId = itemResponse.data.id;
       containerIds.push(containerId);
 
-      // Wait for item processing
-      await wait.for({ seconds: 2 });
+      await this.#waitForContainerStatus({
+        account,
+        containerId,
+        mediaLabel: `carousel ${isVideo ? "video" : "image"} item ${containerIds.length}`,
+      });
     }
 
-    this.#requests.push({
+    this.requests.push({
       createCarouselRequest: {
         url: this.#containerUrl,
         params: {
@@ -465,21 +489,24 @@ export class ThreadsPostClient extends PostClient {
       },
     );
 
-    this.#responses.push({
+    this.responses.push({
       createCarouselResponse: carouselResponse.data,
     });
 
     const carouselContainerId = carouselResponse.data.id;
 
-    // Wait for carousel processing
-    await wait.for({ seconds: 5 });
+    await this.#waitForContainerStatus({
+      account,
+      containerId: carouselContainerId,
+      mediaLabel: "carousel container",
+    });
 
     return carouselContainerId;
   }
 
   async #getPostUrl(account: SocialAccount, postId: string): Promise<string> {
     // After successful publish, fetch the media object to get the permalink
-    this.#requests.push({
+    this.requests.push({
       getPostUrlRequest: { url: `https://graph.threads.net/v1.0/${postId}` },
     });
 
@@ -493,7 +520,7 @@ export class ThreadsPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ getPostUrlResponse: mediaResponse.data });
+    this.responses.push({ getPostUrlResponse: mediaResponse.data });
 
     if (mediaResponse.data.error) {
       throw wrapResponseDataError(

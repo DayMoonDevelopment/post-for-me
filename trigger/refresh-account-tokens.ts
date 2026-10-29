@@ -248,10 +248,7 @@ export const refreshAccountTokens = schedules.task({
       );
     }
 
-    const accounts = [
-      ...(standardAccounts || []),
-      ...(xOAuth2Accounts || []),
-    ];
+    const accounts = [...(standardAccounts || []), ...(xOAuth2Accounts || [])];
 
     if (!accounts || accounts.length === 0) {
       logger.info("No accounts need token refresh");
