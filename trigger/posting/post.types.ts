@@ -181,6 +181,8 @@ export interface YoutubeConfiguration {
   publish_at?: string;
   made_for_kids?: boolean;
   contains_synthetic_media?: boolean;
+  // paidProductPlacementDetails fields
+  has_paid_product_placement?: boolean;
   // recordingDetails fields
   recording_date?: string;
   media?: PostMedia[];
@@ -197,6 +199,7 @@ export interface FacebookConfiguration {
 
 export interface LinkedinConfiguration {
   caption?: string;
+  title?: string;
   media?: PostMedia[];
   reshare_post_id?: string;
 }

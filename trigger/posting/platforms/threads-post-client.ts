@@ -34,7 +34,8 @@ interface ThreadsPostParams {
 }
 
 export class ThreadsPostClient extends PostClient {
-  #maxItems = 4;
+  // https://developers.facebook.com/documentation/threads/posts#carousel-posts
+  #maxItems = 20;
   #containerUrl = "https://graph.threads.net/v1.0/me/threads";
 
   constructor(
@@ -189,6 +190,10 @@ export class ThreadsPostClient extends PostClient {
         provider_post_id: platformId,
         provider_post_url: platformUrl,
         details: {
+          warning:
+            media.length > this.#maxItems
+              ? `Only first ${this.#maxItems} items were posted`
+              : null,
           requests: this.requests,
           responses: this.responses,
         },

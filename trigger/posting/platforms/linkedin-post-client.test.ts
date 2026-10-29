@@ -369,6 +369,33 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
     expect(postsBody.commentary).toBe("A great quarterly report");
   });
 
+  test.each([
+    ["  Quarterly report  ", "Caption with #hashtags", "Quarterly report"],
+    ["x".repeat(201), "Post commentary", "x".repeat(200)],
+    [undefined, "  " + "c".repeat(201) + "  ", "c".repeat(200)],
+    ["", "  Caption fallback  ", "Caption fallback"],
+    ["   ", "  Caption fallback  ", "Caption fallback"],
+    ["   ", "   ", "Document"],
+    ["Custom title", "   ", "Custom title"],
+  ])(
+    "resolves document title %p with caption %p to %p",
+    async (title, caption, expectedTitle) => {
+      const result = await makeClient().post({
+        postId: "post-doc-title",
+        account: personAccount,
+        caption: caption!,
+        media: [documentMedium],
+        platformConfig: { title },
+      });
+
+      expect(result.success).toBe(true);
+      const postsCall = calls.find((c) => c.url.includes("/rest/posts"));
+      const postsBody = JSON.parse(postsCall!.init!.body as string);
+      expect(postsBody.content.media.title).toBe(expectedTitle);
+      expect(postsBody.commentary).toBe(caption!.trim() || expectedTitle);
+    },
+  );
+
   test("falls back commentary and title to a default when the caption is blank", async () => {
     const client = makeClient();
     const result = await client.post({
