@@ -1,3 +1,5 @@
+import { safeConsole as console } from "../../safe-console";
+import { safeLogger as logger } from "../../safe-logger";
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
 import sharp from "sharp";
@@ -15,7 +17,7 @@ import {
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
 import ffmpeg from "fluent-ffmpeg";
 import { createReadStream } from "fs";
-import { logger, tasks, wait } from "@trigger.dev/sdk/v3";
+import { tasks, wait } from "@trigger.dev/sdk/v3";
 
 export class BlueskyPostClient extends PostClient {
   #agent: AtpAgent;

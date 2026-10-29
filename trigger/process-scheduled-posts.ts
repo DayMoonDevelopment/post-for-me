@@ -1,4 +1,6 @@
-import { logger, schedules, tasks } from "@trigger.dev/sdk";
+import { schedules, tasks } from "@trigger.dev/sdk";
+import { safeLogger as logger } from "./safe-logger";
+import { safeConsole as console } from "./safe-console";
 import { createClient } from "@supabase/supabase-js";
 import { Post } from "./posting/post.types";
 

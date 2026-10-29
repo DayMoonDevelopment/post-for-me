@@ -1,3 +1,4 @@
+import { safeConsole as console } from '../logging/safe-console';
 import { Inject, Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 

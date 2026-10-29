@@ -1,3 +1,5 @@
+import { safeConsole as console } from "../../safe-console";
+import { safeLogger as logger } from "../../safe-logger";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -10,7 +12,7 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-import { logger, wait } from "@trigger.dev/sdk";
+import { wait } from "@trigger.dev/sdk";
 import FormData from "form-data";
 import { normalizePlatform } from "../../lib/platform.utils";
 import {

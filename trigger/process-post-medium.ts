@@ -1,6 +1,7 @@
 import { Database } from "./supabase.types";
 import { createClient } from "@supabase/supabase-js";
-import { logger, task } from "@trigger.dev/sdk";
+import { task } from "@trigger.dev/sdk";
+import { safeLogger as logger } from "./safe-logger";
 import fetch from "node-fetch";
 import * as fs from "fs";
 import os from "os";
