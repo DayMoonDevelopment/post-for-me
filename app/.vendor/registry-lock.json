@@ -1,0 +1,37 @@
+{
+  "user-avatar": {
+    "namespace": "@post-for-me",
+    "style": "base-mira",
+    "target": "app/components/user-avatar.tsx",
+    "syncedAt": "2026-07-20",
+    "upstreamRef": "registry/ @ social-account-connection badge refactor (pre-git); transforms: lucide\u2192~/icons, rtl:translate-x-1/2"
+  },
+  "platform-avatar": {
+    "namespace": "@post-for-me",
+    "style": "base-mira",
+    "target": "app/components/platform-avatar.tsx",
+    "syncedAt": "2026-07-20",
+    "upstreamRef": "registry/ @ social-account-connection badge refactor (pre-git); transforms: rtl:translate-x-1/2"
+  },
+  "account-selector": {
+    "namespace": "@post-for-me",
+    "style": "base-mira",
+    "target": "app/components/account-selector.tsx",
+    "syncedAt": "2026-07-22",
+    "upstreamRef": "registry/ @ AccountSelectorContent footer slot (pre-git); transforms: lucide→~/icons (ChevronsUpDown→ExpandIcon), cn-control-radius→rounded-md"
+  },
+  "post-for-me.utils": {
+    "namespace": "@post-for-me",
+    "style": "base-mira",
+    "target": "app/lib/post-for-me.utils.ts",
+    "syncedAt": "2026-07-22",
+    "upstreamRef": "registry/ @ TikTok (Standard/Business API) labels (pre-git); no transforms (identical copy)"
+  },
+  "social-post-configuration": {
+    "namespace": "@post-for-me",
+    "style": "base-mira",
+    "target": "app/components/social-post-configuration.tsx",
+    "syncedAt": "2026-07-22",
+    "upstreamRef": "registry/ @ per-account row separators (pre-git); transforms: lucide→~/icons (ChevronRight), RTL logical props (ml/border-l/pl→ms/border-s/ps)"
+  }
+}
