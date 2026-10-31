@@ -29,6 +29,7 @@ const defaultLabels = {
   instagram: { appId: "App ID", appSecret: "App Secret" },
   facebook: { appId: "App ID", appSecret: "App Secret" },
   tiktok: { appId: "Client Key", appSecret: "Client Secret" },
+  tiktok_business: { appId: "App ID", appSecret: "App Secret" },
   x: { appId: "Client ID", appSecret: "Client Secret" },
   x_oauth2: { appId: "Client ID", appSecret: "Client Secret" },
   youtube: { appId: "Google Client ID", appSecret: "Google Client Secret" },
@@ -162,29 +163,46 @@ export function Component() {
 
   return (
     <Dialog open onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex flex-col items-center text-center gap-3">
-              <BrandIcon
-                brand={provider.split("_")[0]}
-                className="h-[100px] w-[100px]"
-              />
-              <div className="space-y-1">
-                <DialogTitle>Setup {getProviderLabel(provider)}</DialogTitle>
-                <DialogDescription>
-                  {`Learn more in the `}
-                  <Link
-                    to={setupGuideUrl}
-                    target="_blank"
-                    className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
-                  >
-                    setup guide
-                  </Link>
-                  .
-                </DialogDescription>
-              </div>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex flex-col items-center text-center gap-3">
+            <BrandIcon
+              brand={provider.split("_")[0]}
+              className="h-[100px] w-[100px]"
+            />
+            <div className="space-y-1">
+              <DialogTitle>Setup {getProviderLabel(provider)}</DialogTitle>
+              <DialogDescription>
+                {provider === "tiktok_business" ? (
+                  <>
+                    Full integration coming soon. If interested in early access,
+                    contact us at:{" "}
+                    <Link
+                      to="mailto:postforme@daymoon.dev"
+                      target="_blank"
+                      className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
+                    >
+                      postforme@daymoon.dev
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  <>
+                    {`Learn more in the `}
+                    <Link
+                      to={setupGuideUrl}
+                      target="_blank"
+                      className="underline underline-offset-2 text-accent-foreground hover:cursor-pointer"
+                    >
+                      setup guide
+                    </Link>
+                    .
+                  </>
+                )}
+              </DialogDescription>
             </div>
-          </DialogHeader>
+          </div>
+        </DialogHeader>
 
         <Form {...form}>
           <form
