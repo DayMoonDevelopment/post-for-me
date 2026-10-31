@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { Resolver } from "react-hook-form";
+
+import { selectPlatformConfigurations } from "./utils";
 
 const mediaSchema = z.object({
   url: z.string(),
@@ -36,7 +40,9 @@ export const formSchema = z
         youtube: z
           .object({
             title: z.string().optional(),
-            privacy_status: z.enum(["public", "private", "unlisted"]).optional(),
+            privacy_status: z
+              .enum(["public", "private", "unlisted"])
+              .optional(),
           })
           .optional(),
       })
@@ -46,6 +52,10 @@ export const formSchema = z
   })
   .refine(
     (data) => {
+      if (!data._providers?.includes("tiktok")) {
+        return true;
+      }
+
       // If _disclose_content is true, then either _disclose_your_brand or _disclose_branded_content must be true
       if (data._disclose_content === true) {
         return (
@@ -69,8 +79,15 @@ export const formSchema = z
       message:
         "When disclosure is required, you must specify either your brand disclosure or branded content disclosure",
       path: ["_disclose_content"], // This will attach the error to the _disclose_content field
-    }
+    },
   );
 
 export type FormSchema = z.infer<typeof formSchema>;
 export type MediaSchema = z.infer<typeof mediaSchema>;
+
+const resolveForm = zodResolver(formSchema);
+
+// Filter a copy before validation; keep inactive settings in the form so users
+// can reselect an account without losing their platform-specific settings.
+export const formResolver: Resolver<FormSchema> = (values, context, options) =>
+  resolveForm(selectPlatformConfigurations(values), context, options);
