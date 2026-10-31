@@ -1,0 +1,19 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "user-avatar-with-status",
+  "type": "registry:example",
+  "title": "User Avatar with Status",
+  "description": "A UserAvatar with a StatusIndicator placed in a badge slot.",
+  "dependencies": [],
+  "registryDependencies": [
+    "@post-for-me/user-avatar",
+    "@post-for-me/status-indicator"
+  ],
+  "files": [
+    {
+      "path": "registry/base-sera/examples/user-avatar-with-status.tsx",
+      "type": "registry:example",
+      "content": "import {\n  UserAvatar,\n  UserAvatarBadge,\n  UserAvatarStatusBadge,\n} from \"~/components/user-avatar\";\nimport { StatusIndicator } from \"~/ui/status-indicator\";\n\nexport function UserAvatarWithStatus() {\n  return (\n    <UserAvatar name=\"Jane Doe\" size=\"lg\">\n      <UserAvatarBadge placement=\"default\">\n        <UserAvatarStatusBadge>\n          <StatusIndicator status=\"success\" />\n        </UserAvatarStatusBadge>\n      </UserAvatarBadge>\n    </UserAvatar>\n  );\n}\n"
+    }
+  ]
+}

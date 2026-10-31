@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "caption-composer-basic",
+  "type": "registry:example",
+  "title": "Caption Composer",
+  "description": "A caption field with per-platform character budgets.",
+  "dependencies": [],
+  "registryDependencies": [
+    "@post-for-me/caption-composer"
+  ],
+  "files": [
+    {
+      "path": "registry/base-vega/examples/caption-composer-basic.tsx",
+      "type": "registry:example",
+      "content": "import {\n  CaptionComposer,\n  CaptionComposerCount,\n  CaptionComposerFooter,\n  CaptionComposerHeader,\n  CaptionComposerInput,\n  CaptionComposerPlatforms,\n  CaptionComposerTitle,\n} from \"~/components/caption-composer\";\n\nexport function CaptionComposerBasic() {\n  return (\n    <CaptionComposer\n      defaultValue=\"Big news @acme — our launch is finally here! #buildinpublic #startup\"\n      platforms={[\"x\", \"instagram\", \"bluesky\", \"linkedin\"]}\n      className=\"w-full max-w-xl\"\n    >\n      <CaptionComposerHeader>\n        <CaptionComposerTitle>What do you want to post?</CaptionComposerTitle>\n      </CaptionComposerHeader>\n      <CaptionComposerInput placeholder=\"Write a caption…\" />\n      <CaptionComposerFooter>\n        <CaptionComposerCount />\n        <CaptionComposerPlatforms />\n      </CaptionComposerFooter>\n    </CaptionComposer>\n  );\n}\n"
+    }
+  ]
+}
