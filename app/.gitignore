@@ -1,0 +1,12 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+/build/
+
+# Playwright
+/e2e/.auth/
+/playwright-report/
+/test-results/
