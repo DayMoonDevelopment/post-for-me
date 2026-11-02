@@ -99,7 +99,7 @@ jobs:
       - name: Apply Supabase migrations
         id: supabase
         working-directory: api
-        run: supabase db push
+        run: supabase db push --remote
 
   deploy-api:
     name: Deploy API
