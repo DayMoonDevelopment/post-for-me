@@ -54,7 +54,7 @@ export function Accounts() {
       })
       .filter(Boolean) as string[];
 
-    form.setValue("_providers", selectedProviders);
+    form.setValue("_providers", selectedProviders, { shouldValidate: true });
   };
 
   // Show loading state if no connections are available
