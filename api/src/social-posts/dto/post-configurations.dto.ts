@@ -528,6 +528,15 @@ export class LinkedinConfigurationDto extends BaseConfigurationDto {
     required: false,
   })
   reshare_post_id?: string;
+
+  @ApiProperty({
+    description:
+      'LinkedIn only. Text posted as the first comment on the post, by the same account, once the post is published (for example a link kept out of the post itself). If the comment fails, the post still succeeds and the error is reported in the result details under first_comment.',
+    nullable: true,
+    required: false,
+    maxLength: 1250,
+  })
+  first_comment?: string;
 }
 
 export class BlueskyConfigurationDto extends BaseConfigurationDto {}
@@ -948,6 +957,15 @@ export class AccountConfigurationDetailsDto {
     required: false,
   })
   reshare_post_id?: string;
+
+  @ApiProperty({
+    description:
+      'LinkedIn only. Text posted as the first comment on the post, by the same account, once the post is published (for example a link kept out of the post itself). If the comment fails, the post still succeeds and the error is reported in the result details under first_comment.',
+    nullable: true,
+    required: false,
+    maxLength: 1250,
+  })
+  first_comment?: string;
 }
 
 export class AccountConfigurationDto {

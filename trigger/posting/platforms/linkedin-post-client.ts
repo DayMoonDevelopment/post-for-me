@@ -67,7 +67,33 @@ export class LinkedInPostClient extends PostClient {
     };
   }
 
-  async post({
+  async post(args: {
+    postId: string;
+    account: SocialAccount;
+    caption: string;
+    media: PostMedia[];
+    platformConfig?: LinkedinConfiguration;
+  }): Promise<PostResult> {
+    const result = await this.#publish(args);
+    const firstComment = args.platformConfig?.first_comment?.trim();
+
+    if (!result.success || !firstComment || !result.provider_post_id) {
+      return result;
+    }
+
+    const comment = await this.#postFirstComment({
+      account: args.account,
+      postUrn: result.provider_post_id,
+      text: firstComment,
+    });
+
+    return {
+      ...result,
+      details: { ...result.details, first_comment: comment },
+    };
+  }
+
+  async #publish({
     postId,
     account,
     caption,
@@ -81,10 +107,7 @@ export class LinkedInPostClient extends PostClient {
     platformConfig?: LinkedinConfiguration;
   }): Promise<PostResult> {
     try {
-      const authorUrn =
-        account.social_provider_metadata?.connection_type === "page"
-          ? `urn:li:organization:${account.social_provider_user_id}`
-          : `urn:li:person:${account.social_provider_user_id}`;
+      const authorUrn = this.#authorUrn(account);
 
       if (!platformConfig?.reshare_post_id) {
         const documentMedium =
@@ -220,6 +243,72 @@ export class LinkedInPostClient extends PostClient {
     }
 
     return url;
+  }
+
+  #authorUrn(account: SocialAccount) {
+    return account.social_provider_metadata?.connection_type === "page"
+      ? `urn:li:organization:${account.social_provider_user_id}`
+      : `urn:li:person:${account.social_provider_user_id}`;
+  }
+
+  // Comments on a post that has just been published, as its author. A failure
+  // is reported rather than thrown: the post is already live, so failing the
+  // whole result would let the task's retry publish it a second time.
+  //
+  // This uses the unversioned /v2 endpoint on purpose. With a member token
+  // carrying w_member_social, the versioned /rest/socialActions/{urn}/comments
+  // answers 403 "Not enough permissions to access:
+  // partnerApiSocialActions.CREATE", while /v2/socialActions/{urn}/comments
+  // creates the comment (both observed November 2026).
+  async #postFirstComment({
+    account,
+    postUrn,
+    text,
+  }: {
+    account: SocialAccount;
+    postUrn: string;
+    text: string;
+  }): Promise<
+    | { success: true; provider_comment_id?: string }
+    | { success: false; error_message: string }
+  > {
+    const body = {
+      actor: this.#authorUrn(account),
+      object: postUrn,
+      message: { text },
+    };
+    this.requests.push({ firstCommentRequest: body });
+
+    try {
+      const response = await fetch(
+        `https://api.linkedin.com/v2/socialActions/${encodeURIComponent(postUrn)}/comments`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${account.access_token}`,
+            "Content-Type": "application/json",
+            "X-Restli-Protocol-Version": "2.0.0",
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      const data = await this.#parseJsonSafe(response);
+      this.responses.push({ firstCommentResponse: data });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error_message: `Failed to post the first comment to LinkedIn: ${response.status} ${response.statusText}`,
+        };
+      }
+
+      return { success: true, provider_comment_id: data.id };
+    } catch (error) {
+      return {
+        success: false,
+        error_message: `Failed to post the first comment to LinkedIn: ${error.message}`,
+      };
+    }
   }
 
   #toUgcPostUrn(ugcPostId: string) {
