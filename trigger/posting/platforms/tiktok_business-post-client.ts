@@ -1,4 +1,5 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { randomUUID } from "crypto";
+import { uploadMedia } from "../../media-storage";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -39,7 +40,6 @@ export class TikTokBusinessPostClient extends PostClient {
   };
   #clientKey: string;
   #clientSecret: string;
-  #localSupabaseClient;
   #maxFileSize = 20 * 1024 * 1024;
   #allowedAspectRatios = [
     { ratio: 9 / 16, width: 1080, height: 1920 },
@@ -47,22 +47,15 @@ export class TikTokBusinessPostClient extends PostClient {
     { ratio: 1, width: 1080, height: 1080 },
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
-  #addedMedia: any[] = [];
-  #bucket: string = "post-media";
   #maxRequestRetries = 3;
   #requestRetryInitialDelayMs = 2000;
   #maxRequestRetryDelayMs = 15000;
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
 
     this.#clientKey = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
-
-    this.#localSupabaseClient = supabaseClient;
   }
 
   async refreshAccessToken(
@@ -194,7 +187,6 @@ export class TikTokBusinessPostClient extends PostClient {
             status,
             fail_reason: failReason,
             publish_id: publishId,
-            addedMedia: this.#addedMedia,
             requests: this.requests,
             responses: this.responses,
           },
@@ -217,7 +209,6 @@ export class TikTokBusinessPostClient extends PostClient {
             message: isProcessing
               ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
               : "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
-            addedMedia: this.#addedMedia,
             requests: this.requests,
             responses: this.responses,
             username: creatorInfoResponse.data.data.username,
@@ -239,7 +230,6 @@ export class TikTokBusinessPostClient extends PostClient {
             status: "Processing",
             message:
               "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
-            addedMedia: this.#addedMedia,
             requests: this.requests,
             responses: this.responses,
             username: creatorInfoResponse.data.data.username,
@@ -257,7 +247,6 @@ export class TikTokBusinessPostClient extends PostClient {
         provider_post_id: publicPostId ?? publishId,
         details: {
           status: "Published successfully",
-          addedMedia: this.#addedMedia,
           requests: this.requests,
           responses: this.responses,
           username: creatorInfoResponse.data.data.username,
@@ -830,41 +819,11 @@ export class TikTokBusinessPostClient extends PostClient {
       this.#maxFileSize,
     );
 
-    const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
-    const processedKey = `${key.split(".")[0]}_tiktok`;
-
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
-    }
-
-    this.#addedMedia.push({
-      key: processedKey,
-      bucket: this.#bucket,
+    return await uploadMedia({
+      key: `tiktok_business_${randomUUID()}.jpg`,
+      body: processedImage,
+      contentType: "image/jpeg",
+      cacheControl: "public, max-age=31536000",
     });
-
-    const { data: processedImageUpload } = this.#localSupabaseClient.storage
-      .from(this.#bucket)
-      .getPublicUrl(processedKey);
-
-    return processedImageUpload!.publicUrl;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
   }
 }

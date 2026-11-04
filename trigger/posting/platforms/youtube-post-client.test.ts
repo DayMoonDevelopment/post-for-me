@@ -1,5 +1,4 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SocialAccount } from "../post.types";
 import {
   isRetriableYouTubeSessionInitError,
@@ -26,7 +25,7 @@ describe("YouTube paid promotion metadata", () => {
       const errorSpy = spyOn(console, "error").mockImplementation(() => {});
 
       try {
-        const client = new YouTubePostClient({} as SupabaseClient, {
+        const client = new YouTubePostClient({
           app_id: "test",
           app_secret: "test",
         });

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { Mock } from "bun:test";
 import axios from "axios";
 import { wait } from "@trigger.dev/sdk";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { ThreadsPostClient } from "./threads-post-client";
 import type { PostMedia, SocialAccount } from "../post.types";
 
@@ -66,7 +65,7 @@ function makeMedia(count: number, mixed = false): PostMedia[] {
 }
 
 function publish(media: PostMedia[]) {
-  const client = new ThreadsPostClient({} as SupabaseClient, {
+  const client = new ThreadsPostClient({
     app_id: "app-id",
     app_secret: "app-secret",
   });
@@ -208,7 +207,7 @@ describe("ThreadsPostClient#processCarousel status polling", () => {
       return { data: { status: "FINISHED" } };
     });
 
-    const client = new ThreadsPostClient({} as any, {} as any);
+    const client = new ThreadsPostClient({} as any);
     const result = await client.post({
       postId: "post-1",
       account: makeAccount(),
@@ -236,7 +235,7 @@ describe("ThreadsPostClient#processCarousel status polling", () => {
       data: { status: "ERROR", error_message: "transcoding failed" },
     }));
 
-    const client = new ThreadsPostClient({} as any, {} as any);
+    const client = new ThreadsPostClient({} as any);
     const result = await client.post({
       postId: "post-1",
       account: makeAccount(),
@@ -255,7 +254,7 @@ describe("ThreadsPostClient#processCarousel status polling", () => {
     mockContainerLifecycle([]);
     getSpy.mockImplementation(async () => ({ data: { status: "IN_PROGRESS" } }));
 
-    const client = new ThreadsPostClient({} as any, {} as any);
+    const client = new ThreadsPostClient({} as any);
     const result = await client.post({
       postId: "post-1",
       account: makeAccount(),
@@ -288,7 +287,7 @@ describe("ThreadsPostClient#processMedia status polling (regression)", () => {
       return { data: { permalink: "https://threads.net/p/solo" } };
     });
 
-    const client = new ThreadsPostClient({} as any, {} as any);
+    const client = new ThreadsPostClient({} as any);
     const result = await client.post({
       postId: "post-1",
       account: makeAccount(),

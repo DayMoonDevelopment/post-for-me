@@ -3,69 +3,8 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import { createReadStream } from "fs";
-import { Upload } from "tus-js-client";
-
-const getFileKeyFromPublicUrl = (
-  publicUrl: string,
-  bucket: string
-): string | null => {
-  const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-  const match = publicUrl.match(pattern);
-  return match ? match[1] : null;
-};
-
-async function uploadFile({
-  bucketName,
-  key,
-  filePath,
-}: {
-  bucketName: string;
-  key: string;
-  filePath: string;
-}) {
-  return new Promise<void>((resolve, reject) => {
-    const stream = createReadStream(filePath);
-
-    const upload = new Upload(stream, {
-      endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: {
-        authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        "x-upsert": "true",
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true, // Important if you want to allow re-uploading the same file https://github.com/tus/tus-js-client/blob/main/docs/api.md#removefingerprintonsuccess
-      metadata: {
-        bucketName: bucketName,
-        objectName: key,
-        contentType: "video/mp4",
-        cacheControl: "3600",
-      },
-      chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
-      onError: function (error) {
-        logger.error("Failed uploading video", { error });
-        reject(error);
-      },
-      onSuccess: function () {
-        logger.info("Video uploaded succesfully", { bucketName, key });
-        resolve();
-      },
-    });
-
-    // Check if there are any previous uploads to continue.
-    return upload.findPreviousUploads().then(function (previousUploads) {
-      // Found previous uploads so we select the first one.
-      if (previousUploads.length) {
-        upload.resumeFromPreviousUpload(previousUploads[0]);
-      }
-
-      // Start the upload
-      logger.info("Starting video upload", { bucketName, key });
-      upload.start();
-    });
-  });
-}
+import { randomUUID } from "crypto";
+import { uploadMedia } from "./media-storage";
 
 export const ffmpegCompressVideo = task({
   id: "ffmpeg-compress-video",
@@ -84,20 +23,11 @@ export const ffmpegCompressVideo = task({
     url: string;
     maxSizeBytes: number;
   }): Promise<string> => {
-    const bucket = "post-media";
-
-    const key = getFileKeyFromPublicUrl(url, bucket);
-
-    if (!key) {
-      logger.error("Unable to get key from url", { url });
-      throw new Error("Unable to get key from url");
-    }
-
-    const filename = key.split("/").pop()!;
-    const processedKey = `${key}_blueskey`;
-
     logger.info("Downloading video from signed URL");
     const videoResponse = await fetch(url);
+    if (!videoResponse.ok) {
+      throw new Error(`Failed to fetch video: HTTP ${videoResponse.status}`);
+    }
     if (!videoResponse.body) throw new Error("Failed to fetch video");
 
     const videoBuffer = await videoResponse.arrayBuffer();
@@ -116,6 +46,9 @@ export const ffmpegCompressVideo = task({
     });
 
     const tempDir = os.tmpdir();
+    const extension = path.extname(new URL(url).pathname);
+    const filename = `${randomUUID()}${/^\.[a-z0-9]{1,10}$/i.test(extension) ? extension : ".mp4"}`;
+    const processedKey = `bluesky_${randomUUID()}.mp4`;
     const inputPath = path.join(tempDir, filename);
     const maxAttempts = 3;
     let currentInputPath = inputPath;
@@ -149,7 +82,7 @@ export const ffmpegCompressVideo = task({
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const outputPath = path.join(
           tempDir,
-          `processed_${Date.now()}_attempt_${attempt}.mp4`
+          `bluesky_${randomUUID()}_attempt_${attempt}.mp4`
         );
         outputPaths.push(outputPath);
 
@@ -243,13 +176,12 @@ export const ffmpegCompressVideo = task({
           );
 
           logger.info("Uploading processed video to storage");
-          await uploadFile({
-            bucketName: bucket,
+          return await uploadMedia({
             key: processedKey,
             filePath: outputPath,
+            contentType: "video/mp4",
+            cacheControl: "public, max-age=3600",
           });
-
-          return url.replace(key, processedKey);
         }
 
         // If this isn't the last attempt, use the current output as input for the next attempt
@@ -270,12 +202,12 @@ export const ffmpegCompressVideo = task({
           );
 
           logger.info("Uploading processed video to storage");
-          await uploadFile({
-            bucketName: bucket,
+          return await uploadMedia({
             key: processedKey,
             filePath: outputPath,
+            contentType: "video/mp4",
+            cacheControl: "public, max-age=3600",
           });
-          return url.replace(key, processedKey);
         }
       }
 

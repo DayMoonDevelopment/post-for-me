@@ -6,7 +6,6 @@ import {
   TwitterApiTokens,
 } from "twitter-api-v2";
 import { readFile } from "fs/promises";
-import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import * as twitterText from "twitter-text";
 import type { ParseTweetOptions } from "twitter-text";
@@ -88,11 +87,8 @@ export class TwitterPostClient extends PostClient {
   #maxFileSize = 5 * 1024 * 1024;
   #uploadChunkSize = 5 * 1024 * 1024;
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
 
     this.#appKey = appCredentials.app_id;
     this.#appSecret = appCredentials.app_secret;

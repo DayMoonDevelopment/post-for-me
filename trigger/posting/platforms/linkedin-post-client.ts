@@ -1,4 +1,3 @@
-import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
 import {
   LinkedinConfiguration,
@@ -21,11 +20,8 @@ export class LinkedInPostClient extends PostClient {
   #maxImages = 20;
   #apiVersion = process.env.LINKEDIN_API_VERSION || "202601";
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
     this.#clientId = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
   }

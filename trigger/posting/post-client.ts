@@ -6,7 +6,6 @@ import os from "os";
 import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { TimestampedArray } from "./timestamped-array";
 import type {
   BlueskyConfiguration,
@@ -34,10 +33,7 @@ export class PostClient {
   // representation for it and would otherwise silently mishandle it.
   supportedMediaTypes: string[] = ["image", "video"];
 
-  constructor(
-    _supabaseClient: SupabaseClient,
-    _appCredentials: PlatformAppCredentials,
-  ) {}
+  constructor(_appCredentials: PlatformAppCredentials) {}
 
   //##ABSTRACT METHODS##
   async refreshAccessToken(
@@ -112,7 +108,7 @@ export class PostClient {
         type: data.type,
       });
     } catch (error) {
-      console.error("Error getting file from supa:", error);
+      console.error("Error downloading media file:", error);
       throw error;
     }
   }

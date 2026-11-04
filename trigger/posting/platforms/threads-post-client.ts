@@ -1,6 +1,5 @@
 import { PostClient } from "../post-client";
 import axios, { AxiosResponse } from "axios";
-import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import {
   SocialAccount,
@@ -38,11 +37,8 @@ export class ThreadsPostClient extends PostClient {
   #maxItems = 20;
   #containerUrl = "https://graph.threads.net/v1.0/me/threads";
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
   }
 
   async refreshAccessToken(

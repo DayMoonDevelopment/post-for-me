@@ -1,6 +1,5 @@
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
-import { SupabaseClient } from "@supabase/supabase-js";
 import { logger, wait } from "@trigger.dev/sdk";
 import ffmpeg from "fluent-ffmpeg";
 import { createWriteStream } from "node:fs";
@@ -131,11 +130,8 @@ export class YouTubePostClient extends PostClient {
   static readonly PROCESSING_POLL_INITIAL_DELAY_MS = 5_000;
   static readonly PROCESSING_POLL_MAX_DELAY_MS = 60_000;
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
 
     this.#googleClientId = appCredentials.app_id;
     this.#googleClientSecret = appCredentials.app_secret;

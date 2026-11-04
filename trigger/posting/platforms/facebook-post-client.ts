@@ -1,4 +1,3 @@
-import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import fetch from "node-fetch";
@@ -55,11 +54,8 @@ export class FacebookPostClient extends PostClient {
   static readonly READ_BACK_MAX_DELAY_MS = 4_000;
   static readonly RETRYABLE_RATE_LIMIT_CODES = new Set([4, 17, 32, 613]); // Meta Graph API rate-limit error codes
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
     this.#appCredentials = appCredentials;
   }
 

@@ -144,7 +144,7 @@ const makeVideoMedium = (id: string): PostMedia => ({
   type: "video",
 });
 
-const makeClient = () => new InstagramPostClient({} as any, appCredentials);
+const makeClient = () => new InstagramPostClient(appCredentials);
 
 const publishSingle = () =>
   makeClient().post({
