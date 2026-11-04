@@ -144,7 +144,7 @@ export const postToPlatform = task({
       machine: "large-1x",
     },
   },
-  machine: "medium-2x",
+  machine: "medium-1x",
   run: async (payload: IndividualPostData): Promise<PostResult> => {
     const {
       platform,
@@ -272,7 +272,6 @@ export const postToPlatform = task({
             error,
           });
         }
-
       }
     } catch (error) {
       logger.error("Failed Processing Platform Post", { error });

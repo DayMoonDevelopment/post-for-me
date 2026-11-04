@@ -1,11 +1,79 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SocialAccount } from "../post.types";
 import {
   isRetriableYouTubeSessionInitError,
   sanitizeYouTubeDescription,
   sanitizeYouTubeLocalizations,
   truncateToUtf8Bytes,
   YOUTUBE_MAX_DESCRIPTION_BYTES,
+  YouTubePostClient,
 } from "./youtube-post-client";
+
+describe("YouTube paid promotion metadata", () => {
+  test.each([true, false, undefined])(
+    "builds upload metadata for has_paid_product_placement=%s",
+    async (hasPaidProductPlacement) => {
+      const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+        (async (_input, init) =>
+          new Response(init?.method === "HEAD" ? null : "video", {
+            headers: {
+              "content-length": "5",
+              "content-type": "video/mp4",
+            },
+          })) as typeof fetch,
+      );
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        const client = new YouTubePostClient({} as SupabaseClient, {
+          app_id: "test",
+          app_secret: "test",
+        });
+        const result = await client.post({
+          postId: "test-post",
+          account: { id: "test-account" } as SocialAccount,
+          caption: "Test video",
+          media: [
+            {
+              id: "paid-promotion-test",
+              type: "video",
+              url: "https://example.com/video.mp4",
+            },
+          ],
+          platformConfig:
+            hasPaidProductPlacement === undefined
+              ? undefined
+              : { has_paid_product_placement: hasPaidProductPlacement },
+        });
+
+        // Stop before uploading: no OAuth client is configured. The request
+        // metadata has already been built and recorded by the publishing path.
+        expect(result.success).toBe(false);
+        const request = result.details.requests.find(
+          (entry: { postRequest?: unknown }) => entry.postRequest,
+        ).postRequest;
+        if (hasPaidProductPlacement === undefined) {
+          expect(request.part).toEqual(["snippet", "status"]);
+          expect(request.requestBody).not.toHaveProperty(
+            "paidProductPlacementDetails",
+          );
+        } else {
+          expect(request.part).toContain("paidProductPlacementDetails");
+          expect(request.requestBody.paidProductPlacementDetails).toEqual({
+            hasPaidProductPlacement,
+          });
+        }
+        expect(request.requestBody.status).not.toHaveProperty(
+          "hasPaidProductPlacement",
+        );
+      } finally {
+        fetchSpy.mockRestore();
+        errorSpy.mockRestore();
+      }
+    },
+  );
+});
 
 describe("isRetriableYouTubeSessionInitError", () => {
   test("retries on 429", () => {

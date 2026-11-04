@@ -208,6 +208,66 @@ describe("InstagramPostClient media tag platform filters", () => {
   }
 });
 
+describe("InstagramPostClient AI content disclosure", () => {
+  for (const connectionType of ["facebook", "instagram"]) {
+    for (const format of ["image", "reel", "story", "carousel"]) {
+      for (const flag of [true, false, undefined]) {
+        test(`${connectionType} login ${format} forwards AI flag ${flag} only when provided`, async () => {
+          const account = makeAccount();
+          account.social_provider_metadata = {
+            connection_type: connectionType,
+          };
+          const image: PostMedia = {
+            id: "image_1",
+            url: "https://cdn.example.com/photo.jpg",
+            type: "image",
+            skip_processing: true,
+          };
+          const media =
+            format === "carousel"
+              ? [image, makeVideoMedium("video_1")]
+              : format === "image"
+                ? [image]
+                : [makeVideoMedium("video_1")];
+
+          const result = await makeClient().post({
+            postId: "post_1",
+            account,
+            caption: "caption",
+            media,
+            platformConfig: {
+              ...(flag === undefined ? {} : { is_ai_generated: flag }),
+              placement: format === "story" ? "stories" : undefined,
+            },
+          });
+
+          expect(result.success).toBe(true);
+          const containerCalls = axiosPost.mock.calls.filter(([url]) =>
+            url.endsWith("/media"),
+          );
+          expect(containerCalls).toHaveLength(format === "carousel" ? 3 : 1);
+          for (const [url, payload] of containerCalls) {
+            expect(url).toContain(
+              connectionType === "instagram"
+                ? "graph.instagram.com"
+                : "graph.facebook.com",
+            );
+            if (payload.is_carousel_item || flag === undefined) {
+              expect(payload).not.toHaveProperty("is_ai_generated");
+            } else {
+              expect(payload.is_ai_generated).toBe(flag);
+            }
+          }
+          const publishCall = axiosPost.mock.calls.find(([url]) =>
+            url.endsWith("/media_publish"),
+          );
+          expect(publishCall?.[1]).not.toHaveProperty("is_ai_generated");
+        });
+      }
+    }
+  }
+});
+
 describe("InstagramPostClient error detail propagation", () => {
   test("posts a single video successfully (happy path)", async () => {
     const result = await publishSingle();
