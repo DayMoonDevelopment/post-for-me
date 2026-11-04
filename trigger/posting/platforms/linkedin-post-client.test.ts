@@ -66,6 +66,10 @@ function defaultHandler(url: string, init?: RequestInit): Response {
     return new Response(null, { status: 201 });
   }
 
+  if (url.includes("/v2/socialActions/") && method === "POST") {
+    return jsonResponse({ id: "comment-1" }, { status: 201 });
+  }
+
   if (url.includes("/v2/ugcPosts") && method === "POST") {
     return jsonResponse(
       { id: "urn:li:share:legacy-post-1" },
@@ -583,5 +587,134 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
       "Failed to download document for upload: 403",
     );
     expect(cancelCalled).toBe(true);
+  });
+});
+
+describe("LinkedInPostClient#post — first_comment", () => {
+  const commentCalls = () =>
+    calls.filter((c) => c.url.includes("/v2/socialActions/"));
+
+  test("comments on the published post as its author once the post succeeds", async () => {
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-c1",
+      account: personAccount,
+      caption: "hello video",
+      media: [videoMedium],
+      platformConfig: { first_comment: "Full episode: https://example.com/ep-1" },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.provider_post_id).toBe("urn:li:share:legacy-post-1");
+    expect(commentCalls()).toHaveLength(1);
+    const [comment] = commentCalls();
+    expect(comment.url).toBe(
+      `https://api.linkedin.com/v2/socialActions/${encodeURIComponent("urn:li:share:legacy-post-1")}/comments`,
+    );
+    expect(JSON.parse(comment.init!.body as string)).toEqual({
+      actor: "urn:li:person:12345",
+      object: "urn:li:share:legacy-post-1",
+      message: { text: "Full episode: https://example.com/ep-1" },
+    });
+    expect(result.details.first_comment).toEqual({
+      success: true,
+      provider_comment_id: "comment-1",
+    });
+  });
+
+  test("an organization page account comments as the organization", async () => {
+    const client = makeClient();
+    await client.post({
+      postId: "post-c2",
+      account: orgAccount,
+      caption: "hello org",
+      media: [imageMedium],
+      platformConfig: { first_comment: "Link in here" },
+    });
+
+    const body = JSON.parse(commentCalls()[0].init!.body as string);
+    expect(body.actor).toBe("urn:li:organization:67890");
+  });
+
+  test("comments on document posts too, using the Posts API's id", async () => {
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-c3",
+      account: personAccount,
+      caption: "the slides",
+      media: [documentMedium],
+      platformConfig: { first_comment: "Slides source: https://example.com" },
+    });
+
+    expect(result.success).toBe(true);
+    const body = JSON.parse(commentCalls()[0].init!.body as string);
+    expect(body.object).toBe("urn:li:share:doc-post-1");
+  });
+
+  test("makes no comment call when first_comment is absent or blank", async () => {
+    await makeClient().post({
+      postId: "post-c4",
+      account: personAccount,
+      caption: "no comment",
+      media: [imageMedium],
+    });
+    await makeClient().post({
+      postId: "post-c5",
+      account: personAccount,
+      caption: "blank comment",
+      media: [imageMedium],
+      platformConfig: { first_comment: "   " },
+    });
+
+    expect(commentCalls()).toHaveLength(0);
+  });
+
+  test("a failed comment leaves the post successful and reports the error", async () => {
+    handler = (url, init) => {
+      if (url.includes("/v2/socialActions/")) {
+        return jsonResponse(
+          { status: 403, code: "ACCESS_DENIED" },
+          { status: 403 },
+        );
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-c6",
+      account: personAccount,
+      caption: "hello",
+      media: [imageMedium],
+      platformConfig: { first_comment: "Full episode: https://example.com" },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.provider_post_id).toBe("urn:li:share:legacy-post-1");
+    expect(result.details.first_comment.success).toBe(false);
+    expect(result.details.first_comment.error_message).toContain(
+      "Failed to post the first comment to LinkedIn: 403",
+    );
+  });
+
+  test("makes no comment call when the post itself fails", async () => {
+    handler = (url, init) => {
+      if (url.includes("/v2/ugcPosts")) {
+        return jsonResponse({ message: "nope" }, { status: 500 });
+      }
+      return defaultHandler(url, init);
+    };
+
+    const client = makeClient();
+    const result = await client.post({
+      postId: "post-c7",
+      account: personAccount,
+      caption: "hello",
+      media: [imageMedium],
+      platformConfig: { first_comment: "Full episode: https://example.com" },
+    });
+
+    expect(result.success).toBe(false);
+    expect(commentCalls()).toHaveLength(0);
   });
 });

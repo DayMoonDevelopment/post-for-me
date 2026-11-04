@@ -203,6 +203,7 @@ export interface LinkedinConfiguration {
   title?: string;
   media?: PostMedia[];
   reshare_post_id?: string;
+  first_comment?: string;
 }
 
 export interface BlueskyConfiguration {
