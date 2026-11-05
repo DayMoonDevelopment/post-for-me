@@ -25,9 +25,11 @@ PostHog / Meta / Google, this is where to look.
 
 ## Where the wiring happens (outside this folder)
 
-These route files import from `~/tracking/.server/…` to do the work:
+Dashboard lifecycle routes import from `~/tracking/.server/…`. Paid lifecycle
+tracking runs in the independent Trigger worker:
 
-- **Stripe webhook** — `app/routes/api.stripe.webhook/.server/subscription-lifecycle-tracking.ts`
+- **Stripe webhook** — `app/routes/api.stripe.webhook/route.action.ts` verifies
+  and enqueues the event. `trigger/stripe-webhook/subscription-lifecycle-tracking.ts`
   emits every paid-lifecycle event (`customer_converted`, `subscription_reactivated`,
   `subscription_upgraded`/`_downgraded`, `subscription_cancel_scheduled`,
   `subscription_canceled`) and refreshes the `team` group state on each event.

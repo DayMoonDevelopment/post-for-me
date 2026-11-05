@@ -1,12 +1,9 @@
-import { withSupabase } from "~/lib/.server/supabase";
+import { tasks } from "@trigger.dev/sdk";
 import { stripe } from "~/lib/.server/stripe";
 import { STRIPE_WEBHOOK_SECRET } from "~/lib/.server/stripe.constants";
+import type { Route } from "./+types/route";
 
-import { handleCustomerEvent } from "./.server/customer-event";
-import { handleSubscriptionEvent } from "./.server/subscription-event";
-import { handleInvoiceEvent } from "./.server/invoice-event";
-
-export const action = withSupabase(async ({ request, supabaseServiceRole }) => {
+export async function action({ request }: Route.ActionArgs) {
   const sig = request.headers.get("stripe-signature");
 
   let event;
@@ -25,24 +22,36 @@ export const action = withSupabase(async ({ request, supabaseServiceRole }) => {
     return new Response(`Webhook Error: ${error.message}`, { status: 400 });
   }
 
-  // Handle the event
-
+  let customerId: string | undefined;
   switch (event.type) {
     case "customer.created":
     case "customer.updated":
-      await handleCustomerEvent(event.data.object, supabaseServiceRole);
+      customerId = event.data.object.id;
       break;
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted":
-      await handleSubscriptionEvent(event, supabaseServiceRole);
-      break;
     case "invoice.created":
-      await handleInvoiceEvent(event.data.object, supabaseServiceRole);
+    case "invoice.paid":
+    case "invoice.payment_succeeded": {
+      const customer = event.data.object.customer;
+      customerId = typeof customer === "string" ? customer : customer?.id;
       break;
+    }
     default:
-      console.log(`Unhandled event type ${event.type}`);
+      return new Response("OK");
+  }
+
+  try {
+    await tasks.trigger("process-stripe-webhook", { event }, {
+      concurrencyKey: customerId,
+      idempotencyKey: `stripe-webhook:${event.id}`,
+      idempotencyKeyTTL: "7d",
+    });
+  } catch (error) {
+    console.error(`Failed to enqueue Stripe webhook ${event.id}:`, error);
+    return new Response("Failed to enqueue webhook", { status: 503 });
   }
 
   return new Response("OK");
-});
+}

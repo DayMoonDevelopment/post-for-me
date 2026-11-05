@@ -12,7 +12,7 @@ import type { Database } from "~/lib/.server/database.types";
  * User-lifecycle (non-billing) PostHog events: team / project / membership
  * moments that originate from in-app user actions rather than the Stripe
  * webhook. Paid-lifecycle events still live in
- * `routes/api.stripe.webhook/.server/subscription-lifecycle-tracking.ts` and
+ * `trigger/stripe-webhook/subscription-lifecycle-tracking.ts` and
  * must be sourced from Stripe — keep that split intact.
  *
  * Every export here is best-effort and may throw (the count/lookup queries can

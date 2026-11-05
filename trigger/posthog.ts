@@ -4,7 +4,7 @@ import { PostHog } from "posthog-node";
 
 // Vendored copy of the dashboard's server-side PostHog helper. Per the
 // dumb-monorepo rule, siblings don't share code — keep this in sync with
-// dashboard/app/lib/.server/posthog.ts by hand if the shape changes.
+// dashboard/app/tracking/.server/posthog.ts by hand if the shape changes.
 
 const POST_HOG_API_KEY = process.env?.POST_HOG_API_KEY;
 const POST_HOG_API_HOST = process.env?.POST_HOG_API_HOST;
@@ -34,8 +34,8 @@ function getClient(): PostHog | null {
 }
 
 /**
- * Derive a stable UUID from a key so a re-run of the cron can't double-count the
- * same logical event — PostHog deduplicates ingested events by `uuid`.
+ * Derive a stable UUID so retries of the same logical event can be collapsed
+ * with DISTINCT uuid. PostHog's eventual merge is not ingestion-time dedup.
  */
 export function deterministicUuid(key: string): string {
   const hex = createHash("sha256").update(key).digest("hex");
@@ -85,5 +85,20 @@ export async function captureServerEvent(params: {
     await posthog.flush();
   } catch (error) {
     console.error(`Failed to capture PostHog event "${params.event}":`, error);
+  }
+}
+
+/** Refresh current team state. groupIdentify merges these properties. */
+export async function setTeamGroupProperties(
+  teamId: string,
+  properties: Record<string, unknown>,
+): Promise<void> {
+  const posthog = getClient();
+  if (!posthog) return;
+  try {
+    posthog.groupIdentify({ groupType: "team", groupKey: teamId, properties });
+    await posthog.flush();
+  } catch (error) {
+    console.error("Failed to set PostHog team group properties:", error);
   }
 }
