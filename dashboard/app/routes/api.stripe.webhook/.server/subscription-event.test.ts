@@ -3,6 +3,15 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 const updateAPIKeyAccessMock = vi.fn().mockResolvedValue(undefined);
 const trackSubscriptionLifecycleMock = vi.fn().mockResolvedValue(undefined);
 const syncTeamUsageLimitOnUpgradeMock = vi.fn().mockResolvedValue(undefined);
+const retrieveSubscriptionMock = vi.fn();
+
+vi.mock("~/lib/.server/stripe", () => ({
+  stripe: {
+    subscriptions: {
+      retrieve: (...args: unknown[]) => retrieveSubscriptionMock(...args),
+    },
+  },
+}));
 
 vi.mock("~/lib/.server/update-api-key-access.request", () => ({
   updateAPIKeyAccess: (...args: unknown[]) => updateAPIKeyAccessMock(...args),
@@ -39,12 +48,78 @@ function subscriptionEvent(
 }
 
 beforeEach(() => {
+  retrieveSubscriptionMock.mockReset();
+  retrieveSubscriptionMock.mockResolvedValue({ id: "sub_1", status: "active" });
   updateAPIKeyAccessMock.mockClear();
   trackSubscriptionLifecycleMock.mockClear();
   syncTeamUsageLimitOnUpgradeMock.mockClear();
 });
 
 describe("handleSubscriptionEvent", () => {
+  it.each(["past_due", "unpaid", "canceled"])(
+    "enables keys when a stale %s event is retried after recovery",
+    async (status) => {
+      const event = subscriptionEvent("customer.subscription.updated", { status });
+
+      await handleSubscriptionEvent(event, supabaseServiceRole);
+
+      expect(retrieveSubscriptionMock).toHaveBeenCalledWith("sub_1");
+      expect(updateAPIKeyAccessMock).toHaveBeenCalledWith(
+        { stripeCustomerId: "cus_1", enabled: true },
+        supabaseServiceRole,
+      );
+      expect(trackSubscriptionLifecycleMock).toHaveBeenCalledWith(
+        event,
+        supabaseServiceRole,
+      );
+    },
+  );
+
+  it.each(["past_due", "unpaid", "canceled"])(
+    "disables keys when Stripe currently reports %s despite an old active event",
+    async (status) => {
+      retrieveSubscriptionMock.mockResolvedValue({ id: "sub_1", status });
+
+      await handleSubscriptionEvent(
+        subscriptionEvent("customer.subscription.updated"),
+        supabaseServiceRole,
+      );
+
+      expect(updateAPIKeyAccessMock).toHaveBeenCalledWith(
+        { stripeCustomerId: "cus_1", enabled: false },
+        supabaseServiceRole,
+      );
+    },
+  );
+
+  it("enables keys when the current subscription is trialing", async () => {
+    retrieveSubscriptionMock.mockResolvedValue({ id: "sub_1", status: "trialing" });
+
+    await handleSubscriptionEvent(
+      subscriptionEvent("customer.subscription.updated", { status: "past_due" }),
+      supabaseServiceRole,
+    );
+
+    expect(updateAPIKeyAccessMock).toHaveBeenCalledWith(
+      { stripeCustomerId: "cus_1", enabled: true },
+      supabaseServiceRole,
+    );
+  });
+
+  it("propagates Stripe lookup failures without toggling keys", async () => {
+    const error = new Error("Stripe unavailable");
+    retrieveSubscriptionMock.mockRejectedValueOnce(error);
+
+    await expect(handleSubscriptionEvent(
+      subscriptionEvent("customer.subscription.updated", { status: "past_due" }),
+      supabaseServiceRole,
+    )).rejects.toBe(error);
+
+    expect(updateAPIKeyAccessMock).not.toHaveBeenCalled();
+    expect(trackSubscriptionLifecycleMock).not.toHaveBeenCalled();
+    expect(syncTeamUsageLimitOnUpgradeMock).not.toHaveBeenCalled();
+  });
+
   it("invokes syncTeamUsageLimitOnUpgrade with the subscription on customer.subscription.updated", async () => {
     const event = subscriptionEvent("customer.subscription.updated");
 

@@ -1,4 +1,5 @@
 import { updateAPIKeyAccess } from "~/lib/.server/update-api-key-access.request";
+import { stripe } from "~/lib/.server/stripe";
 
 import { trackSubscriptionLifecycle } from "./subscription-lifecycle-tracking";
 import { syncTeamUsageLimitOnUpgrade } from "./sync-usage-limit";
@@ -16,10 +17,13 @@ export async function handleSubscriptionEvent(
 ) {
   const subscription = event.data.object;
   const customerId = subscription.customer as string;
+  // Retried events can contain a delinquent status from before payment recovery.
+  const currentSubscription = await stripe.subscriptions.retrieve(subscription.id);
   const isSubscriptionActive =
-    subscription.status === "active" || subscription.status === "trialing";
+    currentSubscription.status === "active" ||
+    currentSubscription.status === "trialing";
 
-  // Toggle API key access based on subscription status.
+  // Toggle API key access based on the current Stripe subscription status.
   await updateAPIKeyAccess(
     {
       stripeCustomerId: customerId,
