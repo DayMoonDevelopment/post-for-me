@@ -9,7 +9,8 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-import { logger, wait } from "@trigger.dev/sdk";
+import { logger, tasks, wait } from "@trigger.dev/sdk";
+import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
 import FormData from "form-data";
 import { normalizePlatform } from "../../lib/platform.utils";
 import {
@@ -126,9 +127,28 @@ export class FacebookPostClient extends PostClient {
         }
         case media.length === 1: {
           // For single media posts (image or video)
-          const medium = media[0];
+          let medium = media[0];
 
           if (medium.type === "video") {
+            if (["stories", "reels"].includes(platformConfig?.placement ?? "")) {
+              // Meta's Reel/story URL fetchers may retain the old R2 robots policy.
+              try {
+                const copied = await tasks.triggerAndWait<typeof copyMediaToSupabase>(
+                  "copy-media-to-supabase",
+                  { url: medium.url },
+                );
+                if (!copied.ok) {
+                  throw new Error("Failed to copy Facebook media to Supabase");
+                }
+                medium = { ...medium, url: copied.output };
+              } catch {
+                logger.warn("Facebook media copy failed; falling back to R2", {
+                  postId,
+                  mediumId: medium.id,
+                  placement: platformConfig.placement,
+                });
+              }
+            }
             switch (platformConfig?.placement) {
               case "stories": {
                 platformId = await this.#publishVideoStory({ account, medium });

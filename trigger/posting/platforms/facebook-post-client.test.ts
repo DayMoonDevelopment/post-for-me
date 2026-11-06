@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   FacebookConfiguration,
   PlatformAppCredentials,
@@ -24,6 +24,7 @@ import type {
 // setup.
 
 const DEFAULT_VIDEO_ID = "video_123";
+const COPIED_VIDEO_URL = "https://project.supabase.co/storage/v1/object/public/media/video.mp4";
 
 let videoStatusBehaviors: Array<() => unknown>;
 let videoStatusCallCount: number;
@@ -89,7 +90,7 @@ const axiosGet = mock(async (url: string, config?: any) => {
   throw new Error(`Unhandled axios.get url in test: ${url}`);
 });
 
-const axiosPost = mock(async (url: string, body?: any) => {
+const axiosPost = mock(async (url: string, body?: any, _config?: any) => {
   if (url.endsWith("/photos")) {
     return { data: { id: "photo_1", post_id: "photo_post_1" } };
   }
@@ -164,8 +165,11 @@ mock.module("@trigger.dev/sdk", () => {
 });
 
 let FacebookPostClient: typeof import("./facebook-post-client").FacebookPostClient;
+let tasks: typeof import("@trigger.dev/sdk").tasks;
+let copyMedia: ReturnType<typeof mock<typeof tasks.triggerAndWait>>;
 
 beforeAll(async () => {
+  ({ tasks } = await import("@trigger.dev/sdk"));
   ({ FacebookPostClient } = await import("./facebook-post-client"));
 });
 
@@ -175,6 +179,16 @@ beforeEach(() => {
   axiosGet.mockClear();
   axiosPost.mockClear();
   waitFor.mockClear();
+  copyMedia = spyOn(tasks, "triggerAndWait").mockResolvedValue({
+    ok: true,
+    id: "copy_run_1",
+    taskIdentifier: "copy-media-to-supabase",
+    output: COPIED_VIDEO_URL,
+  });
+});
+
+afterEach(() => {
+  copyMedia.mockRestore();
 });
 
 const appCredentials: PlatformAppCredentials = {
@@ -251,6 +265,144 @@ describe("FacebookPostClient media tag platform filters", () => {
         })));
       }
       expect(JSON.stringify(media)).toBe(originalInput);
+    });
+  }
+});
+
+describe("FacebookPostClient Supabase video copy", () => {
+  for (const placement of ["stories", "reels"] as const) {
+    test(`awaits the copy before starting the ${placement} upload and preserves input`, async () => {
+      const medium = makeVideoMedium();
+      const media = [medium];
+      const originalMedia = structuredClone(media);
+      const copied = Promise.withResolvers<{
+        ok: true;
+        id: string;
+        taskIdentifier: string;
+        output: string;
+      }>();
+      // The client only awaits the result, not the SDK promise's unwrap helper.
+      copyMedia.mockReturnValueOnce(copied.promise as ReturnType<typeof tasks.triggerAndWait>);
+
+      const posting = makeClient().post({
+        postId: "post_1",
+        account: makeAccount(),
+        caption: "caption",
+        media,
+        platformConfig: { placement },
+      });
+
+      expect(copyMedia).toHaveBeenCalledTimes(1);
+      expect(copyMedia).toHaveBeenCalledWith("copy-media-to-supabase", {
+        url: originalMedia[0].url,
+      });
+      await Promise.resolve();
+      expect(axiosPost).not.toHaveBeenCalled();
+      expect(axiosGet).not.toHaveBeenCalled();
+      expect(media).toEqual(originalMedia);
+
+      copied.resolve({
+        ok: true,
+        id: "copy_run_1",
+        taskIdentifier: "copy-media-to-supabase",
+        output: COPIED_VIDEO_URL,
+      });
+      const result = await posting;
+
+      expect(result.success).toBe(true);
+      const endpoint = placement === "stories" ? "video_stories" : "video_reels";
+      const uploadUrl = `https://upload.example/${placement === "stories" ? "story" : "reel"}`;
+      expect(axiosPost.mock.calls[0][0]).toEndWith(`/page_1/${endpoint}`);
+      expect(axiosPost.mock.calls[0][1]).toEqual({
+        upload_phase: "start",
+        access_token: "token_1",
+      });
+      expect(axiosPost.mock.calls.filter(([url]) => url === uploadUrl)).toEqual([
+        [uploadUrl, placement === "stories" ? {} : null, {
+          headers: { Authorization: "OAuth token_1", file_url: COPIED_VIDEO_URL },
+        }],
+      ]);
+      expect(axiosPost.mock.calls.some(([url, body]) =>
+        url.endsWith(`/${endpoint}`) && body?.upload_phase === "finish",
+      )).toBe(true);
+      expect(copyMedia).toHaveBeenCalledTimes(1);
+      expect(media).toEqual(originalMedia);
+      expect(media[0]).toBe(medium);
+      expect(medium.url).toBe(originalMedia[0].url);
+    });
+
+    for (const failure of ["failed task", "rejection"] as const) {
+      test(`falls back to the original URL when the ${placement} copy returns ${failure}`, async () => {
+        if (failure === "failed task") {
+          copyMedia.mockResolvedValueOnce({
+            ok: false,
+            id: "copy_run_1",
+            taskIdentifier: "copy-media-to-supabase",
+            error: { name: "Error", message: "Copy failed" },
+          });
+        } else {
+          copyMedia.mockRejectedValueOnce(new Error("Copy task rejected"));
+        }
+        const medium = makeVideoMedium();
+        const media = [medium];
+        const originalMedia = structuredClone(media);
+
+        const result = await makeClient().post({
+          postId: "post_1",
+          account: makeAccount(),
+          caption: "caption",
+          media,
+          platformConfig: { placement },
+        });
+
+        expect(result.success).toBe(true);
+        expect(copyMedia).toHaveBeenCalledTimes(1);
+        expect(copyMedia).toHaveBeenCalledWith("copy-media-to-supabase", {
+          url: originalMedia[0].url,
+        });
+        const endpoint = placement === "stories" ? "video_stories" : "video_reels";
+        const uploadUrl = `https://upload.example/${placement === "stories" ? "story" : "reel"}`;
+        expect(axiosPost.mock.calls[0][0]).toEndWith(`/page_1/${endpoint}`);
+        expect(axiosPost.mock.calls.filter(([url]) => url === uploadUrl)).toEqual([
+          [uploadUrl, placement === "stories" ? {} : null, {
+            headers: { Authorization: "OAuth token_1", file_url: originalMedia[0].url },
+          }],
+        ]);
+        expect(axiosPost.mock.calls.some(([url, body]) =>
+          url.endsWith(`/${endpoint}`) && body?.upload_phase === "finish",
+        )).toBe(true);
+        expect(media).toEqual(originalMedia);
+        expect(media[0]).toBe(medium);
+      });
+    }
+  }
+
+  for (const kind of ["feed video", "photo", "photo story", "carousel"] as const) {
+    test(`does not copy a ${kind} and keeps the original media URL`, async () => {
+      const medium: PostMedia = kind === "feed video"
+        ? makeVideoMedium()
+        : { id: "photo_1", url: "https://cdn.example.com/photo.jpg", type: "image" };
+      const media = kind === "carousel" ? [medium, { ...medium, id: "photo_2" }] : [medium];
+      const originalMedia = structuredClone(media);
+
+      const result = await makeClient().post({
+        postId: "post_1",
+        account: makeAccount(),
+        caption: "caption",
+        media,
+        platformConfig: { placement: kind === "photo story" ? "stories" : undefined },
+      });
+
+      expect(result.success).toBe(true);
+      expect(copyMedia).not.toHaveBeenCalled();
+      const uploadCalls = axiosPost.mock.calls.filter(([url]) =>
+        url.endsWith(kind === "feed video" ? "/videos" : "/photos"),
+      );
+      expect(uploadCalls).toHaveLength(media.length);
+      for (const [, body] of uploadCalls) {
+        expect(kind === "feed video" ? body.file_url : body.url).toBe(medium.url);
+      }
+      expect(media).toEqual(originalMedia);
     });
   }
 });

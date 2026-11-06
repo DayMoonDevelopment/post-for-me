@@ -9,9 +9,16 @@ Standard TikTok posts for projects with `is_system = false` copy the final media
 from R2 back into Supabase's `post-media` bucket via `copy-media-to-supabase`.
 Photos are copied after TikTok-specific transformations (or after skipping them),
 so TikTok receives the legacy public URL. Videos also use the copied Supabase
-source before their existing byte-upload flow. System projects, TikTok Business,
-and other platforms do not run this copy task. A failed copy fails that account's
-post rather than falling back to an unverified R2 URL.
+source before their existing byte-upload flow. System TikTok projects and TikTok
+Business do not run this copy task.
+
+Facebook video Stories and Reels also copy their media to Supabase before
+creating the Meta upload session, as a temporary workaround for robots-policy
+rejections by Meta's URL fetchers. This applies to all projects. Facebook photos,
+photo Stories, regular video posts, and other platforms continue using R2.
+If the Facebook copy fails or cannot be triggered, publishing proceeds with the
+original R2 URL and logs a warning. White-label TikTok copy failures still fail
+the account's post to preserve its verified-domain requirement.
 
 ## Environment
 
