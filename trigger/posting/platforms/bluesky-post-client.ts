@@ -1,6 +1,7 @@
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
-import sharp from "sharp";
+import type { transformBufferedImage } from "../../transform-buffered-image";
+import type { probeVideoDimensions } from "../../video-child-tasks";
 import { shouldSkipProcessing } from "../image-processing-utils";
 import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
@@ -12,7 +13,6 @@ import {
   SocialAccount,
 } from "../post.types";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
-import ffmpeg from "fluent-ffmpeg";
 import { createReadStream } from "fs";
 import { logger, tasks, wait } from "@trigger.dev/sdk/v3";
 
@@ -20,7 +20,6 @@ export class BlueskyPostClient extends PostClient {
   #agent: AtpAgent;
   #charLimit = 300;
   #maxImages = 4;
-  #maxFileSize = 976.56 * 1024;
   #maxVideoFileSize = 100_000_000;
   #videoStatusMaxAttempts = 30;
   #videoStatusInitialDelayMs = 5000;
@@ -248,27 +247,20 @@ export class BlueskyPostClient extends PostClient {
     const remoteName =
       new URL(fileUrl).pathname.split("/").pop() || "video.mp4";
 
+    const dimensions = await tasks.triggerAndWait<typeof probeVideoDimensions>(
+      "probe-video-dimensions",
+      { url: fileUrl },
+    );
+    if (!dimensions.ok) {
+      throw new Error("Failed to probe Bluesky video dimensions", { cause: dimensions.error });
+    }
+    const { width, height } = dimensions.output;
+
     const tmp = await this.downloadToTempFile(fileUrl, {
       prefix: "bluesky_video",
       filename: remoteName,
     });
     const inputPath = tmp.filePath;
-
-    const metadata = await new Promise<any>((resolve, reject) => {
-      ffmpeg.ffprobe(inputPath, (err: any, data: any) => {
-        if (err) reject(err);
-        else resolve(data);
-      });
-    });
-
-    const videoStream = metadata.streams.find(
-      (s: any) => s.codec_type === "video",
-    );
-    if (!videoStream) {
-      throw new Error("No video stream found in file");
-    }
-
-    const { width, height } = videoStream;
 
     let uploadResponseData: unknown;
     try {
@@ -443,43 +435,16 @@ export class BlueskyPostClient extends PostClient {
         continue;
       }
 
-      const file = await this.getFile(medium);
-
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const metadata = await sharp(buffer).metadata();
-      const { width, height } = metadata;
-
-      let sharpBuffer: Buffer = buffer;
-      let encoding = file.type || "image/jpeg";
-      if (!shouldSkipProcessing(medium)) {
-        sharpBuffer = await sharp(buffer).toBuffer();
-        // Resize image if needed
-        if (buffer.length > this.#maxFileSize) {
-          sharpBuffer = await sharp(sharpBuffer)
-            .rotate() // Add this to automatically rotate based on EXIF data
-            .resize(2000, 2000, {
-              fit: "inside",
-              withoutEnlargement: true,
-            })
-            .jpeg({
-              quality: 80,
-            })
-            .toBuffer();
-          encoding = "image/jpeg";
-
-          console.log(`Resized to ${sharpBuffer.length} bytes`);
-
-          // If still too large, reduce quality further
-          if (sharpBuffer.length > this.#maxFileSize) {
-            sharpBuffer = await sharp(sharpBuffer)
-              .jpeg({
-                quality: 60,
-              })
-              .toBuffer();
-            console.log(`Further compressed to ${sharpBuffer.length} bytes`);
-          }
-        }
+      const result = await tasks.triggerAndWait<typeof transformBufferedImage>(
+        "transform-buffered-image",
+        { url: medium.url, platform: "bluesky", skipProcessing: shouldSkipProcessing(medium) },
+      );
+      if (!result.ok) {
+        throw new Error("Failed to prepare Bluesky image", { cause: result.error });
       }
+      const { width, height, mimeType: encoding, url } = result.output;
+      const file = await this.getFile({ ...medium, url });
+      const sharpBuffer = Buffer.from(await file.arrayBuffer());
 
       const uploadResult = await this.#agent.uploadBlob(sharpBuffer, {
         encoding,

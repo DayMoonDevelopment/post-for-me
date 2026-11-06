@@ -9,6 +9,97 @@ import {
   YouTubePostClient,
 } from "./youtube-post-client";
 
+// Isolate module mocks from other platform tests.
+const thumbnailHarness = String.raw`
+import { expect, mock } from "bun:test";
+const scenario = process.env.THUMBNAIL_SCENARIO;
+const events = [];
+const artifactUrl = "https://media.example.com/thumbnail.jpg";
+const thumbnailSet = mock(async (request) => {
+  events.push("thumbnail");
+  expect(request.media.body).toEqual(Buffer.from("jpeg"));
+  expect(request.media.mimeType).toBe("image/jpeg");
+  if (scenario === "upload-error") throw new Error("thumbnail upload failed");
+  return { data: {} };
+});
+mock.module("googleapis", () => ({ google: {
+  auth: { OAuth2: class {
+    setCredentials() {}
+    async refreshAccessToken() { return { credentials: { access_token: "token", expiry_date: Date.now() } }; }
+    async getAccessToken() { return "token"; }
+  } },
+  youtube: () => ({ thumbnails: { set: thumbnailSet }, videos: { list: async () => {
+    events.push("poll");
+    return { data: { items: [{ processingDetails: { processingStatus: "succeeded" } }] } };
+  } } }),
+} }));
+const triggerAndWait = mock(async (id, payload) => {
+  events.push("child");
+  expect(id).toBe("generate-youtube-timestamp-thumbnail");
+  expect(payload).toEqual({ url: "https://example.com/video.mp4", timestampMs: 1250, mediaId: "medium" });
+  if (scenario === "throw") throw new Error("child failed");
+  return scenario === "child-error" ? { ok: false, error: { message: "failed" } } : { ok: true, output: artifactUrl };
+});
+mock.module("@trigger.dev/sdk", () => ({
+  logger: { info() {}, warn() {}, error() {} },
+  tasks: { triggerAndWait }, wait: { for: async () => {} },
+}));
+globalThis.fetch = mock(async (url, init) => {
+  if (init?.method === "HEAD") return new Response(null, { headers: { "content-length": "5", "content-type": "video/mp4" } });
+  if (url === "https://example.com/video.mp4") return new Response("video");
+  if (String(url).startsWith("https://www.googleapis.com/upload/")) return new Response(null, { headers: { location: "https://upload.example.com" } });
+  if (url === "https://upload.example.com") {
+    events.push("video");
+    return Response.json({ id: "video-id" });
+  }
+  if (url === artifactUrl || url === "https://example.com/explicit.jpg") {
+    events.push("download-thumbnail");
+    return new Response("jpeg", { status: scenario === "download-error" ? 404 : 200, headers: { "content-type": "image/jpeg" } });
+  }
+  throw new Error("Unexpected fetch: " + url);
+});
+console.log = () => {};
+console.error = () => {};
+const { YouTubePostClient } = await import("./youtube-post-client.ts");
+const client = new YouTubePostClient({ app_id: "test", app_secret: "test" });
+const account = { id: "account" };
+await client.refreshAccessToken(account);
+const result = await client.post({ postId: "post", account, caption: "caption", media: [{
+  id: "medium", type: "video", url: "https://example.com/video.mp4",
+  ...(scenario !== "none" ? { thumbnail_timestamp_ms: 1250 } : {}),
+  ...(scenario === "explicit" ? { thumbnail_url: "https://example.com/explicit.jpg" } : {}),
+}] });
+expect(result.success).toBe(true);
+expect(triggerAndWait).toHaveBeenCalledTimes(["explicit", "none"].includes(scenario) ? 0 : 1);
+expect(events).toEqual(scenario === "none" ? ["video", "poll"]
+  : scenario === "explicit" ? ["video", "download-thumbnail", "thumbnail", "poll"]
+  : ["child-error", "throw"].includes(scenario) ? ["video", "child", "poll"]
+  : scenario === "download-error" ? ["video", "child", "download-thumbnail", "poll"]
+  : ["video", "child", "download-thumbnail", "thumbnail", "poll"]);
+if (["success", "upload-error"].includes(scenario)) {
+  const request = result.details.requests.find((entry) => entry.thumbnailUploadRequest).thumbnailUploadRequest;
+  expect(request.thumbnailTimestampMs).toBe(1250);
+  expect(request).not.toHaveProperty("thumbnailUrl");
+}
+`;
+
+for (const scenario of ["success", "explicit", "none", "child-error", "throw", "download-error", "upload-error"]) {
+  test(`YouTube thumbnail child boundary: ${scenario}`, async () => {
+    const child = Bun.spawn([process.execPath, "--eval", thumbnailHarness], {
+      cwd: __dirname,
+      env: { ...process.env, THUMBNAIL_SCENARIO: scenario },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect({ exitCode, stdout, stderr }).toEqual({ exitCode: 0, stdout: "", stderr: "" });
+  });
+}
+
 describe("YouTube paid promotion metadata", () => {
   test.each([true, false, undefined])(
     "builds upload metadata for has_paid_product_placement=%s",

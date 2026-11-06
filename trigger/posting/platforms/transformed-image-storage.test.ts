@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import axios, { type AxiosAdapter } from "axios";
 import sharp from "sharp";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
 import * as mediaStorage from "../../media-storage";
 import { InstagramPostClient } from "./instagram-post-client";
 import { TikTokPostClient } from "./tiktok-post-client";
@@ -43,7 +43,34 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       output: "",
     });
   });
-} else for (const { Client, prefix, width, height } of platforms) {
+} else {
+  const definitions = new Map<string, {
+    run(payload: any): Promise<unknown>;
+    machine: string;
+    retry: { maxAttempts: number; outOfMemory: { machine: string } };
+  }>();
+  mock.module("@trigger.dev/sdk", () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const actual = require("@trigger.dev/sdk");
+    return { ...actual, task: (definition: any) => {
+      definitions.set(definition.id, definition);
+      return definition;
+    } };
+  });
+  beforeAll(async () => {
+    await import("../../transform-instagram-image");
+    await import("../../transform-tiktok-image");
+  });
+
+  test("image tasks use medium machines with one retry and large OOM escalation", () => {
+    expect(definitions.size).toBe(2);
+    for (const definition of definitions.values()) {
+      expect(definition.machine).toBe("medium-1x");
+      expect(definition.retry).toEqual({ maxAttempts: 2, outOfMemory: { machine: "large-1x" } });
+    }
+  });
+
+  for (const { Client, prefix, width, height } of platforms) {
   describe(`${Client.name} transformed image storage`, () => {
     const spies: Array<{ mockRestore(): void }> = [];
     afterEach(() => {
@@ -51,10 +78,10 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       for (const spy of spies.splice(0)) spy.mockRestore();
     });
 
-    async function setup() {
+    async function setup(imageWidth = 600, imageHeight = 600, orientation?: number) {
       const image = await sharp({
-        create: { width: 600, height: 600, channels: 3, background: "red" },
-      }).png().toBuffer();
+        create: { width: imageWidth, height: imageHeight, channels: 3, background: "red" },
+      }).withMetadata({ orientation }).png().toBuffer();
       const downloads: string[] = [];
       const publications: any[] = [];
       const adapter: AxiosAdapter = async (config) => {
@@ -78,16 +105,26 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       const upload = spyOn(mediaStorage, "uploadMedia").mockImplementation(
         async ({ key }) => `https://media.example.com/${key}`,
       );
-      spies.push(upload, spyOn(wait, "for").mockResolvedValue(undefined));
+      const child = spyOn(tasks, "triggerAndWait").mockImplementation((async (id: string, payload: unknown) => {
+        const definition = definitions.get(id);
+        if (!definition) throw new Error(`Unexpected child task: ${id}`);
+        try {
+          const output = await definition.run(JSON.parse(JSON.stringify(payload)));
+          return { ok: true, output };
+        } catch (error) {
+          return { ok: false, error };
+        }
+      }) as typeof tasks.triggerAndWait);
+      spies.push(upload, child, spyOn(wait, "for").mockResolvedValue(undefined));
       const client = new Client(credentials);
-      const post = (overrides: Partial<PostMedia> = {}) => client.post({
+      const post = (overrides: Partial<PostMedia> = {}, platformConfig = {}, extraMedia: PostMedia[] = []) => client.post({
         postId: "post-id",
         account,
         caption: "caption",
-        media: [{ id: "media-id", url: sourceUrl, type: "image", ...overrides }],
-        platformConfig: {},
+        media: [{ id: "media-id", url: sourceUrl, type: "image", ...overrides }, ...extraMedia],
+        platformConfig,
       });
-      return { upload, post, downloads, publications };
+      return { upload, child, post, downloads, publications };
     }
 
     test("uploads real transformed JPEG bytes and publishes the returned R2 URL with distinct UUID keys", async () => {
@@ -117,10 +154,10 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       const result = await post();
       expect(result.success).toBe(false);
       if (prefix === "instagram") {
-        expect(result.error_message).toContain("R2 upload unavailable");
+         expect(result.error_message).toContain("Failed to transform Instagram image");
       } else {
         expect(result.error_message).toBe("Failed to post to TikTok");
-        expect(result.details).toMatchObject({ error: { message: "R2 upload unavailable" } });
+        expect(result.details).toMatchObject({ error: { message: prefix === "tiktok" ? "Failed to transform TikTok image" : "Failed to transform TikTok Business image" } });
       }
       expect(upload).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(publications)).not.toContain(sourceUrl);
@@ -129,11 +166,62 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
     });
 
     test("skip_processing publishes the original URL without downloading or uploading", async () => {
-      const { upload, post, downloads, publications } = await setup();
+      const { upload, child, post, downloads, publications } = await setup();
       expect((await post({ skip_processing: true })).success).toBe(true);
       expect(upload).not.toHaveBeenCalled();
+      expect(child).not.toHaveBeenCalled();
       expect(downloads).toHaveLength(0);
       expect(JSON.stringify(publications)).toContain(sourceUrl);
     });
+
+    for (const failure of ["failed result", "rejection"]) {
+      test(`child ${failure} prevents in-process fallback and publication`, async () => {
+        const { child, upload, post, downloads, publications } = await setup();
+        if (failure === "failed result") child.mockResolvedValue({ ok: false, error: { message: "child failed" } } as any);
+        else child.mockRejectedValue(new Error("child rejected"));
+        expect((await post()).success).toBe(false);
+        expect(child).toHaveBeenCalledTimes(1);
+        expect(upload).not.toHaveBeenCalled();
+        expect(downloads).toHaveLength(0);
+        expect(JSON.stringify(publications)).not.toContain("image_url");
+        expect(JSON.stringify(publications)).not.toContain("photo_images");
+      });
+    }
+
+    if (prefix === "instagram") {
+      for (const [placement, expectedHeight] of [["feed", 800], ["stories", 1067]] as const) {
+        test(`preserves ${placement} cropping and returned carousel dimensions across the child boundary`, async () => {
+          const { child, upload, post } = await setup(600, 1200);
+          expect((await post({}, { placement }, [{ id: "second", url: sourceUrl, type: "image" }])).success).toBe(true);
+          expect(child).toHaveBeenCalledTimes(2);
+          expect(child.mock.calls[1][1]).toMatchObject({
+            options: { firstImage: { width: 600, height: expectedHeight }, placement, is_feed: true },
+          });
+          for (const [options] of upload.mock.calls) {
+            expect(await sharp(options.body as Buffer).metadata()).toMatchObject({ width: 600, height: expectedHeight });
+          }
+        });
+      }
+      test("preserves reel cover placement and share_to_feed options", async () => {
+        const { child, upload, post } = await setup(600, 1200);
+        expect((await post({ type: "video", thumbnail_url: sourceUrl }, { placement: "reels", share_to_feed: false })).success).toBe(true);
+        expect(child.mock.calls[0][1]).toMatchObject({ options: { placement: "reels", is_feed: false } });
+        expect(await sharp(upload.mock.calls[0][0].body as Buffer).metadata()).toMatchObject({ width: 600, height: 1067 });
+      });
+    } else {
+      for (const [imageWidth, imageHeight, orientation, targetWidth, targetHeight] of [
+        [600, 1200, 1, 1080, 1920],
+        [1200, 600, 1, 1920, 1080],
+        [1200, 600, 6, 1080, 1920],
+        [600, 800, 1, 1080, 1440],
+      ]) {
+        test(`preserves nearest-ratio crop for ${imageWidth}x${imageHeight} orientation ${orientation}`, async () => {
+          const { upload, post } = await setup(imageWidth, imageHeight, orientation);
+          expect((await post()).success).toBe(true);
+          expect(await sharp(upload.mock.calls[0][0].body as Buffer).metadata()).toMatchObject({ width: targetWidth, height: targetHeight });
+        });
+      }
+    }
   });
+  }
 }

@@ -1,7 +1,7 @@
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
-import { logger, wait } from "@trigger.dev/sdk";
-import ffmpeg from "fluent-ffmpeg";
+import { logger, tasks, wait } from "@trigger.dev/sdk";
+import type { generateYoutubeTimestampThumbnail } from "../../video-child-tasks";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -324,7 +324,7 @@ export class YouTubePostClient extends PostClient {
 
       // Upload custom thumbnail if provided: explicit image URL takes precedence
       // over a timestamp, since a URL is an unambiguous, already-rendered image
-      // while a timestamp requires local extraction from the video we just staged.
+      // while a timestamp requires extraction in a child task.
       if (medium.thumbnail_url) {
         try {
           await this.#uploadThumbnailFromUrl(youtube, videoId, medium);
@@ -338,7 +338,6 @@ export class YouTubePostClient extends PostClient {
             youtube,
             videoId,
             medium,
-            stagedFilePath,
           );
         } catch (thumbnailError) {
           console.error(
@@ -1083,19 +1082,30 @@ export class YouTubePostClient extends PostClient {
     youtube: youtube_v3.Youtube,
     videoId: string,
     medium: PostMedia,
-    stagedFilePath: string,
   ): Promise<void> {
     if (medium.thumbnail_timestamp_ms == null) {
       return;
     }
 
-    const { buffer, mimeType } = await this.#extractFrameAtTimestamp({
-      videoFilePath: stagedFilePath,
-      timestampMs: medium.thumbnail_timestamp_ms,
-      mediaId: medium.id,
-    });
+    const result = await tasks.triggerAndWait<typeof generateYoutubeTimestampThumbnail>(
+      "generate-youtube-timestamp-thumbnail",
+      {
+        url: medium.url,
+        timestampMs: medium.thumbnail_timestamp_ms,
+        mediaId: medium.id,
+      },
+    );
+    if (!result.ok) throw new Error("Failed to generate YouTube timestamp thumbnail");
+    const res = await fetch(result.output);
+    if (!res.ok) {
+      const bodyText = await this.#safeReadText(res);
+      throw new Error(
+        `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
+      );
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
 
-    await this.#setThumbnail(youtube, videoId, buffer, mimeType, {
+    await this.#setThumbnail(youtube, videoId, buffer, "image/jpeg", {
       thumbnailTimestampMs: medium.thumbnail_timestamp_ms,
     });
   }
@@ -1137,55 +1147,6 @@ export class YouTubePostClient extends PostClient {
         },
       });
       throw error;
-    }
-  }
-
-  async #extractFrameAtTimestamp({
-    videoFilePath,
-    timestampMs,
-    mediaId,
-  }: {
-    videoFilePath: string;
-    timestampMs: number;
-    mediaId: string;
-  }): Promise<{ buffer: Buffer; mimeType: string }> {
-    const safeMediaId = mediaId.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const outputPath = path.join(
-      os.tmpdir(),
-      `youtube_thumb_${safeMediaId}_${Date.now()}.jpg`,
-    );
-
-    try {
-      logger.info("Extracting YouTube thumbnail frame", {
-        mediaId,
-        timestampMs,
-        videoFilePath,
-        outputPath,
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg(videoFilePath)
-          .on("end", () => resolve())
-          .on("error", (err) => reject(err))
-          .screenshots({
-            timestamps: [timestampMs / 1000],
-            filename: path.basename(outputPath),
-            folder: path.dirname(outputPath),
-          });
-      });
-
-      const buffer = await fs.readFile(outputPath);
-
-      logger.info("Extracted YouTube thumbnail frame", {
-        mediaId,
-        timestampMs,
-        outputPath,
-        sizeBytes: buffer.length,
-      });
-
-      return { buffer, mimeType: "image/jpeg" };
-    } finally {
-      await fs.unlink(outputPath).catch(() => undefined);
     }
   }
 

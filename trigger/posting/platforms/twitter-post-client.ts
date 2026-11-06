@@ -6,13 +6,11 @@ import {
   TwitterApiTokens,
 } from "twitter-api-v2";
 import { readFile } from "fs/promises";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { transformBufferedImage } from "../../transform-buffered-image";
 import * as twitterText from "twitter-text";
 import type { ParseTweetOptions } from "twitter-text";
-import {
-  compressJpegToLimit,
-  shouldSkipProcessing,
-} from "../image-processing-utils";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -84,7 +82,6 @@ export class TwitterPostClient extends PostClient {
   #CHARACTER_LIMIT = 280;
   #appKey;
   #appSecret;
-  #maxFileSize = 5 * 1024 * 1024;
   #uploadChunkSize = 5 * 1024 * 1024;
 
   constructor(appCredentials: PlatformAppCredentials) {
@@ -279,14 +276,10 @@ export class TwitterPostClient extends PostClient {
           await this.unlinkQuiet(filePath);
         }
       } else {
-        const file = await this.getFile(medium);
-        const buffer = Buffer.from(await file.arrayBuffer());
         mediaId = await this.#uploadImage({
           twitterClient,
-          file,
-          buffer,
+          medium,
           isOAuth2,
-          skipProcessing: shouldSkipProcessing(medium),
         });
       }
 
@@ -306,15 +299,10 @@ export class TwitterPostClient extends PostClient {
       for (const medium of allowedMedia) {
         if (medium.type === "video") continue;
         this.requests.push({ uploadRequest: { file: medium } });
-        const file = await this.getFile(medium);
-        const buffer = Buffer.from(await file.arrayBuffer());
-
         const mediaId = await this.#uploadImage({
           twitterClient,
-          file,
-          buffer,
+          medium,
           isOAuth2,
-          skipProcessing: shouldSkipProcessing(medium),
         });
 
         this.responses.push({ uploadResponse: { mediaId } });
@@ -395,36 +383,41 @@ export class TwitterPostClient extends PostClient {
 
   async #uploadImage({
     twitterClient,
-    file,
-    buffer,
+    medium,
     isOAuth2,
-    skipProcessing,
   }: {
     twitterClient: TwitterApi;
-    file: File;
-    buffer: Buffer;
+    medium: PostMedia;
     isOAuth2: boolean;
-    skipProcessing: boolean;
   }): Promise<string> {
-    let processedImage = buffer;
-    if (!skipProcessing) {
-      processedImage = await compressJpegToLimit(
-        processedImage,
-        this.#maxFileSize,
+    let url = medium.url;
+    let mimeType: string | undefined;
+    if (!shouldSkipProcessing(medium)) {
+      const result = await tasks.triggerAndWait<typeof transformBufferedImage>(
+        "transform-buffered-image",
+        { url, platform: "twitter" },
       );
+      if (!result.ok) {
+        throw new Error("Failed to prepare Twitter image", { cause: result.error });
+      }
+      url = result.output.url;
+      mimeType = result.output.mimeType;
     }
+    const file = await this.getFile({ ...medium, url });
+    const processedImage = Buffer.from(await file.arrayBuffer());
+    mimeType ??= file.type;
 
     if (isOAuth2) {
       // The v1.1 endpoint used below doesn't support OAuth2.
       return await twitterClient.v2.uploadMedia(
         processedImage,
-        { media_type: this.#toUploadMimeType(file.type) },
+        { media_type: this.#toUploadMimeType(mimeType) },
         this.#uploadChunkSize,
       );
     }
 
     return await twitterClient.v1.uploadMedia(processedImage, {
-      mimeType: file.type,
+      mimeType,
     });
   }
 

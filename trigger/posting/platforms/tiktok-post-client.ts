@@ -1,15 +1,10 @@
 import { createReadStream } from "fs";
-import { randomUUID } from "crypto";
-import { uploadMedia } from "../../media-storage";
 import { tasks, wait } from "@trigger.dev/sdk";
 import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
+import type { transformTikTokImage } from "../../transform-tiktok-image";
 import { PostClient } from "../post-client";
 import axios from "axios";
-import sharp from "sharp";
-import {
-  compressJpegToLimit,
-  shouldSkipProcessing,
-} from "../image-processing-utils";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -782,58 +777,18 @@ export class TikTokPostClient extends PostClient {
       return signedUrl;
     }
 
-    const response = await axios({
-      url: signedUrl,
-      method: "GET",
-      responseType: "arraybuffer",
-    });
-
-    const imageBuffer = Buffer.from(response.data);
-
-    // Get image metadata and choose nearest TikTok-allowed ratio
-    const metadata = await sharp(imageBuffer).metadata();
-    const width = metadata.width || 0;
-    const height = metadata.height || 0;
-
-    if (!width || !height) {
-      throw new Error("Unable to read image dimensions for TikTok upload");
+    const result = await tasks.triggerAndWait<typeof transformTikTokImage>(
+      "transform-tiktok-image",
+      {
+        signedUrl,
+        platform: "tiktok",
+        maxFileSize: this.#maxFileSize,
+        allowedAspectRatios: this.#allowedAspectRatios,
+      },
+    );
+    if (!result.ok) {
+      throw new Error("Failed to transform TikTok image");
     }
-
-    const orientation = metadata.orientation || 1;
-    const isExifRotated = [5, 6, 7, 8].includes(orientation);
-    const displayedWidth = isExifRotated ? height : width;
-    const displayedHeight = isExifRotated ? width : height;
-
-    const aspectRatio = displayedWidth / displayedHeight;
-    const targetRatio = this.#allowedAspectRatios.reduce((closest, current) =>
-      Math.abs(current.ratio - aspectRatio) <
-      Math.abs(closest.ratio - aspectRatio)
-        ? current
-        : closest,
-    );
-
-    // Process image with Sharp (normalize orientation, crop, resize and compress)
-    let processedImage = await sharp(imageBuffer)
-      .rotate()
-      .resize({
-        width: targetRatio.width,
-        height: targetRatio.height,
-        fit: "cover",
-        position: "center",
-      })
-      .jpeg({ quality: 100 })
-      .toBuffer();
-
-    processedImage = await compressJpegToLimit(
-      processedImage,
-      this.#maxFileSize,
-    );
-
-    return await uploadMedia({
-      key: `tiktok_${randomUUID()}.jpg`,
-      body: processedImage,
-      contentType: "image/jpeg",
-      cacheControl: "public, max-age=31536000",
-    });
+    return result.output;
   }
 }

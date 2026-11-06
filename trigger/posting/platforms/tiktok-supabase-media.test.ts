@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeAll, expect, mock, spyOn, test } from "bun:test";
 import type { PostMedia, SocialAccount } from "../post.types";
 
 if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
@@ -22,10 +22,21 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
   let storage: typeof import("../../media-storage");
   let TikTokPostClient: typeof import("./tiktok-post-client").TikTokPostClient;
   let originalAdapter: typeof axios.defaults.adapter;
+  let transformRun: (payload: any) => Promise<string>;
   beforeAll(async () => {
     ({ default: axios } = await import("axios"));
     ({ default: sharp } = await import("sharp"));
     ({ tasks } = await import("@trigger.dev/sdk"));
+    mock.module("@trigger.dev/sdk", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const actual = require("@trigger.dev/sdk");
+      return { ...actual, task: (definition: any) => {
+        transformRun = definition.run;
+        return definition;
+      } };
+    });
+    ({ tasks } = await import("@trigger.dev/sdk"));
+    await import("../../transform-tiktok-image");
     storage = await import("../../media-storage");
     ({ TikTokPostClient } = await import("./tiktok-post-client"));
     originalAdapter = axios.defaults.adapter;
@@ -72,7 +83,11 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       events.push("transform-upload");
       return `https://media.example.com/${key}`;
     });
-    const copy = spyOn(tasks, "triggerAndWait").mockImplementation((async () => {
+    const copy = spyOn(tasks, "triggerAndWait").mockImplementation((async (id: string, payload: any) => {
+      if (id === "transform-tiktok-image") {
+        return { ok: true, output: await transformRun(JSON.parse(JSON.stringify(payload))) };
+      }
+      expect(id).toBe("copy-media-to-supabase");
       events.push("copy");
       return { ok: true, output: supabaseUrl } as any;
     }) as unknown as typeof tasks.triggerAndWait);
@@ -105,7 +120,7 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
     expect(options.key).toMatch(/^tiktok_[0-9a-f-]+\.jpg$/);
     expect(options.contentType).toBe("image/jpeg");
     expect(await sharp(options.body as Buffer).metadata()).toMatchObject({ format: "jpeg", width: 1080, height: 1080 });
-    expect(copy).toHaveBeenCalledTimes(1);
+    expect(copy).toHaveBeenCalledTimes(2);
     expect(copy).toHaveBeenCalledWith("copy-media-to-supabase", { url: `https://media.example.com/${options.key}` });
     expect(publications).toHaveLength(1);
     expect(publications[0].payload.source_info).toEqual({ source: "PULL_FROM_URL", photo_cover_index: 0, photo_images: [supabaseUrl] });
@@ -126,7 +141,8 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       const { post, upload, copy, publications } = await setup(flag);
       expect((await post()).success).toBe(true);
       expect(upload).toHaveBeenCalledTimes(1);
-      expect(copy).not.toHaveBeenCalled();
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(copy.mock.calls[0][0]).toBe("transform-tiktok-image");
       expect(publications[0].payload.source_info.photo_images).toEqual([`https://media.example.com/${upload.mock.calls[0][0].key}`]);
     });
   }
