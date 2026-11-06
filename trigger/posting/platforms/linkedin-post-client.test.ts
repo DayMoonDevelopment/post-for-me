@@ -87,7 +87,7 @@ function defaultHandler(url: string, init?: RequestInit): Response {
 }
 
 function makeClient(): LinkedInPostClient {
-  return new LinkedInPostClient({} as any, {
+  return new LinkedInPostClient({
     app_id: "app-id",
     app_secret: "app-secret",
   });

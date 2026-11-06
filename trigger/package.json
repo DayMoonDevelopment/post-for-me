@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bunx trigger.dev@4.4.4 dev",
     "deploy": "bunx trigger.dev@4.4.4 deploy",
+    "deploy:staging": "bunx trigger.dev@4.4.4 deploy --env staging",
     "build": " bunx trigger.dev@4.4.4 deploy --dry-run",
     "typegen": "bun run supabase:typegen",
     "supabase:typegen": "supabase gen types typescript --local > supabase.types.ts",
@@ -15,6 +16,8 @@
   },
   "dependencies": {
     "@atproto/api": "^0.14.20",
+    "@aws-sdk/client-s3": "^3.1162.0",
+    "@aws-sdk/lib-storage": "^3.1162.0",
     "@supabase/supabase-js": "^2.49.4",
     "@trigger.dev/sdk": "4.4.4",
     "@unkey/api": "^2.2.0",

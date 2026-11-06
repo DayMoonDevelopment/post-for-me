@@ -246,6 +246,7 @@ export interface IndividualPostData {
   caption: string;
   account: SocialAccount;
   projectId: string;
+  isSystemProject: boolean;
   platformConfig: PlatformConfiguration;
   appCredentials: PlatformAppCredentials;
 }

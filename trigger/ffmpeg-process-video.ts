@@ -3,9 +3,8 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import fetch from "node-fetch";
-import { createReadStream } from "fs";
-import { Upload } from "tus-js-client";
+import { randomUUID } from "crypto";
+import { uploadMedia } from "./media-storage";
 import type { UserTag } from "./posting/post.types";
 
 // Constants
@@ -20,58 +19,6 @@ const ASPECT_RATIOS = {
   CLASSIC: { ratio: 4 / 3, maxWidth: 1440, maxHeight: 1080 },
 };
 
-async function uploadFile({
-  bucketName,
-  key,
-  filePath,
-}: {
-  bucketName: string;
-  key: string;
-  filePath: string;
-}) {
-  return new Promise<void>((resolve, reject) => {
-    const stream = createReadStream(filePath);
-
-    const upload = new Upload(stream, {
-      endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: {
-        authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        "x-upsert": "true",
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true, // Important if you want to allow re-uploading the same file https://github.com/tus/tus-js-client/blob/main/docs/api.md#removefingerprintonsuccess
-      metadata: {
-        bucketName: bucketName,
-        objectName: key,
-        contentType: "video/mp4",
-        cacheControl: "3600",
-      },
-      chunkSize: 6 * 1024 * 1024, // NOTE: it must be set to 6MB (for now) do not change it
-      onError: function (error) {
-        logger.error("Failed uploading video", { error });
-        reject(error);
-      },
-      onSuccess: function () {
-        logger.info("Video uploaded succesfully", { bucketName, key });
-        resolve();
-      },
-    });
-
-    // Check if there are any previous uploads to continue.
-    return upload.findPreviousUploads().then(function (previousUploads) {
-      // Found previous uploads so we select the first one.
-      if (previousUploads.length) {
-        upload.resumeFromPreviousUpload(previousUploads[0]);
-      }
-
-      // Start the upload
-      logger.info("Starting video upload", { bucketName, key });
-      upload.start();
-    });
-  });
-}
-
 // Optimized aspect ratio detection
 const detectAspectRatio = (width: number, height: number) => {
   const ratio = width / height;
@@ -81,25 +28,6 @@ const detectAspectRatio = (width: number, height: number) => {
       (ar) => Math.abs(ratio - ar.ratio) <= tolerance,
     ) || ASPECT_RATIOS.LANDSCAPE
   ); // Default to landscape if no match
-};
-
-const getFileKeyFromPublicUrl = (
-  publicUrl: string,
-  bucket: string,
-): string | null => {
-  const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-  const match = publicUrl.match(pattern);
-  return match ? match[1] : null;
-};
-
-const getProcessedFileKey = (key: string): string => {
-  const dirname = path.dirname(key);
-  const basename = path.basename(key);
-  const processedBasename = `processed_${Date.now()}_${basename}`;
-
-  return dirname === "."
-    ? processedBasename
-    : `${dirname}/${processedBasename}`;
 };
 
 type ProcessPostVideoMedium = {
@@ -133,22 +61,18 @@ export const ffmpegProcessVideo = task({
     const { url } = medium;
     logger.info("Starting video processing", { url });
     const tempDir = os.tmpdir();
-    const bucket = "post-media";
-    const key = getFileKeyFromPublicUrl(url, bucket);
-
-    if (!key) {
-      logger.error("Unable to get key from url", { url });
-      throw new Error("Unable to get key from url");
-    }
-
-    const filename = key.split("/").pop()!;
+    const extension = path.extname(new URL(url).pathname);
+    const filename = `${randomUUID()}${/^\.[a-z0-9]{1,10}$/i.test(extension) ? extension : ".mp4"}`;
     const inputPath = path.join(tempDir, filename);
-    const outputPath = path.join(tempDir, `out_${Date.now()}.mp4`);
-    let fileProcessed = false;
+    const processedKey = `processed_${randomUUID()}.mp4`;
+    const outputPath = path.join(tempDir, processedKey);
 
     try {
       logger.info("Downloading video from signed URL");
       const videoResponse = await fetch(url);
+      if (!videoResponse.ok) {
+        throw new Error(`Failed to fetch video: HTTP ${videoResponse.status}`);
+      }
       if (!videoResponse.body) throw new Error("Failed to fetch video");
 
       logger.info("Writing video to temporary file", { inputPath });
@@ -411,25 +335,18 @@ export const ffmpegProcessVideo = task({
           .run();
       });
 
-      fileProcessed = true;
-
-      const processedKey = getProcessedFileKey(key);
-      const processedUrl = url.replace(key, processedKey);
-
       logger.info("Uploading processed video to storage", {
-        key,
         processedKey,
       });
-      await uploadFile({
-        bucketName: bucket,
+      const processedUrl = await uploadMedia({
         key: processedKey,
         filePath: outputPath,
+        contentType: "video/mp4",
+        cacheControl: "public, max-age=3600",
       });
 
       logger.info("Video processing completed successfully", {
         key: processedKey,
-        originalKey: key,
-        bucket,
         processed: true,
       });
       return { ...medium, url: processedUrl };
@@ -439,19 +356,18 @@ export const ffmpegProcessVideo = task({
     } finally {
       // Parallel cleanup
       logger.info("Cleaning up temporary files");
-      await Promise.all(
-        [
-          fs
-            .unlink(inputPath)
-            .catch((e) => logger.error("Input cleanup failed", { error: e })),
-          fileProcessed &&
-            fs
-              .unlink(outputPath)
-              .catch((e) =>
-                logger.error("Output cleanup failed", { error: e }),
-              ),
-        ].filter(Boolean),
-      );
+      await Promise.all([
+        fs.unlink(inputPath).catch((e) => {
+          if (e.code !== "ENOENT") {
+            logger.error("Input cleanup failed", { error: e });
+          }
+        }),
+        fs.unlink(outputPath).catch((e) => {
+          if (e.code !== "ENOENT") {
+            logger.error("Output cleanup failed", { error: e });
+          }
+        }),
+      ]);
     }
   },
 });

@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
@@ -32,35 +32,35 @@ const supabaseClient = createClient<Database>(
 );
 
 const createPostClient = ({
-  supabaseClient,
   platformName,
   appCredentials,
+  useSupabaseMedia = false,
 }: {
-  supabaseClient: SupabaseClient;
   platformName: string;
   appCredentials: PlatformAppCredentials;
+  useSupabaseMedia?: boolean;
 }): PostClient => {
   switch (platformName) {
     case "x":
-      return new TwitterPostClient(supabaseClient, appCredentials);
+      return new TwitterPostClient(appCredentials);
     case "instagram":
-      return new InstagramPostClient(supabaseClient, appCredentials);
+      return new InstagramPostClient(appCredentials);
     case "facebook":
-      return new FacebookPostClient(supabaseClient, appCredentials);
+      return new FacebookPostClient(appCredentials);
     case "linkedin":
-      return new LinkedInPostClient(supabaseClient, appCredentials);
+      return new LinkedInPostClient(appCredentials);
     case "tiktok":
-      return new TikTokPostClient(supabaseClient, appCredentials);
+      return new TikTokPostClient(appCredentials, useSupabaseMedia);
     case "bluesky":
-      return new BlueskyPostClient(supabaseClient, appCredentials);
+      return new BlueskyPostClient(appCredentials);
     case "threads":
-      return new ThreadsPostClient(supabaseClient, appCredentials);
+      return new ThreadsPostClient(appCredentials);
     case "pinterest":
-      return new PinterestPostClient(supabaseClient, appCredentials);
+      return new PinterestPostClient(appCredentials);
     case "youtube":
-      return new YouTubePostClient(supabaseClient, appCredentials);
+      return new YouTubePostClient(appCredentials);
     case "tiktok_business":
-      return new TikTokBusinessPostClient(supabaseClient, appCredentials);
+      return new TikTokBusinessPostClient(appCredentials);
     default:
       throw Error("Invalid Platform");
   }
@@ -156,6 +156,7 @@ export const postToPlatform = task({
       stripeCustomerId,
       teamId,
       appCredentials,
+      isSystemProject,
       projectId,
     } = payload;
     let postResult: PostResult | null = null;
@@ -166,9 +167,9 @@ export const postToPlatform = task({
 
       logger.info("Creating Post Client");
       const postClient = createPostClient({
-        supabaseClient: supabaseClient,
         platformName: platform,
         appCredentials,
+        useSupabaseMedia: platform === "tiktok" && isSystemProject === false,
       });
 
       // Each PostClient declares which media types it can publish (e.g.

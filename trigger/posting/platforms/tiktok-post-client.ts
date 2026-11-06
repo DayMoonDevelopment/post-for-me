@@ -1,6 +1,8 @@
 import { createReadStream } from "fs";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { wait } from "@trigger.dev/sdk";
+import { randomUUID } from "crypto";
+import { uploadMedia } from "../../media-storage";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -39,7 +41,7 @@ export class TikTokPostClient extends PostClient {
   };
   #clientKey: string;
   #clientSecret: string;
-  #localSupabaseClient;
+  #useSupabaseMedia: boolean;
   #maxFileSize = 20 * 1024 * 1024;
   #allowedAspectRatios = [
     { ratio: 9 / 16, width: 1080, height: 1920 },
@@ -47,19 +49,13 @@ export class TikTokPostClient extends PostClient {
     { ratio: 1, width: 1080, height: 1080 },
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
-  #addedMedia: any[] = [];
-  #bucket: string = "post-media";
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials, useSupabaseMedia = false) {
+    super(appCredentials);
 
     this.#clientKey = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
-
-    this.#localSupabaseClient = supabaseClient;
+    this.#useSupabaseMedia = useSupabaseMedia;
   }
 
   async refreshAccessToken(
@@ -175,7 +171,6 @@ export class TikTokPostClient extends PostClient {
             status,
             fail_reason: failReason,
             publish_id: publishId,
-            addedMedia: this.#addedMedia,
             requests: this.requests,
             responses: this.responses,
           },
@@ -198,7 +193,6 @@ export class TikTokPostClient extends PostClient {
             message: isProcessing
               ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
               : "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
-            addedMedia: this.#addedMedia,
             requests: this.requests,
             responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
@@ -220,7 +214,6 @@ export class TikTokPostClient extends PostClient {
             status: "Processing",
             message:
               "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
-            addedMedia: this.#addedMedia,
             requests: this.requests,
             responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
@@ -238,7 +231,6 @@ export class TikTokPostClient extends PostClient {
         provider_post_id: publicPostId ?? publishId,
         details: {
           status: "Published successfully",
-          addedMedia: this.#addedMedia,
           requests: this.requests,
           responses: this.responses,
           username: creatorInfoResponse.data.data.creator_username,
@@ -588,7 +580,7 @@ export class TikTokPostClient extends PostClient {
     creatorInfoResponse: any;
   }) {
     const { filePath, mimeType, size } = await this.downloadToTempFile(
-      medium.url,
+      await this.#getUploadUrl(medium.url),
       { prefix: "tiktok" },
     );
 
@@ -705,7 +697,7 @@ export class TikTokPostClient extends PostClient {
       if (medium.type === "video") continue;
 
       const signedUrl = await this.#transformImage(medium);
-      photoUrls.push(signedUrl);
+      photoUrls.push(await this.#getUploadUrl(signedUrl));
     }
 
     const { publishId } = await this.#getPublishId({
@@ -747,6 +739,20 @@ export class TikTokPostClient extends PostClient {
     });
 
     return publishId;
+  }
+
+  async #getUploadUrl(url: string): Promise<string> {
+    if (!this.#useSupabaseMedia) return url;
+
+    // White-label apps have verified the legacy Supabase URL prefix, not R2.
+    const result = await tasks.triggerAndWait<typeof copyMediaToSupabase>(
+      "copy-media-to-supabase",
+      { url },
+    );
+    if (!result.ok) {
+      throw new Error("Failed to copy TikTok media to Supabase");
+    }
+    return result.output;
   }
 
   async #getErrorDetails(error: any) {
@@ -823,41 +829,11 @@ export class TikTokPostClient extends PostClient {
       this.#maxFileSize,
     );
 
-    const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
-    const processedKey = `${key.split(".")[0]}_tiktok`;
-
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
-    }
-
-    this.#addedMedia.push({
-      key: processedKey,
-      bucket: this.#bucket,
+    return await uploadMedia({
+      key: `tiktok_${randomUUID()}.jpg`,
+      body: processedImage,
+      contentType: "image/jpeg",
+      cacheControl: "public, max-age=31536000",
     });
-
-    const { data: processedImageUpload } = this.#localSupabaseClient.storage
-      .from(this.#bucket)
-      .getPublicUrl(processedKey);
-
-    return processedImageUpload!.publicUrl;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
   }
 }

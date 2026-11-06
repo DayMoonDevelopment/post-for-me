@@ -4,7 +4,6 @@ import sharp from "sharp";
 import { shouldSkipProcessing } from "../image-processing-utils";
 import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
-import { SupabaseClient } from "@supabase/supabase-js";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -28,11 +27,8 @@ export class BlueskyPostClient extends PostClient {
   #videoStatusRetryBackoffMultiplier = 1.5;
   #maxRetryDelayMs = 60000;
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
     this.#agent = new AtpAgent({
       service: "https://bsky.social",
     });

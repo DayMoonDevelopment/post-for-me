@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
 import axios from "axios";
 import { TikTokPostClient } from "./tiktok-post-client";
@@ -24,7 +23,7 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
         "UNKNOWN",
       ]) {
         test(`${isDraft ? "draft" : "direct post"} with status ${status}`, async () => {
-          const client = new Client({} as SupabaseClient, {
+          const client = new Client({
             app_id: "app-id",
             app_secret: "app-secret",
           });

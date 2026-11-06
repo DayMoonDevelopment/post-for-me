@@ -201,7 +201,7 @@ const makeVideoMedium = (): PostMedia => ({
 });
 
 const makeClient = () =>
-  new FacebookPostClient({} as any, appCredentials);
+  new FacebookPostClient(appCredentials);
 
 const publishVideo = (placement?: FacebookConfiguration["placement"]) =>
   makeClient().post({

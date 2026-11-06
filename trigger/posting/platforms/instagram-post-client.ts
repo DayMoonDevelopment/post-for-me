@@ -1,4 +1,5 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import { randomUUID } from "crypto";
+import { uploadMedia } from "../../media-storage";
 import { wait } from "@trigger.dev/sdk";
 import { PostClient } from "../post-client";
 import axios from "axios";
@@ -39,9 +40,6 @@ export class InstagramPostClient extends PostClient {
   #maxRetryDelayMs = 60000;
   #maxTaskDurationMs = 60 * 60 * 1000;
   #postStartedAtMs: number | null = null;
-  #localSupabaseClient;
-  #addedMedia: any[] = [];
-  #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 
   #graphApiUrl = (
@@ -65,13 +63,9 @@ export class InstagramPostClient extends PostClient {
     return `${this.#graphApiUrl}/${this.#apiVersion}`;
   }
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
 
-    this.#localSupabaseClient = supabaseClient;
     this.#appCredentials = appCredentials;
   }
 
@@ -303,7 +297,6 @@ export class InstagramPostClient extends PostClient {
             media.length > this.#maxItems
               ? `Only first ${this.#maxItems} items were posted`
               : null,
-          addedMedia: this.#addedMedia,
           requests: this.requests,
           responses: this.responses,
         },
@@ -1069,38 +1062,15 @@ export class InstagramPostClient extends PostClient {
       this.#maxFileSize,
     );
 
-    const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
-    const processedKey = `${key.split(".")[0]}_instagram`;
-
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
-    }
-
-    this.#addedMedia.push({
-      key: processedKey,
-      bucket: this.#bucket,
+    const publicUrl = await uploadMedia({
+      key: `instagram_${randomUUID()}.jpg`,
+      body: processedImage,
+      contentType: "image/jpeg",
+      cacheControl: "public, max-age=31536000",
     });
 
-    const { data: processedImageUpload } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .getPublicUrl(processedKey);
-
     return {
-      signedUrl: processedImageUpload?.publicUrl,
+      signedUrl: publicUrl,
       width: targetWidth,
       height: targetHeight,
     };
@@ -1230,11 +1200,5 @@ export class InstagramPostClient extends PostClient {
     }
 
     return cleanedCaption;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
   }
 }
