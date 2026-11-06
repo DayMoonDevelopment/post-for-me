@@ -60,6 +60,16 @@ if (!process.env.PFM_PLATFORM_STORAGE_TEST_CHILD) {
     // The task mock exposes the registered run callback instead of a task handle.
     run = (postToPlatform as unknown as { run: typeof run }).run;
   });
+  test("posting starts small and retains the larger-machine OOM retry", async () => {
+    const { postToPlatform } = await import("./post-to-platform");
+    const definition = postToPlatform as unknown as {
+      machine: string;
+      retry: { maxAttempts: number; outOfMemory: { machine: string } };
+    };
+    expect(definition.machine).toBe("small-1x");
+    expect(definition.retry.maxAttempts).toBe(2);
+    expect(definition.retry.outOfMemory.machine).toBe("large-1x");
+  });
   const credentials = { app_id: "app-id", app_secret: "app-secret" };
   const payload = (platform = "tiktok") => ({
     platform, projectId: "project-id", isSystemProject: false, postId: "post-id", teamId: "team-id",

@@ -1,9 +1,9 @@
 import { PostClient } from "../post-client";
-import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
-import sharp from "sharp";
+import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs, jsonToLex } from "@atproto/api";
+import type { uploadBlueskyImage, uploadBlueskyLinkPreview } from "../../upload-bluesky-media";
+import type { transformBufferedImage } from "../../transform-buffered-image";
+import type { uploadBlueskyVideo } from "../../upload-bluesky-video";
 import { shouldSkipProcessing } from "../image-processing-utils";
-import { JSDOM } from "jsdom";
-import fetch from "node-fetch";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -12,16 +12,12 @@ import {
   SocialAccount,
 } from "../post.types";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
-import ffmpeg from "fluent-ffmpeg";
-import { createReadStream } from "fs";
 import { logger, tasks, wait } from "@trigger.dev/sdk/v3";
 
 export class BlueskyPostClient extends PostClient {
   #agent: AtpAgent;
   #charLimit = 300;
   #maxImages = 4;
-  #maxFileSize = 976.56 * 1024;
-  #maxVideoFileSize = 100_000_000;
   #videoStatusMaxAttempts = 30;
   #videoStatusInitialDelayMs = 5000;
   #videoStatusRetryBackoffMultiplier = 1.5;
@@ -235,72 +231,22 @@ export class BlueskyPostClient extends PostClient {
 
     const token = serviceAuth.token;
 
-    const processedFile = await tasks.triggerAndWait("ffmpeg-compress-video", {
-      url: medium.url,
-      maxSizeBytes: this.#maxVideoFileSize,
-    });
-
-    let fileUrl = medium.url;
-    if (processedFile.ok) {
-      fileUrl = processedFile.output;
-    }
-
-    const remoteName =
-      new URL(fileUrl).pathname.split("/").pop() || "video.mp4";
-
-    const tmp = await this.downloadToTempFile(fileUrl, {
-      prefix: "bluesky_video",
-      filename: remoteName,
-    });
-    const inputPath = tmp.filePath;
-
-    const metadata = await new Promise<any>((resolve, reject) => {
-      ffmpeg.ffprobe(inputPath, (err: any, data: any) => {
-        if (err) reject(err);
-        else resolve(data);
-      });
-    });
-
-    const videoStream = metadata.streams.find(
-      (s: any) => s.codec_type === "video",
+    const result = await tasks.triggerAndWait<typeof uploadBlueskyVideo>(
+      "upload-bluesky-video", { url: medium.url, token, did: this.#agent.session!.did },
     );
-    if (!videoStream) {
-      throw new Error("No video stream found in file");
+    if (!result.ok) {
+      const error = result.error as { message?: string };
+      throw new Error(error?.message || "Failed to upload Bluesky video", { cause: result.error });
     }
-
-    const { width, height } = videoStream;
-
-    let uploadResponseData: unknown;
-    try {
-      const uploadUrl = new URL(
-        "https://video.bsky.app/xrpc/app.bsky.video.uploadVideo",
-      );
-      uploadUrl.searchParams.append("did", this.#agent.session!.did);
-      uploadUrl.searchParams.append("name", remoteName);
-
-      this.requests.push({ uploadVideoRequest: uploadUrl });
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": tmp.mimeType || "video/mp4",
-          "Content-Length": tmp.size.toString(),
-        },
-        body: createReadStream(inputPath) as any,
-      });
-
-      uploadResponseData = await uploadResponse.json();
-    } finally {
-      await this.unlinkQuiet(inputPath);
-    }
-
-    this.responses.push({ uploadVideoResponse: uploadResponseData });
-
-    const jobStatus = uploadResponseData as AppBskyVideoDefs.JobStatus;
+    this.requests.push(...result.output.requests);
+    this.responses.push(...result.output.responses);
+    if (!result.output.success) throw Object.assign(new Error(), result.output.error);
+    const { width, height } = result.output;
+    const jobStatus = jsonToLex(result.output.jobStatus) as AppBskyVideoDefs.JobStatus;
 
     if (!jobStatus.jobId) {
       logger.error("Error starting video upload job", {
-        error: uploadResponseData,
+        error: jobStatus,
       });
 
       throw new Error(`Unable to start video upload, ${jobStatus.error}`);
@@ -443,51 +389,32 @@ export class BlueskyPostClient extends PostClient {
         continue;
       }
 
-      const file = await this.getFile(medium);
-
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const metadata = await sharp(buffer).metadata();
-      const { width, height } = metadata;
-
-      let sharpBuffer: Buffer = buffer;
-      let encoding = file.type || "image/jpeg";
-      if (!shouldSkipProcessing(medium)) {
-        sharpBuffer = await sharp(buffer).toBuffer();
-        // Resize image if needed
-        if (buffer.length > this.#maxFileSize) {
-          sharpBuffer = await sharp(sharpBuffer)
-            .rotate() // Add this to automatically rotate based on EXIF data
-            .resize(2000, 2000, {
-              fit: "inside",
-              withoutEnlargement: true,
-            })
-            .jpeg({
-              quality: 80,
-            })
-            .toBuffer();
-          encoding = "image/jpeg";
-
-          console.log(`Resized to ${sharpBuffer.length} bytes`);
-
-          // If still too large, reduce quality further
-          if (sharpBuffer.length > this.#maxFileSize) {
-            sharpBuffer = await sharp(sharpBuffer)
-              .jpeg({
-                quality: 60,
-              })
-              .toBuffer();
-            console.log(`Further compressed to ${sharpBuffer.length} bytes`);
-          }
-        }
+      const result = await tasks.triggerAndWait<typeof transformBufferedImage>(
+        "transform-buffered-image",
+        { url: medium.url, platform: "bluesky", skipProcessing: shouldSkipProcessing(medium) },
+      );
+      if (!result.ok) {
+        throw new Error("Failed to prepare Bluesky image", { cause: result.error });
       }
-
-      const uploadResult = await this.#agent.uploadBlob(sharpBuffer, {
-        encoding,
-      });
+      const { width, height, mimeType: encoding, url } = result.output;
+      const uploadResult = await tasks.triggerAndWait<typeof uploadBlueskyImage>(
+        "upload-bluesky-image",
+        { url, encoding, service: this.#agent.dispatchUrl.toString(), session: this.#agent.session! },
+      );
+      if (!uploadResult.ok) {
+        const childError = uploadResult.error;
+        const message = childError && typeof childError === "object" &&
+          "message" in childError && typeof childError.message === "string" && childError.message
+          ? childError.message
+          : "Failed to upload Bluesky image";
+        throw Object.assign(new Error(), {
+          name: "Error", message, cause: childError,
+        });
+      }
 
       images.push({
         alt: medium.alt_text || caption || "Image",
-        image: uploadResult.data.blob,
+        image: jsonToLex(uploadResult.output) as BlobRef,
         aspectRatio: {
           width,
           height,
@@ -508,78 +435,12 @@ export class BlueskyPostClient extends PostClient {
     };
   } | null> {
     try {
-      // Fetch the webpage
-      const response = await fetch(url);
-      const html = await response.text();
-
-      // Parse HTML using JSDOM
-      const dom = new JSDOM(html);
-      const document = dom.window.document;
-
-      // Create the card object with required fields
-      const card: {
-        uri: string;
-        title: string | null;
-        description: string | null;
-        thumb?: BlobRef;
-      } = {
-        uri: url,
-        title: "",
-        description: "",
-      };
-
-      // Extract metadata
-      const titleTag = document.querySelector('meta[property="og:title"]');
-      const descriptionTag = document.querySelector(
-        'meta[property="og:description"]',
+      const result = await tasks.triggerAndWait<typeof uploadBlueskyLinkPreview>(
+        "upload-bluesky-link-preview",
+        { url, service: this.#agent.dispatchUrl.toString(), session: this.#agent.session! },
       );
-      const imageTag = document.querySelector('meta[property="og:image"]');
-
-      if (titleTag) {
-        card.title = titleTag.getAttribute("content");
-      } else {
-        card.title = document.querySelector("title")?.textContent || "";
-      }
-
-      if (descriptionTag) {
-        card.description = descriptionTag.getAttribute("content");
-      } else {
-        const metaDesc = document.querySelector('meta[name="description"]');
-        card.description = metaDesc ? metaDesc.getAttribute("content") : "";
-      }
-
-      // Handle thumbnail image if present
-      if (imageTag) {
-        let imageUrl = imageTag.getAttribute("content") || "";
-
-        // Handle relative URLs
-        if (!imageUrl.startsWith("http")) {
-          const urlObj = new URL(url);
-          imageUrl = imageUrl.startsWith("/")
-            ? `${urlObj.protocol}//${urlObj.host}${imageUrl}`
-            : `${urlObj.protocol}//${urlObj.host}/${imageUrl}`;
-        }
-
-        // Fetch and upload the image
-        const imageResponse = await fetch(imageUrl);
-        const imageBuffer = await imageResponse.arrayBuffer();
-
-        const { data: uploadData } = await this.#agent.uploadBlob(
-          new Uint8Array(imageBuffer),
-          {
-            encoding: imageResponse.headers.get("content-type") || "image/jpeg",
-          },
-        );
-
-        if (uploadData?.blob) {
-          card.thumb = uploadData.blob;
-        }
-      }
-
-      return {
-        $type: "app.bsky.embed.external",
-        external: card,
-      };
+      if (!result.ok) throw new Error("Failed to create Bluesky embed card", { cause: result.error });
+      return jsonToLex(result.output) as typeof result.output;
     } catch (error) {
       console.error("Error creating embed card:", error);
       return null;

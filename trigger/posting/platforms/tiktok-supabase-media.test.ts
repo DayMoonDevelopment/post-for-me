@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeAll, expect, mock, spyOn, test } from "bun:test";
 import type { PostMedia, SocialAccount } from "../post.types";
 
 if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
@@ -22,10 +22,24 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
   let storage: typeof import("../../media-storage");
   let TikTokPostClient: typeof import("./tiktok-post-client").TikTokPostClient;
   let originalAdapter: typeof axios.defaults.adapter;
+  let transformRun: (payload: any) => Promise<string>;
+  let videoRun: (payload: any, context: any) => Promise<any>;
   beforeAll(async () => {
     ({ default: axios } = await import("axios"));
     ({ default: sharp } = await import("sharp"));
     ({ tasks } = await import("@trigger.dev/sdk"));
+    mock.module("@trigger.dev/sdk", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const actual = require("@trigger.dev/sdk");
+      return { ...actual, task: (definition: any) => {
+        if (definition.id === "transform-tiktok-image") transformRun = definition.run;
+        if (definition.id === "upload-tiktok-video") videoRun = definition.run;
+        return definition;
+      } };
+    });
+    ({ tasks } = await import("@trigger.dev/sdk"));
+    await import("../../transform-tiktok-image");
+    await import("../../upload-tiktok-video");
     storage = await import("../../media-storage");
     ({ TikTokPostClient } = await import("./tiktok-post-client"));
     originalAdapter = axios.defaults.adapter;
@@ -45,6 +59,13 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
     const downloads: string[] = [];
     const publications: Array<{ url: string; payload: any }> = [];
     const events: string[] = [];
+    let inChild = false;
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (url: RequestInfo | URL) => {
+      expect(inChild).toBe(true);
+      events.push(`download:${url}`);
+      return new Response("data", { headers: { "content-type": "video/mp4" } });
+    }) as typeof fetch);
+    spies.push(fetchSpy);
     axios.defaults.adapter = async (config) => {
       const url = config.url!;
       let data: any;
@@ -72,23 +93,30 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       events.push("transform-upload");
       return `https://media.example.com/${key}`;
     });
-    const copy = spyOn(tasks, "triggerAndWait").mockImplementation((async () => {
+    const copy = spyOn(tasks, "triggerAndWait").mockImplementation((async (id: string, payload: any) => {
+      if (id === "transform-tiktok-image") {
+        return { ok: true, output: await transformRun(JSON.parse(JSON.stringify(payload))) };
+      }
+      if (id === "upload-tiktok-video") {
+        inChild = true;
+        try {
+          return { ok: true, output: JSON.parse(JSON.stringify(await videoRun(
+            JSON.parse(JSON.stringify(payload)), { ctx: { attempt: { number: 2 } } },
+          ))) };
+        } finally { inChild = false; }
+      }
+      expect(id).toBe("copy-media-to-supabase");
       events.push("copy");
       return { ok: true, output: supabaseUrl } as any;
     }) as unknown as typeof tasks.triggerAndWait);
     spies.push(upload, copy);
-    class VideoClient extends TikTokPostClient {
-      protected async downloadToTempFile(url: string) {
-        events.push(`download:${url}`);
-        return { filePath: __filename, mimeType: "video/mp4", size: 4 };
-      }
-      protected async unlinkQuiet() {}
-    }
     const post = (overrides: Partial<PostMedia> = {}) => {
-      const Client = overrides.type === "video" ? VideoClient : TikTokPostClient;
       const client = useSupabaseMedia === undefined
-        ? new Client(credentials)
-        : new Client(credentials, useSupabaseMedia);
+        ? new TikTokPostClient(credentials)
+        : new TikTokPostClient(credentials, useSupabaseMedia);
+      spies.push(spyOn(client as any, "downloadToTempFile").mockImplementation(() => {
+        throw new Error("Parent must not stage video");
+      }));
       return client.post({
         postId: "post-id", account, caption: "caption", platformConfig: {},
         media: [{ id: "media-id", url: sourceUrl, type: "image", ...overrides }],
@@ -105,7 +133,7 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
     expect(options.key).toMatch(/^tiktok_[0-9a-f-]+\.jpg$/);
     expect(options.contentType).toBe("image/jpeg");
     expect(await sharp(options.body as Buffer).metadata()).toMatchObject({ format: "jpeg", width: 1080, height: 1080 });
-    expect(copy).toHaveBeenCalledTimes(1);
+    expect(copy).toHaveBeenCalledTimes(2);
     expect(copy).toHaveBeenCalledWith("copy-media-to-supabase", { url: `https://media.example.com/${options.key}` });
     expect(publications).toHaveLength(1);
     expect(publications[0].payload.source_info).toEqual({ source: "PULL_FROM_URL", photo_cover_index: 0, photo_images: [supabaseUrl] });
@@ -126,7 +154,8 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       const { post, upload, copy, publications } = await setup(flag);
       expect((await post()).success).toBe(true);
       expect(upload).toHaveBeenCalledTimes(1);
-      expect(copy).not.toHaveBeenCalled();
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(copy.mock.calls[0][0]).toBe("transform-tiktok-image");
       expect(publications[0].payload.source_info.photo_images).toEqual([`https://media.example.com/${upload.mock.calls[0][0].key}`]);
     });
   }
@@ -152,7 +181,8 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       const { post, copy, publications, events } = await setup(flag);
       expect((await post({ type: "video" })).success).toBe(true);
       if (flag) expect(copy).toHaveBeenCalledWith("copy-media-to-supabase", { url: sourceUrl });
-      else expect(copy).not.toHaveBeenCalled();
+      else expect(copy).toHaveBeenCalledTimes(1);
+      expect(copy).toHaveBeenCalledWith("upload-tiktok-video", expect.objectContaining({ url: flag ? supabaseUrl : sourceUrl }));
       expect(events).toEqual([...(flag ? ["copy"] : []), `download:${flag ? supabaseUrl : sourceUrl}`, "publish", "upload-video"]);
       expect(publications[0].url).toEndWith("/video/init/");
       expect(publications[0].payload.source_info).toEqual({ source: "FILE_UPLOAD", video_size: 4, chunk_size: 4, total_chunk_count: 1 });

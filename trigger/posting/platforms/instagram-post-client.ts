@@ -1,16 +1,9 @@
-import { randomUUID } from "crypto";
-import { uploadMedia } from "../../media-storage";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { transformInstagramImage } from "../../transform-instagram-image";
 import { PostClient } from "../post-client";
 import axios from "axios";
-import sharp from "sharp";
 import { normalizePlatform } from "../../lib/platform.utils";
-import {
-  compressJpegToLimit,
-  computeCropDimensions,
-  resolveInstagramMinAspectRatio,
-  shouldSkipProcessing,
-} from "../image-processing-utils";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   InstagramConfiguration,
   PlatformAppCredentials,
@@ -1006,74 +999,24 @@ export class InstagramPostClient extends PostClient {
       return { signedUrl, width: undefined, height: undefined };
     }
 
-    const response = await axios({
-      url: signedUrl,
-      method: "GET",
-      responseType: "arraybuffer",
-    });
-
-    const imageBuffer = Buffer.from(response.data);
-
-    // Get image metadata
-    const metadata = await sharp(imageBuffer).metadata();
-
-    const width = metadata.width || 0;
-    const height = metadata.height || 0;
-
-    const aspectRatio = width / height;
-    let targetWidth = metadata.width;
-    let targetHeight = metadata.height;
-
-    const minAspectRatio = resolveInstagramMinAspectRatio({
-      placement: options?.placement,
-      isFeed: options?.is_feed,
-      feedMinAspectRatio: this.#minAspectRatio,
-      storiesMinAspectRatio: this.#storiesMinAspectRatio,
-      reelsMinAspectRatio: this.#reelsMinAspectRatio,
-    });
-
-    if (options?.firstImage?.width && options?.firstImage?.height) {
-      const firstImageRatio =
-        options?.firstImage?.width / options?.firstImage?.height;
-
-      if (firstImageRatio !== aspectRatio) {
-        targetWidth = options?.firstImage?.width;
-        targetHeight = options?.firstImage?.height;
-      }
-    } else {
-      ({ width: targetWidth, height: targetHeight } = computeCropDimensions({
-        width,
-        height,
-        minAspectRatio,
-        maxAspectRatio: this.#maxAspectRatio,
-      }));
-    }
-
-    // Process image with Sharp (resize & compress)
-    let processedImage = await sharp(imageBuffer)
-      .rotate()
-      .resize({ width: targetWidth, height: targetHeight })
-      .jpeg({ quality: 100 })
-      .toBuffer();
-
-    // Ensure size is within Instagram limits
-    processedImage = await compressJpegToLimit(
-      processedImage,
-      this.#maxFileSize,
+    const result = await tasks.triggerAndWait<typeof transformInstagramImage>(
+      "transform-instagram-image",
+      {
+        signedUrl,
+        options,
+        limits: {
+          minAspectRatio: this.#minAspectRatio,
+          maxAspectRatio: this.#maxAspectRatio,
+          storiesMinAspectRatio: this.#storiesMinAspectRatio,
+          reelsMinAspectRatio: this.#reelsMinAspectRatio,
+          maxFileSize: this.#maxFileSize,
+        },
+      },
     );
-
-    const publicUrl = await uploadMedia({
-      key: `instagram_${randomUUID()}.jpg`,
-      body: processedImage,
-      contentType: "image/jpeg",
-      cacheControl: "public, max-age=31536000",
-    });
-
-    return {
-      signedUrl: publicUrl,
-      width: targetWidth,
-      height: targetHeight,
-    };
+    if (!result.ok) {
+      throw new Error("Failed to transform Instagram image");
+    }
+    return result.output;
   }
 
   #sanitizeCaption(caption: string) {

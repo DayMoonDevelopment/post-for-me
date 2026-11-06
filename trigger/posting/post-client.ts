@@ -163,9 +163,14 @@ export class PostClient {
     const inputStream =
       typeof body?.getReader === "function" ? Readable.fromWeb(body) : body;
 
-    await pipeline(inputStream, createWriteStream(filePath));
-    const stat = await fsp.stat(filePath);
-    return { filePath, mimeType, size: stat.size };
+    try {
+      await pipeline(inputStream, createWriteStream(filePath));
+      const stat = await fsp.stat(filePath);
+      return { filePath, mimeType, size: stat.size };
+    } catch (error) {
+      await this.unlinkQuiet(filePath);
+      throw error;
+    }
   }
 
   protected async unlinkQuiet(filePath: string): Promise<void> {

@@ -1,3 +1,5 @@
+import { tasks } from "@trigger.dev/sdk";
+import type { uploadLinkedInMedia } from "../../upload-linkedin-media";
 import { PostClient } from "../post-client";
 import {
   LinkedinConfiguration,
@@ -7,10 +9,6 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-
-// https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/documents-api
-// "The file size can't exceed 100MB and 300 pages."
-const LINKEDIN_MAX_DOCUMENT_BYTES = 100 * 1024 * 1024;
 
 export class LinkedInPostClient extends PostClient {
   supportedMediaTypes = ["image", "video", "document"];
@@ -196,7 +194,9 @@ export class LinkedInPostClient extends PostClient {
         post_id: postId,
         error_message: `Failed to post to LinkedIn: ${error.message}`,
         details: {
-          error,
+          error: error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack, cause: error.cause }
+            : error,
           requests: this.requests,
           responses: this.responses,
         },
@@ -233,54 +233,7 @@ export class LinkedInPostClient extends PostClient {
     };
   }
 
-  // Safely parses a LinkedIn response body as JSON without throwing on a
-  // non-JSON (e.g. plain-text or empty) error body, so callers can still
-  // inspect `response.ok`/status and raise their own descriptive error.
-  async #parseJsonSafe(response: Response): Promise<any> {
-    const text = await response.text();
-    if (!text) return {};
-    try {
-      return JSON.parse(text);
-    } catch {
-      return {};
-    }
-  }
-
-  // Shared by #createDocumentMedia and #createMedia: streams a downloaded
-  // file's body to a LinkedIn upload URL without buffering it into memory.
-  async #streamUploadFile({
-    uploadUrl,
-    method,
-    fileRes,
-    accessToken,
-    contentType,
-  }: {
-    uploadUrl: string;
-    method: "PUT" | "POST";
-    fileRes: Response;
-    accessToken: string;
-    contentType: string;
-  }): Promise<Response> {
-    const contentLength = fileRes.headers.get("content-length");
-
-    return fetch(uploadUrl, {
-      method,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": contentType,
-        ...(contentLength ? { "Content-Length": contentLength } : {}),
-      },
-      body: fileRes.body,
-      // Required by Node/undici fetch for streaming request bodies.
-      duplex: "half",
-    });
-  }
-
-  // LinkedIn document (PDF) posts have no representation in the legacy
-  // /v2/ugcPosts share model, so they're published through LinkedIn's
-  // versioned Documents + Posts API instead, independent of the legacy
-  // image/video/article flow below.
-  async #createDocumentMedia({
+  async #uploadMedia({
     medium,
     authorUrn,
     account,
@@ -289,75 +242,30 @@ export class LinkedInPostClient extends PostClient {
     authorUrn: string;
     account: SocialAccount;
   }): Promise<string> {
-    this.requests.push({
-      initializeUploadRequest: { owner: authorUrn },
-    });
-
-    // The file download doesn't depend on the initializeUpload result, so
-    // run them concurrently rather than paying both round trips serially.
-    const [initializeResponse, fileRes] = await Promise.all([
-      fetch("https://api.linkedin.com/rest/documents?action=initializeUpload", {
-        method: "POST",
-        headers: this.#versionedHeaders(account.access_token),
-        body: JSON.stringify({
-          initializeUploadRequest: { owner: authorUrn },
-        }),
-      }),
-      fetch(medium.url),
-    ]);
-
-    const initializeData = await this.#parseJsonSafe(initializeResponse);
-    this.responses.push({ initializeDocumentUploadResponse: initializeData });
-
-    const uploadUrl = initializeData?.value?.uploadUrl;
-    const documentUrn = initializeData?.value?.document;
-
-    if (!initializeResponse.ok || !uploadUrl || !documentUrn) {
-      // The download raced initializeUpload and may have already resolved;
-      // release it rather than leaving the connection/socket open.
-      await fileRes.body?.cancel().catch(() => undefined);
+    const result = await tasks.triggerAndWait<typeof uploadLinkedInMedia>(
+      "upload-linkedin-media",
+      {
+        medium: { url: medium.url, type: medium.type },
+        authorUrn,
+        accessToken: account.access_token,
+        apiVersion: this.#apiVersion,
+      },
+    );
+    if (!result.ok) {
+      const error = result.error;
+      const message = error && typeof error === "object" && "message" in error
+        && typeof error.message === "string" ? error.message : "Child task failed";
       throw new Error(
-        `Failed to initialize LinkedIn document upload: ${initializeResponse.status} ${initializeResponse.statusText}`,
+        `Failed to upload LinkedIn media: ${message}`,
+        { cause: error },
       );
     }
-
-    if (!fileRes.ok || !fileRes.body) {
-      await fileRes.body?.cancel().catch(() => undefined);
-      throw new Error(
-        `Failed to download document for upload: ${fileRes.status} ${fileRes.statusText}`,
-      );
+    this.requests.push(...result.output.requests);
+    this.responses.push(...result.output.responses);
+    if (!result.output.success) {
+      throw new Error(result.output.message, { cause: result.output.error });
     }
-
-    // LinkedIn's Documents API rejects files over 100MB. `fileRes` already
-    // has headers (fetch resolves once headers arrive, before the body is
-    // read), so this check needs no extra round trip.
-    const contentLength = fileRes.headers.get("content-length");
-    if (contentLength && Number(contentLength) > LINKEDIN_MAX_DOCUMENT_BYTES) {
-      await fileRes.body.cancel().catch(() => undefined);
-      throw new Error(
-        `Document exceeds LinkedIn's 100MB upload limit (${contentLength} bytes)`,
-      );
-    }
-
-    const contentType = fileRes.headers.get("content-type") || "application/pdf";
-
-    const uploadResponse = await this.#streamUploadFile({
-      uploadUrl,
-      method: "PUT",
-      fileRes,
-      accessToken: account.access_token,
-      contentType,
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error(
-        `Failed to upload document: ${uploadResponse.status} ${uploadResponse.statusText}`,
-      );
-    }
-
-    this.responses.push({ uploadDocumentResponse: uploadResponse.status });
-
-    return documentUrn;
+    return result.output.urn;
   }
 
   async #postDocument({
@@ -375,7 +283,7 @@ export class LinkedInPostClient extends PostClient {
     authorUrn: string;
     title?: string;
   }): Promise<PostResult> {
-    const documentUrn = await this.#createDocumentMedia({
+    const documentUrn = await this.#uploadMedia({
       medium,
       authorUrn,
       account,
@@ -442,120 +350,6 @@ export class LinkedInPostClient extends PostClient {
     };
   }
 
-  async #createMedia({
-    medium,
-    caption,
-    authorUrn,
-    account,
-  }: {
-    medium: PostMedia;
-    caption: string;
-    authorUrn: string;
-    account: SocialAccount;
-  }): Promise<any> {
-    const isVideo = medium.type === "video";
-
-    this.requests.push({
-      registerRequest: {
-        registerUploadRequest: {
-          recipes: [
-            isVideo
-              ? "urn:li:digitalmediaRecipe:feedshare-video"
-              : "urn:li:digitalmediaRecipe:feedshare-image",
-          ],
-          owner: authorUrn,
-          serviceRelationships: [
-            {
-              relationshipType: "OWNER",
-              identifier: "urn:li:userGeneratedContent",
-            },
-          ],
-        },
-      },
-    });
-    // Step 1: Register upload
-    const registerResponse = await fetch(
-      "https://api.linkedin.com/v2/assets?action=registerUpload",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          registerUploadRequest: {
-            recipes: [
-              isVideo
-                ? "urn:li:digitalmediaRecipe:feedshare-video"
-                : "urn:li:digitalmediaRecipe:feedshare-image",
-            ],
-            owner: authorUrn,
-            serviceRelationships: [
-              {
-                relationshipType: "OWNER",
-                identifier: "urn:li:userGeneratedContent",
-              },
-            ],
-          },
-        }),
-      },
-    );
-
-    const registerData = await registerResponse.json();
-
-    this.responses.push({ registerResponse: registerData });
-
-    if (!registerResponse.ok || !registerData.value) {
-      throw new Error(
-        `Failed to register LinkedIn media upload: ${registerResponse.status} ${JSON.stringify(registerData)}`,
-      );
-    }
-
-    const uploadUrl =
-      registerData.value.uploadMechanism[
-        "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
-      ].uploadUrl;
-    const asset = registerData.value.asset;
-
-    // Step 2: Stream upload the video/image (avoid buffering into memory)
-    const fileRes = await fetch(medium.url);
-    if (!fileRes.ok || !fileRes.body) {
-      throw new Error(
-        `Failed to download media for upload: ${fileRes.status} ${fileRes.statusText}`,
-      );
-    }
-
-    const contentType =
-      fileRes.headers.get("content-type") ||
-      (isVideo ? "video/mp4" : "image/jpeg");
-
-    const uploadResponse = await this.#streamUploadFile({
-      uploadUrl,
-      method: "POST",
-      fileRes,
-      accessToken: account.access_token,
-      contentType,
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error(
-        `Failed to upload media: ${uploadResponse.status} ${uploadResponse.statusText}`,
-      );
-    }
-
-    this.responses.push({ uploadResponse: uploadResponse.status });
-
-    const mediaObject: any = {
-      status: "READY",
-      description: {
-        text: caption.substring(0, 200),
-      },
-      media: asset,
-    };
-
-    return mediaObject;
-  }
-
   async #processMedia({
     caption,
     media,
@@ -589,12 +383,11 @@ export class LinkedInPostClient extends PostClient {
           const medium = allowedMedia[i];
           this.requests.push({ processMedia: medium });
           uploadedMedia.push(
-            await this.#createMedia({
-              medium,
-              caption,
-              authorUrn,
-              account,
-            }),
+            {
+              status: "READY",
+              description: { text: caption.substring(0, 200) },
+              media: await this.#uploadMedia({ medium, authorUrn, account }),
+            },
           );
 
           if (i === 0 && medium.type === "video") {

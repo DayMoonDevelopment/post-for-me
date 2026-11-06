@@ -1,6 +1,52 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import { LinkedInPostClient } from "./linkedin-post-client";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { PostMedia, SocialAccount } from "../post.types";
+
+// Keep SDK module mocks and global fetch confined to a separate test process.
+if (!process.env.LINKEDIN_TEST_CHILD) {
+  test("LinkedIn existing flows through the real upload child", async () => {
+    const child = Bun.spawn([process.execPath, "test", __filename], {
+      cwd: `${__dirname}/../..`,
+      env: { ...process.env, LINKEDIN_TEST_CHILD: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+    ]);
+    expect({ exitCode, output: exitCode ? stdout + stderr : "" }).toEqual({ exitCode: 0, output: "" });
+  });
+} else {
+const transport = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
+let inChild = false;
+let uploadRun: (payload: any, context: any) => Promise<any>;
+let LinkedInPostClient: typeof import("./linkedin-post-client").LinkedInPostClient;
+const sdk = {
+  task: (definition: any) => { uploadRun = definition.run; return definition; },
+  tasks: {
+    triggerAndWait: async (id: string, payload: unknown) => {
+      expect(id).toBe("upload-linkedin-media");
+      expect(Object.keys(payload as object).sort()).toEqual(["accessToken", "apiVersion", "authorUrn", "medium"]);
+      expect(Object.keys((payload as any).medium).sort()).toEqual(["type", "url"]);
+      inChild = true;
+      try {
+        let output;
+        try {
+          output = await uploadRun(transport(payload), { ctx: { attempt: { number: 1 } } });
+        } catch {
+          output = await uploadRun(transport(payload), { ctx: { attempt: { number: 2 } } });
+        }
+        return { ok: true, output: transport(output) };
+      } finally {
+        inChild = false;
+      }
+    },
+  },
+};
+mock.module("@trigger.dev/sdk", () => sdk);
+beforeAll(async () => {
+  await import("../../upload-linkedin-media");
+  ({ LinkedInPostClient } = await import("./linkedin-post-client"));
+});
 
 type FetchCall = { url: string; init?: RequestInit };
 
@@ -11,6 +57,7 @@ beforeEach(() => {
   calls = [];
   handler = defaultHandler;
   (globalThis as any).fetch = (url: string, init?: RequestInit) => {
+    if (!inChild) expect(String(url)).toMatch(/\/rest\/posts|\/v2\/ugcPosts/);
     calls.push({ url: String(url), init });
     return Promise.resolve(handler(String(url), init));
   };
@@ -86,7 +133,7 @@ function defaultHandler(url: string, init?: RequestInit): Response {
   throw new Error(`Unhandled fetch in test: ${method} ${url}`);
 }
 
-function makeClient(): LinkedInPostClient {
+function makeClient(): InstanceType<typeof LinkedInPostClient> {
   return new LinkedInPostClient({
     app_id: "app-id",
     app_secret: "app-secret",
@@ -170,6 +217,42 @@ describe("LinkedInPostClient#post — existing image/video flow (unchanged)", ()
     ).toBe("VIDEO");
   });
 
+  test("keeps image order, the 20 image cap, and caption truncation", async () => {
+    const media = Array.from({ length: 21 }, (_, i) => ({ ...imageMedium, url: `https://example.com/file.${i}.jpg` }));
+    const result = await makeClient().post({ postId: "images", account: personAccount, caption: "c".repeat(201), media });
+    expect(result.success).toBe(true);
+    expect(callUrls().filter((url) => url.startsWith("https://example.com/"))).toEqual(media.slice(0, 20).map((medium) => medium.url));
+    const body = JSON.parse(calls.at(-1)!.init!.body as string);
+    const content = body.specificContent["com.linkedin.ugc.ShareContent"];
+    expect(content.shareMediaCategory).toBe("IMAGE");
+    expect(content.media).toHaveLength(20);
+    expect(content.media[0].description.text).toBe("c".repeat(200));
+  });
+
+  test("a first video stops subsequent uploads", async () => {
+    const result = await makeClient().post({ postId: "video", account: personAccount, caption: "caption", media: [videoMedium, imageMedium] });
+    expect(result.success).toBe(true);
+    expect(callUrls().filter((url) => url.startsWith("https://example.com/"))).toEqual([videoMedium.url]);
+  });
+
+  test("article posts do not run an upload", async () => {
+    const result = await makeClient().post({ postId: "article", account: personAccount, caption: "www.example.com", media: [] });
+    expect(result.success).toBe(true);
+    expect(calls).toHaveLength(1);
+    const content = JSON.parse(calls[0].init!.body as string).specificContent["com.linkedin.ugc.ShareContent"];
+    expect(content.shareMediaCategory).toBe("ARTICLE");
+    expect(content.media).toEqual([{ status: "READY", originalUrl: "https://www.example.com" }]);
+  });
+
+  test("reshares bypass even mixed document media without an upload", async () => {
+    const result = await makeClient().post({ postId: "reshare", account: personAccount, caption: "caption", media: [documentMedium, imageMedium], platformConfig: { reshare_post_id: "123" } });
+    expect(result.success).toBe(true);
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0].init!.body as string);
+    expect(body.responseContext).toEqual({ parent: "urn:li:ugcPost:123" });
+    expect(body.specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory).toBe("NONE");
+  });
+
   test("organization page account resolves authorUrn to urn:li:organization", async () => {
     const client = makeClient();
     await client.post({
@@ -218,6 +301,14 @@ describe("LinkedInPostClient#post — existing image/video flow (unchanged)", ()
     expect(result.error_message).not.toContain(
       "Cannot read properties of undefined",
     );
+    const details = transport(result.details) as any;
+    expect(details.error.message).toContain("Failed to register LinkedIn media upload: 403");
+    expect(details.error.cause.message).toBe(details.error.message);
+    expect(details.responses).toEqual([expect.objectContaining({ registerResponse: { status: 403, message: "ACCESS_DENIED" } })]);
+    expect(details.requests).toEqual([
+      expect.objectContaining({ processMedia: imageMedium }),
+      expect.objectContaining({ registerRequest: expect.any(Object) }),
+    ]);
   });
 });
 
@@ -295,6 +386,10 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
     expect(result.error_message).toContain(
       "Failed to initialize LinkedIn document upload: 500",
     );
+    const details = transport(result.details) as any;
+    expect(details.error.cause.message).toContain("Failed to initialize LinkedIn document upload: 500");
+    expect(details.responses).toEqual([expect.objectContaining({ initializeDocumentUploadResponse: {} })]);
+    expect(details.requests).toEqual([expect.objectContaining({ initializeUploadRequest: { owner: "urn:li:person:12345" } })]);
     expect(callUrls().some((u) => u.includes("/rest/posts"))).toBe(false);
   });
 
@@ -585,3 +680,4 @@ describe("LinkedInPostClient#post — document (PDF) posts", () => {
     expect(cancelCalled).toBe(true);
   });
 });
+}
