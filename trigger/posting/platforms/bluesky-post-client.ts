@@ -2,9 +2,8 @@ import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs, jsonToLex } from "@atproto/api";
 import type { uploadBlueskyImage, uploadBlueskyLinkPreview } from "../../upload-bluesky-media";
 import type { transformBufferedImage } from "../../transform-buffered-image";
-import type { probeVideoDimensions } from "../../video-child-tasks";
+import type { uploadBlueskyVideo } from "../../upload-bluesky-video";
 import { shouldSkipProcessing } from "../image-processing-utils";
-import fetch from "node-fetch";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -13,14 +12,12 @@ import {
   SocialAccount,
 } from "../post.types";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
-import { createReadStream } from "fs";
 import { logger, tasks, wait } from "@trigger.dev/sdk/v3";
 
 export class BlueskyPostClient extends PostClient {
   #agent: AtpAgent;
   #charLimit = 300;
   #maxImages = 4;
-  #maxVideoFileSize = 100_000_000;
   #videoStatusMaxAttempts = 30;
   #videoStatusInitialDelayMs = 5000;
   #videoStatusRetryBackoffMultiplier = 1.5;
@@ -234,65 +231,22 @@ export class BlueskyPostClient extends PostClient {
 
     const token = serviceAuth.token;
 
-    const processedFile = await tasks.triggerAndWait("ffmpeg-compress-video", {
-      url: medium.url,
-      maxSizeBytes: this.#maxVideoFileSize,
-    });
-
-    let fileUrl = medium.url;
-    if (processedFile.ok) {
-      fileUrl = processedFile.output;
-    }
-
-    const remoteName =
-      new URL(fileUrl).pathname.split("/").pop() || "video.mp4";
-
-    const dimensions = await tasks.triggerAndWait<typeof probeVideoDimensions>(
-      "probe-video-dimensions",
-      { url: fileUrl },
+    const result = await tasks.triggerAndWait<typeof uploadBlueskyVideo>(
+      "upload-bluesky-video", { url: medium.url, token, did: this.#agent.session!.did },
     );
-    if (!dimensions.ok) {
-      throw new Error("Failed to probe Bluesky video dimensions", { cause: dimensions.error });
+    if (!result.ok) {
+      const error = result.error as { message?: string };
+      throw new Error(error?.message || "Failed to upload Bluesky video", { cause: result.error });
     }
-    const { width, height } = dimensions.output;
-
-    const tmp = await this.downloadToTempFile(fileUrl, {
-      prefix: "bluesky_video",
-      filename: remoteName,
-    });
-    const inputPath = tmp.filePath;
-
-    let uploadResponseData: unknown;
-    try {
-      const uploadUrl = new URL(
-        "https://video.bsky.app/xrpc/app.bsky.video.uploadVideo",
-      );
-      uploadUrl.searchParams.append("did", this.#agent.session!.did);
-      uploadUrl.searchParams.append("name", remoteName);
-
-      this.requests.push({ uploadVideoRequest: uploadUrl });
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": tmp.mimeType || "video/mp4",
-          "Content-Length": tmp.size.toString(),
-        },
-        body: createReadStream(inputPath) as any,
-      });
-
-      uploadResponseData = await uploadResponse.json();
-    } finally {
-      await this.unlinkQuiet(inputPath);
-    }
-
-    this.responses.push({ uploadVideoResponse: uploadResponseData });
-
-    const jobStatus = uploadResponseData as AppBskyVideoDefs.JobStatus;
+    this.requests.push(...result.output.requests);
+    this.responses.push(...result.output.responses);
+    if (!result.output.success) throw Object.assign(new Error(), result.output.error);
+    const { width, height } = result.output;
+    const jobStatus = jsonToLex(result.output.jobStatus) as AppBskyVideoDefs.JobStatus;
 
     if (!jobStatus.jobId) {
       logger.error("Error starting video upload job", {
-        error: uploadResponseData,
+        error: jobStatus,
       });
 
       throw new Error(`Unable to start video upload, ${jobStatus.error}`);

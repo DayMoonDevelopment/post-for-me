@@ -19,7 +19,12 @@ mock.module("@atproto/api", () => ({
   AtpAgent: class {
     dispatchUrl = new URL("https://bsky.social");
     session = { did: "did:test" };
-    com = { atproto: { server: { getServiceAuth: async () => ({ data: { token: "token" } }) } } };
+    com = { atproto: { server: { getServiceAuth: async (params) => {
+      expect(params.aud).toBe("did:web:bsky.social");
+      expect(params.lxm).toBe("com.atproto.repo.uploadBlob");
+      events.push("auth");
+      return { data: { token: "token" } };
+    } } } };
     uploadBlob = upload;
     async post(payload) { posted = payload; return { uri: "at://test/post/id" }; }
   },
@@ -27,6 +32,16 @@ mock.module("@atproto/api", () => ({
 }));
 const child = mock(async (id, payload) => {
   events.push(id);
+  if (id === "upload-bluesky-video") {
+    expect(payload).toEqual({ url: "https://source.example/video", token: "token", did: "did:test" });
+    return { ok: true, output: JSON.parse(JSON.stringify({
+      success: scenario !== "video-failure",
+      error: { name: "Error", message: "Failed to probe Bluesky video dimensions" },
+      jobStatus: { jobId: "job", blob: "video-blob" }, width: 1920, height: 1080,
+      requests: [{ uploadVideoRequest: "upload-url", timestamp: "child-time" }],
+      responses: [{ uploadVideoResponse: { jobId: "job" }, timestamp: "child-time" }],
+    })) };
+  }
   if (id.startsWith("upload-bluesky-")) {
     expect(payload.service).toBe("https://bsky.social/");
     expect(payload.session).toEqual({ did: "did:test" });
@@ -42,15 +57,6 @@ const child = mock(async (id, payload) => {
     if (scenario === "upload-provider-rejection") return { ok: false, error: JSON.parse(JSON.stringify(providerError)) };
     return scenario === "upload-failure" ? { ok: false, error: {} } : { ok: true, output: "image-blob" };
   }
-  if (id === "ffmpeg-compress-video") {
-    expect(payload).toEqual({ url: "https://source.example/video", maxSizeBytes: 100000000 });
-    return { ok: true, output: "https://media.example/compressed.mp4" };
-  }
-  if (video) {
-    expect(id).toBe("probe-video-dimensions");
-    expect(payload).toEqual({ url: "https://media.example/compressed.mp4" });
-    return scenario === "video-failure" ? { ok: false, error: {} } : { ok: true, output: { width: 1920, height: 1080 } };
-  }
   expect(id).toBe("transform-buffered-image");
   expect(payload).toEqual({ url: "https://source.example/image", platform: "bluesky", skipProcessing: scenario === "skip" });
   if (scenario === "throw") throw new Error("child failed");
@@ -61,20 +67,13 @@ const child = mock(async (id, payload) => {
 const sdk = { tasks: { triggerAndWait: child }, logger: { error() {} }, wait: { for: async () => {} } };
 mock.module("@trigger.dev/sdk/v3", () => sdk);
 const nodeFetch = await import("node-fetch");
-spyOn(nodeFetch, "default").mockImplementation(async () => {
-  events.push("upload-video");
-  return { json: async () => ({ jobId: "job", blob: "video-blob" }) };
-});
+spyOn(nodeFetch, "default").mockImplementation(async () => { throw new Error("Parent must not upload media"); });
 globalThis.fetch = mock(async () => { throw new Error("Parent must not download media"); });
 console.error = () => {};
 const { BlueskyPostClient } = await import("./bluesky-post-client.ts");
 const client = new BlueskyPostClient({ app_id: "app", app_secret: "secret" });
-client.downloadToTempFile = async (url) => {
-  expect(url).toBe("https://media.example/compressed.mp4");
-  events.push("stage");
-  return { filePath: "/dev/null", mimeType: "video/mp4", size: 0 };
-};
-client.unlinkQuiet = async () => { events.push("unlink"); };
+client.downloadToTempFile = async () => { throw new Error("Parent must not stage media"); };
+client.unlinkQuiet = async () => { throw new Error("Parent must not clean up media"); };
 const medium = { type: video ? "video" : "image", url: "https://source.example/" + (video ? "video" : "image"), skip_processing: scenario === "skip", alt_text: scenario === "caption-alt" || scenario === "default-alt" ? "" : "alt" };
 const result = await client.post({ postId: "post", account: { id: "account" }, caption: link ? "https://example.com/page)." : scenario === "default-alt" ? "" : "caption",
   media: link ? [] : scenario === "multi" ? [medium, { type: "video" }, medium, medium, medium, medium] : [medium] });
@@ -88,8 +87,9 @@ if (scenario === "upload-provider-rejection" || scenario === "upload-failure") {
   expect(posted).toBeUndefined();
 }
 if (video) {
-  expect(events).toEqual(scenario === "video-failure" ? ["ffmpeg-compress-video", "probe-video-dimensions"]
-    : ["ffmpeg-compress-video", "probe-video-dimensions", "stage", "upload-video", "unlink"]);
+  expect(events).toEqual(["auth", "upload-bluesky-video"]);
+  expect(result.details.requests[0]).toEqual({ uploadVideoRequest: "upload-url", timestamp: "child-time" });
+  if (failure) expect(result.error_message).toBe("Failed to probe Bluesky video dimensions");
   if (!failure) expect(posted.embed.aspectRatio).toEqual({ width: 1920, height: 1080 });
 } else if (link) {
   expect(child).toHaveBeenCalledTimes(1);

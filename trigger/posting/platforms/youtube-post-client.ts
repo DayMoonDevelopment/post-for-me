@@ -3,12 +3,7 @@ import { google, youtube_v3 } from "googleapis";
 import { logger, tasks, wait } from "@trigger.dev/sdk";
 import type { generateYoutubeTimestampThumbnail } from "../../video-child-tasks";
 import type { uploadYoutubeThumbnail } from "../../upload-youtube-thumbnail";
-import { createWriteStream } from "node:fs";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import type { uploadYoutubeVideo } from "../../upload-youtube-video";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -18,22 +13,6 @@ import {
   YoutubeConfiguration,
   YoutubeLocalization,
 } from "../post.types";
-
-export function isRetriableYouTubeSessionInitError(
-  status: number,
-  bodyText: string,
-): boolean {
-  if (status === 429 || (status >= 500 && status <= 599)) return true;
-  if (status === 409) {
-    try {
-      const parsed = JSON.parse(bodyText);
-      return parsed?.error?.errors?.[0]?.reason === "alreadyExists";
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
 
 // YouTube limits snippet.description to 5,000 bytes (UTF-8), not characters.
 export const YOUTUBE_MAX_DESCRIPTION_BYTES = 5000;
@@ -62,18 +41,13 @@ export function sanitizeYouTubeDescription(description: string): {
   truncated: boolean;
   originalBytes: number;
 } {
-  // Remove invalid characters (e.g., '<', '>') but keep newlines, and any
-  // leading/trailing whitespace while keeping internal whitespace
+  // Remove invalid characters but preserve internal whitespace and newlines.
   const sanitized = description.replace(/[<>]/g, "").trim();
-
-  // If the description is empty after sanitization, there is nothing to send
   if (sanitized.length === 0) {
     return { value: null, truncated: false, originalBytes: 0 };
   }
-
   const originalBytes = Buffer.byteLength(sanitized, "utf8");
   const value = truncateToUtf8Bytes(sanitized, YOUTUBE_MAX_DESCRIPTION_BYTES);
-
   return { value, truncated: value.length < sanitized.length, originalBytes };
 }
 
@@ -84,19 +58,13 @@ export function sanitizeYouTubeLocalizations(
 
   return Object.fromEntries(
     Object.entries(localizations).map(([language, localization]) => {
-      // Truncate by code point so emoji and surrogate pairs are never split
+      // Truncate by code point so emoji and surrogate pairs are never split.
       const title = Array.from(
-        (localization?.title ?? "")
-          .replace(/[<>]/g, "")
-          .replace(/\n/g, " ")
-          .trim(),
-      )
-        .slice(0, YOUTUBE_MAX_TITLE_CHARS)
-        .join("");
+        (localization?.title ?? "").replace(/[<>]/g, "").replace(/\n/g, " ").trim(),
+      ).slice(0, YOUTUBE_MAX_TITLE_CHARS).join("");
       const description = localization?.description
         ? sanitizeYouTubeDescription(localization.description)
         : null;
-
       if (description?.truncated) {
         logger.warn("YouTube localized description truncated", {
           language,
@@ -104,14 +72,10 @@ export function sanitizeYouTubeLocalizations(
           limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
         });
       }
-
-      return [
-        language,
-        {
-          ...(title ? { title } : {}),
-          ...(description?.value ? { description: description.value } : {}),
-        },
-      ];
+      return [language, {
+        ...(title ? { title } : {}),
+        ...(description?.value ? { description: description.value } : {}),
+      }];
     }),
   );
 }
@@ -121,41 +85,29 @@ export class YouTubePostClient extends PostClient {
   #googleClientId: string;
   #googleClientSecret: string;
 
-  // Must be a multiple of 256KB per YouTube resumable upload guidance.
-  static readonly DEFAULT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
-  static readonly MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
-  static readonly MAX_RESUMABLE_UPLOAD_ATTEMPTS = 5;
-  static readonly MAX_SESSION_INIT_ATTEMPTS = 3;
   static readonly MAX_PROCESSING_POLL_ATTEMPTS = 20;
-  static readonly MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS = 1_000;
   static readonly PROCESSING_POLL_INITIAL_DELAY_MS = 5_000;
   static readonly PROCESSING_POLL_MAX_DELAY_MS = 60_000;
 
   constructor(appCredentials: PlatformAppCredentials) {
     super(appCredentials);
-
     this.#googleClientId = appCredentials.app_id;
     this.#googleClientSecret = appCredentials.app_secret;
   }
 
-  async refreshAccessToken(
-    account: SocialAccount,
-  ): Promise<RefreshTokenResult> {
+  async refreshAccessToken(account: SocialAccount): Promise<RefreshTokenResult> {
     this.requests.push({ refreshRequest: "refreshing access token" });
     this.#oauth2Client = new google.auth.OAuth2(
       this.#googleClientId,
       this.#googleClientSecret,
       `${process.env.NEXTAUTH_URL}/api/youtube-auth/callback`,
     );
-
     this.#oauth2Client.setCredentials({
       access_token: account.access_token,
       refresh_token: account.refresh_token,
       expiry_date: new Date(account.access_token_expires_at!).getTime(),
     });
-
     const { credentials } = await this.#oauth2Client.refreshAccessToken();
-
     this.responses.push({
       refreshResponse: {
         scope: credentials.scope,
@@ -173,41 +125,21 @@ export class YouTubePostClient extends PostClient {
     };
   }
 
-  async post({
-    postId,
-    account,
-    caption,
-    media,
-    platformConfig,
-  }: {
+  async post({ postId, account, caption, media, platformConfig }: {
     postId: string;
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
     platformConfig?: YoutubeConfiguration;
   }): Promise<PostResult> {
-    let stagedFilePath: string | null = null;
     let warning: string | null = null;
-
     try {
       const medium = media[0];
       if (medium.type !== "video") {
         throw new Error("Only videos are supported for YouTube posts");
       }
-
-      const { fileSize, mimeType } = await this.#getRemoteFileInfo(medium.url, {
-        fallbackMimeType: "video/mp4",
-      });
-
-      // Trim and sanitize the caption
-      const youtube = google.youtube({
-        version: "v3",
-        auth: this.#oauth2Client,
-      }) as youtube_v3.Youtube;
-
-      const description = sanitizeYouTubeDescription(
-        platformConfig?.description || caption,
-      );
+      const youtube = google.youtube({ version: "v3", auth: this.#oauth2Client }) as youtube_v3.Youtube;
+      const description = sanitizeYouTubeDescription(platformConfig?.description || caption);
       if (description.truncated) {
         warning = `Description was truncated to ${YOUTUBE_MAX_DESCRIPTION_BYTES} bytes (was ${description.originalBytes})`;
         logger.warn("YouTube description truncated", {
@@ -215,146 +147,72 @@ export class YouTubePostClient extends PostClient {
           limitBytes: YOUTUBE_MAX_DESCRIPTION_BYTES,
         });
       }
-
       const parts = new Set(["snippet", "status"]);
       if (platformConfig?.localizations) parts.add("localizations");
       if (platformConfig?.recording_date) parts.add("recordingDetails");
-      if (platformConfig?.has_paid_product_placement !== undefined) {
-        parts.add("paidProductPlacementDetails");
-      }
-
+      if (platformConfig?.has_paid_product_placement !== undefined) parts.add("paidProductPlacementDetails");
       const videoRequest = {
         part: [...parts],
         requestBody: {
           snippet: {
-            title: this.#sanitizeYouTubeCaption(
-              platformConfig?.title || caption,
-            ),
+            title: this.#sanitizeYouTubeCaption(platformConfig?.title || caption),
             description: description.value,
-            ...(platformConfig?.tags !== undefined && {
-              tags: platformConfig.tags,
-            }),
-            ...(platformConfig?.category_id !== undefined && {
-              categoryId: platformConfig.category_id,
-            }),
-            ...(platformConfig?.default_language !== undefined && {
-              defaultLanguage: platformConfig.default_language,
-            }),
+            ...(platformConfig?.tags !== undefined && { tags: platformConfig.tags }),
+            ...(platformConfig?.category_id !== undefined && { categoryId: platformConfig.category_id }),
+            ...(platformConfig?.default_language !== undefined && { defaultLanguage: platformConfig.default_language }),
           },
           status: {
             privacyStatus: platformConfig?.privacy_status || "public",
-            selfDeclaredMadeForKids:
-              platformConfig?.made_for_kids == undefined
-                ? false
-                : platformConfig.made_for_kids,
-            containsSyntheticMedia:
-              platformConfig?.contains_synthetic_media === undefined
-                ? false
-                : platformConfig?.contains_synthetic_media,
-            ...(platformConfig?.embeddable !== undefined && {
-              embeddable: platformConfig.embeddable,
-            }),
-            ...(platformConfig?.license !== undefined && {
-              license: platformConfig.license,
-            }),
-            ...(platformConfig?.public_stats_viewable !== undefined && {
-              publicStatsViewable: platformConfig.public_stats_viewable,
-            }),
-            ...(platformConfig?.publish_at !== undefined && {
-              publishAt: platformConfig.publish_at,
-            }),
+            selfDeclaredMadeForKids: platformConfig?.made_for_kids == undefined ? false : platformConfig.made_for_kids,
+            containsSyntheticMedia: platformConfig?.contains_synthetic_media === undefined ? false : platformConfig.contains_synthetic_media,
+            ...(platformConfig?.embeddable !== undefined && { embeddable: platformConfig.embeddable }),
+            ...(platformConfig?.license !== undefined && { license: platformConfig.license }),
+            ...(platformConfig?.public_stats_viewable !== undefined && { publicStatsViewable: platformConfig.public_stats_viewable }),
+            ...(platformConfig?.publish_at !== undefined && { publishAt: platformConfig.publish_at }),
           },
-          ...(platformConfig?.localizations != null && {
-            localizations: sanitizeYouTubeLocalizations(
-              platformConfig.localizations,
-            ),
-          }),
-          ...(platformConfig?.recording_date !== undefined && {
-            recordingDetails: {
-              recordingDate: platformConfig.recording_date,
-            },
-          }),
-          ...(platformConfig?.has_paid_product_placement !== undefined && {
-            paidProductPlacementDetails: {
-              hasPaidProductPlacement:
-                platformConfig.has_paid_product_placement,
-            },
-          }),
+          ...(platformConfig?.localizations != null && { localizations: sanitizeYouTubeLocalizations(platformConfig.localizations) }),
+          ...(platformConfig?.recording_date !== undefined && { recordingDetails: { recordingDate: platformConfig.recording_date } }),
+          ...(platformConfig?.has_paid_product_placement !== undefined && { paidProductPlacementDetails: { hasPaidProductPlacement: platformConfig.has_paid_product_placement } }),
         },
       };
-
-      this.requests.push({
-        postRequest: {
-          ...videoRequest,
-          media: medium,
-          upload: {
-            protocol: "resumable",
-            chunkSizeBytes: YouTubePostClient.DEFAULT_CHUNK_SIZE_BYTES,
-            fileSize,
-            mimeType,
-          },
+      const upload = await tasks.triggerAndWait<typeof uploadYoutubeVideo>("upload-youtube-video", {
+        medium,
+        videoRequest,
+        oauth: {
+          clientId: this.#googleClientId,
+          clientSecret: this.#googleClientSecret,
+          redirectUri: `${process.env.NEXTAUTH_URL}/api/youtube-auth/callback`,
+          credentials: { ...this.#oauth2Client.credentials },
         },
       });
-
-      const stagedMedia = await this.#downloadRemoteFileToTemp({
-        fileUrl: medium.url,
-        expectedFileSize: fileSize,
-        mediaId: medium.id,
-      });
-      stagedFilePath = stagedMedia.path;
-
-      const uploadUrl = await this.#startResumableUploadSession({
-        videoRequest,
-        fileSize,
-        mimeType,
-      });
-
-      const uploadedVideo = await this.#uploadResumableChunks({
-        uploadUrl,
-        filePath: stagedMedia.path,
-        fileSize,
-        mimeType,
-        chunkSizeBytes: YouTubePostClient.DEFAULT_CHUNK_SIZE_BYTES,
-      });
-
-      this.responses.push({ postResponse: uploadedVideo });
-
-      const videoId = uploadedVideo.id!;
+      if (!upload.ok) {
+        const error = upload.error as { message?: string } | undefined;
+        throw new Error(error?.message || "Failed to upload YouTube video", { cause: upload.error });
+      }
+      this.requests.push(...upload.output.requests);
+      this.responses.push(...upload.output.responses);
+      if (!upload.output.success) {
+        throw upload.output.error;
+      }
+      const videoId = upload.output.video.id!;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       console.log("Video uploaded. ID:", videoId, "URL:", videoUrl);
 
-      // Upload custom thumbnail if provided: explicit image URL takes precedence
-      // over a timestamp, since a URL is an unambiguous, already-rendered image
-      // while a timestamp requires extraction in a child task.
+      // An explicit image URL takes precedence over timestamp extraction.
       if (medium.thumbnail_url) {
         try {
-          await this.#uploadThumbnail(videoId, medium.thumbnail_url, {
-            thumbnailUrl: medium.thumbnail_url,
-          });
+          await this.#uploadThumbnail(videoId, medium.thumbnail_url, { thumbnailUrl: medium.thumbnail_url });
         } catch (thumbnailError) {
           console.error("Failed to upload thumbnail:", thumbnailError);
-          // Don't fail the entire post if thumbnail upload fails
         }
-      } else if (medium.thumbnail_timestamp_ms != null && stagedFilePath) {
+      } else if (medium.thumbnail_timestamp_ms != null) {
         try {
-          await this.#uploadThumbnailFromTimestamp(
-            videoId,
-            medium,
-          );
+          await this.#uploadThumbnailFromTimestamp(videoId, medium);
         } catch (thumbnailError) {
-          console.error(
-            "Failed to upload thumbnail from timestamp:",
-            thumbnailError,
-          );
-          // Don't fail the entire post if thumbnail extraction/upload fails
+          console.error("Failed to upload thumbnail from timestamp:", thumbnailError);
         }
       }
-
-      const processingResult = await this.#pollProcessingDetails(
-        youtube,
-        videoId,
-      );
-
+      const processingResult = await this.#pollProcessingDetails(youtube, videoId);
       if (!processingResult.success) {
         return {
           success: false,
@@ -363,723 +221,79 @@ export class YouTubePostClient extends PostClient {
           provider_post_id: videoId,
           provider_post_url: videoUrl,
           error_message: processingResult.message,
-          details: {
-            warning,
-            requests: this.requests,
-            responses: this.responses,
-          },
+          details: { warning, requests: this.requests, responses: this.responses },
         };
       }
-
       return {
         success: true,
         post_id: postId,
         provider_connection_id: account.id,
         provider_post_id: videoId,
         provider_post_url: videoUrl,
-        details: {
-          message: processingResult.message,
-          warning,
-          requests: this.requests,
-          responses: this.responses,
-        },
+        details: { message: processingResult.message, warning, requests: this.requests, responses: this.responses },
       };
     } catch (error: any) {
       console.error("Error Posting to YouTube:", error);
-      if (error.response) {
-        console.error("YouTube API error response:", error.response.data);
-      }
-
+      if (error.response) console.error("YouTube API error response:", error.response.data);
       return {
         success: false,
         post_id: postId,
         provider_connection_id: account.id,
         error_message: `Failed to post to Youtube: ${error.message}`,
         details: {
-          error: error?.response?.data || error,
+          error: error?.response?.data || (error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack, cause: error.cause }
+            : error),
           requests: this.requests,
           responses: this.responses,
         },
       };
-    } finally {
-      if (stagedFilePath) {
-        await fs.unlink(stagedFilePath).catch(() => undefined);
-      }
     }
   }
 
-  async #pollProcessingDetails(
-    youtube: youtube_v3.Youtube,
-    videoId: string,
-  ): Promise<{ success: boolean; message?: string }> {
-    for (
-      let attempt = 1;
-      attempt <= YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS;
-      attempt += 1
-    ) {
-      const pollRequest = {
-        processingStatusPollRequest: { videoId, attempt },
-      };
-      this.requests.push(pollRequest);
-      console.log(
-        `Polling YouTube processing status for video ${videoId} (attempt ${attempt}/${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS})`,
-      );
-
-      const response = await youtube.videos.list({
-        part: ["processingDetails", "status"],
-        id: [videoId],
-      });
-
+  async #pollProcessingDetails(youtube: youtube_v3.Youtube, videoId: string): Promise<{ success: boolean; message?: string }> {
+    for (let attempt = 1; attempt <= YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS; attempt += 1) {
+      this.requests.push({ processingStatusPollRequest: { videoId, attempt } });
+      console.log(`Polling YouTube processing status for video ${videoId} (attempt ${attempt}/${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS})`);
+      const response = await youtube.videos.list({ part: ["processingDetails", "status"], id: [videoId] });
       const video = response.data.items?.[0];
       const processingDetails = video?.processingDetails;
       const processingStatus = processingDetails?.processingStatus;
-
-      this.responses.push({
-        processingStatusPollResponse: {
-          attempt,
-          videoId,
-          processingStatus,
-          processingDetails,
-          videoStatus: video?.status,
-        },
-      });
-
-      console.log(
-        `YouTube processing status for video ${videoId}: ${processingStatus}`,
-      );
-
-      if (processingStatus === "succeeded") {
-        return { success: true };
-      }
-
+      this.responses.push({ processingStatusPollResponse: { attempt, videoId, processingStatus, processingDetails, videoStatus: video?.status } });
+      console.log(`YouTube processing status for video ${videoId}: ${processingStatus}`);
+      if (processingStatus === "succeeded") return { success: true };
       if (processingStatus === "failed" || processingStatus === "terminated") {
         const failureReason = processingDetails?.processingFailureReason;
-        console.error(
-          `YouTube video ${videoId} processing ${processingStatus}. processingFailureReason: ${failureReason}`,
-        );
-        return {
-          success: false,
-          message: `YouTube video processing ${processingStatus}${failureReason ? `: ${failureReason}` : ""}`,
-        };
+        console.error(`YouTube video ${videoId} processing ${processingStatus}. processingFailureReason: ${failureReason}`);
+        return { success: false, message: `YouTube video processing ${processingStatus}${failureReason ? `: ${failureReason}` : ""}` };
       }
-
-      // Still processing — wait with exponential backoff before next attempt
       if (attempt < YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS) {
-        const waitMs = Math.min(
-          YouTubePostClient.PROCESSING_POLL_MAX_DELAY_MS,
-          YouTubePostClient.PROCESSING_POLL_INITIAL_DELAY_MS *
-            2 ** (attempt - 1),
-        );
-        console.log(
-          `Video ${videoId} still processing (status: ${processingStatus}); waiting ${waitMs}ms before next poll`,
-        );
-        this.responses.push({
-          processingStatusPollWait: { attempt, processingStatus, waitMs },
-        });
-        await this.#sleep(waitMs);
+        const waitMs = Math.min(YouTubePostClient.PROCESSING_POLL_MAX_DELAY_MS, YouTubePostClient.PROCESSING_POLL_INITIAL_DELAY_MS * 2 ** (attempt - 1));
+        console.log(`Video ${videoId} still processing (status: ${processingStatus}); waiting ${waitMs}ms before next poll`);
+        this.responses.push({ processingStatusPollWait: { attempt, processingStatus, waitMs } });
+        await wait.for({ seconds: waitMs / 1000 });
       }
     }
-
-    console.warn(
-      `Video ${videoId} still processing after ${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS} polling attempts; returning success with notice`,
-    );
-    return {
-      success: true,
-      message: "Video is still processing, check YouTube for the status",
-    };
-  }
-
-  async #startResumableUploadSession({
-    videoRequest,
-    fileSize,
-    mimeType,
-  }: {
-    videoRequest: {
-      part: string[];
-      requestBody: youtube_v3.Schema$Video;
-    };
-    fileSize: number;
-    mimeType: string;
-  }): Promise<string> {
-    const accessToken = await this.#getAccessToken();
-
-    const part = encodeURIComponent(videoRequest.part.join(","));
-    const url = `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=${part}`;
-
-    logger.info("Starting YouTube resumable upload session", {
-      fileSize,
-      mimeType,
-      part: videoRequest.part,
-    });
-
-    for (
-      let attempt = 1;
-      attempt <= YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS;
-      attempt += 1
-    ) {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json; charset=UTF-8",
-          "X-Upload-Content-Length": String(fileSize),
-          "X-Upload-Content-Type": mimeType,
-        },
-        body: JSON.stringify(videoRequest.requestBody ?? {}),
-      });
-
-      const location =
-        res.headers.get("location") || res.headers.get("Location");
-      if (res.ok && location) {
-        this.responses.push({
-          resumableSession: {
-            status: res.status,
-            location,
-          },
-        });
-
-        logger.info("Started YouTube resumable upload session", {
-          status: res.status,
-          fileSize,
-          mimeType,
-        });
-
-        return location;
-      }
-
-      const bodyText = await this.#safeReadText(res);
-      const retriable = isRetriableYouTubeSessionInitError(
-        res.status,
-        bodyText,
-      );
-
-      if (
-        retriable &&
-        attempt < YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS
-      ) {
-        const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
-        this.responses.push({
-          sessionInitRetry: {
-            attempt,
-            maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
-            status: res.status,
-            waitMs,
-          },
-        });
-        logger.warn("Retrying YouTube resumable upload session init", {
-          attempt,
-          maxAttempts: YouTubePostClient.MAX_SESSION_INIT_ATTEMPTS,
-          status: res.status,
-          statusText: res.statusText,
-          waitMs,
-        });
-        await this.#sleep(waitMs);
-        continue;
-      }
-
-      throw new Error(
-        `Failed to start YouTube resumable upload session: ${res.status} ${res.statusText}. ${bodyText}`,
-      );
-    }
-
-    // Unreachable: every loop iteration above returns or throws. Present only
-    // because TS can't prove that and requires a return on this code path.
-    throw new Error(
-      "Failed to start YouTube resumable upload session: exhausted retry attempts",
-    );
-  }
-
-  async #downloadRemoteFileToTemp({
-    fileUrl,
-    expectedFileSize,
-    mediaId,
-  }: {
-    fileUrl: string;
-    expectedFileSize: number;
-    mediaId: string;
-  }): Promise<{ path: string; size: number }> {
-    const safeMediaId = mediaId.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const tempPath = path.join(
-      os.tmpdir(),
-      `youtube_${safeMediaId}_${Date.now()}.mp4`,
-    );
-    let lastErr: unknown;
-
-    for (
-      let attempt = 1;
-      attempt <= YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS;
-      attempt += 1
-    ) {
-      try {
-        await fs.unlink(tempPath).catch(() => undefined);
-
-        logger.info("Downloading YouTube media to temp file", {
-          attempt,
-          maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
-          expectedFileSize,
-          mediaId,
-          tempPath,
-        });
-
-        const res = await fetch(fileUrl);
-        if (!res.ok) {
-          const bodyText = await this.#safeReadText(res);
-          throw new Error(
-            `Failed to download YouTube media for staging: ${res.status} ${res.statusText}. ${bodyText}`,
-          );
-        }
-        if (!res.body) {
-          throw new Error("No response body available while staging YouTube media");
-        }
-
-        await pipeline(
-          Readable.fromWeb(res.body as any),
-          createWriteStream(tempPath),
-        );
-
-        const stat = await fs.stat(tempPath);
-        if (stat.size !== expectedFileSize) {
-          logger.warn("Staged YouTube media size mismatch", {
-            attempt,
-            expectedFileSize,
-            actualFileSize: stat.size,
-            mediaId,
-            tempPath,
-          });
-          throw new Error(
-            `Staged YouTube media size mismatch: wrote ${stat.size} bytes but expected ${expectedFileSize}`,
-          );
-        }
-
-        logger.info("Downloaded YouTube media to temp file", {
-          attempt,
-          size: stat.size,
-          expectedFileSize,
-          mediaId,
-          tempPath,
-        });
-
-        this.responses.push({
-          mediaStagedForYoutube: {
-            attempt,
-            size: stat.size,
-            expectedFileSize,
-          },
-        });
-        return { path: tempPath, size: stat.size };
-      } catch (err) {
-        lastErr = err;
-        await fs.unlink(tempPath).catch(() => undefined);
-
-        if (attempt === YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS) {
-          break;
-        }
-
-        const waitMs = Math.min(
-          30_000,
-          YouTubePostClient.MEDIA_DOWNLOAD_INITIAL_RETRY_DELAY_MS *
-            2 ** (attempt - 1),
-        );
-        this.responses.push({
-          mediaStageRetry: {
-            attempt,
-            maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
-            error: String(err),
-            waitMs,
-          },
-        });
-        logger.warn("Retrying YouTube media temp-file download", {
-          attempt,
-          maxAttempts: YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS,
-          expectedFileSize,
-          mediaId,
-          error: String(err),
-          waitMs,
-        });
-        await this.#sleep(waitMs);
-      }
-    }
-
-    throw new Error(
-      `Failed to stage YouTube media after ${YouTubePostClient.MAX_MEDIA_DOWNLOAD_ATTEMPTS} attempts: ${String(lastErr)}`,
-    );
-  }
-
-  async #uploadResumableChunks({
-    uploadUrl,
-    filePath,
-    fileSize,
-    mimeType,
-    chunkSizeBytes,
-  }: {
-    uploadUrl: string;
-    filePath: string;
-    fileSize: number;
-    mimeType: string;
-    chunkSizeBytes: number;
-  }): Promise<youtube_v3.Schema$Video> {
-    const stagedStat = await fs.stat(filePath);
-    if (stagedStat.size !== fileSize) {
-      throw new Error(
-        `Staged YouTube media size changed before upload: ${stagedStat.size} bytes on disk, expected ${fileSize}`,
-      );
-    }
-
-    logger.info("Uploading staged media to YouTube", {
-      fileSize,
-      stagedFileSize: stagedStat.size,
-      chunkSizeBytes,
-      filePath,
-    });
-
-    let nextStart = 0;
-    let lastErr: unknown;
-    const fileHandle = await fs.open(filePath, "r");
-
-    try {
-      for (
-        let attempt = 1;
-        attempt <= YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS;
-        attempt += 1
-      ) {
-        const accessToken = await this.#getAccessToken();
-
-        try {
-          while (nextStart < fileSize) {
-            const endExclusive = Math.min(nextStart + chunkSizeBytes, fileSize);
-            const endInclusive = endExclusive - 1;
-            const chunkLen = endExclusive - nextStart;
-            logger.info("Uploading YouTube resumable chunk", {
-              attempt,
-              nextStart,
-              endInclusive,
-              chunkLen,
-              fileSize,
-            });
-
-            const chunkBuf = Buffer.allocUnsafe(chunkLen);
-            const { bytesRead } = await fileHandle.read(
-              chunkBuf,
-              0,
-              chunkLen,
-              nextStart,
-            );
-
-            if (bytesRead !== chunkLen) {
-              throw new Error(
-                `Staged media read returned ${bytesRead} bytes but expected ${chunkLen} bytes for bytes=${nextStart}-${endInclusive}; video would be truncated`,
-              );
-            }
-
-            const contentRange = `bytes ${nextStart}-${endInclusive}/${fileSize}`;
-
-            const res = await this.#fetchWithRetry(uploadUrl, {
-              method: "PUT",
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": mimeType,
-                "Content-Length": String(bytesRead),
-                "Content-Range": contentRange,
-              },
-              body: chunkBuf,
-            });
-
-            if (res.status === 308) {
-              // Resume Incomplete; server returns last received byte in Range header.
-              const range = res.headers.get("range") || res.headers.get("Range");
-              let lastByte = this.#parseLastByteFromRange(range);
-
-              // Some intermediaries strip Range headers; ask the upload URL for its state.
-              if (lastByte == null) {
-                lastByte = await this.#queryResumableUploadLastByte({
-                  uploadUrl,
-                  accessToken,
-                  fileSize,
-                });
-              }
-
-              if (lastByte == null) {
-                throw new Error(
-                  "YouTube resumable upload returned 308 without a Range header; cannot determine server progress",
-                );
-              }
-
-              nextStart = lastByte + 1;
-
-              this.responses.push({
-                resumableChunk: {
-                  status: res.status,
-                  contentRange,
-                  receivedRange: range || null,
-                  nextStart,
-                },
-              });
-
-              logger.info("Uploaded YouTube resumable chunk", {
-                attempt,
-                status: res.status,
-                contentRange,
-                receivedRange: range || null,
-                nextStart,
-                fileSize,
-              });
-
-              continue;
-            }
-
-            if (res.ok) {
-              const data = (await res.json()) as youtube_v3.Schema$Video;
-
-              // Verify YouTube acknowledged the full file before declaring success.
-              const bytesConfirmed = nextStart + bytesRead;
-              if (bytesConfirmed !== fileSize) {
-                throw new Error(
-                  `YouTube upload completed but only ${bytesConfirmed} of ${fileSize} bytes were sent; video would be truncated`,
-                );
-              }
-
-              this.responses.push({
-                resumableComplete: {
-                  status: res.status,
-                  contentRange,
-                  videoId: data?.id,
-                  bytesConfirmed,
-                },
-              });
-              logger.info("Completed YouTube resumable upload", {
-                attempt,
-                status: res.status,
-                contentRange,
-                videoId: data?.id,
-                bytesConfirmed,
-                fileSize,
-              });
-              return data;
-            }
-
-            const bodyText = await this.#safeReadText(res);
-            throw new Error(
-              `YouTube resumable upload failed: ${res.status} ${res.statusText}. ${bodyText}`,
-            );
-          }
-
-          throw new Error(
-            "YouTube resumable upload ended unexpectedly without a final response",
-          );
-        } catch (err) {
-          lastErr = err;
-          if (attempt === YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS) {
-            break;
-          }
-
-          let resumeFrom: number | null = null;
-          try {
-            resumeFrom = await this.#queryResumableUploadLastByte({
-              uploadUrl,
-              accessToken,
-              fileSize,
-            });
-            if (resumeFrom != null) {
-              nextStart = resumeFrom + 1;
-            }
-          } catch {
-            // Keep current nextStart when status check fails.
-          }
-
-          const waitMs = Math.min(30_000, 1_000 * 2 ** (attempt - 1));
-          this.responses.push({
-            resumableChunkRetry: {
-              attempt,
-              maxAttempts: YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS,
-              nextStart,
-              resumeFrom,
-              error: String(err),
-              waitMs,
-            },
-          });
-          logger.warn("Retrying YouTube resumable upload", {
-            attempt,
-            maxAttempts: YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS,
-            nextStart,
-            resumeFrom,
-            error: String(err),
-            waitMs,
-          });
-          await this.#sleep(waitMs);
-        }
-      }
-    } finally {
-      await fileHandle.close().catch(() => undefined);
-    }
-
-    throw new Error(
-      `YouTube resumable chunk upload failed after ${YouTubePostClient.MAX_RESUMABLE_UPLOAD_ATTEMPTS} attempts: ${String(lastErr)}`,
-    );
-  }
-
-  async #queryResumableUploadLastByte({
-    uploadUrl,
-    accessToken,
-    fileSize,
-  }: {
-    uploadUrl: string;
-    accessToken: string;
-    fileSize: number;
-  }): Promise<number | null> {
-    const res = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Length": "0",
-        "Content-Range": `bytes */${fileSize}`,
-      },
-    });
-
-    if (res.status === 308) {
-      const range = res.headers.get("range") || res.headers.get("Range");
-      return this.#parseLastByteFromRange(range);
-    }
-
-    // If it's already complete, caller will naturally hit completion on next loop.
-    return null;
-  }
-
-  async #getAccessToken(): Promise<string> {
-    const tokenResult = await this.#oauth2Client.getAccessToken();
-    const token =
-      typeof tokenResult === "string"
-        ? tokenResult
-        : tokenResult?.token || tokenResult?.res?.data?.access_token;
-
-    if (!token) {
-      throw new Error(
-        "Could not obtain Google access token for YouTube upload",
-      );
-    }
-    return token;
-  }
-
-  #parseLastByteFromRange(rangeHeader: string | null): number | null {
-    // Format: "bytes=0-12345"
-    if (!rangeHeader) {
-      return null;
-    }
-    const match = rangeHeader.match(/(\d+)-(\d+)$/);
-    if (!match) {
-      return null;
-    }
-    const last = Number(match[2]);
-    return Number.isFinite(last) ? last : null;
-  }
-
-  async #fetchWithRetry(
-    url: string,
-    init: RequestInit,
-    opts?: { maxAttempts?: number },
-  ): Promise<Response> {
-    const maxAttempts = opts?.maxAttempts ?? 5;
-    let attempt = 0;
-    let lastErr: unknown;
-
-    while (attempt < maxAttempts) {
-      attempt += 1;
-
-      const waitMs = Math.min(10_000, 500 * 2 ** (attempt - 1));
-      try {
-        const res = await fetch(url, init);
-        if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
-          // Retry throttling/transient server errors.
-          this.responses.push({
-            resumableRetry: {
-              attempt,
-              status: res.status,
-              waitMs,
-            },
-          });
-          await this.#sleep(waitMs);
-          continue;
-        }
-
-        return res;
-      } catch (err) {
-        lastErr = err;
-        this.responses.push({
-          resumableRetry: {
-            attempt,
-            error: String(err),
-            waitMs,
-          },
-        });
-        await this.#sleep(waitMs);
-      }
-    }
-
-    throw new Error(
-      `YouTube upload request failed after retries: ${String(lastErr)}`,
-    );
-  }
-
-  async #safeReadText(res: Response): Promise<string> {
-    try {
-      const text = await res.text();
-      return text ? text.slice(0, 4000) : "";
-    } catch {
-      return "";
-    }
-  }
-
-  async #sleep(ms: number): Promise<void> {
-    await wait.for({ seconds: ms / 1000 });
+    console.warn(`Video ${videoId} still processing after ${YouTubePostClient.MAX_PROCESSING_POLL_ATTEMPTS} polling attempts; returning success with notice`);
+    return { success: true, message: "Video is still processing, check YouTube for the status" };
   }
 
   #sanitizeYouTubeCaption(caption: string): string {
-    // Remove invalid characters (e.g., '<', '>', '\n')
-    let sanitized = caption.replace(/[<>]/g, "").replace(/\n/g, " ");
-
-    // Remove any leading/trailing whitespace
-    sanitized = sanitized.trim();
-
-    // If the caption is empty after sanitization, use a default title
-    if (sanitized.length === 0) {
-      return "Untitled Video";
-    }
-
-    // If the caption is already 100 characters or less, return it as is
-    if (sanitized.length <= 100) {
-      return sanitized;
-    }
-
-    // Trim to 100 characters
-    return sanitized.slice(0, 100);
+    const sanitized = caption.replace(/[<>]/g, "").replace(/\n/g, " ").trim();
+    return sanitized.length === 0 ? "Untitled Video" : sanitized.slice(0, 100);
   }
 
-  async #uploadThumbnailFromTimestamp(
-    videoId: string,
-    medium: PostMedia,
-  ): Promise<void> {
-    if (medium.thumbnail_timestamp_ms == null) {
-      return;
-    }
-
+  async #uploadThumbnailFromTimestamp(videoId: string, medium: PostMedia): Promise<void> {
+    if (medium.thumbnail_timestamp_ms == null) return;
     const result = await tasks.triggerAndWait<typeof generateYoutubeTimestampThumbnail>(
       "generate-youtube-timestamp-thumbnail",
-      {
-        url: medium.url,
-        timestampMs: medium.thumbnail_timestamp_ms,
-        mediaId: medium.id,
-      },
+      { url: medium.url, timestampMs: medium.thumbnail_timestamp_ms, mediaId: medium.id },
     );
     if (!result.ok) throw new Error("Failed to generate YouTube timestamp thumbnail");
-    await this.#uploadThumbnail(videoId, result.output, {
-      thumbnailTimestampMs: medium.thumbnail_timestamp_ms,
-    });
+    await this.#uploadThumbnail(videoId, result.output, { thumbnailTimestampMs: medium.thumbnail_timestamp_ms });
   }
 
-  async #uploadThumbnail(
-    videoId: string,
-    thumbnailUrl: string,
-    source: { thumbnailUrl?: string; thumbnailTimestampMs?: number },
-  ): Promise<void> {
+  async #uploadThumbnail(videoId: string, thumbnailUrl: string, source: { thumbnailUrl?: string; thumbnailTimestampMs?: number }): Promise<void> {
     const result = await tasks.triggerAndWait<typeof uploadYoutubeThumbnail>(
       "upload-youtube-thumbnail",
       {
@@ -1097,70 +311,6 @@ export class YouTubePostClient extends PostClient {
     if (!result.ok) throw new Error("Failed to upload YouTube thumbnail");
     this.requests.push(result.output.request);
     this.responses.push(result.output.response);
-    if (result.output.response.thumbnailError) {
-      throw new Error(result.output.response.thumbnailError.error);
-    }
-  }
-
-  async #getRemoteFileInfo(
-    url: string,
-    opts?: { fallbackMimeType?: string },
-  ): Promise<{ fileSize: number; mimeType: string }> {
-    // Prefer HEAD for metadata.
-    try {
-      const head = await fetch(url, { method: "HEAD" });
-      if (head.ok) {
-        const size = Number(head.headers.get("content-length") || "");
-        const mimeType =
-          head.headers.get("content-type") ||
-          opts?.fallbackMimeType ||
-          "application/octet-stream";
-        if (Number.isFinite(size) && size > 0) {
-          return { fileSize: size, mimeType };
-        }
-      }
-    } catch {
-      // ignore and fall back
-    }
-
-    // Fallback: range request to read total size from Content-Range.
-    const res = await fetch(url, {
-      headers: {
-        Range: "bytes=0-0",
-      },
-    });
-
-    if (!res.ok) {
-      const bodyText = await this.#safeReadText(res);
-      throw new Error(
-        `Could not determine file size: ${res.status} ${res.statusText}. ${bodyText}`,
-      );
-    }
-
-    // Consume the tiny body to allow connection reuse.
-    await res.arrayBuffer().catch(() => undefined);
-
-    const contentRange =
-      res.headers.get("content-range") || res.headers.get("Content-Range");
-    const fileSize = this.#parseTotalSizeFromContentRange(contentRange);
-    const mimeType =
-      res.headers.get("content-type") ||
-      opts?.fallbackMimeType ||
-      "application/octet-stream";
-
-    if (!fileSize || fileSize <= 0) {
-      throw new Error("Could not determine YouTube upload file size");
-    }
-
-    return { fileSize, mimeType };
-  }
-
-  #parseTotalSizeFromContentRange(contentRange: string | null): number | null {
-    // Example: "bytes 0-0/12345"
-    if (!contentRange) return null;
-    const match = contentRange.match(/\/(\d+)$/);
-    if (!match) return null;
-    const total = Number(match[1]);
-    return Number.isFinite(total) ? total : null;
+    if (result.output.response.thumbnailError) throw new Error(result.output.response.thumbnailError.error);
   }
 }

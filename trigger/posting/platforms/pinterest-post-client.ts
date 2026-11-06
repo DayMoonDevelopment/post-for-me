@@ -1,7 +1,7 @@
 import { PostClient } from "../post-client";
 import axios from "axios";
-import FormData from "form-data";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { uploadPinterestVideo } from "../../upload-pinterest-video";
 import {
   PinterestConfiguration,
   PlatformAppCredentials,
@@ -222,94 +222,19 @@ export class PinterestPostClient extends PostClient {
       mediaUrl = "https://api-sandbox.pinterest.com/v5/media";
     }
 
-    this.requests.push({
-      registerMediaRequest: mediaUrl,
-    });
-    // Step 1: Register media with Pinterest
-    const registerMediaResponse = await axios.post(
-      mediaUrl,
-      {
-        media_type: "video",
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          "Content-Type": "application/json",
-        },
-      },
+    const result = await tasks.triggerAndWait<typeof uploadPinterestVideo>(
+      "upload-pinterest-video", { medium, accessToken: account.access_token, mediaUrl },
     );
-
-    this.responses.push({ registerMediaResponse: registerMediaResponse.data });
-
-    const mediaId = registerMediaResponse.data.media_id;
-    const { upload_url, upload_parameters } = registerMediaResponse.data;
-
-    const fileUrl = await this.getSignedUrlForFile(medium);
-    const fileResponse = await axios.get(fileUrl, {
-      responseType: "stream",
-    });
-    const filename =
-      new URL(fileUrl).pathname.split("/").pop() || `video_${mediaId}.mp4`;
-    const contentTypeHeader = fileResponse.headers["content-type"];
-    const contentType =
-      typeof contentTypeHeader === "string" && contentTypeHeader
-        ? contentTypeHeader
-        : "video/mp4";
-    const knownLengthRaw = fileResponse.headers["content-length"];
-    const knownLength = knownLengthRaw ? Number(knownLengthRaw) : undefined;
-
-    // Create form data
-    const form = new FormData();
-
-    // Add Content-Type first
-    form.append("Content-Type", "multipart/form-data");
-
-    // Then add all other AWS parameters
-    Object.entries(upload_parameters).forEach(([key, value]) => {
-      if (key !== "Content-Type") {
-        form.append(key, value);
-      }
-    });
-
-    // Add the file last
-    form.append("file", fileResponse.data, {
-      filename,
-      contentType,
-      ...(Number.isFinite(knownLength as number) && (knownLength as number) > 0
-        ? { knownLength: knownLength as number }
-        : {}),
-    });
-
-    this.requests.push({ uploadRequest: { file: medium } });
-
-    const headers: Record<string, string> = {
-      ...(form.getHeaders() as Record<string, string>),
-    };
-
-    // Best-effort Content-Length (helps some S3-compatible endpoints).
-    try {
-      const formLength = await new Promise<number>((resolve, reject) => {
-        form.getLength((err, length) => {
-          if (err) reject(err);
-          else resolve(length);
-        });
-      });
-      headers["Content-Length"] = String(formLength);
-    } catch {
-      // ignore
+    if (!result.ok) {
+      const error = result.error as { message?: string };
+      throw new Error(error?.message || "Failed to upload Pinterest video", { cause: result.error });
     }
-
-    const uploadResponse = await axios.post(upload_url, form, {
-      headers,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-    });
-
-    this.responses.push({ uploadResponse: uploadResponse.status });
-
-    if (uploadResponse.status !== 204) {
-      throw new Error(`Upload failed with status: ${uploadResponse.status}`);
+    this.requests.push(...result.output.requests);
+    this.responses.push(...result.output.responses);
+    if (!result.output.success) {
+      throw Object.assign(new Error(result.output.message), { response: { data: result.output.error } });
     }
+    const { mediaId } = result.output;
 
     // Step 3: Check media status with exponential backoff
     let mediaStatus;
