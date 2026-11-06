@@ -8,55 +8,68 @@ const { parseTweet } = twitterText;
 const STANDARD_LIMIT = 280;
 const PREMIUM_LIMIT = 2200;
 
-const imageHarness = String.raw`
+const mediaHarness = String.raw`
 import { expect, mock } from "bun:test";
 const scenario = process.env.SCENARIO;
 const oauth2 = process.env.OAUTH2 === "true";
-const skip = scenario === "skip";
-const uploads = [];
-const upload = async (...args) => { uploads.push(args); return "media-id"; };
+const events = [];
+const metadata = mock(async (id, data) => { events.push("alt:" + id); expect(data).toEqual({ alt_text: { text: "alt" } }); });
+const tweet = mock(async (payload) => {
+  events.push("tweet");
+  expect(payload).toEqual({ text: "caption", ...(scenario === "empty" ? {} : { media: { media_ids: scenario === "multi" ? ["media-1", "media-2", "media-3"] : ["media-1"] } }) });
+  return { data: { id: "tweet-id" } };
+});
 mock.module("twitter-api-v2", () => ({
-  EUploadMimeType: { Png: "image/png" },
   TwitterApi: class {
-    v1 = { uploadMedia: upload, createMediaMetadata: async () => {} };
-    v2 = { uploadMedia: upload, tweet: async () => ({ data: { id: "tweet-id" } }) };
+    v1 = { createMediaMetadata: metadata };
+    v2 = { tweet };
   },
 }));
+const childError = { message: "Twitter upload denied" };
 const child = mock(async (id, payload) => {
-  expect(id).toBe("transform-buffered-image");
-  expect(payload).toEqual({ url: "https://source.example/image", platform: "twitter" });
-  if (scenario === "throw") throw new Error("child failed");
-  return scenario === "failure" ? { ok: false, error: { message: "failed" } }
-    : { ok: true, output: { url: "https://media.example/artifact", mimeType: "image/png" } };
+  const index = child.mock.calls.length;
+  events.push("upload:" + index);
+  expect(id).toBe("upload-twitter-media");
+  expect(payload).toEqual({ medium: { ...medium, ...(scenario === "multi" ? { url: "https://source.example/" + index } : {}) },
+    auth: { appKey: "app", appSecret: "secret", accessToken: "token", refreshToken: "refresh", isOAuth2: oauth2 } });
+  if (scenario === "throw") throw new Error("dispatch failed");
+  return scenario === "failure" ? { ok: false, error: childError } : { ok: true, output: { success: true, mediaId: "media-" + index } };
 });
-mock.module("@trigger.dev/sdk", () => ({ tasks: { triggerAndWait: child }, wait: { for: async () => {} } }));
-globalThis.fetch = mock(async (url) => {
-  expect(url).toBe(skip ? "https://source.example/image" : "https://media.example/artifact");
-  return new Response(skip ? "original" : "prepared", { headers: { "content-type": skip ? "image/png" : "image/jpeg" } });
-});
+const delay = mock(async (duration) => { events.push("delay"); expect(duration).toEqual({ seconds: 1 }); });
+mock.module("@trigger.dev/sdk", () => ({ tasks: { triggerAndWait: child }, wait: { for: delay } }));
+globalThis.fetch = mock(() => { throw new Error("Parent must not download media"); });
 console.error = () => {};
 const { TwitterPostClient } = await import("./twitter-post-client.ts");
 const client = new TwitterPostClient({ app_id: "app", app_secret: "secret" });
-const medium = { type: "image", url: "https://source.example/image", skip_processing: skip, alt_text: "alt" };
+const medium = { type: scenario === "video" ? "video" : "image", url: "https://source.example/image", skip_processing: true, alt_text: "alt" };
 const multi = scenario === "multi";
-const result = await client.post({ postId: "post", account: { id: "account", access_token: "token", social_provider_metadata: { connection_type: oauth2 ? "oauth2" : "oauth1" } },
-  caption: "caption", media: multi ? [medium, { type: "video" }, medium, medium, medium, medium] : [medium], platformConfig: {} });
+const media = scenario === "empty" ? [] : multi ? [{ ...medium, url: "https://source.example/1" }, { type: "video" }, { ...medium, url: "https://source.example/2" }, { ...medium, url: "https://source.example/3" }, medium] : [medium];
+const result = await client.post({ postId: "post", account: { id: "account", access_token: "token", refresh_token: "refresh", social_provider_metadata: { connection_type: oauth2 ? "oauth2" : "oauth1" } },
+  caption: "caption", media, platformConfig: {} });
 const failure = ["failure", "throw"].includes(scenario);
 expect(result.success).toBe(!failure);
-expect(child).toHaveBeenCalledTimes(skip ? 0 : multi ? 3 : 1);
-expect(uploads.length).toBe(failure ? 0 : multi ? 3 : 1);
-expect(globalThis.fetch).toHaveBeenCalledTimes(uploads.length);
-for (const args of uploads) {
-  expect(args[0]).toEqual(Buffer.from(skip ? "original" : "prepared"));
-  expect(args[1]).toEqual(oauth2 ? { media_type: "image/png" } : { mimeType: "image/png" });
-  if (oauth2) expect(args[2]).toBe(5 * 1024 * 1024);
+expect(child).toHaveBeenCalledTimes(scenario === "empty" ? 0 : multi ? 3 : 1);
+expect(globalThis.fetch).not.toHaveBeenCalled();
+if (failure) {
+  expect(events).toEqual(["upload:1"]);
+  expect(result.error_message).toBe("Failed to post to Twitter: " + (scenario === "failure" ? childError.message : "dispatch failed"));
+  if (scenario === "failure") expect(result.details.error.cause).toBe(childError);
+} else {
+  expect(events).toEqual(scenario === "empty" ? ["delay", "tweet"] : multi
+    ? ["upload:1", "alt:media-1", "upload:2", "alt:media-2", "upload:3", "alt:media-3", "delay", "tweet"]
+    : ["upload:1", "alt:media-1", "delay", "tweet"]);
+  expect(result.provider_post_id).toBe("tweet-id");
+  const requests = result.details.requests.filter(entry => entry.uploadRequest);
+  const responses = result.details.responses.filter(entry => entry.uploadResponse);
+  expect(requests.length).toBe(child.mock.calls.length);
+  expect(responses.map(entry => entry.uploadResponse.mediaId)).toEqual(multi ? ["media-1", "media-2", "media-3"] : scenario === "empty" ? [] : ["media-1"]);
 }
 `;
 
 for (const oauth2 of [false, true]) {
-  for (const scenario of ["success", "skip", "multi", "failure", "throw"]) {
-    test(`Twitter image child boundary: ${scenario}, OAuth2=${oauth2}`, async () => {
-      const child = Bun.spawn([process.execPath, "--eval", imageHarness], {
+  for (const scenario of ["success", "video", "empty", "multi", "failure", "throw"]) {
+    test(`Twitter media child boundary: ${scenario}, OAuth2=${oauth2}`, async () => {
+      const child = Bun.spawn([process.execPath, "--eval", mediaHarness], {
         cwd: __dirname,
         env: { ...process.env, SCENARIO: scenario, OAUTH2: String(oauth2) },
         stdout: "pipe",

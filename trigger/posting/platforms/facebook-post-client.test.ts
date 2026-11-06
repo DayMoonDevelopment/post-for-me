@@ -232,6 +232,45 @@ const publishVideo = (placement?: FacebookConfiguration["placement"]) =>
 const innerRetryWaits = () =>
   waitFor.mock.calls.filter(([opts]) => opts.seconds < 5);
 
+describe("Facebook thumbnail child boundary", () => {
+  for (const placement of [undefined, "reels", "stories"] as const) {
+    for (const failure of [false, true, "throw"] as const) {
+      test(`${placement ?? "feed"}: child failure=${failure}`, async () => {
+        const events: string[] = [];
+        copyMedia.mockImplementation((async (id: string, payload: unknown) => {
+          if (id === "copy-media-to-supabase") return { ok: true, output: COPIED_VIDEO_URL };
+          expect(id).toBe("upload-facebook-thumbnail");
+          expect(payload).toEqual({
+            thumbnailUrl: "https://cdn.example.com/cover.png",
+            videoId: DEFAULT_VIDEO_ID,
+            accessToken: "token_1",
+            baseUrl: "https://graph.facebook.com/v25.0",
+          });
+          events.push("thumbnail");
+          expect(videoStatusCallCount).toBeGreaterThan(0);
+          expect(axiosPost.mock.calls.some(([, body]) => body?.upload_phase === "finish")).toBe(false);
+          if (failure === "throw") throw new Error("thumbnail network failure");
+          return failure ? { ok: false, error: { message: "thumbnail network failure" } } : { ok: true };
+        }) as typeof tasks.triggerAndWait);
+        const client = makeClient();
+        const download = spyOn(client, "getFile").mockRejectedValue(new Error("Parent must not download"));
+        const result = await client.post({
+          postId: "post_1", account: makeAccount(), caption: "caption",
+          media: [{ ...makeVideoMedium(), thumbnail_url: "https://cdn.example.com/cover.png" }],
+          platformConfig: { placement },
+        });
+        expect(result.success).toBe(placement === "stories" || !failure);
+        if (placement !== "stories" && failure) {
+          expect(result.error_message).toContain("thumbnail network failure");
+        }
+        expect(events).toEqual(placement === "stories" ? [] : ["thumbnail"]);
+        expect(download).not.toHaveBeenCalled();
+        download.mockRestore();
+      });
+    }
+  }
+});
+
 describe("FacebookPostClient media tag platform filters", () => {
   for (const placement of ["feed", "stories", "carousel"] as const) {
     test(`matches case and whitespace variants for ${placement} without changing input`, async () => {

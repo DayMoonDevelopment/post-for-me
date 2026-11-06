@@ -24,8 +24,14 @@ const thumbnailSet = mock(async (request) => {
 });
 mock.module("googleapis", () => ({ google: {
   auth: { OAuth2: class {
-    setCredentials() {}
-    async refreshAccessToken() { return { credentials: { access_token: "token", expiry_date: Date.now() } }; }
+    constructor(id, secret, redirect) {
+      expect([id, secret, redirect]).toEqual(["test", "test", "undefined/api/youtube-auth/callback"]);
+    }
+    setCredentials(credentials) { this.credentials = credentials; }
+    async refreshAccessToken() {
+      this.credentials = { access_token: "current-token", refresh_token: "current-refresh", expiry_date: 123456789 };
+      return { credentials: this.credentials };
+    }
     async getAccessToken() { return "token"; }
   } },
   youtube: () => ({ thumbnails: { set: thumbnailSet }, videos: { list: async () => {
@@ -34,6 +40,15 @@ mock.module("googleapis", () => ({ google: {
   } } }),
 } }));
 const triggerAndWait = mock(async (id, payload) => {
+  if (id === "upload-youtube-thumbnail") {
+    events.push("upload-child");
+    expect(payload.oauth.credentials).toEqual({ access_token: "current-token", refresh_token: "current-refresh", expiry_date: 123456789 });
+    if (scenario === "upload-child-error") return { ok: false };
+    if (scenario === "upload-throw") throw new Error("upload child failed");
+    const { uploadYoutubeThumbnail } = await import("../../upload-youtube-thumbnail.ts");
+    try { return { ok: true, output: await uploadYoutubeThumbnail.run(payload, { ctx: { attempt: { number: 2 } } }) }; }
+    catch (error) { return { ok: false, error }; }
+  }
   events.push("child");
   expect(id).toBe("generate-youtube-timestamp-thumbnail");
   expect(payload).toEqual({ url: "https://example.com/video.mp4", timestampMs: 1250, mediaId: "medium" });
@@ -41,6 +56,7 @@ const triggerAndWait = mock(async (id, payload) => {
   return scenario === "child-error" ? { ok: false, error: { message: "failed" } } : { ok: true, output: artifactUrl };
 });
 mock.module("@trigger.dev/sdk", () => ({
+  task: (definition) => definition,
   logger: { info() {}, warn() {}, error() {} },
   tasks: { triggerAndWait }, wait: { for: async () => {} },
 }));
@@ -70,20 +86,22 @@ const result = await client.post({ postId: "post", account, caption: "caption", 
   ...(scenario === "explicit" ? { thumbnail_url: "https://example.com/explicit.jpg" } : {}),
 }] });
 expect(result.success).toBe(true);
-expect(triggerAndWait).toHaveBeenCalledTimes(["explicit", "none"].includes(scenario) ? 0 : 1);
+expect(triggerAndWait).toHaveBeenCalledTimes(scenario === "none" ? 0 : ["explicit", "child-error", "throw"].includes(scenario) ? 1 : 2);
 expect(events).toEqual(scenario === "none" ? ["video", "poll"]
-  : scenario === "explicit" ? ["video", "download-thumbnail", "thumbnail", "poll"]
+  : scenario === "explicit" ? ["video", "upload-child", "download-thumbnail", "thumbnail", "poll"]
   : ["child-error", "throw"].includes(scenario) ? ["video", "child", "poll"]
-  : scenario === "download-error" ? ["video", "child", "download-thumbnail", "poll"]
-  : ["video", "child", "download-thumbnail", "thumbnail", "poll"]);
+  : ["upload-child-error", "upload-throw"].includes(scenario) ? ["video", "child", "upload-child", "poll"]
+  : scenario === "download-error" ? ["video", "child", "upload-child", "download-thumbnail", "poll"]
+  : ["video", "child", "upload-child", "download-thumbnail", "thumbnail", "poll"]);
 if (["success", "upload-error"].includes(scenario)) {
   const request = result.details.requests.find((entry) => entry.thumbnailUploadRequest).thumbnailUploadRequest;
   expect(request.thumbnailTimestampMs).toBe(1250);
   expect(request).not.toHaveProperty("thumbnailUrl");
 }
+if (scenario === "upload-error") expect(result.details.responses.some((entry) => entry.thumbnailError?.error === "thumbnail upload failed")).toBe(true);
 `;
 
-for (const scenario of ["success", "explicit", "none", "child-error", "throw", "download-error", "upload-error"]) {
+for (const scenario of ["success", "explicit", "none", "child-error", "throw", "download-error", "upload-error", "upload-child-error", "upload-throw"]) {
   test(`YouTube thumbnail child boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", thumbnailHarness], {
       cwd: __dirname,

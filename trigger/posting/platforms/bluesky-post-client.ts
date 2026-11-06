@@ -1,9 +1,9 @@
 import { PostClient } from "../post-client";
-import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs } from "@atproto/api";
+import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs, jsonToLex } from "@atproto/api";
+import type { uploadBlueskyImage, uploadBlueskyLinkPreview } from "../../upload-bluesky-media";
 import type { transformBufferedImage } from "../../transform-buffered-image";
 import type { probeVideoDimensions } from "../../video-child-tasks";
 import { shouldSkipProcessing } from "../image-processing-utils";
-import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
 import {
   PlatformAppCredentials,
@@ -443,16 +443,24 @@ export class BlueskyPostClient extends PostClient {
         throw new Error("Failed to prepare Bluesky image", { cause: result.error });
       }
       const { width, height, mimeType: encoding, url } = result.output;
-      const file = await this.getFile({ ...medium, url });
-      const sharpBuffer = Buffer.from(await file.arrayBuffer());
-
-      const uploadResult = await this.#agent.uploadBlob(sharpBuffer, {
-        encoding,
-      });
+      const uploadResult = await tasks.triggerAndWait<typeof uploadBlueskyImage>(
+        "upload-bluesky-image",
+        { url, encoding, service: this.#agent.dispatchUrl.toString(), session: this.#agent.session! },
+      );
+      if (!uploadResult.ok) {
+        const childError = uploadResult.error;
+        const message = childError && typeof childError === "object" &&
+          "message" in childError && typeof childError.message === "string" && childError.message
+          ? childError.message
+          : "Failed to upload Bluesky image";
+        throw Object.assign(new Error(), {
+          name: "Error", message, cause: childError,
+        });
+      }
 
       images.push({
         alt: medium.alt_text || caption || "Image",
-        image: uploadResult.data.blob,
+        image: jsonToLex(uploadResult.output) as BlobRef,
         aspectRatio: {
           width,
           height,
@@ -473,78 +481,12 @@ export class BlueskyPostClient extends PostClient {
     };
   } | null> {
     try {
-      // Fetch the webpage
-      const response = await fetch(url);
-      const html = await response.text();
-
-      // Parse HTML using JSDOM
-      const dom = new JSDOM(html);
-      const document = dom.window.document;
-
-      // Create the card object with required fields
-      const card: {
-        uri: string;
-        title: string | null;
-        description: string | null;
-        thumb?: BlobRef;
-      } = {
-        uri: url,
-        title: "",
-        description: "",
-      };
-
-      // Extract metadata
-      const titleTag = document.querySelector('meta[property="og:title"]');
-      const descriptionTag = document.querySelector(
-        'meta[property="og:description"]',
+      const result = await tasks.triggerAndWait<typeof uploadBlueskyLinkPreview>(
+        "upload-bluesky-link-preview",
+        { url, service: this.#agent.dispatchUrl.toString(), session: this.#agent.session! },
       );
-      const imageTag = document.querySelector('meta[property="og:image"]');
-
-      if (titleTag) {
-        card.title = titleTag.getAttribute("content");
-      } else {
-        card.title = document.querySelector("title")?.textContent || "";
-      }
-
-      if (descriptionTag) {
-        card.description = descriptionTag.getAttribute("content");
-      } else {
-        const metaDesc = document.querySelector('meta[name="description"]');
-        card.description = metaDesc ? metaDesc.getAttribute("content") : "";
-      }
-
-      // Handle thumbnail image if present
-      if (imageTag) {
-        let imageUrl = imageTag.getAttribute("content") || "";
-
-        // Handle relative URLs
-        if (!imageUrl.startsWith("http")) {
-          const urlObj = new URL(url);
-          imageUrl = imageUrl.startsWith("/")
-            ? `${urlObj.protocol}//${urlObj.host}${imageUrl}`
-            : `${urlObj.protocol}//${urlObj.host}/${imageUrl}`;
-        }
-
-        // Fetch and upload the image
-        const imageResponse = await fetch(imageUrl);
-        const imageBuffer = await imageResponse.arrayBuffer();
-
-        const { data: uploadData } = await this.#agent.uploadBlob(
-          new Uint8Array(imageBuffer),
-          {
-            encoding: imageResponse.headers.get("content-type") || "image/jpeg",
-          },
-        );
-
-        if (uploadData?.blob) {
-          card.thumb = uploadData.blob;
-        }
-      }
-
-      return {
-        $type: "app.bsky.embed.external",
-        external: card,
-      };
+      if (!result.ok) throw new Error("Failed to create Bluesky embed card", { cause: result.error });
+      return jsonToLex(result.output) as typeof result.output;
     } catch (error) {
       console.error("Error creating embed card:", error);
       return null;

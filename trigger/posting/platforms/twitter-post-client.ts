@@ -1,16 +1,13 @@
 import { PostClient } from "../post-client";
 import {
-  EUploadMimeType,
   SendTweetV2Params,
   TwitterApi,
   TwitterApiTokens,
 } from "twitter-api-v2";
-import { readFile } from "fs/promises";
 import { tasks, wait } from "@trigger.dev/sdk";
-import type { transformBufferedImage } from "../../transform-buffered-image";
+import type { uploadTwitterMedia } from "../../upload-twitter-media";
 import * as twitterText from "twitter-text";
 import type { ParseTweetOptions } from "twitter-text";
-import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -82,7 +79,6 @@ export class TwitterPostClient extends PostClient {
   #CHARACTER_LIMIT = 280;
   #appKey;
   #appSecret;
-  #uploadChunkSize = 5 * 1024 * 1024;
 
   constructor(appCredentials: PlatformAppCredentials) {
     super(appCredentials);
@@ -153,6 +149,7 @@ export class TwitterPostClient extends PostClient {
         twitterClient,
         media,
         isOAuth2,
+        account,
       });
 
       const characterLimit = account.social_provider_metadata?.has_platform_premium
@@ -248,40 +245,18 @@ export class TwitterPostClient extends PostClient {
     twitterClient,
     media,
     isOAuth2,
+    account,
   }: {
     twitterClient: TwitterApi;
     media: PostMedia[];
     isOAuth2: boolean;
+    account: SocialAccount;
   }): Promise<string[]> {
     const mediaIds: string[] = [];
     if (media.length == 1) {
       const medium = media[0];
       this.requests.push({ uploadRequest: { file: medium } });
-      const isVideo = medium.type === "video";
-
-      let mediaId: string;
-      if (isVideo) {
-        const { filePath, mimeType } = await this.downloadToTempFile(
-          medium.url,
-          { prefix: "twitter" },
-        );
-        try {
-          mediaId = await this.#uploadVideo({
-            twitterClient,
-            filePath,
-            mimeType,
-            isOAuth2,
-          });
-        } finally {
-          await this.unlinkQuiet(filePath);
-        }
-      } else {
-        mediaId = await this.#uploadImage({
-          twitterClient,
-          medium,
-          isOAuth2,
-        });
-      }
+      const mediaId = await this.#uploadMedium(medium, account, isOAuth2);
 
       this.responses.push({ uploadResponse: { mediaId } });
       mediaIds.push(mediaId);
@@ -299,11 +274,7 @@ export class TwitterPostClient extends PostClient {
       for (const medium of allowedMedia) {
         if (medium.type === "video") continue;
         this.requests.push({ uploadRequest: { file: medium } });
-        const mediaId = await this.#uploadImage({
-          twitterClient,
-          medium,
-          isOAuth2,
-        });
+        const mediaId = await this.#uploadMedium(medium, account, isOAuth2);
 
         this.responses.push({ uploadResponse: { mediaId } });
         mediaIds.push(mediaId);
@@ -321,113 +292,39 @@ export class TwitterPostClient extends PostClient {
     return mediaIds;
   }
 
-  async #uploadVideo({
-    twitterClient,
-    filePath,
-    mimeType,
-    isOAuth2,
-  }: {
-    twitterClient: TwitterApi;
-    filePath: string;
-    mimeType: string;
-    isOAuth2: boolean;
-  }): Promise<string> {
-    if (isOAuth2) {
-      // The v2 client chunks, finalizes, and polls processing status
-      // internally - the v1.1 endpoint used below doesn't support OAuth2.
-      const buffer = await readFile(filePath);
-      return await twitterClient.v2.uploadMedia(
-        buffer,
-        { media_type: this.#toUploadMimeType(mimeType) },
-        this.#uploadChunkSize,
-      );
+  async #uploadMedium(
+    medium: PostMedia,
+    account: SocialAccount,
+    isOAuth2: boolean,
+  ): Promise<string> {
+    const result = await tasks.triggerAndWait<typeof uploadTwitterMedia>(
+      "upload-twitter-media",
+      {
+        medium,
+        auth: {
+          appKey: this.#appKey,
+          appSecret: this.#appSecret,
+          accessToken: account.access_token,
+          refreshToken: account.refresh_token,
+          isOAuth2,
+        },
+      },
+    );
+    if (!result.ok) {
+      const error = result.error;
+      const message = error && typeof error === "object" && "message" in error
+        && typeof error.message === "string" ? error.message : undefined;
+      throw new Error(message || "Failed to upload Twitter media", {
+        cause: error,
+      });
     }
-
-    const mediaId = await twitterClient.v1.uploadMedia(filePath, {
-      mimeType,
-      longVideo: true,
-    });
-
-    // Add delay and media status check
-    let mediaInfo;
-    let attempts = 0;
-    const maxAttempts = 4;
-
-    while (attempts < maxAttempts) {
-      try {
-        mediaInfo = await twitterClient.v1.mediaInfo(mediaId);
-
-        if (mediaInfo.processing_info?.state === "succeeded") {
-          break;
-        } else if (mediaInfo.processing_info?.state === "failed") {
-          throw new Error("Media processing failed");
-        }
-
-        console.log(
-          `Media processing status: ${mediaInfo.processing_info?.state}`,
-        );
-        await wait.for({ seconds: 2 });
-        attempts++;
-      } catch (error) {
-        console.error("Error checking media status:", error);
-        throw error;
-      }
+    if (!result.output.success) {
+      const { message, error } = result.output;
+      throw Object.assign(new Error(message, { cause: error }), {
+        data: "error" in error ? error.error : undefined,
+        toJSON: () => error,
+      });
     }
-
-    if (attempts >= maxAttempts) {
-      throw new Error("Media processing timeout");
-    }
-
-    return mediaId;
-  }
-
-  async #uploadImage({
-    twitterClient,
-    medium,
-    isOAuth2,
-  }: {
-    twitterClient: TwitterApi;
-    medium: PostMedia;
-    isOAuth2: boolean;
-  }): Promise<string> {
-    let url = medium.url;
-    let mimeType: string | undefined;
-    if (!shouldSkipProcessing(medium)) {
-      const result = await tasks.triggerAndWait<typeof transformBufferedImage>(
-        "transform-buffered-image",
-        { url, platform: "twitter" },
-      );
-      if (!result.ok) {
-        throw new Error("Failed to prepare Twitter image", { cause: result.error });
-      }
-      url = result.output.url;
-      mimeType = result.output.mimeType;
-    }
-    const file = await this.getFile({ ...medium, url });
-    const processedImage = Buffer.from(await file.arrayBuffer());
-    mimeType ??= file.type;
-
-    if (isOAuth2) {
-      // The v1.1 endpoint used below doesn't support OAuth2.
-      return await twitterClient.v2.uploadMedia(
-        processedImage,
-        { media_type: this.#toUploadMimeType(mimeType) },
-        this.#uploadChunkSize,
-      );
-    }
-
-    return await twitterClient.v1.uploadMedia(processedImage, {
-      mimeType,
-    });
-  }
-
-  #toUploadMimeType(mimeType: string): EUploadMimeType {
-    if (
-      !Object.values(EUploadMimeType).includes(mimeType as EUploadMimeType)
-    ) {
-      throw new Error(`Unsupported media type for X: ${mimeType}`);
-    }
-
-    return mimeType as EUploadMimeType;
+    return result.output.mediaId;
   }
 }

@@ -4,7 +4,9 @@ const harness = String.raw`
 import { expect, mock, spyOn } from "bun:test";
 const scenario = process.env.SCENARIO;
 const video = scenario.startsWith("video");
+const link = scenario.startsWith("link");
 const events = [];
+const providerError = { name: "XRPCError", message: "InvalidMimeType: image/webp is not supported", status: 400, error: "InvalidMimeType" };
 let posted;
 mock.module("jsdom", () => ({ JSDOM: class {} }));
 const upload = mock(async (buffer, options) => {
@@ -13,6 +15,7 @@ const upload = mock(async (buffer, options) => {
   return { data: { blob: "image-blob" } };
 });
 mock.module("@atproto/api", () => ({
+  jsonToLex: (value) => value,
   AtpAgent: class {
     dispatchUrl = new URL("https://bsky.social");
     session = { did: "did:test" };
@@ -24,6 +27,21 @@ mock.module("@atproto/api", () => ({
 }));
 const child = mock(async (id, payload) => {
   events.push(id);
+  if (id.startsWith("upload-bluesky-")) {
+    expect(payload.service).toBe("https://bsky.social/");
+    expect(payload.session).toEqual({ did: "did:test" });
+    expect(JSON.parse(JSON.stringify(payload))).toEqual(payload);
+    if (link) {
+      expect(id).toBe("upload-bluesky-link-preview");
+      expect(payload.url).toBe("https://example.com/page");
+      if (scenario === "link-throw") throw new Error("child failed");
+      return scenario === "link-failure" ? { ok: false, error: {} } : { ok: true, output: scenario === "link-null" ? null : { $type: "app.bsky.embed.external", external: { uri: payload.url, title: "title", description: "description" } } };
+    }
+    expect(payload.url).toBe("https://media.example/artifact");
+    expect(payload.encoding).toBe("image/png");
+    if (scenario === "upload-provider-rejection") return { ok: false, error: JSON.parse(JSON.stringify(providerError)) };
+    return scenario === "upload-failure" ? { ok: false, error: {} } : { ok: true, output: "image-blob" };
+  }
   if (id === "ffmpeg-compress-video") {
     expect(payload).toEqual({ url: "https://source.example/video", maxSizeBytes: 100000000 });
     return { ok: true, output: "https://media.example/compressed.mp4" };
@@ -47,10 +65,7 @@ spyOn(nodeFetch, "default").mockImplementation(async () => {
   events.push("upload-video");
   return { json: async () => ({ jobId: "job", blob: "video-blob" }) };
 });
-globalThis.fetch = mock(async (url) => {
-  expect(url).toBe("https://media.example/artifact");
-  return new Response("prepared", { headers: { "content-type": "application/octet-stream" } });
-});
+globalThis.fetch = mock(async () => { throw new Error("Parent must not download media"); });
 console.error = () => {};
 const { BlueskyPostClient } = await import("./bluesky-post-client.ts");
 const client = new BlueskyPostClient({ app_id: "app", app_secret: "secret" });
@@ -60,27 +75,39 @@ client.downloadToTempFile = async (url) => {
   return { filePath: "/dev/null", mimeType: "video/mp4", size: 0 };
 };
 client.unlinkQuiet = async () => { events.push("unlink"); };
-const medium = { type: video ? "video" : "image", url: "https://source.example/" + (video ? "video" : "image"), skip_processing: scenario === "skip", alt_text: "alt" };
-const result = await client.post({ postId: "post", account: { id: "account" }, caption: "caption",
-  media: scenario === "multi" ? [medium, { type: "video" }, medium, medium, medium, medium] : [medium] });
-const failure = ["failure", "throw", "video-failure"].includes(scenario);
+const medium = { type: video ? "video" : "image", url: "https://source.example/" + (video ? "video" : "image"), skip_processing: scenario === "skip", alt_text: scenario === "caption-alt" || scenario === "default-alt" ? "" : "alt" };
+const result = await client.post({ postId: "post", account: { id: "account" }, caption: link ? "https://example.com/page)." : scenario === "default-alt" ? "" : "caption",
+  media: link ? [] : scenario === "multi" ? [medium, { type: "video" }, medium, medium, medium, medium] : [medium] });
+const failure = ["failure", "throw", "upload-failure", "upload-provider-rejection", "video-failure"].includes(scenario);
 expect(result.success, JSON.stringify(result)).toBe(!failure);
+if (scenario === "upload-provider-rejection" || scenario === "upload-failure") {
+  const serialized = JSON.parse(JSON.stringify(result));
+  const message = scenario === "upload-provider-rejection" ? providerError.message : "Failed to upload Bluesky image";
+  expect(serialized.error_message).toBe(message);
+  expect(serialized.details.error).toEqual({ name: "Error", message, cause: scenario === "upload-provider-rejection" ? providerError : {} });
+  expect(posted).toBeUndefined();
+}
 if (video) {
   expect(events).toEqual(scenario === "video-failure" ? ["ffmpeg-compress-video", "probe-video-dimensions"]
     : ["ffmpeg-compress-video", "probe-video-dimensions", "stage", "upload-video", "unlink"]);
   if (!failure) expect(posted.embed.aspectRatio).toEqual({ width: 1920, height: 1080 });
+} else if (link) {
+  expect(child).toHaveBeenCalledTimes(1);
+  expect(posted.embed).toEqual(["link-failure", "link-throw", "link-null"].includes(scenario) ? undefined : { $type: "app.bsky.embed.external", external: { uri: "https://example.com/page", title: "title", description: "description" } });
+  expect(upload).not.toHaveBeenCalled();
+  expect(globalThis.fetch).not.toHaveBeenCalled();
 } else {
   const count = scenario === "multi" ? 3 : 1;
-  expect(child).toHaveBeenCalledTimes(count);
-  expect(upload).toHaveBeenCalledTimes(failure ? 0 : count);
-  expect(globalThis.fetch).toHaveBeenCalledTimes(failure ? 0 : count);
+  expect(child).toHaveBeenCalledTimes(["failure", "throw"].includes(scenario) ? 1 : count * 2);
+  expect(upload).not.toHaveBeenCalled();
+  expect(globalThis.fetch).not.toHaveBeenCalled();
   if (!failure) for (const image of posted.embed.images) {
-    expect(image).toEqual({ alt: "alt", image: "image-blob", aspectRatio: { width: 4000, height: 3000 } });
+    expect(image).toEqual({ alt: scenario === "caption-alt" ? "caption" : scenario === "default-alt" ? "Image" : "alt", image: "image-blob", aspectRatio: { width: 4000, height: 3000 } });
   }
 }
 `;
 
-for (const scenario of ["success", "skip", "multi", "failure", "throw", "video", "video-failure"]) {
+for (const scenario of ["success", "skip", "multi", "caption-alt", "default-alt", "failure", "throw", "upload-failure", "upload-provider-rejection", "link", "link-null", "link-failure", "link-throw", "video", "video-failure"]) {
   test(`Bluesky child boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
       cwd: __dirname,

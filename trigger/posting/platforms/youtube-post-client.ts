@@ -2,6 +2,7 @@ import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { logger, tasks, wait } from "@trigger.dev/sdk";
 import type { generateYoutubeTimestampThumbnail } from "../../video-child-tasks";
+import type { uploadYoutubeThumbnail } from "../../upload-youtube-thumbnail";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -327,7 +328,9 @@ export class YouTubePostClient extends PostClient {
       // while a timestamp requires extraction in a child task.
       if (medium.thumbnail_url) {
         try {
-          await this.#uploadThumbnailFromUrl(youtube, videoId, medium);
+          await this.#uploadThumbnail(videoId, medium.thumbnail_url, {
+            thumbnailUrl: medium.thumbnail_url,
+          });
         } catch (thumbnailError) {
           console.error("Failed to upload thumbnail:", thumbnailError);
           // Don't fail the entire post if thumbnail upload fails
@@ -335,7 +338,6 @@ export class YouTubePostClient extends PostClient {
       } else if (medium.thumbnail_timestamp_ms != null && stagedFilePath) {
         try {
           await this.#uploadThumbnailFromTimestamp(
-            youtube,
             videoId,
             medium,
           );
@@ -1051,35 +1053,7 @@ export class YouTubePostClient extends PostClient {
     return sanitized.slice(0, 100);
   }
 
-  async #uploadThumbnailFromUrl(
-    youtube: youtube_v3.Youtube,
-    videoId: string,
-    medium: PostMedia,
-  ): Promise<void> {
-    if (!medium.thumbnail_url) {
-      return;
-    }
-
-    const res = await fetch(medium.thumbnail_url);
-    if (!res.ok) {
-      const bodyText = await this.#safeReadText(res);
-      throw new Error(
-        `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
-      );
-    }
-
-    const imageBuffer = Buffer.from(await res.arrayBuffer());
-
-    const rawContentType = res.headers.get("content-type") ?? "image/jpeg";
-    const mimeType = rawContentType.split(";")[0].trim() || "image/jpeg";
-
-    await this.#setThumbnail(youtube, videoId, imageBuffer, mimeType, {
-      thumbnailUrl: medium.thumbnail_url,
-    });
-  }
-
   async #uploadThumbnailFromTimestamp(
-    youtube: youtube_v3.Youtube,
     videoId: string,
     medium: PostMedia,
   ): Promise<void> {
@@ -1096,57 +1070,35 @@ export class YouTubePostClient extends PostClient {
       },
     );
     if (!result.ok) throw new Error("Failed to generate YouTube timestamp thumbnail");
-    const res = await fetch(result.output);
-    if (!res.ok) {
-      const bodyText = await this.#safeReadText(res);
-      throw new Error(
-        `Failed to download thumbnail: ${res.status} ${res.statusText}. ${bodyText}`,
-      );
-    }
-    const buffer = Buffer.from(await res.arrayBuffer());
-
-    await this.#setThumbnail(youtube, videoId, buffer, "image/jpeg", {
+    await this.#uploadThumbnail(videoId, result.output, {
       thumbnailTimestampMs: medium.thumbnail_timestamp_ms,
     });
   }
 
-  async #setThumbnail(
-    youtube: youtube_v3.Youtube,
+  async #uploadThumbnail(
     videoId: string,
-    imageBuffer: Buffer,
-    mimeType: string,
+    thumbnailUrl: string,
     source: { thumbnailUrl?: string; thumbnailTimestampMs?: number },
   ): Promise<void> {
-    try {
-      this.requests.push({
-        thumbnailUploadRequest: {
-          videoId,
-          ...source,
-          mimeType,
-          sizeBytes: imageBuffer.length,
+    const result = await tasks.triggerAndWait<typeof uploadYoutubeThumbnail>(
+      "upload-youtube-thumbnail",
+      {
+        videoId,
+        thumbnailUrl,
+        source,
+        oauth: {
+          clientId: this.#googleClientId,
+          clientSecret: this.#googleClientSecret,
+          redirectUri: `${process.env.NEXTAUTH_URL}/api/youtube-auth/callback`,
+          credentials: { ...this.#oauth2Client.credentials },
         },
-      });
-
-      const thumbnailResponse = await youtube.thumbnails.set({
-        videoId: videoId,
-        media: {
-          body: imageBuffer,
-          mimeType,
-        },
-      });
-
-      this.responses.push({ thumbnailResponse: thumbnailResponse.data });
-      console.log("Thumbnail uploaded successfully for video:", videoId);
-    } catch (error) {
-      console.error("Error uploading thumbnail:", error);
-      this.responses.push({
-        thumbnailError: {
-          videoId,
-          ...source,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      throw error;
+      },
+    );
+    if (!result.ok) throw new Error("Failed to upload YouTube thumbnail");
+    this.requests.push(result.output.request);
+    this.responses.push(result.output.response);
+    if (result.output.response.thumbnailError) {
+      throw new Error(result.output.response.thumbnailError.error);
     }
   }
 
