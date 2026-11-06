@@ -109,7 +109,8 @@ try {
   expect(task.id).toBe("copy-media-to-supabase");
   expect(task.machine).toBe("medium-1x");
   expect(task.maxDuration).toBe(800);
-  expect(task.retry.maxAttempts).toBe(3);
+  expect(task.retry.maxAttempts).toBe(2);
+  expect(task.retry.outOfMemory.machine).toBe("large-1x");
   const failures = {
     "missing-url": "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required",
     "missing-key": "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required",
