@@ -34,9 +34,11 @@ const supabaseClient = createClient<Database>(
 const createPostClient = ({
   platformName,
   appCredentials,
+  useSupabaseMedia = false,
 }: {
   platformName: string;
   appCredentials: PlatformAppCredentials;
+  useSupabaseMedia?: boolean;
 }): PostClient => {
   switch (platformName) {
     case "x":
@@ -48,7 +50,7 @@ const createPostClient = ({
     case "linkedin":
       return new LinkedInPostClient(appCredentials);
     case "tiktok":
-      return new TikTokPostClient(appCredentials);
+      return new TikTokPostClient(appCredentials, useSupabaseMedia);
     case "bluesky":
       return new BlueskyPostClient(appCredentials);
     case "threads":
@@ -154,6 +156,7 @@ export const postToPlatform = task({
       stripeCustomerId,
       teamId,
       appCredentials,
+      isSystemProject,
       projectId,
     } = payload;
     let postResult: PostResult | null = null;
@@ -166,6 +169,7 @@ export const postToPlatform = task({
       const postClient = createPostClient({
         platformName: platform,
         appCredentials,
+        useSupabaseMedia: platform === "tiktok" && isSystemProject === false,
       });
 
       // Each PostClient declares which media types it can publish (e.g.

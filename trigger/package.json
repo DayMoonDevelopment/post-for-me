@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bunx trigger.dev@4.4.4 dev",
     "deploy": "bunx trigger.dev@4.4.4 deploy",
+    "deploy:staging": "bunx trigger.dev@4.4.4 deploy --env staging",
     "build": " bunx trigger.dev@4.4.4 deploy --dry-run",
     "typegen": "bun run supabase:typegen",
     "supabase:typegen": "supabase gen types typescript --local > supabase.types.ts",
@@ -31,6 +32,7 @@
     "posthog-node": "^5.35.5",
     "sharp": "^0.34.0",
     "stripe": "^18.1.1",
+    "tus-js-client": "^4.3.1",
     "twitter-api-v2": "^1.22.0",
     "twitter-text": "^3.1.0",
     "uuid": "^11.1.0"

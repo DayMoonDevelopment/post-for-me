@@ -507,6 +507,7 @@ export const processPost = task({
                 caption,
                 platformConfig: platformData,
                 appCredentials,
+                isSystemProject: project.is_system,
                 projectId: post.project_id,
               });
             }
@@ -521,6 +522,7 @@ export const processPost = task({
               caption,
               platformConfig: platformData,
               appCredentials,
+              isSystemProject: project.is_system,
               projectId: post.project_id,
             });
           }

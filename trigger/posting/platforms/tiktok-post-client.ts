@@ -1,7 +1,8 @@
 import { createReadStream } from "fs";
 import { randomUUID } from "crypto";
 import { uploadMedia } from "../../media-storage";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import sharp from "sharp";
@@ -40,6 +41,7 @@ export class TikTokPostClient extends PostClient {
   };
   #clientKey: string;
   #clientSecret: string;
+  #useSupabaseMedia: boolean;
   #maxFileSize = 20 * 1024 * 1024;
   #allowedAspectRatios = [
     { ratio: 9 / 16, width: 1080, height: 1920 },
@@ -48,11 +50,12 @@ export class TikTokPostClient extends PostClient {
     { ratio: 16 / 9, width: 1920, height: 1080 },
   ];
 
-  constructor(appCredentials: PlatformAppCredentials) {
+  constructor(appCredentials: PlatformAppCredentials, useSupabaseMedia = false) {
     super(appCredentials);
 
     this.#clientKey = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
+    this.#useSupabaseMedia = useSupabaseMedia;
   }
 
   async refreshAccessToken(
@@ -577,7 +580,7 @@ export class TikTokPostClient extends PostClient {
     creatorInfoResponse: any;
   }) {
     const { filePath, mimeType, size } = await this.downloadToTempFile(
-      medium.url,
+      await this.#getUploadUrl(medium.url),
       { prefix: "tiktok" },
     );
 
@@ -694,7 +697,7 @@ export class TikTokPostClient extends PostClient {
       if (medium.type === "video") continue;
 
       const signedUrl = await this.#transformImage(medium);
-      photoUrls.push(signedUrl);
+      photoUrls.push(await this.#getUploadUrl(signedUrl));
     }
 
     const { publishId } = await this.#getPublishId({
@@ -736,6 +739,20 @@ export class TikTokPostClient extends PostClient {
     });
 
     return publishId;
+  }
+
+  async #getUploadUrl(url: string): Promise<string> {
+    if (!this.#useSupabaseMedia) return url;
+
+    // White-label apps have verified the legacy Supabase URL prefix, not R2.
+    const result = await tasks.triggerAndWait<typeof copyMediaToSupabase>(
+      "copy-media-to-supabase",
+      { url },
+    );
+    if (!result.ok) {
+      throw new Error("Failed to copy TikTok media to Supabase");
+    }
+    return result.output;
   }
 
   async #getErrorDetails(error: any) {

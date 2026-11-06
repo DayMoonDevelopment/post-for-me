@@ -7,7 +7,7 @@ export default defineConfig({
   project: process.env.TRIGGER_PROJECT_ID!,
   build: {
     extensions: [ffmpeg()],
-    external: ["fluent-ffmpeg", "jsdom", "sharp"],
+    external: ["fluent-ffmpeg", "jsdom", "sharp", "tus-js-client"],
   },
   runtime: "node-22",
   logLevel: "log",

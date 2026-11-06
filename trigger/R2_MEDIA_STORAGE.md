@@ -5,6 +5,14 @@ videos, and Instagram/TikTok transformed images to R2. Existing Supabase and
 external URLs remain readable over HTTP. Supabase is still required for database
 access. The API upload endpoint and dashboard uploads have not been migrated.
 
+Standard TikTok posts for projects with `is_system = false` copy the final media
+from R2 back into Supabase's `post-media` bucket via `copy-media-to-supabase`.
+Photos are copied after TikTok-specific transformations (or after skipping them),
+so TikTok receives the legacy public URL. Videos also use the copied Supabase
+source before their existing byte-upload flow. System projects, TikTok Business,
+and other platforms do not run this copy task. A failed copy fails that account's
+post rather than falling back to an unverified R2 URL.
+
 ## Environment
 
 Configure these locally and in every deployed Trigger.dev environment:
@@ -22,6 +30,14 @@ fragment. A path prefix is supported only if public routing maps it to the bucke
 root; the uploader does not add that prefix to object keys. Keep
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` configured.
 
+The copy task defaults to `${SUPABASE_URL}/storage/v1/object/public/post-media`
+for public URLs. If the API URL differs from the legacy domain verified by
+white-label TikTok apps, set the optional `SUPABASE_MEDIA_PUBLIC_BASE_URL` to
+`https://data.postforme.dev/storage/v1/object/public/post-media` (or the existing
+verified bucket prefix). This changes only the returned URL, not the upload
+destination; that public host must serve the same Supabase bucket. The existing
+Supabase cleanup task removes these temporary copies under its current policy.
+
 ## Before Production
 
 - Attach a public custom domain to the R2 bucket. Do not use the S3 API endpoint
@@ -30,14 +46,13 @@ root; the uploader does not add that prefix to object keys. Keep
   aborting multipart uploads.
 - Verify public GET, HEAD, Content-Length, Content-Type, and byte-range responses.
   Do not require cookies or authentication or present bot challenges to providers.
-- Verify the new public domain/URL prefix for every applicable TikTok app before
-  switching photo publishing. Standard TikTok photos use `PULL_FROM_URL`; standard
+- Verify the R2 public domain/URL prefix for system TikTok apps and applicable
+  TikTok Business apps. Standard TikTok photos use `PULL_FROM_URL`; standard
   videos still upload bytes. TikTok Business also passes media URLs to TikTok.
 - The current dashboard TikTok setup displays the Supabase prefix and uploads
-  verification files to Supabase. It does not verify the R2 domain. Arrange R2
-  verification-file hosting and app verification separately; a new domain is not
-  automatically covered by existing app verification. Update that onboarding
-  flow before relying on it to configure new apps for R2.
+  verification files to Supabase. Non-system standard TikTok projects retain
+  that verified prefix through the copy task and do not need R2 verification.
+  Ensure the copy task's public prefix matches their existing verification.
 - Configure lifecycle cleanup for abandoned multipart uploads after crashes or
   terminated tasks. Handled upload failures abort their multipart uploads.
 - Leave completed objects available for scheduled posts and delayed provider
