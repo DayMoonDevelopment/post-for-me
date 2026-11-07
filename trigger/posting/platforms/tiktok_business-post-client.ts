@@ -1,5 +1,6 @@
 import { tasks, wait } from "@trigger.dev/sdk";
 import type { transformTikTokImage } from "../../transform-tiktok-image";
+import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import { shouldSkipProcessing } from "../image-processing-utils";
@@ -701,7 +702,16 @@ export class TikTokBusinessPostClient extends PostClient {
       if (medium.type === "video") continue;
 
       const signedUrl = await this.#transformImage(medium);
-      photoUrls.push(signedUrl);
+      // Temporary PFM-1626 workaround: Business photo pulls stall on R2 even
+      // with a verified domain. Remove once TikTok's R2 downloads are reliable.
+      const copy = await tasks.triggerAndWait<typeof copyMediaToSupabase>(
+        "copy-media-to-supabase",
+        { url: signedUrl },
+      );
+      if (!copy.ok) {
+        throw new Error("Failed to copy TikTok Business photo to Supabase");
+      }
+      photoUrls.push(copy.output);
     }
 
     return await this.#getPublishId({

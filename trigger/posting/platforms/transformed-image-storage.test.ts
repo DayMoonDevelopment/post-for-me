@@ -106,6 +106,9 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         async ({ key }) => `https://media.example.com/${key}`,
       );
       const child = spyOn(tasks, "triggerAndWait").mockImplementation((async (id: string, payload: unknown) => {
+        if (id === "copy-media-to-supabase") {
+          return { ok: true, output: `https://data.postforme.dev/storage/v1/object/public/post-media/${new URL((payload as { url: string }).url).pathname.split("/").pop()}` };
+        }
         const definition = definitions.get(id);
         if (!definition) throw new Error(`Unexpected child task: ${id}`);
         try {
@@ -127,7 +130,7 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       return { upload, child, post, downloads, publications };
     }
 
-    test("uploads real transformed JPEG bytes and publishes the returned R2 URL with distinct UUID keys", async () => {
+    test("uploads real transformed JPEG bytes and publishes from the platform's storage host with distinct UUID keys", async () => {
       const { upload, post, downloads, publications } = await setup();
       expect((await post()).success).toBe(true);
       expect((await post()).success).toBe(true);
@@ -142,7 +145,13 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         expect(metadata.format).toBe("jpeg");
         expect(metadata.width).toBe(width);
         expect(metadata.height).toBe(height);
-        expect(JSON.stringify(publications)).toContain(`https://media.example.com/${options.key}`);
+        const publicBase = prefix === "tiktok_business"
+          ? "https://data.postforme.dev/storage/v1/object/public/post-media"
+          : "https://media.example.com";
+        expect(JSON.stringify(publications)).toContain(`${publicBase}/${options.key}`);
+        if (prefix === "tiktok_business") {
+          expect(JSON.stringify(publications)).not.toContain("https://media.example.com/");
+        }
       }
       expect(new Set(keys).size).toBe(2);
       expect(downloads).toHaveLength(2);
@@ -165,13 +174,20 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       expect(JSON.stringify(publications)).not.toContain("image_url");
     });
 
-    test("skip_processing publishes the original URL without downloading or uploading", async () => {
+    test("skip_processing avoids transformation and retains the platform's storage policy", async () => {
       const { upload, child, post, downloads, publications } = await setup();
       expect((await post({ skip_processing: true })).success).toBe(true);
       expect(upload).not.toHaveBeenCalled();
-      expect(child).not.toHaveBeenCalled();
+      if (prefix === "tiktok_business") {
+        expect(child).toHaveBeenCalledTimes(1);
+        expect(child).toHaveBeenCalledWith("copy-media-to-supabase", { url: sourceUrl });
+        expect(JSON.stringify(publications)).toContain("https://data.postforme.dev/storage/v1/object/public/post-media/photo.original.png");
+        expect(JSON.stringify(publications)).not.toContain(sourceUrl);
+      } else {
+        expect(child).not.toHaveBeenCalled();
+        expect(JSON.stringify(publications)).toContain(sourceUrl);
+      }
       expect(downloads).toHaveLength(0);
-      expect(JSON.stringify(publications)).toContain(sourceUrl);
     });
 
     for (const failure of ["failed result", "rejection"]) {
