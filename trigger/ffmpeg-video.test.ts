@@ -19,9 +19,19 @@ const logger = { info() {}, error() {}, warn() {} };
 mock.module("@trigger.dev/sdk", () => ({ logger, task: (definition) => definition }));
 mock.module("@trigger.dev/sdk/v3", () => ({ logger, task: (definition) => definition }));
 mock.module("os", () => ({ default: { tmpdir: () => tempDir } }));
+const enqueueMediaServerJob = mock(async () => {});
+mock.module("./media-server", () => ({ enqueueMediaServerJob }));
 
 const download = mock(async (source) => {
   expect(source).toBe(url);
+  if (scenario === "download-error") throw new Error("download failed");
+  if (scenario.startsWith("large-file")) {
+    // Exercise the size branch without allocating hundreds of megabytes.
+    const bytes = new Uint8Array(100).buffer;
+    return { ok: true, body: {}, arrayBuffer: async () => ({
+      byteLength: 301 * 1024 * 1024, valueOf: () => bytes,
+    }) };
+  }
   return new Response(new Uint8Array(100), { status: scenario === "http-error" ? 404 : 200 });
 });
 globalThis.fetch = download;
@@ -59,9 +69,31 @@ const ffmpeg = Object.assign((input) => {
   ffprobe(input, callback) {
     probeCount++;
     expect(path.basename(input)).toMatch(new RegExp("^" + uuid + "\\.(mov|mp4)$"));
+    const video = { codec_type: "video", codec_name: "h264", width: 1280, height: 720, avg_frame_rate: "30/1" };
+    if (scenario === "scaled" || scenario.startsWith("rotated-")) {
+      video.width = 3840;
+      video.height = 2160;
+      if (scenario === "rotated-tag") video.tags = { rotate: "90" };
+      if (scenario === "rotated-stream") video.rotation = 270;
+      if (scenario === "rotated-matrix") video.side_data_list = [{ side_data_type: "Display Matrix", rotation: -90 }];
+    }
+    if (scenario === "odd-dimensions" || scenario === "skip-odd") {
+      video.width = 1279;
+      video.height = 719;
+    }
+    if (scenario === "low-fps") video.avg_frame_rate = "15/1";
+    if (scenario === "high-fps") video.avg_frame_rate = "120/1";
+    if (scenario === "frame-count") { video.nb_frames = "240"; video.avg_frame_rate = "120/1"; }
+    const streams = [video];
+    if (scenario === "audio") streams.push({ codec_type: "audio", codec_name: "mp3", bit_rate: "320000", channels: 6, sample_rate: "96000" });
+    if (scenario === "skip-audio") streams.push({ codec_type: "audio", codec_name: "aac", bit_rate: "128000", channels: 2, sample_rate: "48000" });
     callback(null, {
-      streams: [{ codec_type: "video", codec_name: "h264", width: 1280, height: 720, avg_frame_rate: "30/1" }],
-      format: { duration: 10, bit_rate: 1000000, format_name: scenario === "skip" ? "mov,mp4" : "avi" },
+      streams,
+      format: {
+        duration: scenario === "large-file-duration" ? 600 : 10,
+        bit_rate: scenario === "high-bitrate" ? 30000000 : 1000000,
+        format_name: scenario.startsWith("skip") || ["high-bitrate", "scaled", "low-fps", "high-fps", "audio"].includes(scenario) || scenario.startsWith("rotated-") || scenario.startsWith("large-file") ? "mov,mp4" : "avi",
+      },
     });
   },
 });
@@ -74,11 +106,11 @@ try {
     : async () => (await import("./ffmpeg-compress-video.ts")).ffmpegCompressVideo.run({ url, maxSizeBytes: scenario === "skip" ? 100 : 50 });
 
   if (scenario.endsWith("error")) {
-    const message = { "http-error": "HTTP 404", "encode-error": "encode failed", "upload-error": "upload failed" }[scenario];
+    const message = { "http-error": "HTTP 404", "download-error": "download failed", "encode-error": "encode failed", "upload-error": "upload failed" }[scenario];
     await expect(execute()).rejects.toThrow(message);
   } else {
     const result = await execute();
-    if (scenario === "skip") {
+    if (scenario.startsWith("skip")) {
       expect(result).toBe(kind === "process" ? medium : url);
     } else {
       expect(result).toEqual(kind === "process" ? { ...medium, url: uploadedUrl } : uploadedUrl);
@@ -86,14 +118,51 @@ try {
   }
 
   expect(await fs.readdir(tempDir)).toEqual([]);
-  const noEncoding = scenario === "skip" || scenario === "http-error";
+  const noEncoding = scenario.startsWith("skip") || scenario === "http-error" || scenario === "download-error";
   expect(encodeCount).toBe(noEncoding ? 0 : scenario === "final-attempt" ? 3 : 1);
   expect(uploadMedia).toHaveBeenCalledTimes(noEncoding || scenario === "encode-error" ? 0 : 1);
-  if (scenario === "http-error" || (kind === "compress" && scenario === "skip")) expect(probeCount).toBe(0);
+  if (scenario === "http-error" || scenario === "download-error" || (kind === "compress" && scenario === "skip")) expect(probeCount).toBe(0);
   for (const encoding of options) {
     expect(encoding).toContain("-c:v libx264");
     expect(encoding).toContain("-movflags +faststart");
-    expect(encoding).toContain("-an");
+    if (scenario !== "audio" && scenario !== "skip-audio") expect(encoding).toContain("-an");
+  }
+  const hasShadow = kind === "process" && !["http-error", "download-error"].includes(scenario);
+  expect(enqueueMediaServerJob).toHaveBeenCalledTimes(hasShadow ? 1 : 0);
+  if (hasShadow) {
+    const rotated = scenario.startsWith("rotated-");
+    const odd = scenario === "odd-dimensions" || scenario === "skip-odd";
+    const fps = ["low-fps", "high-fps", "frame-count"].includes(scenario) ? 24 : 30;
+    const scale = rotated ? { width: 1080, height: 1920 }
+      : scenario === "scaled" ? { width: 1920, height: 1080 }
+      : odd ? { width: 1278, height: 718 } : { width: 1280, height: 720 };
+    const large = scenario.startsWith("large-file");
+    const mbps = scenario === "large-file-duration" ? 3.914683 : 15;
+    const rate = large ? { crf: undefined, bitrate: Math.round(mbps * 1000000), maxrate: Math.round(mbps * 1.1 * 1000000), bufsize: Math.round(mbps * 2 * 1000000) }
+      : scenario === "high-bitrate" ? { crf: undefined, bitrate: 24000000, maxrate: 25000000, bufsize: 50000000 }
+      : { crf: 23, maxrate: 25000000, bufsize: 50000000 };
+    const audio = scenario === "audio" || scenario === "skip-audio"
+      ? { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 } : null;
+    expect(enqueueMediaServerJob.mock.calls[0]).toEqual(["ffmpeg-process-video", {
+      task: "media.transform-video", source: url,
+      output: {
+        type: "video", container: "mp4", faststart: true,
+        video: { codec: "h264", preset: large ? "superfast" : "ultrafast", profile: "high", level: "4.0", pixelFormat: "yuv420p", ...rate, fps, scale },
+        audio,
+      },
+    }]);
+    if (!noEncoding) {
+      const liveScale = odd ? { width: 1279, height: 719 } : scale;
+      expect(options[0]).toEqual([
+        "-c:v libx264", "-preset " + (large ? "superfast" : "ultrafast"),
+        ...(large ? ["-b:v " + mbps + "M", "-maxrate " + mbps * 1.1 + "M", "-bufsize " + mbps * 2 + "M"]
+          : scenario === "high-bitrate" ? ["-b:v 24M", "-maxrate 25M", "-bufsize 50M"]
+          : ["-crf 23", "-maxrate 25M", "-bufsize 50M"]),
+        "-profile:v high", "-level 4.0", "-pix_fmt yuv420p", "-movflags +faststart", "-r " + fps,
+        "-vf scale=" + liveScale.width + ":" + liveScale.height + ",fps=" + fps,
+        ...(audio ? ["-c:a aac", "-b:a 128k", "-ac 2", "-ar 48000"] : ["-an"]),
+      ]);
+    }
   }
   if (scenario === "final-attempt") {
     expect(options.map((encoding) => encoding[2])).toEqual(["fast", "medium", "slow"]);
@@ -117,16 +186,21 @@ for (const kind of ["process", "compress"]) {
     { scenario: "upload", url },
     { scenario: "skip", url },
   ]);
-  for (const scenario of ["http-error", "encode-error", "upload-error"]) {
+  for (const scenario of ["http-error", "download-error", "encode-error", "upload-error"]) {
     cases.push({ scenario, url: sources[0] });
   }
   if (kind === "compress") cases.push({ scenario: "final-attempt", url: sources[0] });
+  if (kind === "process") {
+    for (const scenario of ["high-bitrate", "scaled", "rotated-stream", "rotated-tag", "rotated-matrix", "odd-dimensions", "skip-odd", "low-fps", "high-fps", "frame-count", "audio", "skip-audio", "large-file", "large-file-duration"]) {
+      cases.push({ scenario, url: sources[0] });
+    }
+  }
 
   for (const { scenario, url } of cases) {
     test(`${kind}: ${scenario} (${url})`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {
         cwd: __dirname,
-        env: { ...process.env, VIDEO_TASK: kind, VIDEO_SCENARIO: scenario, VIDEO_URL: url },
+        env: { ...process.env, MEDIA_SERVER_REDIS_URL: "redis://127.0.0.1:1", VIDEO_TASK: kind, VIDEO_SCENARIO: scenario, VIDEO_URL: url },
         stdout: "pipe",
         stderr: "pipe",
       });

@@ -5,6 +5,7 @@ import os from "os";
 import path from "path";
 import { randomUUID } from "crypto";
 import { uploadMedia } from "./media-storage";
+import { enqueueMediaServerJob, type MediaServerVideoOutput } from "./media-server";
 import type { UserTag } from "./posting/post.types";
 
 // Constants
@@ -195,6 +196,28 @@ export const ffmpegProcessVideo = task({
         logger.info("Non-MP4 file detected - will process to MP4");
       }
 
+      const shadowOutput: MediaServerVideoOutput = {
+        type: "video",
+        container: "mp4",
+        faststart: true,
+        video: {
+          codec: "h264",
+          preset: fileSizeBytes > MAX_FILE_SIZE_BYTES ? "superfast" : "ultrafast",
+          profile: "high",
+          level: "4.0",
+          pixelFormat: "yuv420p",
+          crf: 23,
+          maxrate: 25000000,
+          bufsize: 50000000,
+          fps: frameRate < MIN_FRAME_RATE || frameRate > MAX_FRAME_RATE ? DEFAULT_FRAME_RATE : frameRate,
+          scale: {
+            width: Math.max(2, Math.floor(width / 2) * 2),
+            height: Math.max(2, Math.floor(height / 2) * 2),
+          },
+        },
+        audio: hasAudio ? { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 } : null,
+      };
+
       // Early exit conditions - Only MP4 files that meet all other requirements can skip processing
       if (
         isMP4 &&
@@ -207,6 +230,9 @@ export const ffmpegProcessVideo = task({
         height <= aspectRatio.maxHeight &&
         hasValidAudio
       ) {
+        await enqueueMediaServerJob("ffmpeg-process-video", {
+          task: "media.transform-video", source: url, output: shadowOutput,
+        });
         logger.info("video already meets requirements, skipping processing");
         return medium;
       }
@@ -266,6 +292,10 @@ export const ffmpegProcessVideo = task({
           `-maxrate ${targetBitrateMbps * 1.1}M`,
           `-bufsize ${targetBitrateMbps * 2}M`,
         ];
+        shadowOutput.video.crf = undefined;
+        shadowOutput.video.bitrate = Math.round(targetBitrateMbps * 1000000);
+        shadowOutput.video.maxrate = Math.round(targetBitrateMbps * 1.1 * 1000000);
+        shadowOutput.video.bufsize = Math.round(targetBitrateMbps * 2 * 1000000);
       } else if (needsProcessingForBitrate) {
         // Original input bitrate > 25Mbps
         logger.info(
@@ -273,6 +303,8 @@ export const ffmpegProcessVideo = task({
           { inputBitrate: metadata.format.bit_rate },
         );
         videoEncodingOptions = ["-b:v 24M", "-maxrate 25M", "-bufsize 50M"];
+        shadowOutput.video.crf = undefined;
+        shadowOutput.video.bitrate = 24000000;
       } else {
         // Input bitrate <= 25Mbps OR unknown. Use CRF. This path is also taken if processing for non-bitrate reasons (e.g. container change, other MP4 validation failures)
         logger.info(
@@ -309,6 +341,14 @@ export const ffmpegProcessVideo = task({
       } else {
         ffmpegOptions.push("-an"); // No audio
       }
+
+      shadowOutput.video.scale = {
+        width: Math.max(2, Math.floor(targetWidth / 2) * 2),
+        height: Math.max(2, Math.floor(targetHeight / 2) * 2),
+      };
+      await enqueueMediaServerJob("ffmpeg-process-video", {
+        task: "media.transform-video", source: url, output: shadowOutput,
+      });
 
       logger.info("Starting FFmpeg processing", {
         targetWidth,

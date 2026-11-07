@@ -81,16 +81,21 @@ export function resolveInstagramMinAspectRatio({
 export async function compressJpegToLimit(
   buffer: Buffer,
   maxFileSize: number,
+  onQuality?: (quality: 80 | 60) => void,
 ): Promise<Buffer> {
   if (buffer.length <= maxFileSize) {
     return buffer;
   }
 
   let compressed = await sharp(buffer).jpeg({ quality: 80 }).toBuffer();
+  let quality: 80 | 60 = 80;
 
   if (compressed.length > maxFileSize) {
     compressed = await sharp(compressed).jpeg({ quality: 60 }).toBuffer();
+    quality = 60;
   }
+
+  onQuality?.(quality);
 
   return compressed;
 }

@@ -5,6 +5,7 @@ import os from "os";
 import path from "path";
 import { pipeline } from "stream/promises";
 import { uploadMedia } from "./media-storage";
+import { enqueueMediaServerJob } from "./media-server";
 import { v4 as uuidv4 } from "uuid";
 import type { UserTag } from "./posting/post.types";
 
@@ -331,6 +332,15 @@ export const processPostMedium = task({
     position: number;
   }> => {
     logger.info("Starting media processing", { url, thumbnail_url });
+
+    await Promise.all(
+      [url, thumbnail_url].filter((source): source is string => !!source).map(
+        (source) => enqueueMediaServerJob("process-post-medium", {
+          task: "media.localize",
+          url: source,
+        }),
+      ),
+    );
 
     try {
       // Stream download and upload main media file
