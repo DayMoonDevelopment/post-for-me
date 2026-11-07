@@ -1,5 +1,7 @@
 # R2 Media Storage
 
+Optional Zenith media-server shadow traffic is documented in [MEDIA_SERVER.md](./MEDIA_SERVER.md).
+
 Trigger writes localized media, thumbnails, processed videos, Bluesky-compressed
 videos, and Instagram/TikTok transformed images to R2. Existing Supabase and
 external URLs remain readable over HTTP. Supabase is still required for database

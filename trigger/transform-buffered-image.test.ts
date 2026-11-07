@@ -8,6 +8,7 @@ import { randomFillSync } from "node:crypto";
 const platform = process.env.PLATFORM;
 const scenario = process.env.SCENARIO;
 mock.module("@trigger.dev/sdk", () => ({ task: (definition) => definition }));
+mock.module("./media-server", () => ({ enqueueMediaServerJob: async () => {} }));
 let uploaded;
 mock.module("./media-storage", () => ({ uploadMedia: async (options) => {
   uploaded = options;
