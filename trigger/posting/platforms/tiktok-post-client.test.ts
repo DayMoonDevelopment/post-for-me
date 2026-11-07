@@ -87,6 +87,11 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
           };
           spyOn(axios, "get").mockImplementation(response as any);
           spyOn(axios, "post").mockImplementation(response as any);
+          const copy = spyOn(tasks, "triggerAndWait").mockResolvedValue({
+            ok: true,
+            output: "https://data.postforme.dev/storage/v1/object/public/post-media/photo.jpg",
+          } as any);
+          copy.mockClear();
 
           const result = await client.post({
             postId: "post-id",
@@ -106,6 +111,14 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
           });
 
           const isProcessing = status.startsWith("PROCESSING");
+          if (Client === TikTokBusinessPostClient) {
+            expect(copy).toHaveBeenCalledTimes(1);
+            expect(copy).toHaveBeenCalledWith("copy-media-to-supabase", {
+              url: "https://example.com/image.jpg",
+            });
+          } else {
+            expect(copy).not.toHaveBeenCalled();
+          }
           expect(result.success).toBe(
             !isProcessing && status !== "FAILED" && status !== "UNKNOWN" &&
               (isDraft || status !== "SEND_TO_USER_INBOX"),

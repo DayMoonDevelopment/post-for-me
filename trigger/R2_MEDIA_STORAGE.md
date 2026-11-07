@@ -11,8 +11,18 @@ Standard TikTok posts for projects with `is_system = false` copy the final media
 from R2 back into Supabase's `post-media` bucket via `copy-media-to-supabase`.
 Photos are copied after TikTok-specific transformations (or after skipping them),
 so TikTok receives the legacy public URL. Videos also use the copied Supabase
-source before their existing byte-upload flow. System TikTok projects and TikTok
-Business do not run this copy task.
+source before their existing byte-upload flow. System standard TikTok projects
+do not run this copy task.
+
+TikTok Business photos also copy their final URLs to Supabase for all projects,
+including when `skip_processing` is set. This is a temporary workaround for
+`PROCESSING_DOWNLOAD` stalls after the R2 switch (PFM-1626), not a confirmed
+root-cause fix. The copy happens after transformation, and a failed copy stops
+publication rather than submitting the R2 URL. Business videos and their
+thumbnail URLs are unchanged. Remove this exception once live TikTok Business
+photo pulls from R2 are reliable. Verify photo/carousel publishing in staging
+using the legacy public prefix below; do not automatically repost timed-out
+publish IDs, since they may still complete on TikTok.
 
 Facebook video Stories and Reels also copy their media to Supabase before
 creating the Meta upload session, as a temporary workaround for robots-policy
