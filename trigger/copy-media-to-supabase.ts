@@ -8,6 +8,7 @@ import { Readable } from "node:stream";
 import { finished, pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { Upload } from "tus-js-client";
+import { mimeTypeToExtension } from "./media-extension";
 
 export const copyMediaToSupabase = task({
   id: "copy-media-to-supabase",
@@ -44,20 +45,7 @@ export const copyMediaToSupabase = task({
     if (!response.body)
       throw new Error("No response body available for streaming");
 
-    const extensions: Record<string, string> = {
-      "image/jpeg": ".jpg",
-      "image/png": ".png",
-      "image/gif": ".gif",
-      "image/webp": ".webp",
-      "image/svg+xml": ".svg",
-      "image/avif": ".avif",
-      "video/mp4": ".mp4",
-      "video/webm": ".webm",
-      "video/mov": ".mov",
-      "video/quicktime": ".mov",
-      "video/avi": ".avi",
-    };
-    const extension = extensions[contentType] ?? "";
+    const extension = mimeTypeToExtension(contentType);
     const key = `tiktok_${randomUUID()}${extension}`;
     const tempPath = path.join(os.tmpdir(), key);
 

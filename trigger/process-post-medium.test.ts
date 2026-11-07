@@ -27,6 +27,7 @@ describe("getMediaType", () => {
 
   test("still falls back to 'image' extensions when content type is unknown", () => {
     expect(getMediaType("application/octet-stream", ".png")).toBe("image");
+    expect(getMediaType("application/octet-stream", ".avif")).toBe("image");
   });
 
   test("defaults to 'image' when nothing matches", () => {
@@ -70,6 +71,12 @@ describe("getFileExtension", () => {
   test("maps known image/video types to their extensions", () => {
     expect(getFileExtension("image/jpeg")).toBe(".jpg");
     expect(getFileExtension("video/mp4")).toBe(".mp4");
+  });
+
+  test("maps previously-gapped types to their extensions", () => {
+    expect(getFileExtension("video/quicktime")).toBe(".mov");
+    expect(getFileExtension("image/svg+xml")).toBe(".svg");
+    expect(getFileExtension("image/avif")).toBe(".avif");
   });
 
   test("returns empty string for unknown or missing content type", () => {

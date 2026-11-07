@@ -54,6 +54,8 @@ if (scenario === "upload-error") {
   }
   expect(uploaded.body.equals(expected)).toBe(true);
   expect(uploaded.contentType).toBe(expectedMime);
+  const expectedExtension = expectedMime === "image/png" ? ".png" : ".jpg";
+  expect(uploaded.key).toMatch(new RegExp("^" + platform + "_[0-9a-f-]{36}\\" + expectedExtension + "$"));
   expect(result).toEqual({ url: "https://media.example/artifact", mimeType: expectedMime,
     width: platform === "bluesky" ? (large ? 3300 : 23) : undefined,
     height: platform === "bluesky" ? (large ? 3300 : 17) : undefined });

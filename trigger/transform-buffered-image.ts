@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { uploadMedia } from "./media-storage";
 import { enqueueMediaServerJob } from "./media-server";
+import { mimeTypeToExtension } from "./media-extension";
 import { compressJpegToLimit } from "./posting/image-processing-utils";
 
 export const transformBufferedImage = task({
@@ -81,8 +82,12 @@ export const transformBufferedImage = task({
       ...(!skipProcessing ? { maxBytes: platform === "twitter" ? 5 * 1024 * 1024 : Math.floor(976.56 * 1024) } : {}),
     });
 
+    // This task only ever produces images; fall back to .jpg if the source
+    // blob didn't report a usable MIME type so the object still gets an
+    // extension matching its actual (image) file type.
+    const extension = mimeTypeToExtension(mimeType) || ".jpg";
     const artifactUrl = await uploadMedia({
-      key: `${platform}_${randomUUID()}`,
+      key: `${platform}_${randomUUID()}${extension}`,
       body: processedImage,
       contentType: mimeType,
       cacheControl: "public, max-age=31536000",
