@@ -6,6 +6,7 @@ import path from "path";
 import { pipeline } from "stream/promises";
 import { uploadMedia } from "./media-storage";
 import { enqueueMediaServerJob } from "./media-server";
+import { mimeTypeToExtension } from "./media-extension";
 import { v4 as uuidv4 } from "uuid";
 import type { UserTag } from "./posting/post.types";
 
@@ -29,7 +30,15 @@ export const getMediaType = (
     "video/quicktime",
   ];
   const documentTypes = ["application/pdf"];
-  const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
+  const imageExtensions = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".avif",
+  ];
   const videoExtensions = [".mp4", ".webm", ".mov", ".avi", ".qt"];
   const documentExtensions = [".pdf"];
 
@@ -56,25 +65,12 @@ const normalizeContentType = (contentType: string): string => {
   return contentType.split(";")[0].trim().toLowerCase();
 };
 
-// Helper function to get file extension from URL or content type
-export const getFileExtension = (contentType?: string): string => {
-  if (contentType) {
-    const mimeToExt: Record<string, string> = {
-      "image/jpeg": ".jpg",
-      "image/png": ".png",
-      "image/gif": ".gif",
-      "image/webp": ".webp",
-      "video/mp4": ".mp4",
-      "video/webm": ".webm",
-      "video/mov": ".mov",
-      "video/avi": ".avi",
-      "application/pdf": ".pdf",
-    };
-    return mimeToExt[contentType] || "";
-  }
-
-  return "";
-};
+// Helper function to get file extension from content type. Delegates to the
+// shared mime->extension map so localized media always gets an extension
+// matching its actual file type, including formats (video/quicktime,
+// image/svg+xml, image/avif, etc.) that aren't hardcoded here.
+export const getFileExtension = (contentType?: string): string =>
+  mimeTypeToExtension(contentType);
 
 // Helper function to detect content type from file signature
 export const detectContentTypeFromBytes = (bytes: Uint8Array): string | null => {
