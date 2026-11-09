@@ -12,6 +12,8 @@ const scenario = process.env.STORAGE_SCENARIO;
 const requests = [];
 let activeParts = 0;
 let maxActiveParts = 0;
+let releaseFirstParts;
+const firstPartsReady = new Promise((resolve) => { releaseFirstParts = resolve; });
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -28,7 +30,9 @@ const server = Bun.serve({
     if (request.method === "PUT" && url.searchParams.has("partNumber")) {
       activeParts++;
       maxActiveParts = Math.max(maxActiveParts, activeParts);
-      await Bun.sleep(30);
+      // Hold the first part until both upload workers reach the server, regardless of scheduling delay.
+      if (activeParts === 2) releaseFirstParts();
+      await firstPartsReady;
       activeParts--;
       if (scenario === "multipart-failure" && url.searchParams.get("partNumber") === "1") {
         return xml('<Error><Code>InvalidRequest</Code><Message>part rejected</Message></Error>', 400);
