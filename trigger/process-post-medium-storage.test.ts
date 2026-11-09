@@ -35,8 +35,6 @@ mock.module("@trigger.dev/sdk", () => ({
   task: (definition) => definition,
 }));
 mock.module("os", () => ({ default: { tmpdir: () => tempDir } }));
-const enqueueMediaServerJob = mock(async () => {});
-mock.module("./media-server", () => ({ enqueueMediaServerJob }));
 const download = mock(async (url, options) => {
   requests.push({ url, options });
   const thumbnail = url === thumbnailUrl;
@@ -128,30 +126,13 @@ try {
     .toBe(["range-pdf", "head-error", "unsupported"].includes(scenario) ? 1 : 0);
   expect(requests.filter(({ url }) => url === thumbnailUrl).length).toBe(withThumbnail ? 2 : 0);
   expect(await fs.readdir(tempDir)).toEqual([]);
-  expect(enqueueMediaServerJob.mock.calls).toEqual([
-    ["process-post-medium", { task: "media.localize", url: sourceUrl }],
-    ...(withThumbnail ? [["process-post-medium", { task: "media.localize", url: thumbnailUrl }]] : []),
-  ]);
-
-  // Both original URLs must enqueue even when the main localization fails first.
-  enqueueMediaServerJob.mockClear();
   uploadMedia.mockImplementation(async () => { throw new Error("main localization failed"); });
   await expect(processPostMedium.run({ medium: { ...medium, thumbnail_url: thumbnailUrl } })).rejects.toThrow();
-  expect(enqueueMediaServerJob.mock.calls).toEqual([
-    ["process-post-medium", { task: "media.localize", url: sourceUrl }],
-    ["process-post-medium", { task: "media.localize", url: thumbnailUrl }],
-  ]);
 
-  // Missing URLs are skipped independently, not replaced with uploaded URLs.
+  // A thumbnail cannot substitute for a missing main media URL.
   for (const absent of [undefined, null, ""]) {
-    enqueueMediaServerJob.mockClear();
     await expect(processPostMedium.run({ medium: { ...medium, url: absent, thumbnail_url: thumbnailUrl } })).rejects.toThrow("No media URL provided");
-    expect(enqueueMediaServerJob.mock.calls).toEqual([
-      ["process-post-medium", { task: "media.localize", url: thumbnailUrl }],
-    ]);
-    enqueueMediaServerJob.mockClear();
     await expect(processPostMedium.run({ medium: { ...medium, url: absent, thumbnail_url: absent } })).rejects.toThrow("No media URL provided");
-    expect(enqueueMediaServerJob).not.toHaveBeenCalled();
   }
   expect(await fs.readdir(tempDir)).toEqual([]);
 } finally {
@@ -177,7 +158,7 @@ for (const scenario of [
   test(`process medium storage: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
       cwd: __dirname,
-      env: { ...process.env, MEDIA_SERVER_REDIS_URL: "redis://127.0.0.1:1", MEDIUM_SCENARIO: scenario },
+      env: { ...process.env, MEDIUM_SCENARIO: scenario },
       stdout: "pipe",
       stderr: "pipe",
     });

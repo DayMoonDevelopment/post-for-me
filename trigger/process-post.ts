@@ -9,6 +9,8 @@ import type {
   UserTag,
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
+import type { mediaShadow } from "./media-shadow";
+import { selectPostMedia } from "./posting/media-selection";
 
 import { Database, Json } from "./supabase.types";
 
@@ -297,6 +299,31 @@ export const processPost = task({
       await tags.add(`${project.team_id}`);
       const postMedia: ProcessedMedium[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
+        if (process.env.MEDIA_SERVER_REDIS_URL) {
+          try {
+            const shadow = await tasks.trigger<typeof mediaShadow>("media-shadow", {
+              postId: post.id,
+              projectId: post.project_id,
+              media: post.social_post_media.map((medium) => ({
+                id: medium.id, url: medium.url, thumbnail_url: medium.thumbnail_url,
+                thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
+                provider: medium.provider, provider_connection_id: medium.provider_connection_id,
+                skip_processing: medium.skip_processing, index: medium.index,
+              })),
+              accounts: accounts.map(({ id, provider }) => ({ id, provider })),
+              configurations: post.social_post_configurations.map((config) => {
+                const data = config.provider_data as { placement?: string; share_to_feed?: boolean };
+                return {
+                  provider: config.provider, provider_connection_id: config.provider_connection_id,
+                  provider_data: { placement: data?.placement, share_to_feed: data?.share_to_feed },
+                };
+              }),
+            });
+            logger.info("Shadow media coordinator scheduled", { postId: post.id, shadowRunId: shadow.id });
+          } catch {
+            logger.warn("Shadow media coordinator scheduling failed; continuing live processing", { postId: post.id });
+          }
+        }
         logger.info("Localizing Media", { media: post.social_post_media });
 
         const localizedMedia = await tasks.batchTriggerAndWait(
@@ -480,12 +507,7 @@ export const processPost = task({
             accountConfig?.caption ||
             platformConfig?.caption ||
             postData.caption;
-          const media =
-            accountMedia && accountMedia.length > 0
-              ? accountMedia
-              : platformConfig && platformMedia.length > 0
-                ? platformMedia
-                : defaultMedia;
+          const media = selectPostMedia(postData.media, account, !!platformConfig);
 
           const platformData = {
             ...platformConfig?.provider_data,

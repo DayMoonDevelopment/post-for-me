@@ -1,178 +1,273 @@
 import { expect, test } from "bun:test";
+import {
+  parseMediaServerResponse,
+  sanitizeMediaServerLog,
+  type MediaServerJob,
+} from "./media-server";
 
-// Module mocks live only in subprocesses, so other task suites keep their own SDK mocks.
+const image = {
+  kind: "image", format: "jpeg", width: 1080, height: 1920,
+  orientation: 1, hasAlpha: false,
+};
+const video = {
+  kind: "video", container: "mp4", width: 1080, height: 1920, rotation: 0,
+  durationSeconds: 12, bitrate: 2000000, frameRate: 30,
+  video: { codec: "h264", profile: "high", pixelFormat: "yuv420p", level: 40, bitrate: 1800000 },
+  audio: { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 },
+};
+const stored = (media: unknown = image) => ({
+  fileId: "file-123", versionId: "version-456", path: "shadow/result.jpg",
+  url: "https://media.example/result.jpg", contentType: "image/jpeg", size: 1234, media,
+});
+
+test("parseMediaServerResponse accepts localized images, videos and documents without copying", () => {
+  for (const media of [image, video, { kind: "document", contentType: "application/pdf" }]) {
+    const result = stored(media);
+    expect<unknown>(parseMediaServerResponse(result, "media.localize")).toBe(result);
+  }
+  expect(parseMediaServerResponse({ ...stored(), size: 0 }, "media.localize").size).toBe(0);
+});
+
+test("parseMediaServerResponse accepts each transform decision and nullable video metadata", () => {
+  for (const decision of ["unchanged", "transformed"]) {
+    const result = { ...stored(), decision };
+    expect<unknown>(parseMediaServerResponse(result, "media.transform-image")).toBe(result);
+  }
+  for (const decision of ["unchanged", "copied", "encoded"]) {
+    for (const rotation of [0, 90, 180, 270]) {
+      const result = { ...stored({ ...video, rotation }), decision };
+      expect<unknown>(parseMediaServerResponse(result, "media.transform-video")).toBe(result);
+    }
+  }
+  const result = stored({
+    ...video, durationSeconds: null, bitrate: null, frameRate: null,
+    video: { codec: "h264", profile: null, pixelFormat: null, level: null, bitrate: null },
+    audio: null,
+  });
+  expect<unknown>(parseMediaServerResponse(result, "media.localize")).toBe(result);
+  const nullableAudio = stored({
+    ...video, audio: { codec: "aac", bitrate: null, channels: null, sampleRate: null },
+  });
+  expect<unknown>(parseMediaServerResponse(nullableAudio, "media.localize")).toBe(nullableAudio);
+});
+
+test("parseMediaServerResponse rejects invalid stored media envelopes", () => {
+  for (const value of [null, undefined, [], "result", 1]) {
+    expect(() => parseMediaServerResponse(value, "media.localize")).toThrow("Invalid Zenith result object");
+  }
+  for (const key of ["fileId", "versionId", "path", "url", "contentType"]) {
+    for (const value of [undefined, null, "", 1]) {
+      expect(() => parseMediaServerResponse({ ...stored(), [key]: value }, "media.localize"))
+        .toThrow("Invalid Zenith stored media result");
+    }
+  }
+  for (const size of [undefined, null, "12", -1, 1.5, NaN, Infinity]) {
+    expect(() => parseMediaServerResponse({ ...stored(), size }, "media.localize"))
+      .toThrow("Invalid Zenith stored media result");
+  }
+  for (const media of [undefined, null, [], {}, { kind: "audio" }, { kind: "document", contentType: "" }]) {
+    expect(() => parseMediaServerResponse({ ...stored(), media }, "media.localize")).toThrow();
+  }
+});
+
+test("parseMediaServerResponse rejects malformed image metadata", () => {
+  for (const patch of [
+    { format: "" }, { width: 0 }, { width: Infinity }, { height: -1 }, { height: "1920" },
+    { orientation: 0 }, { orientation: 9 }, { orientation: 1.5 }, { hasAlpha: undefined }, { hasAlpha: 0 },
+  ]) {
+    expect(() => parseMediaServerResponse(stored({ ...image, ...patch }), "media.localize"))
+      .toThrow("Invalid Zenith image metadata");
+  }
+  for (const orientation of [1, 8]) {
+    expect<unknown>(parseMediaServerResponse(stored({ ...image, orientation }), "media.localize").media)
+      .toEqual({ ...image, orientation });
+  }
+});
+
+test("parseMediaServerResponse rejects malformed video and audio metadata", () => {
+  for (const patch of [
+    { container: "" }, { width: 0 }, { height: NaN }, { rotation: 45 },
+    { durationSeconds: undefined }, { bitrate: Infinity }, { frameRate: "30" },
+    ...["codec", "profile", "pixelFormat", "level", "bitrate"].map((key) => ({
+      video: { ...video.video, [key]: key === "codec" || key === "profile" || key === "pixelFormat" ? "" : NaN },
+    })),
+  ]) {
+    expect(() => parseMediaServerResponse(stored({ ...video, ...patch }), "media.localize"))
+      .toThrow("Invalid Zenith video metadata");
+  }
+  for (const audio of [
+    { ...video.audio, codec: "" }, { ...video.audio, bitrate: NaN },
+    { ...video.audio, channels: "2" }, { ...video.audio, sampleRate: undefined },
+  ]) {
+    expect(() => parseMediaServerResponse(stored({ ...video, audio }), "media.localize"))
+      .toThrow("Invalid Zenith audio metadata");
+  }
+  for (const patch of [{ video: null }, { video: [] }, { audio: undefined }, { audio: [] }]) {
+    expect(() => parseMediaServerResponse(stored({ ...video, ...patch }), "media.localize"))
+      .toThrow("Invalid Zenith result object");
+  }
+});
+
+test("parseMediaServerResponse requires task-specific media kinds and decisions", () => {
+  const cases: [MediaServerJob["task"], unknown, unknown][] = [
+    ["media.transform-image", image, undefined], ["media.transform-image", image, "encoded"],
+    ["media.transform-video", video, undefined], ["media.transform-video", video, "transformed"],
+    ["media.transform-image", video, "unchanged"], ["media.transform-video", image, "unchanged"],
+    ["media.transform-image", { kind: "document", contentType: "application/pdf" }, "unchanged"],
+  ];
+  for (const [task, media, decision] of cases) {
+    expect(() => parseMediaServerResponse({ ...stored(media), decision }, task))
+      .toThrow("Invalid Zenith transform decision");
+  }
+});
+
+test("sanitizeMediaServerLog recursively redacts URLs without mutating input", () => {
+  const value = {
+    message: 'GET HTTPS://source.example/file?signature=secret failed; redis://user:password@host:6379/7',
+    nested: [null, true, 42, undefined, { error: 'rediss://user:secret@host/0 "http://example.test/file"' }],
+  };
+  expect(sanitizeMediaServerLog(value)).toEqual({
+    message: "GET [redacted URL] failed; [redacted URL]",
+    nested: [null, true, 42, undefined, { error: '[redacted URL] "[redacted URL]"' }],
+  });
+  expect(value.message).toContain("signature=secret");
+  expect(value.nested[4]).toEqual({ error: 'rediss://user:secret@host/0 "http://example.test/file"' });
+});
+
+test("sanitizeMediaServerLog bounds each string after redaction and preserves plain values", () => {
+  expect(sanitizeMediaServerLog("https://secret.example/" + "x".repeat(5000))).toBe("[redacted URL]");
+  expect(sanitizeMediaServerLog(["a".repeat(5000), { text: "b".repeat(5000) }]))
+    .toEqual(["a".repeat(4000), { text: "b".repeat(4000) }]);
+  for (const value of [undefined, null, false, 0, "plain text"]) {
+    expect(sanitizeMediaServerLog(value)).toBe(value);
+  }
+});
+
+// Module mocks live only in subprocesses, so other suites keep their own mocks.
 const harness = String.raw`
 import { expect, mock } from "bun:test";
 const scenario = process.env.MEDIA_SERVER_SCENARIO;
-const redisUrl = "redis://fake-user:fake-redis-password@127.0.0.1:1/7";
-const source = "https://source.example/media?signature=fake-signed-url-secret";
-process.env.MEDIA_SERVER_REDIS_URL = redisUrl;
-const logs = [];
-mock.module("@trigger.dev/sdk", () => ({ logger: {
-  info: (...args) => logs.push(["info", ...args]),
-  warn: (...args) => logs.push(["warn", ...args]),
-} }));
-const connections = [], queues = [], adds = [], events = [];
-const timers = new Map();
-const cleared = [];
-let nextTimer = 0, clock = 0;
-const virtual = scenario.startsWith("timeout-");
-if (virtual) {
-  globalThis.setTimeout = (callback, delay) => {
-    const id = ++nextTimer;
-    timers.set(id, { callback, delay, at: clock + delay });
-    return id;
-  };
-  globalThis.clearTimeout = (id) => { cleared.push(id); timers.delete(id); };
-}
-let resolveConnect, resolveAdd;
-const connectGate = new Promise((resolve) => { resolveConnect = resolve; });
+const connections = [], queues = [], adds = [], lookups = [], events = [];
+const failure = new Error("Redis operation failed");
+const redisUrl = "redis://user:password@127.0.0.1:1/7";
+const forbidden = mock(() => { throw new Error("Unexpected long-lived Redis operation"); });
+let resolveAdd;
 const addGate = new Promise((resolve) => { resolveAdd = resolve; });
-const failure = new Error("Redis " + redisUrl + " source " + source);
-failure.name = "TestEnqueueError";
-const forbidden = mock(() => { throw new Error("Must not inspect job completion"); });
 mock.module("ioredis", () => ({ Redis: class {
   constructor(url, options) {
     this.url = url; this.options = options;
     this.on = mock(() => this);
-    this.disconnect = mock(() => { events.push("disconnect"); });
+    this.disconnect = mock(() => events.push("disconnect"));
     this.quit = forbidden;
     connections.push(this);
   }
   async connect() {
     events.push("connect");
-    if (scenario === "connect-rejection") throw failure;
-    if (scenario === "non-error-rejection") throw source;
-    if (scenario === "timeout-connect" || scenario === "timeout-overall") await connectGate;
+    if (scenario === "connect-error") throw failure;
   }
 } }));
+let state = "waiting", reads = 0;
+const fresh = { returnvalue: { fileId: "finished-file" }, failedReason: "worker failed",
+  timestamp: 100, processedOn: 200, finishedOn: 300, attemptsMade: 5 };
+const stale = { returnvalue: null, attemptsMade: 0,
+  getState: mock(async () => { events.push("state"); return state; }) };
 mock.module("bullmq", () => ({
-  QueueEvents: forbidden,
-  Worker: forbidden,
+  QueueEvents: forbidden, Worker: forbidden,
   Queue: class {
     constructor(name, options) {
       this.name = name; this.options = options;
       this.on = mock(() => this);
       this.close = mock(async () => {
         events.push("close");
-        // Cleanup rejection must not turn a shadow failure into a task failure.
-        if (scenario === "add-rejection") throw failure;
+        if (scenario === "add-error") throw new Error("Cleanup failed");
       });
-      this.getJob = forbidden;
-      this.getJobState = forbidden;
-      this.getJobs = forbidden;
       this.waitUntilReady = forbidden;
       queues.push(this);
     }
     async add(...args) {
       adds.push(args); events.push("add");
-      if (scenario === "add-rejection") throw failure;
-      if (scenario === "acknowledgement" || scenario === "timeout-add" || scenario === "timeout-overall") await addGate;
+      if (scenario === "add-error") throw failure;
+      if (scenario === "acknowledgement") await addGate;
       events.push("acknowledged");
-      return { waitUntilFinished: forbidden, getState: forbidden, returnvalue: undefined };
+      return { waitUntilFinished: forbidden };
+    }
+    async getJob(id) {
+      lookups.push(id); events.push("getJob"); reads++;
+      if (scenario === "inspect-error") throw failure;
+      if (scenario === "missing" || (scenario === "vanished" && reads === 2)) return undefined;
+      return reads === 1 ? stale : fresh;
     }
   },
 }));
-const { enqueueMediaServerJob } = await import("./media-server.ts");
-const origin = "process-post-medium";
-const localize = { task: "media.localize", url: source };
+const { createMediaServerTransport, mediaServerLanes } = await import("./media-server.ts");
+const transport = createMediaServerTransport(redisUrl);
+const handle = { jobId: "job-123", queue: "custom-queue", requestId: "request-456", path: "shadow/custom/result" };
+const localize = { task: "media.localize", url: "https://source.example/signed?token=secret" };
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
-const warnings = () => logs.filter(([level]) => level === "warn");
-const successes = () => logs.filter(([, message]) => message === "Media server shadow job enqueued");
-
-if (scenario === "disabled") {
-  for (const value of [undefined, ""]) {
-    if (value === undefined) delete process.env.MEDIA_SERVER_REDIS_URL;
-    else process.env.MEDIA_SERVER_REDIS_URL = value;
-    expect(await enqueueMediaServerJob(origin, localize)).toBeUndefined();
-  }
-  expect(connections).toHaveLength(0);
-  expect(queues).toHaveLength(0);
-  expect(logs).toHaveLength(0);
-} else if (scenario === "routing") {
-  const image = { type: "image", format: "jpeg", quality: 80, autoOrient: true,
-    resize: { width: 1080, height: 1920, fit: "cover", withoutEnlargement: false } };
-  const video = { type: "video", container: "mp4", faststart: true,
-    video: { codec: "h264", preset: "ultrafast", profile: "high", level: "4.0", pixelFormat: "yuv420p",
-      crf: 23, bitrate: 2000000, maxrate: 3000000, bufsize: 6000000, scale: { width: 1080, height: 1920 }, fps: 30 },
-    audio: { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 } };
-  const cases = [
-    [origin, localize, "ingest", "media-localize", ""],
-    ["transform-instagram-image", { task: "media.transform-image", source, output: image, maxBytes: 10000000 }, "images", "media-transform-image", ".jpg"],
-    ["transform-buffered-image", { task: "media.transform-image", source, output: { type: "image", format: "png" } }, "images", "media-transform-image", ".png"],
-    ["transform-tiktok-image", { task: "media.transform-image", source, output: { ...image, format: "webp" } }, "images", "media-transform-image", ".webp"],
-    ["ffmpeg-process-video", { task: "media.transform-video", source, output: video, maxBytes: 50000000 }, "videos", "media-transform-video", ".mp4"],
-    ["ffmpeg-process-video", { task: "media.transform-video", source, output: { ...video, audio: null } }, "videos", "media-transform-video", ".mp4"],
+if (scenario === "routing") {
+  expect(mediaServerLanes).toEqual({ "media.localize": "ingest", "media.transform-image": "images", "media.transform-video": "videos" });
+  const source = { fileId: "source-file", versionId: "source-version" };
+  const jobs = [localize,
+    { task: "media.transform-image", source, output: { type: "image", format: "jpeg", quality: 80,
+      autoOrient: true, resize: { width: 1080, height: 1920, fit: "cover", withoutEnlargement: false } } },
+    { task: "media.transform-video", source, output: { type: "video", container: "mp4", faststart: true,
+      video: { codec: "h264", preset: "fast", crf: 23, scale: { width: 1080, height: 1920 }, fps: 30 },
+      audio: { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 } } },
   ];
-  for (const [taskOrigin, job, lane, prefix, extension] of cases) {
-    const beforeDate = new Date().toISOString().slice(0, 10);
-    expect(await enqueueMediaServerJob(taskOrigin, job)).toBeUndefined();
-    const afterDate = new Date().toISOString().slice(0, 10);
-    const [name, payload, options] = adds.at(-1);
-    expect(name).toBe(job.task);
-    expect(payload.requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    expect([beforeDate, afterDate]).toContain(payload.path.split("/")[1]);
-    expect(payload.path).toBe("shadow/" + payload.path.split("/")[1] + "/" + taskOrigin + "/" + payload.requestId + extension);
+  for (const job of jobs) {
+    const laneHandle = { ...handle, queue: mediaServerLanes[job.task] };
+    expect(await transport.enqueue(laneHandle, job)).toBeUndefined();
     const { task, ...input } = job;
-    expect(payload).toEqual({ ...input, requestId: payload.requestId, path: payload.path });
-    expect(options).toEqual({ jobId: prefix + "/" + payload.requestId, attempts: 5,
-      backoff: { type: "exponential", delay: 1000 }, removeOnComplete: { count: 1000 }, removeOnFail: { count: 5000 } });
-    expect(queues.at(-1).name).toBe(lane);
-    expect(queues.at(-1).options).toEqual({ connection: connections.at(-1), prefix: "bull" });
-    const context = { origin: taskOrigin, task, queue: lane, jobId: options.jobId, requestId: payload.requestId, path: payload.path };
-    expect(logs.slice(-2)).toEqual([
-      ["info", "Calling media server shadow job", context],
-      ["info", "Media server shadow job enqueued", context],
-    ]);
+    expect(adds.at(-1)).toEqual([task, { ...input, requestId: handle.requestId, path: handle.path }, {
+      jobId: handle.jobId, attempts: 5, backoff: { type: "exponential", delay: 1000 },
+      removeOnComplete: { age: 10800 }, removeOnFail: { age: 10800 },
+    }]);
+    expect(queues.at(-1).name).toBe(laneHandle.queue);
   }
-  // Retries of the exact same input must not deduplicate shadow samples.
-  await Promise.all(Array.from({ length: 8 }, () => enqueueMediaServerJob(origin, localize)));
-  for (const values of [adds.map(([, p]) => p.requestId), adds.map(([, p]) => p.path), adds.map(([, , o]) => o.jobId)]) {
-    expect(new Set(values).size).toBe(adds.length);
-  }
-  expect(warnings()).toHaveLength(0);
+  expect(connections).toHaveLength(jobs.length);
+  expect(new Set(connections).size).toBe(jobs.length);
 } else if (scenario === "acknowledgement") {
   let settled = false;
-  const pending = enqueueMediaServerJob(origin, localize).then(() => { settled = true; });
+  const pending = transport.enqueue(handle, localize).then(() => { settled = true; });
   await flush();
   expect(adds).toHaveLength(1);
   expect(settled).toBe(false);
-  expect(successes()).toHaveLength(0);
   expect(connections[0].disconnect).not.toHaveBeenCalled();
   resolveAdd();
   await pending;
-  expect(successes()).toHaveLength(1);
   expect(events).toEqual(["connect", "add", "acknowledged", "disconnect", "close"]);
-} else {
-  const pending = enqueueMediaServerJob(origin, localize);
-  await flush();
-  if (virtual) {
-    expect(timers.size).toBe(1);
-    const [id, timer] = [...timers][0];
-    expect(timer.delay).toBe(2500);
-    expect(successes()).toHaveLength(0);
-    if (scenario === "timeout-overall") {
-      clock = 2000;
-      resolveConnect();
-      await flush();
-      expect(adds).toHaveLength(1);
-      expect([...timers.keys()]).toEqual([id]);
-      expect(timer.at - clock).toBe(500);
-    }
-    clock = 2500;
-    timer.callback();
-    await expect(pending).resolves.toBeUndefined();
-    expect(cleared).toEqual([id]);
-    expect(timers.size).toBe(0);
-    expect(warnings()[0][2].errorType).toBe("Error");
-  } else {
-    await expect(pending).resolves.toBeUndefined();
-    expect(warnings()[0][2].errorType).toBe(scenario === "non-error-rejection" ? "UnknownError" : "TestEnqueueError");
+} else if (["connect-error", "add-error", "inspect-error"].includes(scenario)) {
+  for (const operation of scenario === "connect-error" ? ["enqueue", "inspect"] : [scenario === "add-error" ? "enqueue" : "inspect"]) {
+    await expect(operation === "enqueue" ? transport.enqueue(handle, localize) : transport.inspect(handle)).rejects.toBe(failure);
   }
-  expect(successes()).toHaveLength(0);
-  expect(warnings()).toHaveLength(1);
-  expect(warnings()[0][1]).toBe("Media server shadow enqueue failed; continuing existing processing");
-  expect(adds).toHaveLength(scenario === "add-rejection" || scenario === "timeout-add" || scenario === "timeout-overall" ? 1 : 0);
+  if (scenario === "connect-error") expect(queues).toHaveLength(0);
+} else {
+  const states = scenario === "retryable" ? ["waiting", "active", "delayed", "prioritized", "waiting-children", "unknown"]
+    : [scenario === "vanished" ? "completed" : scenario];
+  for (state of states) {
+    reads = 0;
+    const snapshot = await transport.inspect(handle);
+    if (scenario === "missing" || scenario === "vanished") {
+      expect(snapshot).toEqual({ state: "missing" });
+    } else if (state === "completed" || state === "failed") {
+      expect(snapshot).toEqual({ state, response: fresh.returnvalue, failedReason: fresh.failedReason,
+        timestamp: 100, processedOn: 200, finishedOn: 300, attemptsMade: 5 });
+    } else {
+      expect(snapshot).toEqual({ state, response: null, failedReason: undefined,
+        timestamp: undefined, processedOn: undefined, finishedOn: undefined, attemptsMade: 0 });
+    }
+    expect(reads).toBe(state === "completed" || state === "failed" ? 2 : 1);
+    expect(queues.at(-1).name).toBe(handle.queue);
+  }
+  expect(lookups.every((id) => id === handle.jobId)).toBe(true);
+  expect(adds).toHaveLength(0);
+  if (scenario !== "missing") expect(stale.getState).toHaveBeenCalledTimes(states.length);
+  else expect(stale.getState).not.toHaveBeenCalled();
+  if (scenario === "completed" || scenario === "failed" || scenario === "vanished") {
+    expect(events).toEqual(["connect", "getJob", "state", "getJob", "disconnect", "close"]);
+  }
+  expect(connections).toHaveLength(states.length);
+  expect(new Set(connections).size).toBe(states.length);
 }
 await flush();
 for (const connection of connections) {
@@ -185,23 +280,19 @@ for (const connection of connections) {
   expect(connection.on).toHaveBeenCalledWith("error", expect.any(Function));
   expect(connection.disconnect).toHaveBeenCalledTimes(1);
 }
-for (const queue of queues) {
-  expect(queue.on).toHaveBeenCalledWith("error", expect.any(Function));
-  expect(queue.close).toHaveBeenCalledTimes(1);
+for (let i = 0; i < queues.length; i++) {
+  expect(queues[i].options).toEqual({ connection: connections[i], prefix: "bull" });
+  expect(queues[i].on).toHaveBeenCalledWith("error", expect.any(Function));
+  expect(queues[i].close).toHaveBeenCalledTimes(1);
 }
 expect(forbidden).not.toHaveBeenCalled();
-const serialized = JSON.stringify(logs);
-for (const secret of [redisUrl, "fake-user", "fake-redis-password", source, "fake-signed-url-secret"]) {
-  expect(serialized).not.toContain(secret);
-}
 `;
 
 const networkHarness = String.raw`
 import { expect, mock } from "bun:test";
 import { createServer } from "node:net";
 import { Redis as RealRedis } from "ioredis";
-const scenario = process.env.MEDIA_SERVER_SCENARIO;
-const sockets = new Set();
+const sockets = new Set(), connections = [];
 let accepted = 0;
 const server = createServer((socket) => {
   accepted++;
@@ -212,61 +303,48 @@ const server = createServer((socket) => {
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const port = server.address().port;
-if (scenario === "network-refusal") await new Promise((resolve) => server.close(resolve));
-process.env.MEDIA_SERVER_REDIS_URL = "redis://fake-user:fake-redis-password@127.0.0.1:" + port + "/7";
-const connections = [], logs = [];
-mock.module("@trigger.dev/sdk", () => ({ logger: {
-  info: (...args) => logs.push(["info", ...args]), warn: (...args) => logs.push(["warn", ...args]),
-} }));
 mock.module("ioredis", () => ({ Redis: class extends RealRedis {
   constructor(...args) { super(...args); connections.push(this); }
 } }));
 try {
-  const { enqueueMediaServerJob } = await import("./media-server.ts");
+  const { createMediaServerTransport } = await import("./media-server.ts");
+  const transport = createMediaServerTransport("redis://127.0.0.1:" + port + "/7");
+  const handle = { jobId: "job", queue: "ingest", requestId: "request", path: "shadow/result" };
   const start = performance.now();
-  await expect(enqueueMediaServerJob("process-post-medium", {
-    task: "media.localize", url: "https://source.example/file?signature=fake-signed-url-secret",
-  })).resolves.toBeUndefined();
+  const pending = process.env.MEDIA_SERVER_SCENARIO === "blackhole-enqueue"
+    ? transport.enqueue(handle, { task: "media.localize", url: "https://source.example/file" })
+    : transport.inspect(handle);
+  // Either the operation deadline or ioredis's command deadline may win the race.
+  await expect(pending).rejects.toThrow(/timed out/i);
   const elapsed = performance.now() - start;
+  expect(elapsed).toBeGreaterThanOrEqual(2400);
   expect(elapsed).toBeLessThan(3500);
-  if (scenario === "network-blackhole") {
-    expect(accepted).toBe(1);
-    expect(elapsed).toBeGreaterThanOrEqual(2400);
-  }
-  expect(logs.filter(([level]) => level === "warn")).toHaveLength(1);
-  expect(logs.some(([, message]) => message === "Media server shadow job enqueued")).toBe(false);
-  // Give ioredis's socket-close handler time to run; there must be no reconnect.
+  expect(accepted).toBe(1);
   await Bun.sleep(100);
   expect(connections).toHaveLength(1);
   expect(connections[0].status).toBe("end");
   expect(sockets.size).toBe(0);
-  for (const secret of ["fake-user", "fake-redis-password", "fake-signed-url-secret"]) {
-    expect(JSON.stringify(logs)).not.toContain(secret);
-  }
 } finally {
   for (const connection of connections) connection.disconnect();
   for (const socket of sockets) socket.destroy();
-  if (server.listening) await new Promise((resolve) => server.close(resolve));
+  await new Promise((resolve) => server.close(resolve));
 }
 `;
 
 for (const scenario of [
-  "disabled", "routing", "acknowledgement", "connect-rejection", "add-rejection",
-  "non-error-rejection", "timeout-connect", "timeout-add", "timeout-overall",
-  "network-refusal", "network-blackhole",
+  "routing", "acknowledgement", "completed", "failed", "missing", "vanished", "retryable",
+  "connect-error", "add-error", "inspect-error", "blackhole-enqueue", "blackhole-inspect",
 ]) {
-  test(`media server: ${scenario}`, async () => {
-    const child = Bun.spawn([process.execPath, "--eval", scenario.startsWith("network-") ? networkHarness : harness], {
+  test(`media server transport: ${scenario}`, async () => {
+    const child = Bun.spawn([process.execPath, "--eval", scenario.startsWith("blackhole-") ? networkHarness : harness], {
       cwd: __dirname,
-      env: { ...process.env, MEDIA_SERVER_REDIS_URL: "redis://fake-user:fake-redis-password@127.0.0.1:1/7", MEDIA_SERVER_SCENARIO: scenario },
+      env: { ...process.env, MEDIA_SERVER_SCENARIO: scenario },
       stdout: "pipe",
       stderr: "pipe",
     });
     try {
       const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
+        new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
       ]);
       expect({ exitCode, stdout, stderr }).toEqual({ exitCode: 0, stdout: "", stderr: "" });
     } finally {
