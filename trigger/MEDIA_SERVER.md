@@ -53,6 +53,11 @@ context, job ID, queue, path, and request ID. URLs are redacted in requests,
 responses, and worker failure reasons. Transport exceptions are not logged
 verbatim because they may expose Redis credentials. Logs include:
 
+- Timeline labels name the Zenith task, destination platform, and stage, for
+  example `media.transform-image [instagram/image-q100]`. Request details include
+  `redisJob: { name, data, options }`, built by the same function used for
+  `queue.add(name, data, options)`, including the full transform recipe and stored
+  source IDs. Source URLs remain redacted.
 - Client elapsed time from submission through observation.
 - Zenith enqueue-to-terminal time, including retries and queue delays.
 - Latest-attempt duration and attempts made; this is not cumulative compute

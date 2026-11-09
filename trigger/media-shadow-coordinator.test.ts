@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { coordinateShadowMedia, SHADOW_OBSERVATION_MS, type ShadowPost } from "./media-shadow-coordinator";
-import type { MediaServerHandle, MediaServerJob, MediaServerSnapshot } from "./media-server";
+import { mediaServerSubmission, sanitizeMediaServerLog, type MediaServerHandle, type MediaServerJob, type MediaServerSnapshot } from "./media-server";
 import type { MediaInfo, StoredMedia } from "./media-shadow-recipes";
 
 const image = {
@@ -417,11 +417,25 @@ describe("shadow observation and safety", () => {
   test("logs redact requests and responses while retaining all stored artifacts without deletion", async () => {
     const h = harness();
     const summary = await h.run();
-    const requests = h.logs.filter((log) => log.message === "Zenith shadow job request");
-    const responses = h.logs.filter((log) => log.message === "Zenith shadow job terminal response");
+    const requests = h.logs.filter((log) => log.message.startsWith("Zenith shadow job request:"));
+    const responses = h.logs.filter((log) => log.message.startsWith("Zenith shadow job terminal response:"));
     expect(requests).toHaveLength(2);
     expect(responses).toHaveLength(2);
-    expect(requests[0].data.request).toMatchObject({ url: "[redacted URL]" });
+    expect(requests.map((log) => log.message)).toEqual([
+      "Zenith shadow job request: media.localize [localize]",
+      "Zenith shadow job request: media.transform-image [instagram/image-q100]",
+    ]);
+    for (const [index, entry] of h.entries.entries()) {
+      expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job)));
+      expect(requests[index].data.task).toBe(entry.job.task);
+    }
+    expect(requests[0].data.redisJob).toMatchObject({
+      name: "media.localize", data: { url: "[redacted URL]" }, options: { attempts: 5 },
+    });
+    expect(requests[1].data.redisJob).toMatchObject({
+      name: "media.transform-image",
+      data: { source: sourceOf(h.entries[0]), output: { type: "image", format: "jpeg", quality: 100 } },
+    });
     expect(responses[0].data.response).toMatchObject({ url: "[redacted URL]" });
     expect(responses[0].data).toMatchObject({ enqueueToTerminalMs: 40, latestAttemptMs: 30, attemptsMade: 1 });
     const serialized = JSON.stringify(h.logs);

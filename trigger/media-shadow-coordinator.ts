@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { selectPostMedia } from "./posting/media-selection";
 import {
-  mediaServerLanes, parseMediaServerResponse, sanitizeMediaServerLog,
+  mediaServerLanes, mediaServerSubmission, parseMediaServerResponse, sanitizeMediaServerLog,
   type MediaServerHandle, type MediaServerJob, type MediaServerTransport,
 } from "./media-server";
 import {
@@ -36,6 +36,7 @@ export type ShadowPost = {
 };
 
 type JobRecord = MediaServerHandle & {
+  task: MediaServerJob["task"];
   stage: string;
   mediumId: string;
   accountId?: string;
@@ -87,11 +88,15 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
       jobId: `${job.task.replace(".", "-")}/${requestId}`,
       requestId, queue: mediaServerLanes[job.task],
       path: `shadow/${runId}/${requestId}`,
+      task: job.task,
       stage, mediumId, accountId: destination?.id, platform: destination?.provider,
       status: "incomplete", lastState: "enqueueing", startedAt: deps.now(),
     };
     jobs.push(record);
-    log("info", "Zenith shadow job request", { ...record, request: { ...job, requestId, path: record.path } });
+    const label = `${job.task} [${destination ? `${destination.provider}/` : ""}${stage}]`;
+    log("info", `Zenith shadow job request: ${label}`, {
+      ...record, redisJob: mediaServerSubmission(record, job),
+    });
     let acknowledged = false;
     async function enqueue() {
       await redisOperation(async () => {
@@ -100,7 +105,7 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
       });
       acknowledged = true;
       record.lastState = "enqueued";
-      log("info", "Zenith shadow job enqueued", { ...record });
+      log("info", `Zenith shadow job enqueued: ${label}`, { ...record });
     }
     try {
       await enqueue();
@@ -129,7 +134,7 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
               ? snapshot.finishedOn - snapshot.processedOn : undefined,
             attemptsMade: snapshot.attemptsMade,
           };
-          log(snapshot.state === "completed" ? "info" : "error", "Zenith shadow job terminal response", {
+          log(snapshot.state === "completed" ? "info" : "error", `Zenith shadow job terminal response: ${label}`, {
             ...record, ...timing, response: snapshot.response, failedReason: snapshot.failedReason,
           });
           if (snapshot.state === "failed") {

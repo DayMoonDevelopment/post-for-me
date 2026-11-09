@@ -78,6 +78,22 @@ export interface MediaServerTransport {
 
 const OPERATION_TIMEOUT_MS = 2500;
 
+export function mediaServerSubmission(handle: MediaServerHandle, job: MediaServerJob) {
+  const { task, ...input } = job;
+  return {
+    name: task,
+    data: { ...input, requestId: handle.requestId, path: handle.path },
+    options: {
+      jobId: handle.jobId,
+      attempts: 5,
+      backoff: { type: "exponential", delay: 1000 },
+      // Keep observed results long enough for the two-hour coordinator even under load.
+      removeOnComplete: { age: 3 * 60 * 60 },
+      removeOnFail: { age: 3 * 60 * 60 },
+    },
+  };
+}
+
 async function withQueue<T>(redisUrl: string, name: string, operation: (queue: Queue) => Promise<T>): Promise<T> {
   const connection = new Redis(redisUrl, {
     lazyConnect: true,
@@ -113,15 +129,8 @@ export function createMediaServerTransport(redisUrl: string): MediaServerTranspo
   return {
     async enqueue(handle, job) {
       await withQueue(redisUrl, handle.queue, async (queue) => {
-        const { task, ...input } = job;
-        await queue.add(task, { ...input, requestId: handle.requestId, path: handle.path }, {
-          jobId: handle.jobId,
-          attempts: 5,
-          backoff: { type: "exponential", delay: 1000 },
-          // Keep observed results long enough for the two-hour coordinator even under load.
-          removeOnComplete: { age: 3 * 60 * 60 },
-          removeOnFail: { age: 3 * 60 * 60 },
-        });
+        const { name, data, options } = mediaServerSubmission(handle, job);
+        await queue.add(name, data, options);
       });
     },
     async inspect(handle) {
