@@ -1,4 +1,5 @@
-import { AbortTaskRunError, logger, task, tags, wait } from "@trigger.dev/sdk";
+import { setTimeout } from "node:timers/promises";
+import { AbortTaskRunError, logger, task, tags } from "@trigger.dev/sdk";
 import { coordinateShadowMedia, SHADOW_MAX_DURATION_SECONDS, type ShadowPost } from "./media-shadow-coordinator";
 import { createMediaServerTransport } from "./media-server";
 
@@ -14,7 +15,8 @@ export const mediaShadow = task({
     const summary = await coordinateShadowMedia(payload, ctx.run.id, {
       transport: createMediaServerTransport(redisUrl),
       now: Date.now,
-      sleep: (seconds) => wait.for({ seconds }),
+      // Independent polling branches cannot use Trigger's non-concurrent durable waits.
+      sleep: (seconds) => setTimeout(seconds * 1000),
       log: (level, message, data) => logger[level](message, data),
     });
     if (summary.status !== "completed") throw new AbortTaskRunError(`Shadow media processing ${summary.status}; see final job summary`);
