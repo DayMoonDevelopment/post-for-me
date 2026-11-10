@@ -8,7 +8,7 @@ import {
   blueskyVideoOutput, genericVideoOutput, platformImageRecipe, type StoredMedia,
 } from "./media-shadow-recipes";
 
-export const SHADOW_MAX_DURATION_SECONDS = 7200;
+export const SHADOW_MAX_DURATION_SECONDS = 480;
 // Reserve time for bounded Redis operations and final logs before Trigger's hard cutoff.
 export const SHADOW_OBSERVATION_MS = (SHADOW_MAX_DURATION_SECONDS - 30) * 1000;
 

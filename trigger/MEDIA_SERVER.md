@@ -41,8 +41,8 @@ only catalogue fields; post/stage/account context stays in Trigger logs.
 
 ## Timing And Timeouts
 
-The task has `maxDuration: 7200` and no automatic Trigger retries. A separate
-wall-clock observation deadline expires after 7,170 seconds, reserving 30
+The task has `maxDuration: 480` and no automatic Trigger retries. A separate
+wall-clock observation deadline expires after 450 seconds, reserving 30
 seconds for bounded Redis operations and final logs before the hard cutoff.
 Each Redis operation has a 2.5-second deadline. At most five Redis operations
 run concurrently; observing one slow job does not block independent submissions.
