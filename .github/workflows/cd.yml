@@ -143,7 +143,7 @@ jobs:
 
       - name: Install Unkey CLI
         run: |
-          curl -sL https://github.com/unkeyed/unkey/releases/download/cli%2Fv2.0.147/unkey_Linux_x86_64.tar.gz | tar xz
+          curl -sL https://github.com/unkeyed/cli/releases/download/cli%2Fv2.0.157/unkey_Linux_x86_64.tar.gz | tar xz
           ./unkey --version
 
       - name: Deploy API to Unkey
@@ -222,7 +222,7 @@ jobs:
 
       - name: Install Unkey CLI
         run: |
-          curl -sL https://github.com/unkeyed/unkey/releases/download/cli%2Fv2.0.147/unkey_Linux_x86_64.tar.gz | tar xz
+          curl -sL https://github.com/unkeyed/cli/releases/download/cli%2Fv2.0.147/unkey_Linux_x86_64.tar.gz | tar xz
           ./unkey --version
 
       - name: Deploy Dashboard to Unkey
@@ -280,7 +280,7 @@ jobs:
 
       - name: Install Unkey CLI
         run: |
-          curl -sL https://github.com/unkeyed/unkey/releases/download/cli%2Fv2.0.147/unkey_Linux_x86_64.tar.gz | tar xz
+          curl -sL https://github.com/unkeyed/cli/releases/download/cli%2Fv2.0.157/unkey_Linux_x86_64.tar.gz | tar xz
           ./unkey --version
 
       - name: Deploy Marketing to Unkey
