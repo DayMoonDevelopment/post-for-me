@@ -19,8 +19,6 @@ const logger = { info() {}, error() {}, warn() {} };
 mock.module("@trigger.dev/sdk", () => ({ logger, task: (definition) => definition }));
 mock.module("@trigger.dev/sdk/v3", () => ({ logger, task: (definition) => definition }));
 mock.module("os", () => ({ default: { tmpdir: () => tempDir } }));
-const enqueueMediaServerJob = mock(async () => {});
-mock.module("./media-server", () => ({ enqueueMediaServerJob }));
 
 const download = mock(async (source) => {
   expect(source).toBe(url);
@@ -127,42 +125,25 @@ try {
     expect(encoding).toContain("-movflags +faststart");
     if (scenario !== "audio" && scenario !== "skip-audio") expect(encoding).toContain("-an");
   }
-  const hasShadow = kind === "process" && !["http-error", "download-error"].includes(scenario);
-  expect(enqueueMediaServerJob).toHaveBeenCalledTimes(hasShadow ? 1 : 0);
-  if (hasShadow) {
+  if (kind === "process" && !noEncoding) {
     const rotated = scenario.startsWith("rotated-");
     const odd = scenario === "odd-dimensions" || scenario === "skip-odd";
     const fps = ["low-fps", "high-fps", "frame-count"].includes(scenario) ? 24 : 30;
     const scale = rotated ? { width: 1080, height: 1920 }
       : scenario === "scaled" ? { width: 1920, height: 1080 }
-      : odd ? { width: 1278, height: 718 } : { width: 1280, height: 720 };
+      : odd ? { width: 1279, height: 719 } : { width: 1280, height: 720 };
     const large = scenario.startsWith("large-file");
     const mbps = scenario === "large-file-duration" ? 3.914683 : 15;
-    const rate = large ? { crf: undefined, bitrate: Math.round(mbps * 1000000), maxrate: Math.round(mbps * 1.1 * 1000000), bufsize: Math.round(mbps * 2 * 1000000) }
-      : scenario === "high-bitrate" ? { crf: undefined, bitrate: 24000000, maxrate: 25000000, bufsize: 50000000 }
-      : { crf: 23, maxrate: 25000000, bufsize: 50000000 };
-    const audio = scenario === "audio" || scenario === "skip-audio"
-      ? { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 } : null;
-    expect(enqueueMediaServerJob.mock.calls[0]).toEqual(["ffmpeg-process-video", {
-      task: "media.transform-video", source: url,
-      output: {
-        type: "video", container: "mp4", faststart: true,
-        video: { codec: "h264", preset: large ? "superfast" : "ultrafast", profile: "high", level: "4.0", pixelFormat: "yuv420p", ...rate, fps, scale },
-        audio,
-      },
-    }]);
-    if (!noEncoding) {
-      const liveScale = odd ? { width: 1279, height: 719 } : scale;
-      expect(options[0]).toEqual([
-        "-c:v libx264", "-preset " + (large ? "superfast" : "ultrafast"),
-        ...(large ? ["-b:v " + mbps + "M", "-maxrate " + mbps * 1.1 + "M", "-bufsize " + mbps * 2 + "M"]
-          : scenario === "high-bitrate" ? ["-b:v 24M", "-maxrate 25M", "-bufsize 50M"]
-          : ["-crf 23", "-maxrate 25M", "-bufsize 50M"]),
-        "-profile:v high", "-level 4.0", "-pix_fmt yuv420p", "-movflags +faststart", "-r " + fps,
-        "-vf scale=" + liveScale.width + ":" + liveScale.height + ",fps=" + fps,
-        ...(audio ? ["-c:a aac", "-b:a 128k", "-ac 2", "-ar 48000"] : ["-an"]),
-      ]);
-    }
+    const hasAudio = scenario === "audio";
+    expect(options[0]).toEqual([
+      "-c:v libx264", "-preset " + (large ? "superfast" : "ultrafast"),
+      ...(large ? ["-b:v " + mbps + "M", "-maxrate " + mbps * 1.1 + "M", "-bufsize " + mbps * 2 + "M"]
+        : scenario === "high-bitrate" ? ["-b:v 24M", "-maxrate 25M", "-bufsize 50M"]
+        : ["-crf 23", "-maxrate 25M", "-bufsize 50M"]),
+      "-profile:v high", "-level 4.0", "-pix_fmt yuv420p", "-movflags +faststart", "-r " + fps,
+      "-vf scale=" + scale.width + ":" + scale.height + ",fps=" + fps,
+      ...(hasAudio ? ["-c:a aac", "-b:a 128k", "-ac 2", "-ar 48000"] : ["-an"]),
+    ]);
   }
   if (scenario === "final-attempt") {
     expect(options.map((encoding) => encoding[2])).toEqual(["fast", "medium", "slow"]);
@@ -200,7 +181,7 @@ for (const kind of ["process", "compress"]) {
     test(`${kind}: ${scenario} (${url})`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {
         cwd: __dirname,
-        env: { ...process.env, MEDIA_SERVER_REDIS_URL: "redis://127.0.0.1:1", VIDEO_TASK: kind, VIDEO_SCENARIO: scenario, VIDEO_URL: url },
+        env: { ...process.env, VIDEO_TASK: kind, VIDEO_SCENARIO: scenario, VIDEO_URL: url },
         stdout: "pipe",
         stderr: "pipe",
       });

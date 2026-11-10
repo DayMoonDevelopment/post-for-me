@@ -3,7 +3,6 @@ import { randomUUID } from "crypto";
 import axios from "axios";
 import sharp from "sharp";
 import { uploadMedia } from "./media-storage";
-import { enqueueMediaServerJob } from "./media-server";
 import {
   compressJpegToLimit,
   computeCropDimensions,
@@ -87,21 +86,7 @@ export const transformInstagramImage = task({
       .toBuffer();
 
     // Ensure size is within Instagram limits
-    let shadowQuality = 100;
-    processedImage = await compressJpegToLimit(processedImage, limits.maxFileSize, (quality) => { shadowQuality = quality; });
-
-    await enqueueMediaServerJob("transform-instagram-image", {
-      task: "media.transform-image",
-      source: signedUrl,
-      output: {
-        type: "image",
-        format: "jpeg",
-        quality: shadowQuality,
-        autoOrient: true,
-        resize: { width: targetWidth, height: targetHeight, fit: "cover", withoutEnlargement: false },
-      },
-      maxBytes: limits.maxFileSize,
-    });
+    processedImage = await compressJpegToLimit(processedImage, limits.maxFileSize);
 
     const publicUrl = await uploadMedia({
       key: `instagram_${randomUUID()}.jpg`,

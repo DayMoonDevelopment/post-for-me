@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-// Each subprocess owns its SDK/storage/shadow mocks, leaving other suites untouched.
+// Each subprocess owns its SDK/storage mocks, leaving other suites untouched.
 const harness = String.raw`
 import { expect, mock } from "bun:test";
 import { randomFillSync } from "node:crypto";
@@ -9,11 +9,7 @@ const { IMAGE_KIND: kind, IMAGE_SCENARIO: scenario } = process.env;
 mock.module("@trigger.dev/sdk", () => ({ task: (definition) => definition }));
 const source = "https://source.example/image?token=signed";
 let uploaded;
-let acknowledged = false;
-const enqueue = mock(async () => { await Promise.resolve(); acknowledged = true; });
-mock.module("./media-server", () => ({ enqueueMediaServerJob: enqueue }));
 mock.module("./media-storage", () => ({ uploadMedia: async (options) => {
-  expect(acknowledged).toBe(true);
   uploaded = options;
   return "https://media.example/artifact";
 } }));
@@ -35,7 +31,7 @@ const download = mock(async () => ({ blob: async () => new Blob([input], { type:
 globalThis.fetch = download;
 const axios = mock(async (options) => { expect(options.url).toBe(source); return { data: input }; });
 mock.module("axios", () => ({ default: axios }));
-let expected, expectedResult, expectedMime = "image/jpeg", expectedOutput, maxBytes;
+let expected, expectedResult, expectedMime = "image/jpeg", maxBytes;
 let compressionQuality;
 const compress = async (buffer, limit) => {
   if (buffer.length <= limit) return buffer;
@@ -81,21 +77,19 @@ if (kind === "instagram" || kind === "tiktok") {
   expected = await compress(initial, maxBytes);
   const quality = compressionQuality ?? 100;
   if (compressed) expect(quality).toBe(scenario === "compress80" ? 80 : 60);
-  expectedOutput = { type: "image", format: "jpeg", quality, autoOrient: true, resize: { width: targetWidth, height: targetHeight, fit: "cover", withoutEnlargement: false } };
 } else {
   ({ transformBufferedImage: child } = await import("./transform-buffered-image.ts"));
   args = { url: source, platform: kind, skipProcessing: skip };
   maxBytes = skip ? undefined : kind === "twitter" ? 5 * 1024 * 1024 : 976.56 * 1024;
   expected = input; expectedMime = mime;
   let quality;
-  let resize = false;
   if (!skip && kind === "twitter") {
     expected = await compress(input, maxBytes);
     quality = compressionQuality;
   } else if (!skip) {
     expected = await sharp(input).toBuffer();
     if (input.length > maxBytes) {
-      resize = true; quality = 80;
+      quality = 80;
       expected = await sharp(expected).rotate().resize(2000, 2000, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
       expectedMime = "image/jpeg";
       if (expected.length > maxBytes) { quality = 60; expected = await sharp(expected).jpeg({ quality: 60 }).toBuffer(); }
@@ -105,18 +99,12 @@ if (kind === "instagram" || kind === "tiktok") {
     if (kind === "twitter") expect(compressionQuality).toBe(scenario === "compress80" ? 80 : 60);
     else expect(quality).toBe(scenario === "compress80" ? 80 : 60);
   }
-  expectedOutput = { type: "image", format: quality !== undefined ? "jpeg" : format === "gif" ? "jpeg" : format, quality, autoOrient: resize,
-    ...(resize ? { resize: { width: 2000, height: 2000, fit: "inside", withoutEnlargement: true } } : {}) };
   expectedResult = { url: "https://media.example/artifact", mimeType: expectedMime, width: kind === "bluesky" ? width : undefined, height: kind === "bluesky" ? height : undefined };
 }
 expect(await child.run(args)).toEqual(expectedResult);
 expect(uploaded.body.equals(expected)).toBe(true);
 expect(uploaded.contentType).toBe(expectedMime);
 expect(uploaded.cacheControl).toBe("public, max-age=31536000");
-expect(enqueue).toHaveBeenCalledTimes(1);
-expect(enqueue).toHaveBeenCalledWith("transform-" + (kind === "instagram" ? "instagram" : kind === "tiktok" ? "tiktok" : "buffered") + "-image", {
-  task: "media.transform-image", source, output: expectedOutput, ...(maxBytes === undefined ? {} : { maxBytes: Math.floor(maxBytes) }),
-});
 expect(download).toHaveBeenCalledTimes(kind === "instagram" || kind === "tiktok" ? 0 : 1);
 expect(axios).toHaveBeenCalledTimes(kind === "instagram" || kind === "tiktok" ? 1 : 0);
 `;
@@ -128,7 +116,7 @@ for (const kind of ["instagram", "tiktok", "bluesky", "twitter"]) {
     ? ["wide", "tall", "exif", "compress80", "compress60", "compress60-fits"]
     : ["png", "jpeg", "webp", "gif", "exif", "skip-png", "skip-jpeg", "skip-webp", "skip-gif", "compress80", "compress60"];
   for (const scenario of scenarios) {
-    test(`${kind} image shadow: ${scenario}`, async () => {
+    test(`${kind} image processing: ${scenario}`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {
         cwd: __dirname,
         env: { ...process.env, IMAGE_KIND: kind, IMAGE_SCENARIO: scenario },

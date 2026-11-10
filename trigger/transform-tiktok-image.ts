@@ -3,7 +3,6 @@ import { randomUUID } from "crypto";
 import axios from "axios";
 import sharp from "sharp";
 import { uploadMedia } from "./media-storage";
-import { enqueueMediaServerJob } from "./media-server";
 import { compressJpegToLimit } from "./posting/image-processing-utils";
 
 export const transformTikTokImage = task({
@@ -58,26 +57,7 @@ export const transformTikTokImage = task({
       .jpeg({ quality: 100 })
       .toBuffer();
 
-    let shadowQuality = 100;
-    processedImage = await compressJpegToLimit(processedImage, maxFileSize, (quality) => { shadowQuality = quality; });
-
-    await enqueueMediaServerJob("transform-tiktok-image", {
-      task: "media.transform-image",
-      source: signedUrl,
-      output: {
-        type: "image",
-        format: "jpeg",
-        quality: shadowQuality,
-        autoOrient: true,
-        resize: {
-          width: targetRatio.width,
-          height: targetRatio.height,
-          fit: "cover",
-          withoutEnlargement: false,
-        },
-      },
-      maxBytes: maxFileSize,
-    });
+    processedImage = await compressJpegToLimit(processedImage, maxFileSize);
 
     return await uploadMedia({
       key: `${platform}_${randomUUID()}.jpg`,
