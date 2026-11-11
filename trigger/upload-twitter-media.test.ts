@@ -43,8 +43,8 @@ mock.module("twitter-api-v2", () => ({
 }));
 const transformError = { message: "transform rejected" };
 const transform = mock(async (id, payload) => {
-  expect(id).toBe("transform-buffered-image");
-  expect(payload).toEqual({ url: "https://source.example/image", platform: "twitter" });
+  expect(id).toBe("transform-live-image");
+  expect(payload).toEqual({ url: "https://source.example/image", stored: undefined, platform: "twitter" });
   if (scenario === "transform-throw") throw new Error("dispatch rejected");
   return scenario === "transform-failure" ? { ok: false, error: transformError }
     : { ok: true, output: { url: "https://media.example/artifact", mimeType: scenario === "mime-fallback" ? undefined : mime } };

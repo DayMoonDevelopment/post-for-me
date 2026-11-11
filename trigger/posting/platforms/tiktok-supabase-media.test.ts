@@ -22,7 +22,6 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
   let storage: typeof import("../../media-storage");
   let TikTokPostClient: typeof import("./tiktok-post-client").TikTokPostClient;
   let originalAdapter: typeof axios.defaults.adapter;
-  let transformRun: (payload: any) => Promise<string>;
   let videoRun: (payload: any, context: any) => Promise<any>;
   beforeAll(async () => {
     ({ default: axios } = await import("axios"));
@@ -32,13 +31,11 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const actual = require("@trigger.dev/sdk");
       return { ...actual, task: (definition: any) => {
-        if (definition.id === "transform-tiktok-image") transformRun = definition.run;
         if (definition.id === "upload-tiktok-video") videoRun = definition.run;
         return definition;
       } };
     });
     ({ tasks } = await import("@trigger.dev/sdk"));
-    await import("../../transform-tiktok-image");
     await import("../../upload-tiktok-video");
     storage = await import("../../media-storage");
     ({ TikTokPostClient } = await import("./tiktok-post-client"));
@@ -94,8 +91,11 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       return `https://media.example.com/${key}`;
     });
     const copy = spyOn(tasks, "triggerAndWait").mockImplementation((async (id: string, payload: any) => {
-      if (id === "transform-tiktok-image") {
-        return { ok: true, output: await transformRun(JSON.parse(JSON.stringify(payload))) };
+      if (id === "transform-live-image") {
+        // Simulate a completed Zenith output; the copy must use this URL, never the source.
+        const body = await sharp(image).resize(1080, 1080).jpeg().toBuffer();
+        const url = await storage.uploadMedia({ key: "tiktok_1234-abcd.jpg", body, contentType: "image/jpeg" });
+        return { ok: true, output: { url } };
       }
       if (id === "upload-tiktok-video") {
         inChild = true;
@@ -155,7 +155,7 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       expect((await post()).success).toBe(true);
       expect(upload).toHaveBeenCalledTimes(1);
       expect(copy).toHaveBeenCalledTimes(1);
-      expect(copy.mock.calls[0][0]).toBe("transform-tiktok-image");
+      expect(copy.mock.calls[0][0]).toBe("transform-live-image");
       expect(publications[0].payload.source_info.photo_images).toEqual([`https://media.example.com/${upload.mock.calls[0][0].key}`]);
     });
   }

@@ -64,7 +64,7 @@ if (scenario.startsWith("integration")) {
   const transport = (value) => JSON.parse(JSON.stringify(value));
   sdk.tasks.triggerAndWait = async (id, payload) => {
       payload = transport(payload);
-      if (id === "transform-buffered-image") return { ok: true, output: { url: "https://media.example/prepared", mimeType: "image/png", width: 4000, height: 3000 } };
+      if (id === "transform-live-image") return { ok: true, output: { url: "https://media.example/prepared", mimeType: "image/png", width: 4000, height: 3000 } };
       const child = id === "upload-bluesky-image" ? uploadBlueskyImage : uploadBlueskyLinkPreview;
       return { ok: true, output: transport(await child.run(payload)) };
   };

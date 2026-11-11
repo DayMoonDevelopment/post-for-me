@@ -52,11 +52,8 @@ type JobRecord = MediaServerHandle & {
   versionId?: string;
   decision?: string;
 };
-/** The slice of Trigger's `wait` API the coordinator uses. */
-export type WaitpointApi = {
-  createToken(options: { timeout: string; tags: string[]; idempotencyKey: string }): Promise<{ id: string; url: string }>;
-  forToken(token: { id: string }): PromiseLike<{ ok: true; output: unknown } | { ok: false; error: Error }>;
-};
+export type { WaitpointApi } from "./media-server";
+import type { WaitpointApi } from "./media-server";
 type Dependencies = {
   transport: MediaServerTransport;
   wait: WaitpointApi;

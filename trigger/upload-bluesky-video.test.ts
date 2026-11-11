@@ -11,7 +11,14 @@ const blob = { $type: "blob", ref: { $link: "bafkreigh2akiscaildcw4535x3ql5ojybh
 const job = { jobId: "job", did: "did:plc:test", state: "JOB_STATE_COMPLETED", ...(scenario === "poll" || scenario === "poll-failed" ? {} : { blob }) };
 const sourceUrl = "https://source.example/original.mp4?token=source";
 const compressedUrl = "https://artifact.example/compressed.mp4?token=artifact";
-const fileUrl = scenario === "compression-failure" ? sourceUrl : compressedUrl;
+const fileUrl = compressedUrl;
+mock.module("./live-media-runtime", () => ({ liveMediaExecutor: () => async (stage, id, input) => {
+  events.push(input.task);
+  if (scenario === "compression-failure") throw new Error("Zenith worker failed");
+  if (scenario === "probe-error") throw new Error("Invalid Zenith video metadata");
+  return { fileId: "file", versionId: "version", url: compressedUrl, contentType: "video/mp4", size: 11,
+    media: { kind: "video", width: 1920, height: 1080 } };
+} }));
 let path;
 let posted;
 globalThis.fetch = mock(async (input, init) => {
@@ -46,9 +53,9 @@ spyOn(nodeFetch, "default").mockImplementation(async (url, options) => {
   events.push("upload");
   expect(url.origin + url.pathname).toBe("https://video.bsky.app/xrpc/app.bsky.video.uploadVideo");
   expect(url.searchParams.get("did")).toBe("did:plc:test");
-  expect(url.searchParams.get("name")).toBe(scenario === "compression-failure" ? "original.mp4" : "compressed.mp4");
+  expect(url.searchParams.get("name")).toBe("compressed.mp4");
   expect(options.method).toBe("POST");
-  expect(options.headers).toEqual({ Authorization: "Bearer service-token", "Content-Type": "video/custom", "Content-Length": "11" });
+  expect(options.headers).toEqual({ Authorization: "Bearer service-token", "Content-Type": "video/mp4", "Content-Length": "11" });
   path = options.body.path;
   const chunks = [];
   for await (const chunk of options.body) chunks.push(chunk);
@@ -68,21 +75,13 @@ expect(uploadBlueskyVideo.retry).toEqual({ maxAttempts: 2, outOfMemory: { machin
 sdk.tasks.triggerAndWait = async (id, payload) => {
   payload = transport(payload);
   events.push(id);
-  if (id === "ffmpeg-compress-video") {
-    expect(payload).toEqual({ url: sourceUrl, maxSizeBytes: 100000000 });
-    return scenario === "compression-failure" ? { ok: false, error: {} } : { ok: true, output: compressedUrl };
-  }
-  if (id === "probe-video-dimensions") {
-    expect(payload).toEqual({ url: fileUrl });
-    return scenario === "probe-error" ? { ok: false, error: { message: "probe failed" } } : { ok: true, output: { width: 1920, height: 1080 } };
-  }
   expect(id).toBe("upload-bluesky-video");
-  expect(payload).toEqual({ url: sourceUrl, token: "service-token", did: "did:plc:test" });
-  return { ok: true, output: transport(await uploadBlueskyVideo.run(payload, { ctx: { attempt: { number: 2 } } })) };
+  expect(payload).toEqual({ url: sourceUrl, skipProcessing: false, token: "service-token", did: "did:plc:test" });
+  return { ok: true, output: transport(await uploadBlueskyVideo.run(payload, { ctx: { run: { id: "run" }, attempt: { number: 2 } } })) };
 };
-const failure = ["probe-error", "download-error", "upload-error", "json-error"].includes(scenario);
+const failure = ["compression-failure", "probe-error", "download-error", "upload-error", "json-error"].includes(scenario);
 if (failure) {
-  await expect(uploadBlueskyVideo.run({ url: sourceUrl, token: "service-token", did: "did:plc:test" }, { ctx: { attempt: { number: 1 } } })).rejects.toThrow();
+  await expect(uploadBlueskyVideo.run({ url: sourceUrl, token: "service-token", did: "did:plc:test" }, { ctx: { run: { id: "run" }, attempt: { number: 1 } } })).rejects.toThrow();
   if (path) await expect(access(path)).rejects.toThrow();
   events.length = 0;
 }
@@ -100,10 +99,12 @@ await client.refreshAccessToken({ access_token: "access", refresh_token: "refres
 client.downloadToTempFile = async () => { throw new Error("Parent cannot stage bytes"); };
 const result = transport(await client.post({ postId: "post", account: { id: "account", social_provider_user_name: "test.example" }, caption: "caption", media: [{ type: "video", url: sourceUrl }] }));
 expect(result.success, JSON.stringify(result)).toBe(!failure && scenario !== "no-job" && scenario !== "poll-failed");
-expect(events.slice(0, 4)).toEqual(["auth", "upload-bluesky-video", "ffmpeg-compress-video", "probe-video-dimensions"]);
+expect(events.slice(0, 3)).toEqual(["auth", "upload-bluesky-video", "media.localize"]);
+expect(events).not.toContain("ffmpeg-compress-video");
+expect(events).not.toContain("probe-video-dimensions");
 if (path) await expect(access(path)).rejects.toThrow();
 if (failure) {
-  expect(result.error_message).toBe({ "probe-error": "Failed to probe Bluesky video dimensions", "download-error": "Failed to download media: 403 Forbidden", "upload-error": "stream upload failed", "json-error": "invalid JSON" }[scenario]);
+  expect(result.error_message).toBe({ "compression-failure": "Zenith worker failed", "probe-error": "Invalid Zenith video metadata", "download-error": "Failed to download media: 403 Forbidden", "upload-error": "stream upload failed", "json-error": "invalid JSON" }[scenario]);
   expect(posted).toBeUndefined();
   if (["upload-error", "json-error"].includes(scenario)) expect(result.details.requests.at(-1).uploadVideoRequest).toContain("https://video.bsky.app/");
 } else if (scenario === "no-job") {

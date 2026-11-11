@@ -96,6 +96,8 @@ export interface RefreshTokenResult {
 }
 
 export interface PostMedia {
+  stored?: import("../media-recipes").StoredMedia;
+  thumbnail_stored?: import("../media-recipes").StoredMedia;
   id: string;
   url: string;
   thumbnail_url?: string | null;

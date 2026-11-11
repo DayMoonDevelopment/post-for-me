@@ -1,7 +1,7 @@
 import { tasks, wait } from "@trigger.dev/sdk";
 import type { uploadTikTokVideo } from "../../upload-tiktok-video";
 import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
-import type { transformTikTokImage } from "../../transform-tiktok-image";
+import type { transformLiveImageTask } from "../../transform-live-image";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import { shouldSkipProcessing } from "../image-processing-utils";
@@ -37,13 +37,6 @@ export class TikTokPostClient extends PostClient {
   #clientKey: string;
   #clientSecret: string;
   #useSupabaseMedia: boolean;
-  #maxFileSize = 20 * 1024 * 1024;
-  #allowedAspectRatios = [
-    { ratio: 9 / 16, width: 1080, height: 1920 },
-    { ratio: 3 / 4, width: 1080, height: 1440 },
-    { ratio: 1, width: 1080, height: 1080 },
-    { ratio: 16 / 9, width: 1920, height: 1080 },
-  ];
 
   constructor(appCredentials: PlatformAppCredentials, useSupabaseMedia = false) {
     super(appCredentials);
@@ -639,18 +632,18 @@ export class TikTokPostClient extends PostClient {
       return signedUrl;
     }
 
-    const result = await tasks.triggerAndWait<typeof transformTikTokImage>(
-      "transform-tiktok-image",
+    const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
+      "transform-live-image",
       {
-        signedUrl,
+        url: signedUrl,
+        mediumId: medium.id,
+        stored: medium.stored,
         platform: "tiktok",
-        maxFileSize: this.#maxFileSize,
-        allowedAspectRatios: this.#allowedAspectRatios,
       },
     );
     if (!result.ok) {
       throw new Error("Failed to transform TikTok image");
     }
-    return result.output;
+    return result.output.url;
   }
 }

@@ -74,14 +74,16 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   const updatedSelect = mock(() => ({ order: updatedOrder }));
   const updatedEq = mock(() => ({ select: updatedSelect }));
   const update = mock(() => ({ eq: updatedEq }));
+  const insertResults = mock((_results: unknown[]) => ({ select: async () => ({ data: [], error: null }) }));
   const from = mock((table: string) => {
     if (table === "projects") return { select: projectSelect };
     if (table === "social_posts") return { update };
+    if (table === "social_post_results") return { insert: insertResults };
     throw new Error(`Unexpected table: ${table}`);
   });
   const getKey = mock(async () => ({ data: { enabled: true } }));
-  const batchTriggerAndWait = mock(async (id: string, _items: unknown[]) => {
-    if (id === "process-post-medium") {
+  const batchTriggerAndWait = mock(async (id: string, _items: unknown[]): Promise<{ runs: any[] }> => {
+    if (id === "process-live-medium") {
       return { runs: [{ ok: true, output: medium }] };
     }
     if (id === "post-to-platform") return { runs: [] };
@@ -133,7 +135,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
 
   for (const mode of ["enabled", "disabled", "rejected"] as const) {
-    test(`media-shadow ${mode}: live localization and publishing proceed independently`, async () => {
+    test(`media-shadow ${mode}: never schedules shadow; publishes completed live outputs`, async () => {
       if (mode !== "disabled") {
         process.env.MEDIA_SERVER_REDIS_URL = "redis://shadow.example.com";
       }
@@ -172,32 +174,10 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       await run({ index: 0, post: input });
 
       const shadowCalls = trigger.mock.calls.filter(([id]) => id === "media-shadow");
-      expect(shadowCalls).toEqual(mode === "disabled" ? [] : [["media-shadow", {
-        postId: post.id,
-        projectId: post.project_id,
-        media: [{
-          id: medium.id, url: "https://external.example.com/original.jpg",
-          thumbnail_url: "https://external.example.com/thumbnail.jpg",
-          thumbnail_timestamp_ms: 1234, provider: null, provider_connection_id: null,
-          skip_processing: true, index: 0,
-        }],
-        accounts: [
-          { id: "account-1", provider: "facebook" },
-          { id: "account-2", provider: "facebook" },
-        ],
-        configurations: [{
-          provider: "facebook", provider_connection_id: null,
-          provider_data: { placement: "reels", share_to_feed: false },
-        }, {
-          provider: null, provider_connection_id: "account-2",
-          provider_data: { placement: "reels", share_to_feed: true },
-        }],
-      }]]);
-      expect(trigger.mock.calls.map(([id]) => id)).toEqual(mode === "disabled"
-        ? ["process-webhooks"] : ["media-shadow", "process-webhooks"]);
-      // Only scheduling returns a handle; no shadow completion is supplied or awaited.
+      expect(shadowCalls).toEqual([]);
+      expect(trigger.mock.calls.map(([id]) => id)).toEqual(["process-webhooks"]);
       expect(batchTriggerAndWait.mock.calls.map(([id]) => id)).toEqual([
-        "process-post-medium", "post-to-platform",
+        "process-live-medium", "post-to-platform",
       ]);
       expect(batchTriggerAndWait.mock.calls[0][1]).toEqual([{
         payload: { medium: {
@@ -219,16 +199,31 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       expect(batchTrigger).not.toHaveBeenCalled();
       expect(logError).not.toHaveBeenCalled();
       expect(update).toHaveBeenCalledWith({ status: "processed" });
-      if (mode === "rejected") {
-        expect(logWarn).toHaveBeenCalledWith(
-          "Shadow media coordinator scheduling failed; continuing live processing",
-          { postId: post.id },
-        );
-      } else {
-        expect(logWarn).not.toHaveBeenCalled();
-      }
+      expect(logWarn).not.toHaveBeenCalled();
     });
   }
+
+  test("failed account override cannot fall back; independent account publishes completed defaults in index order", async () => {
+    const inputMedia = [
+      { id: "last", index: 9, provider_connection_id: null },
+      { id: "failed-override", index: 0, provider_connection_id: "account-1" },
+      { id: "first", index: 2, provider_connection_id: null },
+    ].map((item) => ({
+      url: `https://source.example/${item.id}`, thumbnail_url: null, thumbnail_timestamp_ms: null,
+      provider: null, alt_text: "preserved alt", tags: [{ id: "tag", type: "user", platform: "facebook" }], skip_processing: false, ...item,
+    }));
+    batchTriggerAndWait.mockImplementationOnce(async () => ({ runs: inputMedia.map((item) => item.id === "failed-override"
+      ? { ok: false, error: { message: "Zenith failed" } }
+      : { ok: true, output: { ...item, url: `https://zenith.example/${item.id}`, thumbnail_url: "", type: "image", position: item.index } }) }));
+    await run({ index: 0, post: { ...post, social_post_media: inputMedia } });
+    const publish = batchTriggerAndWait.mock.calls.find(([id]) => id === "post-to-platform")!;
+    const payloads = publish[1] as { payload: IndividualPostData }[];
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].payload.account.id).toBe("account-2");
+    expect(payloads[0].payload.media.map((m) => m.url)).toEqual(["https://zenith.example/first", "https://zenith.example/last"]);
+    expect(payloads[0].payload.media[0]).toMatchObject({ alt_text: "preserved alt", tags: inputMedia[0].tags });
+    expect(insertResults).toHaveBeenCalledWith([expect.objectContaining({ provider_connection_id: "account-1", success: false })]);
+  });
 
   for (const isSystem of [true, false]) {
     for (const story of [false, true]) {
@@ -274,7 +269,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
 
         const batches = batchTriggerAndWait.mock.calls;
         expect(batches.map(([id]) => id)).toEqual(story
-          ? ["process-post-medium"] : ["post-to-platform"]);
+          ? ["process-live-medium"] : ["post-to-platform"]);
         const payloads = story
           ? triggerAndWait.mock.calls.map(([id, payload]) => {
             expect(id).toBe("post-to-platform");
