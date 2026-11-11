@@ -1,16 +1,19 @@
 import { createHash } from "node:crypto";
 import { selectPostMedia } from "./posting/media-selection";
 import {
-  mediaServerDecision, mediaServerLanes, mediaServerSubmission, parseMediaServerResponse, sanitizeMediaServerLog,
-  type MediaServerHandle, type MediaServerJob, type MediaServerTransport, type MediaServerVideoDecision,
+  mediaServerDecision, MEDIA_SERVER_INTEROP_LANE, mediaServerSubmission, parseMediaServerResponse, sanitizeMediaServerLog,
+  type MediaServerHandle, type MediaServerJob, type MediaServerTokenOutput, type MediaServerTransport, type MediaServerVideoDecision,
 } from "./media-server";
 import {
   blueskyVideoOutput, GENERIC_VIDEO_ACCEPT, GENERIC_VIDEO_MAX_BYTES, genericVideoOutput, platformImageRecipe, type StoredMedia,
 } from "./media-shadow-recipes";
 
-export const SHADOW_MAX_DURATION_SECONDS = 480;
-// Reserve time for bounded Redis operations and final logs before Trigger's hard cutoff.
-export const SHADOW_OBSERVATION_MS = (SHADOW_MAX_DURATION_SECONDS - 30) * 1000;
+/** Compute budget in seconds; time spent waiting on tokens does not count against it. */
+export const SHADOW_MAX_DURATION_SECONDS = 600;
+/** Each token's timeout covers its job's queue wait plus its run on media's side. */
+export const SHADOW_VIDEO_TOKEN_TIMEOUT = "30m";
+export const SHADOW_TOKEN_TIMEOUT = "10m";
+const ENQUEUE_ATTEMPTS = 3;
 
 export type ShadowMedium = {
   id: string;
@@ -44,24 +47,28 @@ type JobRecord = MediaServerHandle & {
   status: "incomplete" | "completed" | "failed";
   lastState: string;
   startedAt: number;
+  errorCode?: string;
   fileId?: string;
   versionId?: string;
   decision?: string;
 };
+/** The slice of Trigger's `wait` API the coordinator uses. */
+export type WaitpointApi = {
+  createToken(options: { timeout: string; tags: string[]; idempotencyKey: string }): Promise<{ id: string; url: string }>;
+  forToken(token: { id: string }): PromiseLike<{ ok: true; output: unknown } | { ok: false; error: Error }>;
+};
 type Dependencies = {
   transport: MediaServerTransport;
+  wait: WaitpointApi;
   now: () => number;
-  sleep: (seconds: number) => Promise<unknown>;
   log: (level: "info" | "warn" | "error", message: string, data: Record<string, unknown>) => void;
 };
 
 export async function coordinateShadowMedia(post: ShadowPost, runId: string, deps: Dependencies) {
   const startedAt = deps.now();
-  const deadline = startedAt + SHADOW_OBSERVATION_MS;
   const jobs: JobRecord[] = [];
   let branchErrors = 0;
   let unsupported = 0;
-  let notSubmitted = 0;
   const log = (level: "info" | "warn" | "error", message: string, data: Record<string, unknown>) =>
     deps.log(level, message, sanitizeMediaServerLog({ postId: post.postId, runId, ...data }) as Record<string, unknown>);
   const sourceOf = (source: StoredMedia) => ({ fileId: source.fileId, versionId: source.versionId });
@@ -78,93 +85,88 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
     }
   }
 
+  // Trigger rejects overlapping waits, so branches queue here and wait on their tokens one at a time.
+  let waitQueue: Promise<unknown> = Promise.resolve();
+  function waitForToken(token: { id: string }) {
+    const result = waitQueue.then(() => deps.wait.forToken(token));
+    waitQueue = result.then(() => {}, () => {});
+    return result;
+  }
+
   async function execute(stage: string, mediumId: string, job: MediaServerJob, destination?: { id: string; provider: string }) {
-    if (deps.now() >= deadline) {
-      notSubmitted++;
-      log("warn", "Shadow stage not submitted: coordinator deadline reached", { stage, mediumId, accountId: destination?.id });
-      throw new Error("Shadow coordinator deadline reached");
-    }
     const requestId = createHash("sha256").update(`${runId}/${stage}/${mediumId}/${destination?.id ?? "shared"}`).digest("hex");
     const record: JobRecord = {
       jobId: `${job.task.replace(".", "-")}/${requestId}`,
-      requestId, queue: mediaServerLanes[job.task],
+      requestId, queue: MEDIA_SERVER_INTEROP_LANE,
       path: `shadow/${runId}/${requestId}`,
       task: job.task,
       stage, mediumId, accountId: destination?.id, platform: destination?.provider,
-      status: "incomplete", lastState: "enqueueing", startedAt: deps.now(),
+      status: "incomplete", lastState: "creating-token", startedAt: deps.now(),
     };
     jobs.push(record);
     const label = `${job.task} [${destination ? `${destination.provider}/` : ""}${stage}]`;
-    log("info", `Zenith shadow job request: ${label}`, {
-      ...record, redisJob: mediaServerSubmission(record, job),
+    const token = await deps.wait.createToken({
+      timeout: job.task === "media.transform-video" ? SHADOW_VIDEO_TOKEN_TIMEOUT : SHADOW_TOKEN_TIMEOUT,
+      tags: [post.postId, runId],
+      idempotencyKey: record.jobId,
     });
-    let acknowledged = false;
-    async function enqueue() {
-      await redisOperation(async () => {
-        if (deps.now() >= deadline) throw new Error("Shadow coordinator deadline reached");
-        await deps.transport.enqueue(record, job);
-      });
-      acknowledged = true;
-      record.lastState = "enqueued";
-      log("info", `Zenith shadow job enqueued: ${label}`, { ...record });
+    const callback = { url: token.url };
+    log("info", `Zenith shadow job request: ${label}`, {
+      ...record, tokenId: token.id, redisJob: mediaServerSubmission(record, job, callback),
+    });
+    let enqueued = false;
+    for (let attempt = 1; attempt <= ENQUEUE_ATTEMPTS && !enqueued; attempt++) {
+      try {
+        await redisOperation(() => deps.transport.enqueue(record, job, callback));
+        enqueued = true;
+      } catch {
+        log("warn", "Zenith enqueue failed", { ...record, attempt });
+      }
+    }
+    if (!enqueued) {
+      record.status = "failed";
+      record.lastState = "enqueue-failed";
+      throw new Error("Zenith shadow enqueue failed");
+    }
+    record.lastState = "enqueued";
+    log("info", `Zenith shadow job enqueued: ${label}`, { ...record, tokenId: token.id });
+
+    const result = await waitForToken(token);
+    record.lastState = result.ok ? "token-completed" : "token-timed-out";
+    const elapsedMs = deps.now() - record.startedAt;
+    if (!result.ok) {
+      log("error", `Zenith shadow job incomplete: token timed out: ${label}`, { ...record, elapsedMs, tokenId: token.id });
+      throw new Error("Zenith shadow token timed out");
+    }
+    const outcome = result.output as MediaServerTokenOutput | null;
+    if (!outcome || typeof outcome !== "object" || (outcome.ok !== true && outcome.ok !== false)) {
+      record.status = "failed";
+      log("error", "Zenith shadow response contract mismatch", { ...record });
+      throw new Error("Zenith shadow response contract mismatch");
+    }
+    if (!outcome.ok) {
+      record.status = "failed";
+      record.errorCode = outcome.error?.code;
+      log("error", `Zenith shadow job terminal response: ${label}`, { ...record, elapsedMs, error: outcome.error });
+      if (job.task === "media.transform-image" && /animated images are not supported/i.test(outcome.error?.message ?? "")) {
+        unsupported++;
+        log("warn", "Shadow animated image transformation unsupported by Zenith", { ...record });
+      }
+      throw new Error("Zenith shadow worker failed");
     }
     try {
-      await enqueue();
+      const response = parseMediaServerResponse(outcome.output, job.task);
+      record.status = "completed";
+      record.fileId = response.fileId;
+      record.versionId = response.versionId;
+      record.decision = mediaServerDecision(outcome.output);
+      log("info", `Zenith shadow job terminal response: ${label}`, { ...record, elapsedMs, response: outcome.output });
+      return response;
     } catch {
-      // An acknowledgement failure does not prove the job was not submitted.
-      record.lastState = "enqueue-unconfirmed";
-      log("warn", "Zenith enqueue unconfirmed; observing the known job ID", { ...record });
+      record.status = "failed";
+      log("error", "Zenith shadow response contract mismatch", { ...record });
+      throw new Error("Zenith shadow response contract mismatch");
     }
-    let inspectionFailed = false;
-    while (deps.now() < deadline) {
-      try {
-        const snapshot = await redisOperation(() => {
-          if (deps.now() >= deadline) throw new Error("Shadow coordinator deadline reached");
-          return deps.transport.inspect(record);
-        });
-        record.lastState = snapshot.state;
-        inspectionFailed = false;
-        if (snapshot.state === "missing" && !acknowledged) await enqueue();
-        if (snapshot.state === "completed" || snapshot.state === "failed") {
-          record.status = snapshot.state;
-          const timing = {
-            elapsedMs: deps.now() - record.startedAt,
-            enqueueToTerminalMs: snapshot.finishedOn !== undefined && snapshot.timestamp !== undefined
-              ? snapshot.finishedOn - snapshot.timestamp : undefined,
-            latestAttemptMs: snapshot.finishedOn !== undefined && snapshot.processedOn !== undefined
-              ? snapshot.finishedOn - snapshot.processedOn : undefined,
-            attemptsMade: snapshot.attemptsMade,
-          };
-          log(snapshot.state === "completed" ? "info" : "error", `Zenith shadow job terminal response: ${label}`, {
-            ...record, ...timing, response: snapshot.response, failedReason: snapshot.failedReason,
-          });
-          if (snapshot.state === "failed") {
-            if (job.task === "media.transform-image" && /animated images are not supported/i.test(snapshot.failedReason ?? "")) {
-              unsupported++;
-              log("warn", "Shadow animated image transformation unsupported by Zenith", { ...record });
-            }
-            throw new Error("Zenith shadow worker failed");
-          }
-          try {
-            const response = parseMediaServerResponse(snapshot.response, job.task);
-            record.fileId = response.fileId;
-            record.versionId = response.versionId;
-            record.decision = mediaServerDecision(snapshot.response);
-            return response;
-          } catch {
-            record.status = "failed";
-            log("error", "Zenith shadow response contract mismatch", { ...record });
-            throw new Error("Zenith shadow response contract mismatch");
-          }
-        }
-      } catch (error) {
-        if (record.status !== "incomplete") throw error;
-        if (!inspectionFailed) log("warn", "Zenith shadow inspection unavailable; retrying until deadline", { ...record });
-        inspectionFailed = true;
-      }
-      await deps.sleep(Math.min(10, Math.max(0, (deadline - deps.now()) / 1000)));
-    }
-    throw new Error("Shadow coordinator deadline reached");
   }
 
   async function batch<T>(items: T[], operation: (item: T, index: number) => Promise<unknown>) {
@@ -203,7 +205,7 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
   const thumbnails = new Map<string, StoredMedia>();
   const ready = new Map<string, StoredMedia>();
   const ordered = [...post.media].sort((a, b) => a.index - b.index);
-  log("info", "Shadow media coordinator started", { deadline: new Date(deadline).toISOString(), mediaCount: ordered.length });
+  log("info", "Shadow media coordinator started", { mediaCount: ordered.length });
   let stageStarted = deps.now();
   await batch(ordered.flatMap((medium) => [
     { medium, thumbnail: false, url: medium.url },
@@ -295,15 +297,15 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
   log("info", "Shadow platform transformations stage finished", { elapsedMs: deps.now() - stageStarted });
 
   const incomplete = jobs.filter((job) => job.status === "incomplete");
-  for (const job of incomplete) log("error", "Zenith shadow job incomplete at coordinator timeout", {
+  for (const job of incomplete) log("error", "Zenith shadow job incomplete at coordinator end", {
     ...job, elapsedMs: deps.now() - job.startedAt,
   });
   const summary = {
-    status: incomplete.length || notSubmitted ? "incomplete" : branchErrors ? "failed" : "completed",
+    status: incomplete.length ? "incomplete" : branchErrors ? "failed" : "completed",
     elapsedMs: deps.now() - startedAt,
     completed: jobs.filter((job) => job.status === "completed").length,
     failed: jobs.filter((job) => job.status === "failed").length,
-    incomplete: incomplete.length, notSubmitted, branchErrors, unsupported,
+    incomplete: incomplete.length, branchErrors, unsupported,
     incompleteJobIds: incomplete.map((job) => job.jobId),
     videoDecisions: Object.fromEntries((["unchanged", "copied", "encoded"] as MediaServerVideoDecision[]).map((decision) => [
       decision, jobs.filter((job) => job.stage === "normalize-video" && job.decision === decision).length,

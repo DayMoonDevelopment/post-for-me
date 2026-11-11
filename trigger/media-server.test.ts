@@ -134,6 +134,11 @@ test("sanitizeMediaServerLog recursively redacts URLs without mutating input", (
   expect(value.nested[4]).toEqual({ error: 'rediss://user:secret@host/0 "http://example.test/file"' });
 });
 
+test("sanitizeMediaServerLog redacts a callback entry whole, whatever it holds", () => {
+  expect(sanitizeMediaServerLog({ data: { callback: { url: "https://trigger.example/callback/secret" } }, callback: "opaque-secret" }))
+    .toEqual({ data: { callback: "[redacted callback]" }, callback: "[redacted callback]" });
+});
+
 test("sanitizeMediaServerLog bounds each string after redaction and preserves plain values", () => {
   expect(sanitizeMediaServerLog("https://secret.example/" + "x".repeat(5000))).toBe("[redacted URL]");
   expect(sanitizeMediaServerLog(["a".repeat(5000), { text: "b".repeat(5000) }]))
@@ -147,7 +152,7 @@ test("sanitizeMediaServerLog bounds each string after redaction and preserves pl
 const harness = String.raw`
 import { expect, mock } from "bun:test";
 const scenario = process.env.MEDIA_SERVER_SCENARIO;
-const connections = [], queues = [], adds = [], lookups = [], events = [];
+const connections = [], queues = [], adds = [], events = [];
 const failure = new Error("Redis operation failed");
 const redisUrl = "redis://user:password@127.0.0.1:1/7";
 const forbidden = mock(() => { throw new Error("Unexpected long-lived Redis operation"); });
@@ -166,11 +171,6 @@ mock.module("ioredis", () => ({ Redis: class {
     if (scenario === "connect-error") throw failure;
   }
 } }));
-let state = "waiting", reads = 0;
-const fresh = { returnvalue: { fileId: "finished-file" }, failedReason: "worker failed",
-  timestamp: 100, processedOn: 200, finishedOn: 300, attemptsMade: 5 };
-const stale = { returnvalue: null, attemptsMade: 0,
-  getState: mock(async () => { events.push("state"); return state; }) };
 mock.module("bullmq", () => ({
   QueueEvents: forbidden, Worker: forbidden,
   Queue: class {
@@ -191,21 +191,21 @@ mock.module("bullmq", () => ({
       events.push("acknowledged");
       return { waitUntilFinished: forbidden };
     }
-    async getJob(id) {
-      lookups.push(id); events.push("getJob"); reads++;
-      if (scenario === "inspect-error") throw failure;
-      if (scenario === "missing" || (scenario === "vanished" && reads === 2)) return undefined;
-      return reads === 1 ? stale : fresh;
-    }
   },
 }));
-const { createMediaServerTransport, mediaServerLanes } = await import("./media-server.ts");
+const { createMediaServerTransport, MEDIA_SERVER_INTEROP_LANE, mediaServerInteropJobs } = await import("./media-server.ts");
 const transport = createMediaServerTransport(redisUrl);
 const handle = { jobId: "job-123", queue: "custom-queue", requestId: "request-456", path: "shadow/custom/result" };
 const localize = { task: "media.localize", url: "https://source.example/signed?token=secret" };
+const callback = { url: "https://trigger.example/callback/secret" };
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 if (scenario === "routing") {
-  expect(mediaServerLanes).toEqual({ "media.localize": "ingest", "media.transform-image": "images", "media.transform-video": "videos" });
+  expect(MEDIA_SERVER_INTEROP_LANE).toBe("trigger-interop");
+  expect(mediaServerInteropJobs).toEqual({
+    "media.localize": "media.trigger-localize",
+    "media.transform-image": "media.trigger-transform-image",
+    "media.transform-video": "media.trigger-transform-video",
+  });
   const source = { fileId: "source-file", versionId: "source-version" };
   const jobs = [localize,
     { task: "media.transform-image", source, output: { type: "image", format: "jpeg", quality: 80,
@@ -215,10 +215,10 @@ if (scenario === "routing") {
       audio: { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 } } },
   ];
   for (const job of jobs) {
-    const laneHandle = { ...handle, queue: mediaServerLanes[job.task] };
-    expect(await transport.enqueue(laneHandle, job)).toBeUndefined();
+    const laneHandle = { ...handle, queue: MEDIA_SERVER_INTEROP_LANE };
+    expect(await transport.enqueue(laneHandle, job, callback)).toBeUndefined();
     const { task, ...input } = job;
-    expect(adds.at(-1)).toEqual([task, { ...input, requestId: handle.requestId, path: handle.path }, {
+    expect(adds.at(-1)).toEqual([mediaServerInteropJobs[task], { input: { ...input, requestId: handle.requestId, path: handle.path }, callback }, {
       jobId: handle.jobId, attempts: 5, backoff: { type: "exponential", delay: 1000 },
       removeOnComplete: { age: 10800 }, removeOnFail: { age: 10800 },
     }]);
@@ -228,7 +228,7 @@ if (scenario === "routing") {
   expect(new Set(connections).size).toBe(jobs.length);
 } else if (scenario === "acknowledgement") {
   let settled = false;
-  const pending = transport.enqueue(handle, localize).then(() => { settled = true; });
+  const pending = transport.enqueue(handle, localize, callback).then(() => { settled = true; });
   await flush();
   expect(adds).toHaveLength(1);
   expect(settled).toBe(false);
@@ -236,38 +236,9 @@ if (scenario === "routing") {
   resolveAdd();
   await pending;
   expect(events).toEqual(["connect", "add", "acknowledged", "disconnect", "close"]);
-} else if (["connect-error", "add-error", "inspect-error"].includes(scenario)) {
-  for (const operation of scenario === "connect-error" ? ["enqueue", "inspect"] : [scenario === "add-error" ? "enqueue" : "inspect"]) {
-    await expect(operation === "enqueue" ? transport.enqueue(handle, localize) : transport.inspect(handle)).rejects.toBe(failure);
-  }
+} else if (["connect-error", "add-error"].includes(scenario)) {
+  await expect(transport.enqueue(handle, localize, callback)).rejects.toBe(failure);
   if (scenario === "connect-error") expect(queues).toHaveLength(0);
-} else {
-  const states = scenario === "retryable" ? ["waiting", "active", "delayed", "prioritized", "waiting-children", "unknown"]
-    : [scenario === "vanished" ? "completed" : scenario];
-  for (state of states) {
-    reads = 0;
-    const snapshot = await transport.inspect(handle);
-    if (scenario === "missing" || scenario === "vanished") {
-      expect(snapshot).toEqual({ state: "missing" });
-    } else if (state === "completed" || state === "failed") {
-      expect(snapshot).toEqual({ state, response: fresh.returnvalue, failedReason: fresh.failedReason,
-        timestamp: 100, processedOn: 200, finishedOn: 300, attemptsMade: 5 });
-    } else {
-      expect(snapshot).toEqual({ state, response: null, failedReason: undefined,
-        timestamp: undefined, processedOn: undefined, finishedOn: undefined, attemptsMade: 0 });
-    }
-    expect(reads).toBe(state === "completed" || state === "failed" ? 2 : 1);
-    expect(queues.at(-1).name).toBe(handle.queue);
-  }
-  expect(lookups.every((id) => id === handle.jobId)).toBe(true);
-  expect(adds).toHaveLength(0);
-  if (scenario !== "missing") expect(stale.getState).toHaveBeenCalledTimes(states.length);
-  else expect(stale.getState).not.toHaveBeenCalled();
-  if (scenario === "completed" || scenario === "failed" || scenario === "vanished") {
-    expect(events).toEqual(["connect", "getJob", "state", "getJob", "disconnect", "close"]);
-  }
-  expect(connections).toHaveLength(states.length);
-  expect(new Set(connections).size).toBe(states.length);
 }
 await flush();
 for (const connection of connections) {
@@ -311,9 +282,7 @@ try {
   const transport = createMediaServerTransport("redis://127.0.0.1:" + port + "/7");
   const handle = { jobId: "job", queue: "ingest", requestId: "request", path: "shadow/result" };
   const start = performance.now();
-  const pending = process.env.MEDIA_SERVER_SCENARIO === "blackhole-enqueue"
-    ? transport.enqueue(handle, { task: "media.localize", url: "https://source.example/file" })
-    : transport.inspect(handle);
+  const pending = transport.enqueue(handle, { task: "media.localize", url: "https://source.example/file" }, { url: "https://trigger.example/callback" });
   // Either the operation deadline or ioredis's command deadline may win the race.
   await expect(pending).rejects.toThrow(/timed out/i);
   const elapsed = performance.now() - start;
@@ -332,8 +301,7 @@ try {
 `;
 
 for (const scenario of [
-  "routing", "acknowledgement", "completed", "failed", "missing", "vanished", "retryable",
-  "connect-error", "add-error", "inspect-error", "blackhole-enqueue", "blackhole-inspect",
+  "routing", "acknowledgement", "connect-error", "add-error", "blackhole-enqueue",
 ]) {
   test(`media server transport: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", scenario.startsWith("blackhole-") ? networkHarness : harness], {

@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test";
 
 // Isolate module mocks from the coordinator and transport test suites.
 if (!process.env.PFM_MEDIA_SHADOW_TEST_CHILD) {
-  test("media-shadow polling uses concurrent-safe timers", async () => {
+  test("media-shadow hands the coordinator Trigger's token waits", async () => {
     const child = Bun.spawn([process.execPath, "test", __filename], {
       cwd: __dirname,
       env: { ...process.env, PFM_MEDIA_SHADOW_TEST_CHILD: "1" },
@@ -17,46 +17,41 @@ if (!process.env.PFM_MEDIA_SHADOW_TEST_CHILD) {
     expect({ exitCode, output: exitCode === 0 ? "" : stdout + stderr }).toEqual({ exitCode: 0, output: "" });
   });
 } else {
-  test("task wiring allows overlapping polling sleeps without durable waits", async () => {
-    const delays: number[] = [];
-    let activeTimers = 0;
-    let peakTimers = 0;
-    const durableWait = mock(async () => { throw new Error("Parallel waits are not supported"); });
+  test("task wiring delegates to wait.createToken and wait.forToken, and the kill switch disables it", async () => {
+    const created = mock(async (options: unknown) => ({ id: "waitpoint_1", url: "https://trigger.example/cb", options }));
+    const waited = mock((token: unknown) => Promise.resolve({ ok: true, output: token }));
     mock.module("@trigger.dev/sdk", () => ({
       task: (definition: unknown) => definition,
       tags: { add: async () => {} },
       logger: {},
       AbortTaskRunError: Error,
-      wait: { for: durableWait },
-    }));
-    mock.module("node:timers/promises", () => ({
-      setTimeout: async (ms: number) => {
-        delays.push(ms);
-        peakTimers = Math.max(peakTimers, ++activeTimers);
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        activeTimers--;
-      },
+      wait: { createToken: created, forToken: waited },
     }));
     mock.module("./media-server", () => ({ createMediaServerTransport: () => ({}) }));
     mock.module("./media-shadow-coordinator", () => ({
-      SHADOW_MAX_DURATION_SECONDS: 480,
-      coordinateShadowMedia: async (_post: unknown, _runId: string, deps: { sleep: (seconds: number) => Promise<unknown> }) => {
-        await Promise.all([deps.sleep(10), deps.sleep(10), deps.sleep(0.5)]);
+      SHADOW_MAX_DURATION_SECONDS: 600,
+      coordinateShadowMedia: async (_post: unknown, _runId: string, deps: {
+        wait: { createToken: (options: unknown) => Promise<unknown>; forToken: (token: unknown) => PromiseLike<unknown> };
+      }) => {
+        const token = await deps.wait.createToken({ timeout: "10m" });
+        expect(await deps.wait.forToken(token)).toEqual({ ok: true, output: token });
         return { status: "completed" };
       },
     }));
-    const originalRedisUrl = process.env.MEDIA_SERVER_REDIS_URL;
-    process.env.MEDIA_SERVER_REDIS_URL = "redis://localhost:6379";
+    const original = process.env.MEDIA_SERVER_REDIS_URL;
     try {
       const { mediaShadow } = await import("./media-shadow");
       const run = (mediaShadow as unknown as { run: (payload: unknown, context: unknown) => Promise<unknown> }).run;
+      delete process.env.MEDIA_SERVER_REDIS_URL;
+      expect(await run({ postId: "post", projectId: "project" }, { ctx: { run: { id: "run" } } })).toEqual({ status: "disabled" });
+      expect(created).not.toHaveBeenCalled();
+      process.env.MEDIA_SERVER_REDIS_URL = "redis://localhost:6379";
       expect(await run({ postId: "post", projectId: "project" }, { ctx: { run: { id: "run" } } })).toEqual({ status: "completed" });
-      expect(delays).toEqual([10000, 10000, 500]);
-      expect(peakTimers).toBe(3);
-      expect(durableWait).not.toHaveBeenCalled();
+      expect(created).toHaveBeenCalledTimes(1);
+      expect(waited).toHaveBeenCalledTimes(1);
     } finally {
-      if (originalRedisUrl === undefined) delete process.env.MEDIA_SERVER_REDIS_URL;
-      else process.env.MEDIA_SERVER_REDIS_URL = originalRedisUrl;
+      if (original === undefined) delete process.env.MEDIA_SERVER_REDIS_URL;
+      else process.env.MEDIA_SERVER_REDIS_URL = original;
     }
   });
 }
