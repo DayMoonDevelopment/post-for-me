@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { coordinateShadowMedia, SHADOW_OBSERVATION_MS, type ShadowPost } from "./media-shadow-coordinator";
-import { mediaServerSubmission, sanitizeMediaServerLog, type MediaServerHandle, type MediaServerJob, type MediaServerSnapshot } from "./media-server";
+import { coordinateShadowMedia, SHADOW_TOKEN_TIMEOUT, SHADOW_VIDEO_TOKEN_TIMEOUT, type ShadowPost, type WaitpointApi } from "./media-shadow-coordinator";
+import {
+  mediaServerSubmission, sanitizeMediaServerLog, type MediaServerCallback, type MediaServerHandle, type MediaServerJob, type MediaServerTokenOutput,
+} from "./media-server";
 import type { MediaInfo, StoredMedia } from "./media-shadow-recipes";
 
 const image = {
@@ -33,55 +35,59 @@ function post(overrides: Partial<ShadowPost> = {}): ShadowPost {
 type Entry = {
   handle: MediaServerHandle;
   job: MediaServerJob;
+  callback: MediaServerCallback;
   response: StoredMedia;
-  inspections: number;
 };
+type Outcome = MediaServerTokenOutput | "timeout" | "malformed";
 
 function harness(options: {
   localize?: (url: string) => StoredMedia;
   result?: (entry: Entry) => StoredMedia;
-  inspect?: (entry: Entry) => MediaServerSnapshot | Error;
-  rejectEnqueue?: (entry: Entry) => boolean;
-  rejectBeforeAdd?: (handle: MediaServerHandle, job: MediaServerJob, attempt: number) => boolean;
+  outcome?: (entry: Entry) => Outcome | undefined;
+  rejectBeforeAdd?: (attempt: number) => boolean;
 } = {}) {
   const entries: Entry[] = [];
-  const enqueueAttempts: { handle: MediaServerHandle; job: MediaServerJob }[] = [];
-  const inspections: MediaServerHandle[] = [];
+  const enqueueAttempts: { handle: MediaServerHandle; job: MediaServerJob; callback: MediaServerCallback }[] = [];
+  const tokens: { options: Parameters<WaitpointApi["createToken"]>[0]; id: string; url: string }[] = [];
   const artifacts = new Map<string, StoredMedia>();
   const logs: { level: string; message: string; data: Record<string, unknown> }[] = [];
-  const sleeps: number[] = [];
   let clock = 0;
-  let tickScheduled = false;
-  let sleepers: { at: number; resolve: () => void }[] = [];
-  // Drain transport microtasks before advancing to the next shared virtual wakeup.
-  function tick() {
-    clock = Math.min(...sleepers.map((sleeper) => sleeper.at));
-    const due = sleepers.filter((sleeper) => sleeper.at <= clock);
-    sleepers = sleepers.filter((sleeper) => sleeper.at > clock);
-    tickScheduled = sleepers.length > 0;
-    if (tickScheduled) setImmediate(tick);
-    for (const sleeper of due) sleeper.resolve();
-  }
+  let activeWaits = 0;
+  let overlappingWaits = 0;
   const deps = {
     now: () => clock,
-    sleep: async (seconds: number) => {
-      sleeps.push(seconds);
-      await new Promise<void>((resolve) => {
-        sleepers.push({ at: clock + seconds * 1000, resolve });
-        if (!tickScheduled) {
-          tickScheduled = true;
-          setImmediate(tick);
-        }
-      });
-    },
     log: (level: "info" | "warn" | "error", message: string, data: Record<string, unknown>) => {
       logs.push({ level, message, data: structuredClone(data) });
     },
+    wait: {
+      async createToken(tokenOptions: Parameters<WaitpointApi["createToken"]>[0]) {
+        const id = `waitpoint_${tokens.length + 1}`;
+        const token = { options: tokenOptions, id, url: `https://trigger.example/api/v1/waitpoints/tokens/${id}/callback/secret-hash-${id}` };
+        tokens.push(token);
+        return { id, url: token.url };
+      },
+      // Mirrors Trigger's runtime, which throws when waits overlap.
+      async forToken(token: { id: string }) {
+        if (activeWaits++ > 0) overlappingWaits++;
+        try {
+          await new Promise((resolve) => setImmediate(resolve));
+          clock += 1000;
+          const url = tokens.find((item) => item.id === token.id)!.url;
+          const entry = entries.find((item) => item.callback.url === url);
+          const outcome = entry ? options.outcome?.(entry) : "timeout";
+          if (!entry || outcome === "timeout") return { ok: false as const, error: new Error("Timed out waiting for waitpoint") };
+          if (outcome === "malformed") return { ok: true as const, output: "nonsense" };
+          return { ok: true as const, output: outcome ?? { ok: true, output: entry.response } };
+        } finally {
+          activeWaits--;
+        }
+      },
+    },
     transport: {
-      async enqueue(handle: MediaServerHandle, job: MediaServerJob) {
+      async enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback) {
         const identity = { jobId: handle.jobId, requestId: handle.requestId, queue: handle.queue, path: handle.path };
-        enqueueAttempts.push({ handle: identity, job: structuredClone(job) });
-        if (options.rejectBeforeAdd?.(handle, job, enqueueAttempts.length)) throw new Error("Enqueue failed before add");
+        enqueueAttempts.push({ handle: identity, job: structuredClone(job), callback });
+        if (options.rejectBeforeAdd?.(enqueueAttempts.length)) throw new Error("Enqueue failed before add");
         const id = entries.length + 1;
         const source = job.task === "media.localize"
           ? (options.localize?.(job.url) ?? stored())
@@ -109,29 +115,17 @@ function harness(options: {
           };
           Object.assign(response, { decision: "encoded", contentType: "video/mp4" });
         }
-        const entry: Entry = { handle: identity, job: structuredClone(job), response, inspections: 0 };
+        const entry: Entry = { handle: identity, job: structuredClone(job), callback, response };
         response = options.result?.(entry) ?? response;
         entry.response = response;
         entries.push(entry);
         artifacts.set(response.versionId, response);
-        if (options.rejectEnqueue?.(entry)) throw new Error("Lost enqueue acknowledgement");
-      },
-      async inspect(handle: MediaServerHandle): Promise<MediaServerSnapshot> {
-        inspections.push({ jobId: handle.jobId, requestId: handle.requestId, queue: handle.queue, path: handle.path });
-        const entry = entries.find((item) => item.handle.jobId === handle.jobId);
-        if (!entry) return { state: "missing" };
-        entry.inspections++;
-        const snapshot = options.inspect?.(entry) ?? {
-          state: "completed", response: entry.response,
-          timestamp: 10, processedOn: 20, finishedOn: 50, attemptsMade: 1,
-        };
-        if (snapshot instanceof Error) throw snapshot;
-        return snapshot;
       },
     },
   };
   return {
-    entries, enqueueAttempts, inspections, artifacts, logs, sleeps, deps,
+    entries, enqueueAttempts, tokens, artifacts, logs, deps,
+    overlappingWaits: () => overlappingWaits,
     run: (input = post()) => coordinateShadowMedia(input, "run-123", deps),
   };
 }
@@ -186,9 +180,9 @@ describe("shadow media coordinator graph", () => {
       expect(entry.job).toMatchObject({
         accept: { containers: ["mp4"], videoCodecs: ["h264", "hevc", "h265"], maxBitrate: 25000000 }, maxBytes: 314572800,
       });
-      const { name, data } = mediaServerSubmission(entry.handle, entry.job);
-      expect(name).toBe("media.transform-video");
-      expect(Object.keys(data).sort()).toEqual(["accept", "maxBytes", "output", "path", "requestId", "source"]);
+      const { name, data } = mediaServerSubmission(entry.handle, entry.job, entry.callback);
+      expect(name).toBe("media.trigger-transform-video");
+      expect(Object.keys(data.input).sort()).toEqual(["accept", "maxBytes", "output", "path", "requestId", "source"]);
     }
     expect(summary.videoDecisions).toEqual({ unchanged: 1, copied: 1, encoded: 1 });
     expect(h.logs.filter((log) => log.message === "Shadow video normalization decided").map((log) => log.data.decision).sort())
@@ -361,91 +355,94 @@ describe("shadow media coordinator graph", () => {
   });
 });
 
-describe("shadow observation and safety", () => {
-  test("animated image rejection is reported as an unsupported failed transform", async () => {
-    const h = harness({ inspect: (entry) => entry.job.task === "media.transform-image"
-      ? { state: "failed", failedReason: "Animated images are not supported." }
-      : { state: "completed", response: entry.response } });
-    const summary = await coordinateShadowMedia(post(), "run", h.deps);
-    expect(summary).toMatchObject({ status: "failed", completed: 1, failed: 1, unsupported: 1 });
-    expect(h.logs.some((log) => log.message === "Shadow animated image transformation unsupported by Zenith")).toBe(true);
+describe("shadow waitpoint tokens", () => {
+  test("each branch enqueues the interop job with its input and token URL, under an idempotent token", async () => {
+    const h = harness({ localize: (url) => stored(url.includes("thumb") ? image : video, url.includes("thumb") ? 1024 : 20_000_000) });
+    const summary = await h.run(post({ media: [{ ...post().media[0], thumbnail_url: "https://origin.example/thumb" }], accounts: [{ id: "ig", provider: "instagram" }] }));
+    expect(summary.status).toBe("completed");
+    expect(h.entries.map((entry) => mediaServerSubmission(entry.handle, entry.job, entry.callback).name)).toEqual([
+      "media.trigger-localize", "media.trigger-localize", "media.trigger-transform-video", "media.trigger-transform-image",
+    ]);
+    for (const [index, entry] of h.entries.entries()) {
+      const submission = mediaServerSubmission(entry.handle, entry.job, entry.callback);
+      const { task, ...input } = entry.job;
+      expect(task).toBeDefined();
+      expect(entry.handle.queue).toBe("trigger-interop");
+      expect(submission.data).toEqual({ input: { ...input, requestId: entry.handle.requestId, path: entry.handle.path }, callback: { url: h.tokens[index].url } });
+      expect(h.tokens[index].options).toEqual({
+        timeout: task === "media.transform-video" ? SHADOW_VIDEO_TOKEN_TIMEOUT : SHADOW_TOKEN_TIMEOUT,
+        tags: ["post", "run-123"], idempotencyKey: entry.handle.jobId,
+      });
+    }
   });
 
-  test("failed branch waits for other jobs, continues independent media, and reports failed", async () => {
-    const h = harness({ inspect: (entry) => entry.job.task === "media.localize" && entry.job.url.includes("broken")
-      ? { state: "failed", failedReason: "worker failed", attemptsMade: 5 }
-      : entry.inspections < 3 ? { state: "active" } : { state: "completed", response: entry.response } });
+  test("branches in one stage never wait on tokens concurrently", async () => {
+    const h = harness();
+    const summary = await h.run(post({
+      media: Array.from({ length: 6 }, (_, index) => ({ id: `medium-${index}`, url: `https://origin.example/${index}`, index })),
+      accounts: [{ id: "ig", provider: "instagram" }, { id: "tt", provider: "tiktok" }],
+    }));
+    expect(summary).toMatchObject({ status: "completed", failed: 0, incomplete: 0 });
+    expect(h.overlappingWaits()).toBe(0);
+  });
+
+  test("a failed token output records the branch as failed and continues independent media", async () => {
+    const h = harness({ outcome: (entry) => entry.job.task === "media.localize" && entry.job.url.includes("broken")
+      ? { ok: false, error: { code: "fetch_failed", message: "worker failed" } } : undefined });
     const summary = await h.run(post({ media: [
       { id: "broken", url: "https://origin.example/broken", index: 0 }, post().media[0],
     ] }));
     expect(summary).toMatchObject({ status: "failed", failed: 1, completed: 2, incomplete: 0, branchErrors: 1 });
-    expect(h.entries.slice(1).every((entry) => entry.inspections === 3)).toBe(true);
-    expect(h.logs.at(-1)?.data.status).toBe("failed");
+    expect(h.logs.some((log) => log.data.error && JSON.stringify(log.data.error).includes("fetch_failed"))).toBe(true);
   });
 
-  test("delayed/active retries with failedReason are not terminal failures", async () => {
-    const h = harness({ inspect: (entry) => entry.inspections < 4
-      ? { state: ["waiting", "active", "delayed"][entry.inspections - 1], failedReason: "prior attempt failed", attemptsMade: 2 }
-      : { state: "completed", response: entry.response, attemptsMade: 3 } });
+  test("animated image rejection is reported as an unsupported failed transform", async () => {
+    const h = harness({ outcome: (entry) => entry.job.task === "media.transform-image"
+      ? { ok: false, error: { code: "unsupported", message: "Animated images are not supported." } } : undefined });
     const summary = await h.run();
-    expect(summary).toMatchObject({ status: "completed", completed: 2, failed: 0 });
-    expect(h.entries.every((entry) => entry.inspections === 4)).toBe(true);
-    expect(h.sleeps).toEqual(Array(6).fill(10));
+    expect(summary).toMatchObject({ status: "failed", completed: 1, failed: 1, unsupported: 1 });
   });
 
-  test("lost enqueue acknowledgement still observes the deterministic known job ID", async () => {
-    const h = harness({ rejectEnqueue: () => true });
-    expect(await h.run()).toMatchObject({ status: "completed", completed: 2 });
-    expect(h.entries.every((entry) => entry.inspections === 1)).toBe(true);
-    const warnings = h.logs.filter((log) => log.message.includes("enqueue unconfirmed"));
-    expect(warnings.map((log) => log.data.jobId)).toEqual(h.entries.map((entry) => entry.handle.jobId));
-    expect(h.entries.every((entry) => entry.handle.requestId.length === 64 && entry.handle.path.startsWith("shadow/run-123/"))).toBe(true);
-  });
-
-  test("enqueue failure before add observes missing, retries the same handle and job, then completes", async () => {
-    const h = harness({ rejectBeforeAdd: (_handle, _job, attempt) => attempt === 1 });
+  test("a timed-out token is incomplete, stops its dependents, and is not a failure or an artifact", async () => {
+    const h = harness({ outcome: (entry) => entry.job.task === "media.localize" ? "timeout" : undefined });
     const summary = await h.run();
-    expect(summary).toMatchObject({ status: "completed", completed: 2, failed: 0, incomplete: 0 });
-    expect(h.enqueueAttempts).toHaveLength(3);
-    expect(h.enqueueAttempts[1]).toEqual(h.enqueueAttempts[0]);
-    expect(h.inspections.slice(0, 2)).toEqual([h.enqueueAttempts[0].handle, h.enqueueAttempts[0].handle]);
-    expect(h.entries).toHaveLength(2);
-    expect(h.entries[0].handle).toEqual(h.enqueueAttempts[0].handle);
-    expect(h.sleeps).toEqual([10]);
+    expect(summary).toMatchObject({ status: "incomplete", incomplete: 1, failed: 0, completed: 0 });
+    expect(summary.incompleteJobIds).toEqual([h.entries[0].handle.jobId]);
+    expect(h.entries).toHaveLength(1);
+    expect(summary.artifacts).toEqual([]);
   });
 
-  test("a stalled localization does not block later independent localizations beyond the first five", async () => {
-    const h = harness({ inspect: (entry) => entry.job.task === "media.localize" && entry.job.url.endsWith("/0")
-      ? { state: "active" } : { state: "completed", response: entry.response } });
+  test("a timeout in one branch leaves independent branches to finish", async () => {
+    const h = harness({ outcome: (entry) => entry.job.task === "media.localize" && entry.job.url.endsWith("/0") ? "timeout" : undefined });
     const summary = await h.run(post({
       accounts: [],
-      media: Array.from({ length: 7 }, (_, index) => ({
-        id: `medium-${index}`, url: `https://origin.example/${index}`, index,
-      })),
+      media: Array.from({ length: 3 }, (_, index) => ({ id: `medium-${index}`, url: `https://origin.example/${index}`, index })),
     }));
-    expect(summary).toMatchObject({ status: "incomplete", completed: 6, incomplete: 1, notSubmitted: 0 });
-    expect(h.entries).toHaveLength(7);
-    expect(h.entries.slice(1).every((entry) => entry.inspections === 1)).toBe(true);
-    expect(summary.incompleteJobIds).toEqual([h.entries[0].handle.jobId]);
-    expect(summary.elapsedMs).toBe(SHADOW_OBSERVATION_MS);
+    expect(summary).toMatchObject({ status: "incomplete", completed: 2, incomplete: 1 });
   });
 
-  test("inspection errors are retried without reenqueuing or losing the job", async () => {
-    const h = harness({ inspect: (entry) => entry.inspections <= 2
-      ? new Error("Redis temporarily unavailable") : { state: "completed", response: entry.response } });
-    expect(await h.run()).toMatchObject({ status: "completed", completed: 2 });
-    expect(h.entries).toHaveLength(2);
-    expect(h.entries.every((entry) => entry.inspections === 3)).toBe(true);
-    expect(h.logs.filter((log) => log.message.includes("inspection unavailable"))).toHaveLength(2);
+  test("enqueue failure before add retries the same handle, job and callback, then completes", async () => {
+    const h = harness({ rejectBeforeAdd: (attempt) => attempt === 1 });
+    const summary = await h.run();
+    expect(summary).toMatchObject({ status: "completed", completed: 2, failed: 0, incomplete: 0 });
+    expect(h.enqueueAttempts[1]).toEqual(h.enqueueAttempts[0]);
+    expect(h.tokens).toHaveLength(2);
+  });
+
+  test("an enqueue that keeps failing fails the branch without waiting on its token", async () => {
+    const h = harness({ rejectBeforeAdd: () => true });
+    const summary = await h.run();
+    expect(summary).toMatchObject({ status: "failed", failed: 1, completed: 0, incomplete: 0, branchErrors: 1 });
+    expect(h.enqueueAttempts).toHaveLength(3);
   });
 
   test.each(["localize", "normalize", "platform"])("invalid %s result stops dependents and is not an artifact", async (stage) => {
     const h = harness({
       localize: () => stored(stage === "normalize" ? video : image),
-      inspect: (entry) => {
+      outcome: (entry) => {
         const invalid = stage === "localize" ? entry.job.task === "media.localize"
           : stage === "normalize" ? entry.job.task === "media.transform-video" : entry.job.task === "media.transform-image";
-        return { state: "completed", response: invalid ? { ...entry.response, media: { kind: "image", width: 0 } } : entry.response };
+        return { ok: true, output: invalid ? { ...entry.response, media: { kind: "image", width: 0 } } : entry.response };
       },
     });
     const summary = await h.run();
@@ -456,57 +453,33 @@ describe("shadow observation and safety", () => {
     expect(h.logs.some((log) => log.message.includes("contract mismatch"))).toBe(true);
   });
 
-  test("global deadline logs every incomplete ID and submits no jobs after the fake clock expires", async () => {
-    const h = harness({ inspect: () => ({ state: "active" }) });
-    const summary = await h.run(post({ media: Array.from({ length: 7 }, (_, index) => ({
-      id: `medium-${index}`, url: `https://origin.example/${index}`, index,
-    })) }));
-    expect(summary).toMatchObject({ status: "incomplete", incomplete: 7, notSubmitted: 0, completed: 0 });
-    expect(h.entries).toHaveLength(7);
-    expect(summary.elapsedMs).toBe(SHADOW_OBSERVATION_MS);
-    expect(summary.incompleteJobIds).toEqual(h.entries.map((entry) => entry.handle.jobId));
-    const incomplete = h.logs.filter((log) => log.message.includes("job incomplete at coordinator timeout"));
-    expect(incomplete.map((log) => log.data.jobId)).toEqual(summary.incompleteJobIds);
-    expect(h.logs.filter((log) => log.message.includes("job request"))).toHaveLength(7);
-    expect(h.sleeps.every((seconds) => seconds === 10)).toBe(true);
+  test("a token completed with something other than the contract is a mismatch", async () => {
+    const h = harness({ outcome: () => "malformed" });
+    expect(await h.run()).toMatchObject({ status: "failed", failed: 1, completed: 0 });
   });
 
-  test("logs redact requests and responses while retaining all stored artifacts without deletion", async () => {
+  test("no log contains a callback URL, while requests and responses stay redacted and artifacts retained", async () => {
     const h = harness();
     const summary = await h.run();
     const requests = h.logs.filter((log) => log.message.startsWith("Zenith shadow job request:"));
-    const responses = h.logs.filter((log) => log.message.startsWith("Zenith shadow job terminal response:"));
-    expect(requests).toHaveLength(2);
-    expect(responses).toHaveLength(2);
     expect(requests.map((log) => log.message)).toEqual([
       "Zenith shadow job request: media.localize [localize]",
       "Zenith shadow job request: media.transform-image [instagram/image-q100]",
     ]);
     for (const [index, entry] of h.entries.entries()) {
-      expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job)));
-      expect(requests[index].data.task).toBe(entry.job.task);
+      expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job, entry.callback)));
     }
     expect(requests[0].data.redisJob).toMatchObject({
-      name: "media.localize", data: { url: "[redacted URL]" }, options: { attempts: 5 },
+      name: "media.trigger-localize", data: { input: { url: "[redacted URL]" }, callback: "[redacted callback]" },
     });
-    expect(requests[1].data.redisJob).toMatchObject({
-      name: "media.transform-image",
-      data: { source: sourceOf(h.entries[0]), output: { type: "image", format: "jpeg", quality: 100 } },
-    });
-    expect(responses[0].data.response).toMatchObject({ url: "[redacted URL]" });
-    expect(responses[0].data).toMatchObject({ enqueueToTerminalMs: 40, latestAttemptMs: 30, attemptsMade: 1 });
     const serialized = JSON.stringify(h.logs);
-    for (const secret of ["request-secret", "response-secret", "https://"]) expect(serialized).not.toContain(secret);
-    expect(h.entries[0].job).toMatchObject({ url: post().media[0].url });
+    for (const secret of ["secret-hash", "trigger.example", "request-secret", "response-secret", "https://"]) expect(serialized).not.toContain(secret);
     expect(summary.artifacts).toEqual(h.entries.map(sourceOf));
-    expect(h.artifacts.size).toBe(summary.artifacts.length);
-    for (const artifact of summary.artifacts) expect(h.artifacts.get(artifact.versionId ?? "")?.fileId).toBe(artifact.fileId);
-    expect(h.entries.map((entry) => entry.job.task)).toEqual(["media.localize", "media.transform-image"]);
   });
 
   test("matches live behavior by falling back to default media after all account-scoped media fail", async () => {
-    const h = harness({ inspect: (entry) => entry.job.task === "media.localize" && entry.job.url.endsWith("account")
-      ? { state: "failed", failedReason: "unavailable" } : { state: "completed", response: entry.response } });
+    const h = harness({ outcome: (entry) => entry.job.task === "media.localize" && entry.job.url.endsWith("account")
+      ? { ok: false, error: { code: "unavailable", message: "unavailable" } } : undefined });
     const summary = await h.run(post({ media: [post().media[0], {
       id: "override", url: "https://origin.example/account", provider_connection_id: "ig", index: 1,
     }] }));

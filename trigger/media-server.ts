@@ -75,11 +75,22 @@ export type MediaServerJob =
     maxBytes?: number;
   };
 
-export const mediaServerLanes = {
-  "media.localize": "ingest",
-  "media.transform-image": "images",
-  "media.transform-video": "videos",
+/** The BullMQ lane whose coordinators run the real task and complete a Trigger waitpoint token. */
+export const MEDIA_SERVER_INTEROP_LANE = "trigger-interop";
+
+export const mediaServerInteropJobs = {
+  "media.localize": "media.trigger-localize",
+  "media.transform-image": "media.trigger-transform-image",
+  "media.transform-video": "media.trigger-transform-video",
 } as const;
+
+/** The URL media POSTs a task's outcome to; it completes the waitpoint token and is a secret. */
+export type MediaServerCallback = { url: string };
+
+/** What media POSTs to the callback: the real task's output, or a coded error. */
+export type MediaServerTokenOutput =
+  | { ok: true; output: unknown }
+  | { ok: false; error: { code: string; message: string } };
 
 export type MediaServerHandle = {
   jobId: string;
@@ -88,33 +99,22 @@ export type MediaServerHandle = {
   path: string;
 };
 
-export type MediaServerSnapshot = {
-  state: string;
-  response?: unknown;
-  failedReason?: string;
-  timestamp?: number;
-  processedOn?: number;
-  finishedOn?: number;
-  attemptsMade?: number;
-};
-
 export interface MediaServerTransport {
-  enqueue(handle: MediaServerHandle, job: MediaServerJob): Promise<void>;
-  inspect(handle: MediaServerHandle): Promise<MediaServerSnapshot>;
+  enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback): Promise<void>;
 }
 
 const OPERATION_TIMEOUT_MS = 2500;
 
-export function mediaServerSubmission(handle: MediaServerHandle, job: MediaServerJob) {
+/** The BullMQ job for a task on the interop lane: the real task's input plus the callback. */
+export function mediaServerSubmission(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback) {
   const { task, ...input } = job;
   return {
-    name: task,
-    data: { ...input, requestId: handle.requestId, path: handle.path },
+    name: mediaServerInteropJobs[task],
+    data: { input: { ...input, requestId: handle.requestId, path: handle.path }, callback },
     options: {
       jobId: handle.jobId,
       attempts: 5,
       backoff: { type: "exponential", delay: 1000 },
-      // Keep observed results long enough for the two-hour coordinator even under load.
       removeOnComplete: { age: 3 * 60 * 60 },
       removeOnFail: { age: 3 * 60 * 60 },
     },
@@ -154,29 +154,10 @@ async function withQueue<T>(redisUrl: string, name: string, operation: (queue: Q
 
 export function createMediaServerTransport(redisUrl: string): MediaServerTransport {
   return {
-    async enqueue(handle, job) {
+    async enqueue(handle, job, callback) {
       await withQueue(redisUrl, handle.queue, async (queue) => {
-        const { name, data, options } = mediaServerSubmission(handle, job);
+        const { name, data, options } = mediaServerSubmission(handle, job, callback);
         await queue.add(name, data, options);
-      });
-    },
-    async inspect(handle) {
-      return withQueue(redisUrl, handle.queue, async (queue) => {
-        const job = await queue.getJob(handle.jobId);
-        if (!job) return { state: "missing" };
-        const state = await job.getState();
-        // Refetch after state: the original snapshot may predate the worker's returnvalue.
-        const current = state === "completed" || state === "failed" ? await queue.getJob(handle.jobId) : job;
-        if (!current) return { state: "missing" };
-        return {
-          state,
-          response: current.returnvalue,
-          failedReason: current.failedReason,
-          timestamp: current.timestamp,
-          processedOn: current.processedOn,
-          finishedOn: current.finishedOn,
-          attemptsMade: current.attemptsMade,
-        };
       });
     },
   };
@@ -188,7 +169,8 @@ export function sanitizeMediaServerLog(value: unknown): unknown {
   }
   if (Array.isArray(value)) return value.map(sanitizeMediaServerLog);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeMediaServerLog(item)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) =>
+      [key, key === "callback" ? "[redacted callback]" : sanitizeMediaServerLog(item)]));
   }
   return value;
 }
