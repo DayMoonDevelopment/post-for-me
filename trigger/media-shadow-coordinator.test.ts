@@ -159,6 +159,63 @@ describe("shadow media coordinator graph", () => {
     expect(summary.artifacts).toEqual(h.entries.map(sourceOf));
   });
 
+  test("submits every video with accept and maxBytes, compliant or not, and records media's decision", async () => {
+    const compliant = {
+      ...video, container: "mov,mp4,m4a,3gp,3g2,mj2", width: 1080, height: 1920, bitrate: 8000000,
+      video: { codec: "h264", profile: null, level: null, pixelFormat: "yuv420p", bitrate: 7800000 },
+      audio: { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 },
+    } satisfies MediaInfo;
+    const decisions = ["unchanged", "copied", "encoded"];
+    const h = harness({
+      localize: (url) => stored(url.includes("good") ? compliant : video),
+      result: (entry) => {
+        if (entry.job.task !== "media.transform-video") return entry.response;
+        const index = h.entries.length - 3;
+        const decision = decisions[index];
+        return { ...entry.response, decision, ...(decision === "unchanged"
+          ? { fileId: entry.job.source.fileId, versionId: entry.job.source.versionId } : {}) } as StoredMedia;
+      },
+    });
+    const summary = await h.run(post({
+      media: ["good", "bad", "also-bad"].map((name, index) => ({ id: name, url: `https://origin.example/${name}`, index })),
+      accounts: [],
+    }));
+    const transforms = h.entries.filter((entry) => entry.job.task === "media.transform-video");
+    expect(transforms).toHaveLength(3);
+    for (const entry of transforms) {
+      expect(entry.job).toMatchObject({
+        accept: { containers: ["mp4"], videoCodecs: ["h264", "hevc", "h265"], maxBitrate: 25000000 }, maxBytes: 314572800,
+      });
+      const { name, data } = mediaServerSubmission(entry.handle, entry.job);
+      expect(name).toBe("media.transform-video");
+      expect(Object.keys(data).sort()).toEqual(["accept", "maxBytes", "output", "path", "requestId", "source"]);
+    }
+    expect(summary.videoDecisions).toEqual({ unchanged: 1, copied: 1, encoded: 1 });
+    expect(h.logs.filter((log) => log.message === "Shadow video normalization decided").map((log) => log.data.decision).sort())
+      .toEqual(["copied", "encoded", "unchanged"]);
+    expect(h.logs.some((log) => log.message.includes("source meets requirements"))).toBe(false);
+  });
+
+  test("an unchanged result names the source itself, and the Bluesky chain still consumes it", async () => {
+    const h = harness({
+      localize: () => stored(video, 200_000_000),
+      result: (entry) => {
+        if (entry.job.task !== "media.transform-video") return entry.response;
+        const { fileId, versionId } = entry.job.source;
+        const accepted = entry.job.accept !== undefined;
+        const size = accepted ? 200_000_000 : entry.job.output.video.preset === "slow" ? 90_000_000 : 150_000_000;
+        return { ...entry.response, ...(accepted ? { decision: "unchanged", fileId, versionId } : {}), size } as StoredMedia;
+      },
+    });
+    const summary = await h.run(post({ accounts: [{ id: "b", provider: "bluesky" }] }));
+    expect(summary).toMatchObject({ status: "completed", completed: 5, videoDecisions: { unchanged: 1, copied: 0, encoded: 0 } });
+    const [localized, normalized, ...passes] = h.entries;
+    expect(sourceOf(normalized)).toEqual(sourceOf(localized));
+    expect(passes[0].job).toMatchObject({ source: sourceOf(localized), output: { video: { preset: "fast" } } });
+    expect(passes[1].job).toMatchObject({ source: sourceOf(passes[0]) });
+    expect(summary.artifacts).toHaveLength(h.entries.length - 1);
+  });
+
   test("account media wins over platform media, platform needs configuration, otherwise defaults win", async () => {
     const h = harness();
     const summary = await h.run(post({

@@ -42,11 +42,38 @@ export type MediaServerVideoOutput = {
   };
 };
 
+type AcceptRange = { min?: number; max?: number };
+
+/** What counts as a video already good enough; vendored from Zenith's `videoAcceptSchema`. */
+export type MediaServerVideoAccept = {
+  videoCodecs?: string[];
+  pixelFormats?: string[];
+  maxWidth?: number;
+  maxHeight?: number;
+  bounds?: { aspectRatio?: AcceptRange; maxWidth: number; maxHeight: number }[];
+  aspectRatio?: AcceptRange;
+  fps?: AcceptRange;
+  maxVideoBitrate?: number;
+  maxBitrate?: number;
+  audioRequired?: boolean;
+  audioCodecs?: string[];
+  audioBitrate?: AcceptRange;
+  audioChannels?: AcceptRange;
+  audioSampleRate?: AcceptRange;
+  containers?: string[];
+};
+
 type StoredSource = { fileId: string; versionId: string };
 export type MediaServerJob =
   | { task: "media.localize"; url: string }
   | { task: "media.transform-image"; source: StoredSource; output: MediaServerImageOutput }
-  | { task: "media.transform-video"; source: StoredSource; output: MediaServerVideoOutput };
+  | {
+    task: "media.transform-video";
+    source: StoredSource;
+    output: MediaServerVideoOutput;
+    accept?: MediaServerVideoAccept;
+    maxBytes?: number;
+  };
 
 export const mediaServerLanes = {
   "media.localize": "ingest",
@@ -164,6 +191,15 @@ export function sanitizeMediaServerLog(value: unknown): unknown {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeMediaServerLog(item)]));
   }
   return value;
+}
+
+/** What media did with a source video: kept it, redid only its audio or container, or re-encoded it. */
+export type MediaServerVideoDecision = "unchanged" | "copied" | "encoded";
+
+/** The transform's decision, or `undefined` for a result that has none. */
+export function mediaServerDecision(response: unknown): string | undefined {
+  const decision = (response as { decision?: unknown } | null)?.decision;
+  return typeof decision === "string" ? decision : undefined;
 }
 
 export function parseMediaServerResponse(value: unknown, task: MediaServerJob["task"]): StoredMedia {

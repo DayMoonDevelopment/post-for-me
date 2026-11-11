@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { selectPostMedia } from "./posting/media-selection";
 import {
-  mediaServerLanes, mediaServerSubmission, parseMediaServerResponse, sanitizeMediaServerLog,
-  type MediaServerHandle, type MediaServerJob, type MediaServerTransport,
+  mediaServerDecision, mediaServerLanes, mediaServerSubmission, parseMediaServerResponse, sanitizeMediaServerLog,
+  type MediaServerHandle, type MediaServerJob, type MediaServerTransport, type MediaServerVideoDecision,
 } from "./media-server";
 import {
-  blueskyVideoOutput, genericVideoOutput, platformImageRecipe, type StoredMedia,
+  blueskyVideoOutput, GENERIC_VIDEO_ACCEPT, GENERIC_VIDEO_MAX_BYTES, genericVideoOutput, platformImageRecipe, type StoredMedia,
 } from "./media-shadow-recipes";
 
 export const SHADOW_MAX_DURATION_SECONDS = 480;
@@ -46,6 +46,7 @@ type JobRecord = MediaServerHandle & {
   startedAt: number;
   fileId?: string;
   versionId?: string;
+  decision?: string;
 };
 type Dependencies = {
   transport: MediaServerTransport;
@@ -148,6 +149,7 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
             const response = parseMediaServerResponse(snapshot.response, job.task);
             record.fileId = response.fileId;
             record.versionId = response.versionId;
+            record.decision = mediaServerDecision(snapshot.response);
             return response;
           } catch {
             record.status = "failed";
@@ -216,11 +218,15 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
   await batch(ordered.filter((medium) => localized.has(medium.id)), async (medium) => {
     let result = localized.get(medium.id)!;
     if (result.media.kind === "video" && !medium.skip_processing) {
-      const output = genericVideoOutput(result);
-      if (output) result = await execute("normalize-video", medium.id, {
-        task: "media.transform-video", source: sourceOf(result), output,
+      const source = result;
+      result = await execute("normalize-video", medium.id, {
+        task: "media.transform-video", source: sourceOf(source), output: genericVideoOutput(source),
+        accept: GENERIC_VIDEO_ACCEPT, maxBytes: GENERIC_VIDEO_MAX_BYTES,
       });
-      else log("info", "Shadow video normalization skipped: source meets requirements", { mediumId: medium.id });
+      log("info", "Shadow video normalization decided", {
+        mediumId: medium.id, decision: mediaServerDecision(result),
+        sourceFileId: source.fileId, sourceVersionId: source.versionId,
+      });
     }
     ready.set(medium.id, result);
   });
@@ -299,7 +305,10 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
     failed: jobs.filter((job) => job.status === "failed").length,
     incomplete: incomplete.length, notSubmitted, branchErrors, unsupported,
     incompleteJobIds: incomplete.map((job) => job.jobId),
-    artifacts: jobs.filter((job) => job.fileId).map(({ fileId, versionId }) => ({ fileId, versionId })),
+    videoDecisions: Object.fromEntries((["unchanged", "copied", "encoded"] as MediaServerVideoDecision[]).map((decision) => [
+      decision, jobs.filter((job) => job.stage === "normalize-video" && job.decision === decision).length,
+    ])),
+    artifacts: [...new Map(jobs.filter((job) => job.fileId).map(({ fileId, versionId }) => [`${fileId}/${versionId}`, { fileId, versionId }])).values()],
   };
   log(summary.status === "completed" ? "info" : "error", "Shadow media coordinator finished", summary);
   return summary;
