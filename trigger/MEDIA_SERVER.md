@@ -15,8 +15,15 @@ The former individual-task shadow producers have been removed.
 
 1. Localize every original medium and supplied thumbnail using `media.localize`
    on `ingest`. Observe each job to terminal state and validate its response.
-2. Normalize non-skipped videos that need processing using
-   `media.transform-video` on `videos`. Compliant videos are not encoded.
+2. Submit every non-skipped localized video to `media.transform-video` on
+   `videos` with production's checks as `accept`, `maxBytes` of 300 MiB, and
+   production's H.264 encode as `output`. The coordinator does not decide
+   eligibility: Zenith profiles the source and returns a `decision` of
+   `unchanged` (the source passed; the result names the source's own file and
+   version), `copied` (video stream kept, audio or container redone) or
+   `encoded`. Decisions are logged per video and counted in the final summary
+   as `videoDecisions`. Downstream stages read the result's file and version
+   the same way for all three.
 3. Resolve account/platform/default media overrides using the live selection
    helper, merge destination configuration, and split story posting units.
 4. Run required platform transformations: Instagram images and single-video
@@ -31,8 +38,9 @@ Each transform reads `source: { fileId, versionId }` from the preceding
 completed job, never the live pipeline's URL. Localization metadata is sufficient
 to select recipes without downloading or running Sharp/FFmpeg in the coordinator.
 Image quality ladders and Bluesky's three video passes are separate chained jobs.
-Oversized final outputs are logged, matching the live ladders' return-anyway
-behavior rather than passing Zenith's rejecting `maxBytes` option.
+Oversized final outputs of the image ladders and Bluesky's passes are logged,
+matching the live ladders' return-anyway behavior rather than passing Zenith's
+rejecting `maxBytes` option; only the generic video transform sends `maxBytes`.
 
 Contracts are vendored locally from Zenith's
 `packages/foundations/src/jobs/catalogue.ts` (reviewed at `186cd76`). BullMQ is
@@ -99,17 +107,18 @@ until its deadline.
   different native tool versions. Instagram's raw EXIF dimension choice is
   reconstructed; JPEG recipes specify black transparency flattening to match
   the existing Sharp pipelines rather than Zenith's white default.
-- Unknown video metadata is handled conservatively and can force an encode
-  where live processing would pass through. Oversized videos without a usable
-  duration cannot have a safe bitrate budget calculated and fail that branch.
+- Oversized videos without a usable duration cannot have a safe bitrate budget calculated and fail that branch.
 - X's no-auto-orientation JPEG conversion is not exact metadata parity:
   Zenith preserves the orientation tag when `autoOrient: false`, whereas the
   live Sharp conversion strips metadata. Tagged oversized images can therefore
   display differently; Zenith needs an explicit strip-without-rotate option
   for exact parity on that path.
-- Zenith `accept` does not express all live video checks (including audio
-  channels/sample rate). The coordinator makes eligibility decisions itself
-  and omits `accept`, avoiding accidental copy/pass-through decisions.
+- The generic video `accept` expresses every check production makes, and
+  Zenith decides the path. Three differences from live production are accepted:
+  a `.mov` with good streams comes out `copied` into an MP4, where production
+  would skip it; an encoded result over 300 MiB fails the job, where production
+  only gates the source; and pixel format is not checked, as in production.
+  Bluesky's size-budget encodes send no `accept`.
 - Supabase-domain compatibility copies, platform uploads, provider-side
   transcoding, and publishing/status polling are outside this measurement.
   Destinations are planned from post configuration, not credential validation

@@ -1,4 +1,4 @@
-import type { MediaServerImageOutput, MediaServerVideoOutput } from "./media-server";
+import type { MediaServerImageOutput, MediaServerVideoAccept, MediaServerVideoOutput } from "./media-server";
 import { computeCropDimensions, resolveInstagramMinAspectRatio } from "./posting/image-processing-utils";
 
 // Vendored from Zenith's jobs catalogue. Dimensions are already display-oriented.
@@ -34,32 +34,56 @@ export type StoredMedia = {
   media: MediaInfo;
 };
 
-export function genericVideoOutput(source: StoredMedia): MediaServerVideoOutput | undefined {
+const GENERIC_ASPECT_TOLERANCE = 0.1;
+const GENERIC_BOUNDS = [
+  { ratio: 9 / 16, width: 1080, height: 1920 },
+  { ratio: 16 / 9, width: 1920, height: 1080 },
+  { ratio: 1, width: 1080, height: 1080 },
+  { ratio: 4 / 3, width: 1440, height: 1080 },
+];
+const GENERIC_FALLBACK_BOUND = { width: 1920, height: 1080 };
+const GENERIC_MAX_BITRATE = 25000000;
+const GENERIC_AUDIO_BITRATE = { min: 126000, max: 130000 };
+
+/** The largest result, in bytes, that the generic recipe lets media store. */
+export const GENERIC_VIDEO_MAX_BYTES = 300 * 1024 * 1024;
+
+/** What production accepts as-is: media keeps a source that passes, and re-encodes or copies the rest. */
+export const GENERIC_VIDEO_ACCEPT: MediaServerVideoAccept = {
+  containers: ["mp4"],
+  videoCodecs: ["h264", "hevc", "h265"],
+  maxBitrate: GENERIC_MAX_BITRATE,
+  fps: { min: 22.5, max: 60.4999 },
+  bounds: [
+    ...GENERIC_BOUNDS.map((bound) => ({
+      aspectRatio: { min: bound.ratio - GENERIC_ASPECT_TOLERANCE, max: bound.ratio + GENERIC_ASPECT_TOLERANCE },
+      maxWidth: bound.width,
+      maxHeight: bound.height,
+    })),
+    { maxWidth: GENERIC_FALLBACK_BOUND.width, maxHeight: GENERIC_FALLBACK_BOUND.height },
+  ],
+  audioCodecs: ["aac"],
+  audioChannels: { min: 1, max: 2 },
+  audioSampleRate: { min: 1, max: 48000 },
+  audioBitrate: GENERIC_AUDIO_BITRATE,
+};
+
+/**
+ * The encode production makes when a video fails `GENERIC_VIDEO_ACCEPT`.
+ * @param source The localized video.
+ * @returns The H.264 output, sized to the source's aspect-ratio bound.
+ */
+export function genericVideoOutput(source: StoredMedia): MediaServerVideoOutput {
   const media = source.media;
   if (media.kind !== "video") throw new Error("Expected video metadata");
   const { width, height, audio } = media;
   const aspectRatio = width / height;
-  const bounds = [
-    { ratio: 9 / 16, width: 1080, height: 1920 },
-    { ratio: 16 / 9, width: 1920, height: 1080 },
-    { ratio: 1, width: 1080, height: 1080 },
-    { ratio: 4 / 3, width: 1440, height: 1080 },
-  ].find((bound) => Math.abs(aspectRatio - bound.ratio) <= 0.1)
-    ?? { width: 1920, height: 1080 };
+  const bounds = GENERIC_BOUNDS.find((bound) => Math.abs(aspectRatio - bound.ratio) <= GENERIC_ASPECT_TOLERANCE)
+    ?? GENERIC_FALLBACK_BOUND;
   const frameRate = media.frameRate === null ? null : Math.round(media.frameRate);
   const validFrameRate = frameRate !== null && frameRate >= 23 && frameRate <= 60;
-  const validAudio = audio === null || (
-    audio.codec === "aac" && audio.channels !== null && audio.channels > 0 && audio.channels <= 2 &&
-    audio.sampleRate !== null && audio.sampleRate > 0 && audio.sampleRate <= 48000 &&
-    audio.bitrate !== null && audio.bitrate >= 126000 && audio.bitrate <= 130000
-  );
-  const large = source.size > 300 * 1024 * 1024;
-  const highBitrate = media.bitrate !== null && media.bitrate > 25000000;
-  if (
-    media.container.includes("mp4") && ["h264", "hevc", "h265"].includes(media.video.codec) &&
-    media.bitrate !== null && !highBitrate && !large && validFrameRate &&
-    width <= bounds.width && height <= bounds.height && validAudio
-  ) return undefined;
+  const large = source.size > GENERIC_VIDEO_MAX_BYTES;
+  const highBitrate = media.bitrate !== null && media.bitrate > GENERIC_MAX_BITRATE;
 
   const scaleRatio = Math.min(bounds.width / width, bounds.height / height, 1);
   const even = (dimension: number) => Math.max(2, Math.floor(dimension / 2) * 2);

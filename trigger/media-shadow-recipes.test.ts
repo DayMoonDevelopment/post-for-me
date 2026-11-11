@@ -20,15 +20,8 @@ function image(width: number, height: number, orientation = 1, size?: number): S
 }
 
 describe("generic video policy", () => {
-  test("leaves compliant H.264 and HEVC MP4s untouched, even with unknown profile fields", () => {
-    for (const codec of ["h264", "hevc", "h265"]) {
-      expect(genericVideoOutput(video({ video: { codec, profile: null, level: null, pixelFormat: null, bitrate: null } }))).toBeUndefined();
-    }
-    expect(genericVideoOutput(video({ audio: null }))).toBeUndefined();
-  });
-
   test("uses display dimensions without rotating a portrait video twice", () => {
-    expect(genericVideoOutput(video({ width: 1080, height: 1920, rotation: 90 }))).toBeUndefined();
+    expect(genericVideoOutput(video({ width: 1080, height: 1920, rotation: 90 }))?.video.scale).toEqual({ width: 1080, height: 1920 });
     const output = genericVideoOutput(video({ width: 2160, height: 3840, rotation: 270 }));
     expect(output?.video.scale).toEqual({ width: 1080, height: 1920 });
     expect(output?.video.fps).toBe(30);
@@ -41,7 +34,7 @@ describe("generic video policy", () => {
     expect(genericVideoOutput(video({ frameRate: 60.5 }))?.video.fps).toBe(24);
   });
 
-  test("unknown nullable metadata cannot prove compliance", () => {
+  test("unknown nullable metadata falls back to CRF, 24 fps and the standard audio", () => {
     expect(genericVideoOutput(video({ bitrate: null }))?.video.crf).toBe(23);
     expect(genericVideoOutput(video({ frameRate: null }))?.video.fps).toBe(24);
     for (const field of ["channels", "sampleRate", "bitrate"] as const) {
@@ -52,15 +45,11 @@ describe("generic video policy", () => {
     }
   });
 
-  test("preserves the audio bitrate tolerance and forces invalid audio through AAC", () => {
-    for (const bitrate of [126000, 130000]) {
-      expect(genericVideoOutput(video({ audio: { codec: "aac", bitrate, channels: 1, sampleRate: 44100 } }))).toBeUndefined();
-    }
-    expect(genericVideoOutput(video({ audio: { codec: "aac", bitrate: 130001, channels: 2, sampleRate: 48000 } }))?.audio?.bitrate).toBe(128000);
+  test("keeps a silent video silent", () => {
+    expect(genericVideoOutput(video({ audio: null }))?.audio).toBeNull();
   });
 
-  test("honors exact size/bitrate limits and prioritizes large-file compression", () => {
-    expect(genericVideoOutput(video({ bitrate: 25000000 }, 300 * 1024 * 1024))).toBeUndefined();
+  test("budgets the bitrate for high-bitrate and large sources, large first", () => {
     const high = genericVideoOutput(video({ bitrate: 25000001 }));
     expect(high?.video).toMatchObject({ bitrate: 24000000, maxrate: 25000000, bufsize: 50000000 });
     expect(high?.video.crf).toBeUndefined();
@@ -72,7 +61,7 @@ describe("generic video policy", () => {
   });
 
   test("requires duration only when the size-targeted encode needs it", () => {
-    expect(genericVideoOutput(video({ durationSeconds: null }))).toBeUndefined();
+    expect(genericVideoOutput(video({ durationSeconds: null }))?.video.crf).toBe(23);
     expect(() => genericVideoOutput(video({ durationSeconds: null }, 301 * 1024 * 1024))).toThrow("positive duration");
     expect(() => genericVideoOutput(image(100, 100))).toThrow("video metadata");
   });
