@@ -26,4 +26,9 @@ export default defineConfig({
     },
   },
   dirs: ["."],
+  // Keep the local profiler out of task discovery; preserve the default test exclusions.
+  ignorePatterns: [
+    "**/*.{test,spec}.{ts,mts,cts,js,mjs,cjs}",
+    "**/scripts/profile-webhooks.ts",
+  ],
 });
