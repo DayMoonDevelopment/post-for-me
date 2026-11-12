@@ -103,8 +103,10 @@ export function Component() {
             <p className="text-sm text-muted-foreground">
               {`We want you to succeed, and not be afraid of surprise charges. If
               you unexpectedly go over the limits of your plan, we won't shut
-              you down or charge you extra automatically. If your
-              usage is consistently exceeding the limits, we'll reach out about upgrading your account.`}
+              you down or charge you extra immediately. If you exceed your plan's
+              limits, we'll automatically upgrade you to the next tier at the
+              start of your next billing cycle. That's when the higher-tier
+              charge takes effect.`}
             </p>
           </div>
         </div>
