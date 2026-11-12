@@ -315,6 +315,15 @@ export class TwitterConfigurationDto extends BaseConfigurationDto {
   quote_tweet_id?: string;
 
   @ApiProperty({
+    description:
+      'ID of an existing X post to reply to. Omit to publish a standalone post. This sets the reply target, not who can reply (reply_settings).',
+    required: false,
+    nullable: false,
+    example: '1841234567890123456',
+  })
+  reply_to_tweet_id?: string;
+
+  @ApiProperty({
     description: 'Who can reply to the tweet',
     enum: ['following', 'mentionedUsers', 'subscribers', 'verified'],
     required: false,
