@@ -216,9 +216,10 @@ if (scenario === "routing") {
   ];
   for (const job of jobs) {
     const laneHandle = { ...handle, queue: MEDIA_SERVER_INTEROP_LANE };
-    expect(await transport.enqueue(laneHandle, job, callback)).toBeUndefined();
+    const lookupKeys = [{ key: "social_post", refId: "post-1" }];
+    expect(await transport.enqueue(laneHandle, job, callback, lookupKeys)).toBeUndefined();
     const { task, ...input } = job;
-    expect(adds.at(-1)).toEqual([mediaServerInteropJobs[task], { input: { ...input, requestId: handle.requestId, path: handle.path }, callback }, {
+    expect(adds.at(-1)).toEqual([mediaServerInteropJobs[task], { input: { ...input, requestId: handle.requestId, path: handle.path }, callback, lookupKeys }, {
       jobId: handle.jobId, attempts: 5, backoff: { type: "exponential", delay: 1000 },
       removeOnComplete: { age: 10800 }, removeOnFail: { age: 10800 },
     }]);

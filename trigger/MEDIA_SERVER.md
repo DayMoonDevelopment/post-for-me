@@ -65,9 +65,11 @@ Per Zenith job the coordinator:
    | `media.transform-video` | `media.trigger-transform-video` |
    | `media.transform-image` | `media.trigger-transform-image` |
 
-   Data is `{ input, callback: { url } }`. `input` is exactly what the real task
-   takes (source, output, accept, maxBytes, `requestId`, `path`); `url` is the
-   token's callback URL.
+   Data is `{ input, callback: { url }, lookupKeys }`. `input` is exactly what the
+   real task takes (source, output, accept, maxBytes, `requestId`, `path`); `url`
+   is the token's callback URL. `lookupKeys` is the optional catalogue field
+   `[{ key, refId }]`; every job, chained steps included, carries
+   `[{ key: "social_post", refId: <postId> }]`.
 3. Waits with `wait.forToken(token)`. Media runs the real task and POSTs
    `{ ok: true, output }` (the real task's output, validated by
    `parseMediaServerResponse`) or `{ ok: false, error: { code, message } }` to

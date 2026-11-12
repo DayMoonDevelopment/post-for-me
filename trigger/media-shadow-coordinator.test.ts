@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { coordinateShadowMedia, SHADOW_TOKEN_TIMEOUT, SHADOW_VIDEO_TOKEN_TIMEOUT, type ShadowPost, type WaitpointApi } from "./media-shadow-coordinator";
 import {
-  mediaServerSubmission, sanitizeMediaServerLog, type MediaServerCallback, type MediaServerHandle, type MediaServerJob, type MediaServerTokenOutput,
+  mediaServerSubmission, sanitizeMediaServerLog, type MediaServerCallback, type MediaServerHandle, type MediaServerJob, type MediaServerLookupKey, type MediaServerTokenOutput,
 } from "./media-server";
 import type { MediaInfo, StoredMedia } from "./media-shadow-recipes";
 
@@ -36,6 +36,7 @@ type Entry = {
   handle: MediaServerHandle;
   job: MediaServerJob;
   callback: MediaServerCallback;
+  lookupKeys?: MediaServerLookupKey[];
   response: StoredMedia;
 };
 type Outcome = MediaServerTokenOutput | "timeout" | "malformed";
@@ -47,7 +48,7 @@ function harness(options: {
   rejectBeforeAdd?: (attempt: number) => boolean;
 } = {}) {
   const entries: Entry[] = [];
-  const enqueueAttempts: { handle: MediaServerHandle; job: MediaServerJob; callback: MediaServerCallback }[] = [];
+  const enqueueAttempts: { handle: MediaServerHandle; job: MediaServerJob; callback: MediaServerCallback; lookupKeys?: MediaServerLookupKey[] }[] = [];
   const tokens: { options: Parameters<WaitpointApi["createToken"]>[0]; id: string; url: string }[] = [];
   const artifacts = new Map<string, StoredMedia>();
   const logs: { level: string; message: string; data: Record<string, unknown> }[] = [];
@@ -84,9 +85,9 @@ function harness(options: {
       },
     },
     transport: {
-      async enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback) {
+      async enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback, lookupKeys?: MediaServerLookupKey[]) {
         const identity = { jobId: handle.jobId, requestId: handle.requestId, queue: handle.queue, path: handle.path };
-        enqueueAttempts.push({ handle: identity, job: structuredClone(job), callback });
+        enqueueAttempts.push({ handle: identity, job: structuredClone(job), callback, lookupKeys });
         if (options.rejectBeforeAdd?.(enqueueAttempts.length)) throw new Error("Enqueue failed before add");
         const id = entries.length + 1;
         const source = job.task === "media.localize"
@@ -115,7 +116,7 @@ function harness(options: {
           };
           Object.assign(response, { decision: "encoded", contentType: "video/mp4" });
         }
-        const entry: Entry = { handle: identity, job: structuredClone(job), callback, response };
+        const entry: Entry = { handle: identity, job: structuredClone(job), callback, lookupKeys, response };
         response = options.result?.(entry) ?? response;
         entry.response = response;
         entries.push(entry);
@@ -180,7 +181,7 @@ describe("shadow media coordinator graph", () => {
       expect(entry.job).toMatchObject({
         accept: { containers: ["mp4"], videoCodecs: ["h264", "hevc", "h265"], maxBitrate: 25000000 }, maxBytes: 314572800,
       });
-      const { name, data } = mediaServerSubmission(entry.handle, entry.job, entry.callback);
+      const { name, data } = mediaServerSubmission(entry.handle, entry.job, entry.callback, entry.lookupKeys);
       expect(name).toBe("media.trigger-transform-video");
       expect(Object.keys(data.input).sort()).toEqual(["accept", "maxBytes", "output", "path", "requestId", "source"]);
     }
@@ -270,6 +271,8 @@ describe("shadow media coordinator graph", () => {
     }) });
     const summary = await h.run();
     expect(summary).toMatchObject({ status: "completed", completed: 4 });
+    expect(h.entries.length).toBeGreaterThan(3);
+    for (const entry of h.entries) expect(entry.lookupKeys).toEqual([{ key: "social_post", refId: "post" }]);
     for (const [index, quality] of [100, 80, 60].entries()) {
       expect(h.entries[index + 1].job).toMatchObject({ source: sourceOf(h.entries[index]), output: { quality } });
     }
@@ -360,15 +363,15 @@ describe("shadow waitpoint tokens", () => {
     const h = harness({ localize: (url) => stored(url.includes("thumb") ? image : video, url.includes("thumb") ? 1024 : 20_000_000) });
     const summary = await h.run(post({ media: [{ ...post().media[0], thumbnail_url: "https://origin.example/thumb" }], accounts: [{ id: "ig", provider: "instagram" }] }));
     expect(summary.status).toBe("completed");
-    expect(h.entries.map((entry) => mediaServerSubmission(entry.handle, entry.job, entry.callback).name)).toEqual([
+    expect(h.entries.map((entry) => mediaServerSubmission(entry.handle, entry.job, entry.callback, entry.lookupKeys).name)).toEqual([
       "media.trigger-localize", "media.trigger-localize", "media.trigger-transform-video", "media.trigger-transform-image",
     ]);
     for (const [index, entry] of h.entries.entries()) {
-      const submission = mediaServerSubmission(entry.handle, entry.job, entry.callback);
+      const submission = mediaServerSubmission(entry.handle, entry.job, entry.callback, entry.lookupKeys);
       const { task, ...input } = entry.job;
       expect(task).toBeDefined();
       expect(entry.handle.queue).toBe("trigger-interop");
-      expect(submission.data).toEqual({ input: { ...input, requestId: entry.handle.requestId, path: entry.handle.path }, callback: { url: h.tokens[index].url } });
+      expect(submission.data).toEqual({ input: { ...input, requestId: entry.handle.requestId, path: entry.handle.path }, callback: { url: h.tokens[index].url }, lookupKeys: [{ key: "social_post", refId: "post" }] });
       expect(h.tokens[index].options).toEqual({
         timeout: task === "media.transform-video" ? SHADOW_VIDEO_TOKEN_TIMEOUT : SHADOW_TOKEN_TIMEOUT,
         tags: ["post", "run-123"], idempotencyKey: entry.handle.jobId,
@@ -467,7 +470,7 @@ describe("shadow waitpoint tokens", () => {
       "Zenith shadow job request: media.transform-image [instagram/image-q100]",
     ]);
     for (const [index, entry] of h.entries.entries()) {
-      expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job, entry.callback)));
+      expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job, entry.callback, entry.lookupKeys)));
     }
     expect(requests[0].data.redisJob).toMatchObject({
       name: "media.trigger-localize", data: { input: { url: "[redacted URL]" }, callback: "[redacted callback]" },
