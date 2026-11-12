@@ -12,6 +12,7 @@ const supabaseClient = createClient<Database>(
 
 export const processWebhooks = task({
   id: "process-webhook-event",
+  // Customer response bodies are unbounded; retain headroom (WEBHOOK_SIZING.md).
   machine: "medium-1x",
   maxDuration: 3600,
   retry: { maxAttempts: 2 },
