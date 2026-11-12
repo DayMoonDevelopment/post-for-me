@@ -19,6 +19,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 import { PrivateModule } from './private/private.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
+import { PinterestModule } from './pinterest/pinterest.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { HealthcheckModule } from './healthcheck/healthcheck.module';
     SocialAccountFeedsModule,
     PrivateModule,
     HealthcheckModule,
+    PinterestModule,
   ],
   controllers: [],
   providers: [

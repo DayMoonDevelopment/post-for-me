@@ -1,4 +1,17 @@
-import { Injectable, Scope } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  HttpException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  Scope,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { REQUEST } from '@nestjs/core';
+import type { Request } from 'express';
+import { differenceInDays } from 'date-fns';
 import axios, { AxiosError } from 'axios';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
@@ -9,6 +22,11 @@ import type {
 } from '../lib/dto/global.dto';
 import type { PinterestPostMetricsDto } from './dto/pinterest-post-metrics.dto';
 import { SupabaseService } from '../supabase/supabase.service';
+import type {
+  PinterestBoardDto,
+  PinterestBoardsResponseDto,
+} from './dto/pinterest-board.dto';
+import type { PinterestBoardsQueryDto } from './dto/pinterest-boards-query.dto';
 
 // Pinterest API Types
 interface PinterestImageVariant {
@@ -68,7 +86,123 @@ interface PinterestTokenResponse {
 export class PinterestService implements SocialPlatformService {
   appCredentials: SocialProviderAppCredentials;
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+    @Inject(REQUEST) private readonly request: Request,
+  ) {}
+
+  async getBoards(
+    accountId: string,
+    projectId: string,
+    query: PinterestBoardsQueryDto,
+  ): Promise<PinterestBoardsResponseDto> {
+    const { data: account, error } = await this.supabaseService.supabaseClient
+      .from('social_provider_connections')
+      .select(
+        'id, provider, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, social_provider_user_id, social_provider_user_name, social_provider_metadata',
+      )
+      .eq('id', accountId)
+      .eq('project_id', projectId)
+      .single();
+
+    if (error || !account) {
+      throw new NotFoundException('Social account not found');
+    }
+    if (account.provider !== 'pinterest') {
+      throw new BadRequestException(
+        'Social account must be a Pinterest account',
+      );
+    }
+
+    try {
+      await this.initService(projectId);
+      let socialAccount: SocialAccount = {
+        ...account,
+        access_token: account.access_token || '',
+        access_token_expires_at: account.access_token_expires_at
+          ? new Date(account.access_token_expires_at)
+          : null,
+        refresh_token_expires_at: account.refresh_token_expires_at
+          ? new Date(account.refresh_token_expires_at)
+          : null,
+      };
+
+      if (
+        differenceInDays(
+          socialAccount.access_token_expires_at || new Date(),
+          new Date(),
+        ) <= 7
+      ) {
+        socialAccount = await this.refreshAccessToken(socialAccount);
+        const { error: updateError } = await this.supabaseService.supabaseClient
+          .from('social_provider_connections')
+          .update({
+            access_token: socialAccount.access_token,
+            refresh_token: socialAccount.refresh_token,
+            access_token_expires_at:
+              socialAccount.access_token_expires_at?.toISOString(),
+            refresh_token_expires_at:
+              socialAccount.refresh_token_expires_at?.toISOString(),
+          })
+          .eq('id', accountId)
+          .eq('project_id', projectId);
+        if (updateError) {
+          throw new InternalServerErrorException(
+            'Unable to save refreshed Pinterest credentials',
+          );
+        }
+      }
+
+      const metadata = socialAccount.social_provider_metadata as {
+        is_sandbox?: boolean;
+      } | null;
+      const baseUrl = metadata?.is_sandbox
+        ? 'https://api-sandbox.pinterest.com/v5'
+        : 'https://api.pinterest.com/v5';
+      // /boards includes owned + collaborative boards. No privacy filter: return
+      // everything Pinterest exposes to this token, one upstream page at a time.
+      const { data } = await axios.get<{
+        items: PinterestBoardDto[];
+        bookmark?: string | null;
+      }>(`${baseUrl}/boards`, {
+        headers: { Authorization: `Bearer ${socialAccount.access_token}` },
+        params: { page_size: query.limit, bookmark: query.cursor },
+      });
+      const cursor = data.bookmark || '';
+      let next: string | null = null;
+      if (cursor) {
+        const url = new URL(
+          this.request.path,
+          this.configService.get<string>('API_BASE_URL') ??
+            'https://api.postforme.dev/',
+        );
+        url.searchParams.set('limit', String(query.limit));
+        url.searchParams.set('cursor', cursor);
+        next = url.toString();
+      }
+      return {
+        data: data.items,
+        meta: { cursor, limit: query.limit, next, has_more: !!cursor },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        // Never expose upstream bodies/configs: they can contain credentials.
+        if (status && [400, 401, 403, 429].includes(status)) {
+          throw new HttpException(
+            'Pinterest request failed. Check the connected account permissions or reconnect the account.',
+            status,
+          );
+        }
+        throw new BadGatewayException('Unable to fetch Pinterest boards');
+      }
+      throw new InternalServerErrorException(
+        'Unable to fetch Pinterest boards',
+      );
+    }
+  }
 
   async initService(projectId: string): Promise<void> {
     const { data: appCredentials, error: appCredentialsError } =
