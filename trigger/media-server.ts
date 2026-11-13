@@ -92,6 +92,9 @@ export type MediaServerTokenOutput =
   | { ok: true; output: unknown }
   | { ok: false; error: { code: string; message: string } };
 
+/** Names the record a job belongs to, so media can find its jobs by that record. */
+export type MediaServerLookupKey = { key: string; refId: string };
+
 export type MediaServerHandle = {
   jobId: string;
   queue: string;
@@ -100,17 +103,19 @@ export type MediaServerHandle = {
 };
 
 export interface MediaServerTransport {
-  enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback): Promise<void>;
+  enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback, lookupKeys?: MediaServerLookupKey[]): Promise<void>;
 }
 
 const OPERATION_TIMEOUT_MS = 2500;
 
-/** The BullMQ job for a task on the interop lane: the real task's input plus the callback. */
-export function mediaServerSubmission(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback) {
+/** The BullMQ job for a task on the interop lane: the real task's input, the callback and any lookup keys. */
+export function mediaServerSubmission(
+  handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback, lookupKeys?: MediaServerLookupKey[],
+) {
   const { task, ...input } = job;
   return {
     name: mediaServerInteropJobs[task],
-    data: { input: { ...input, requestId: handle.requestId, path: handle.path }, callback },
+    data: { input: { ...input, requestId: handle.requestId, path: handle.path }, callback, ...(lookupKeys ? { lookupKeys } : {}) },
     options: {
       jobId: handle.jobId,
       attempts: 5,
@@ -154,9 +159,9 @@ async function withQueue<T>(redisUrl: string, name: string, operation: (queue: Q
 
 export function createMediaServerTransport(redisUrl: string): MediaServerTransport {
   return {
-    async enqueue(handle, job, callback) {
+    async enqueue(handle, job, callback, lookupKeys) {
       await withQueue(redisUrl, handle.queue, async (queue) => {
-        const { name, data, options } = mediaServerSubmission(handle, job, callback);
+        const { name, data, options } = mediaServerSubmission(handle, job, callback, lookupKeys);
         await queue.add(name, data, options);
       });
     },

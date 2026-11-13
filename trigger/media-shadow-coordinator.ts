@@ -111,13 +111,14 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
       idempotencyKey: record.jobId,
     });
     const callback = { url: token.url };
+    const lookupKeys = [{ key: "social_post", refId: post.postId }];
     log("info", `Zenith shadow job request: ${label}`, {
-      ...record, tokenId: token.id, redisJob: mediaServerSubmission(record, job, callback),
+      ...record, tokenId: token.id, redisJob: mediaServerSubmission(record, job, callback, lookupKeys),
     });
     let enqueued = false;
     for (let attempt = 1; attempt <= ENQUEUE_ATTEMPTS && !enqueued; attempt++) {
       try {
-        await redisOperation(() => deps.transport.enqueue(record, job, callback));
+        await redisOperation(() => deps.transport.enqueue(record, job, callback, lookupKeys));
         enqueued = true;
       } catch {
         log("warn", "Zenith enqueue failed", { ...record, attempt });
