@@ -144,7 +144,7 @@ export const postToPlatform = task({
       machine: "large-1x",
     },
   },
-  machine: "small-1x",
+  machine: "small-2x",
   run: async (payload: IndividualPostData): Promise<PostResult> => {
     const {
       platform,
