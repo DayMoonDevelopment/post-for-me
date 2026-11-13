@@ -1,5 +1,5 @@
 import { tasks, wait } from "@trigger.dev/sdk";
-import type { transformInstagramImage } from "../../transform-instagram-image";
+import type { transformLiveImageTask } from "../../transform-live-image";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import { normalizePlatform } from "../../lib/platform.utils";
@@ -21,11 +21,6 @@ import {
 
 export class InstagramPostClient extends PostClient {
   #maxItems = 10;
-  #maxFileSize = 8 * 1024 * 1024;
-  #minAspectRatio = 3 / 4;
-  #maxAspectRatio = 1.91;
-  #storiesMinAspectRatio = 9 / 16;
-  #reelsMinAspectRatio = 9 / 16;
   #mediaRetryAttempts = 30;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
@@ -358,6 +353,7 @@ export class InstagramPostClient extends PostClient {
           medium: {
             id: medium.id,
             url: medium.thumbnail_url,
+            stored: medium.thumbnail_stored,
             type: "image",
             skip_processing: medium.skip_processing,
           },
@@ -999,18 +995,14 @@ export class InstagramPostClient extends PostClient {
       return { signedUrl, width: undefined, height: undefined };
     }
 
-    const result = await tasks.triggerAndWait<typeof transformInstagramImage>(
-      "transform-instagram-image",
+    const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
+      "transform-live-image",
       {
-        signedUrl,
+        url: signedUrl,
+        mediumId: medium.id,
+        stored: medium.stored,
+        platform: "instagram",
         options,
-        limits: {
-          minAspectRatio: this.#minAspectRatio,
-          maxAspectRatio: this.#maxAspectRatio,
-          storiesMinAspectRatio: this.#storiesMinAspectRatio,
-          reelsMinAspectRatio: this.#reelsMinAspectRatio,
-          maxFileSize: this.#maxFileSize,
-        },
       },
     );
     if (!result.ok) {

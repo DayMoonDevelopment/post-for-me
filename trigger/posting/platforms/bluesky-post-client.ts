@@ -1,7 +1,7 @@
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs, jsonToLex } from "@atproto/api";
 import type { uploadBlueskyImage, uploadBlueskyLinkPreview } from "../../upload-bluesky-media";
-import type { transformBufferedImage } from "../../transform-buffered-image";
+import type { transformLiveImageTask } from "../../transform-live-image";
 import type { uploadBlueskyVideo } from "../../upload-bluesky-video";
 import { shouldSkipProcessing } from "../image-processing-utils";
 import {
@@ -232,7 +232,7 @@ export class BlueskyPostClient extends PostClient {
     const token = serviceAuth.token;
 
     const result = await tasks.triggerAndWait<typeof uploadBlueskyVideo>(
-      "upload-bluesky-video", { url: medium.url, token, did: this.#agent.session!.did },
+      "upload-bluesky-video", { url: medium.url, mediumId: medium.id, stored: medium.stored, skipProcessing: shouldSkipProcessing(medium), token, did: this.#agent.session!.did },
     );
     if (!result.ok) {
       const error = result.error as { message?: string };
@@ -389,9 +389,9 @@ export class BlueskyPostClient extends PostClient {
         continue;
       }
 
-      const result = await tasks.triggerAndWait<typeof transformBufferedImage>(
-        "transform-buffered-image",
-        { url: medium.url, platform: "bluesky", skipProcessing: shouldSkipProcessing(medium) },
+      const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
+        "transform-live-image",
+        { url: medium.url, mediumId: medium.id, stored: medium.stored, platform: "bluesky", skipProcessing: shouldSkipProcessing(medium) },
       );
       if (!result.ok) {
         throw new Error("Failed to prepare Bluesky image", { cause: result.error });

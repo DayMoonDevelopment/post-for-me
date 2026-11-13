@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import axios, { type AxiosAdapter } from "axios";
 import sharp from "sharp";
+import { randomUUID } from "node:crypto";
 import { tasks, wait } from "@trigger.dev/sdk";
 import * as mediaStorage from "../../media-storage";
 import { InstagramPostClient } from "./instagram-post-client";
@@ -42,12 +43,12 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       exitCode: 0,
       output: "",
     });
-  });
+  }, 30_000);
 } else {
   const definitions = new Map<string, {
-    run(payload: any): Promise<unknown>;
+    run(payload: any, context: any): Promise<unknown>;
     machine: string;
-    retry: { maxAttempts: number; outOfMemory: { machine: string } };
+    retry: { maxAttempts: number };
   }>();
   mock.module("@trigger.dev/sdk", () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -57,16 +58,42 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       return definition;
     } };
   });
+  // Simulate Zenith's stored-version contract, not the retired Trigger image tasks.
+  mock.module("../../live-media-runtime", () => ({ liveMediaExecutor: () => {
+    const artifacts = new Map<string, Buffer>();
+    return async (stage: string, _id: string, job: any) => {
+      let buffer: Buffer;
+      if (job.task === "media.localize") {
+        buffer = Buffer.from((await axios({ url: job.url, responseType: "arraybuffer" })).data);
+      } else {
+        const source = artifacts.get(job.source.versionId)!;
+        let image = sharp(source);
+        if (job.output.autoOrient) image = image.rotate();
+        if (job.output.resize) image = image.resize(job.output.resize);
+        buffer = await image.jpeg({ quality: job.output.quality }).toBuffer();
+      }
+      const metadata = await sharp(buffer).metadata();
+      const versionId = randomUUID();
+      artifacts.set(versionId, buffer);
+      const platform = stage.split("-")[1];
+      const url = job.task === "media.localize" ? job.url : await mediaStorage.uploadMedia({
+        key: `${platform}_${versionId}.jpg`, body: buffer, contentType: "image/jpeg", cacheControl: "public, max-age=31536000",
+      });
+      const rotated = [5, 6, 7, 8].includes(metadata.orientation || 1);
+      return { fileId: "file", versionId, url, path: "publishing/test", size: buffer.length,
+        contentType: job.task === "media.localize" ? "image/png" : "image/jpeg",
+        media: { kind: "image", format: metadata.format, width: rotated ? metadata.height : metadata.width,
+          height: rotated ? metadata.width : metadata.height, orientation: metadata.orientation || 1, hasAlpha: false } };
+    };
+  } }));
   beforeAll(async () => {
-    await import("../../transform-instagram-image");
-    await import("../../transform-tiktok-image");
+    await import("../../transform-live-image");
   });
 
-  test("image tasks use medium machines with one retry and large OOM escalation", () => {
-    expect(definitions.size).toBe(2);
+  test("live image task waits on Zenith without native-machine escalation", () => {
+    expect(definitions.size).toBe(1);
     for (const definition of definitions.values()) {
-      expect(definition.machine).toBe("medium-1x");
-      expect(definition.retry).toEqual({ maxAttempts: 2, outOfMemory: { machine: "large-1x" } });
+      expect(definition.retry).toEqual({ maxAttempts: 1 });
     }
   });
 
@@ -109,7 +136,7 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         const definition = definitions.get(id);
         if (!definition) throw new Error(`Unexpected child task: ${id}`);
         try {
-          const output = await definition.run(JSON.parse(JSON.stringify(payload)));
+          const output = await definition.run(JSON.parse(JSON.stringify(payload)), { ctx: { run: { id: randomUUID() } } });
           return { ok: true, output };
         } catch (error) {
           return { ok: false, error };
@@ -172,6 +199,20 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       expect(child).not.toHaveBeenCalled();
       expect(downloads).toHaveLength(0);
       expect(JSON.stringify(publications)).toContain(sourceUrl);
+    });
+
+    test("retains platform item limits and completed transformation output order", async () => {
+      const { child, upload, post, publications } = await setup();
+      const limit = prefix === "instagram" ? 10 : 32;
+      const extra = Array.from({ length: limit + 2 }, (_, index) => ({ id: `extra-${index}`, url: sourceUrl, type: "image" }));
+      expect((await post({}, {}, extra)).success).toBe(true);
+      expect(child).toHaveBeenCalledTimes(limit);
+      const outputUrls = upload.mock.calls.map(([options]) => `https://media.example.com/${options.key}`);
+      const publishedUrls = prefix === "instagram"
+        ? publications.filter(({ payload }) => payload.image_url).map(({ payload }) => payload.image_url)
+        : prefix === "tiktok_business" ? publications.find(({ payload }) => payload.photo_images)?.payload.photo_images
+        : publications.find(({ payload }) => payload.source_info)?.payload.source_info.photo_images;
+      expect(publishedUrls).toEqual(outputUrls);
     });
 
     for (const failure of ["failed result", "rejection"]) {

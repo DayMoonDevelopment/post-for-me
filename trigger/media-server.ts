@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
-import type { StoredMedia } from "./media-shadow-recipes";
+import type { StoredMedia } from "./media-recipes";
 
 // Vendored subset of Zenith's jobs catalogue; no cross-repository imports.
 export type MediaServerImageOutput = {
@@ -102,6 +102,12 @@ export type MediaServerHandle = {
 export interface MediaServerTransport {
   enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback): Promise<void>;
 }
+
+/** The slice of Trigger's wait API used by live and diagnostic processing. */
+export type WaitpointApi = {
+  createToken(options: { timeout: string; tags: string[]; idempotencyKey: string }): Promise<{ id: string; url: string }>;
+  forToken(token: { id: string }): PromiseLike<{ ok: true; output: unknown } | { ok: false; error: Error }>;
+};
 
 const OPERATION_TIMEOUT_MS = 2500;
 
