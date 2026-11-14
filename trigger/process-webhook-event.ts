@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { logger, retry, tags, task } from "@trigger.dev/sdk";
+import { logger, retry, task } from "@trigger.dev/sdk";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { Database } from "./supabase.types";
 
 type EventTypeEnum = Database["public"]["Enums"]["webhook_event_type"];
@@ -30,7 +31,7 @@ export const processWebhooks = task({
       error?: string;
     } = {};
 
-    await tags.add([`${webhookId}`, `${id}`]);
+    await addTagsBestEffort([`${webhookId}`, `${id}`]);
 
     try {
       const backoffResponse = await retry.fetch(url, {

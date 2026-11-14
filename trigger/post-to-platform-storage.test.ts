@@ -18,6 +18,8 @@ if (!process.env.PFM_PLATFORM_STORAGE_TEST_CHILD) {
 } else {
   const post = mock(async () => ({ success: true, post_id: "post-id", provider_connection_id: "account-id" }));
   const constructed = mock((..._args: unknown[]) => {});
+  const addTags = mock(async (_values: string | string[], _requestOptions?: unknown) => {});
+  const logWarn = mock();
   const inserted: unknown[] = [];
   const from = mock((table: string) => {
     if (table === "social_post_results") return {
@@ -32,8 +34,8 @@ if (!process.env.PFM_PLATFORM_STORAGE_TEST_CHILD) {
   mock.module("@supabase/supabase-js", () => ({ createClient: () => ({ from }) }));
   mock.module("@trigger.dev/sdk", () => ({
     task: (definition: unknown) => definition,
-    tags: { add: mock(async () => {}) },
-    logger: { info: mock(), warn: mock(), error: mock() },
+    tags: { add: addTags },
+    logger: { info: mock(), warn: logWarn, error: mock() },
     tasks: { trigger: mock(async () => {}) },
     idempotencyKeys: { create: mock(async () => "key") },
   }));
@@ -66,7 +68,7 @@ if (!process.env.PFM_PLATFORM_STORAGE_TEST_CHILD) {
       machine: string;
       retry: { maxAttempts: number; outOfMemory: { machine: string } };
     };
-    expect(definition.machine).toBe("small-1x");
+    expect(definition.machine).toBe("small-2x");
     expect(definition.retry.maxAttempts).toBe(2);
     expect(definition.retry.outOfMemory.machine).toBe("large-1x");
   });
@@ -78,9 +80,41 @@ if (!process.env.PFM_PLATFORM_STORAGE_TEST_CHILD) {
     account: { id: "account-id", provider: platform, access_token_expires_at: new Date(Date.now() + 30 * 86400000) },
   }) as IndividualPostData;
   beforeEach(() => {
-    for (const fn of [post, constructed, from]) fn.mockClear();
+    for (const fn of [post, constructed, from, logWarn]) fn.mockClear();
+    addTags.mockReset();
+    addTags.mockImplementation(async () => {});
     inserted.length = 0;
   });
+
+  for (const failedTag of ["account-id", "result_success"]) {
+    test(`${failedTag} rate limiting does not interrupt publishing or result persistence`, async () => {
+      const error = Object.assign(new Error("Too Many Requests"), { status: 429 });
+      addTags.mockImplementation(async (values) => {
+        if (values === failedTag) throw error;
+      });
+
+      const result = await run(payload());
+
+      expect(result.success).toBe(true);
+      expect(post).toHaveBeenCalledTimes(1);
+      expect(inserted).toEqual([result]);
+      const tagRequestOptions = {
+        retry: {
+          maxAttempts: 3,
+          minTimeoutInMs: 1_000,
+          maxTimeoutInMs: 5_000,
+          factor: 2,
+          randomize: true,
+        },
+      };
+      expect(addTags).toHaveBeenCalledWith("account-id", tagRequestOptions);
+      expect(addTags).toHaveBeenCalledWith("result_success", tagRequestOptions);
+      expect(logWarn).toHaveBeenCalledWith(
+        "Failed to add task tags; continuing without tags",
+        { tags: failedTag, error },
+      );
+    });
+  }
 
   for (const isSystem of [true, false]) {
     test(`TikTok is_system=${isSystem} passes the strict storage flag to the client`, async () => {
