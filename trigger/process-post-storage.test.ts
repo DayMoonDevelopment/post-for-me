@@ -22,7 +22,6 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
 } else {
   const originalMediaServerRedisUrl = process.env.MEDIA_SERVER_REDIS_URL;
-  let rejectShadowSchedule = false;
   const credentials = {
     provider: "facebook",
     app_id: "project-app-id",
@@ -91,13 +90,10 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
   const triggerAndWait = mock(async (_id: string, _payload: IndividualPostData) => ({ ok: true }));
   const trigger = mock(async (id: string, _payload: unknown) => {
-    if (id === "media-shadow" && rejectShadowSchedule) {
-      throw new Error("Shadow scheduling unavailable");
-    }
     return { id: `${id}-run-id` };
   });
   const batchTrigger = mock(async () => {});
-  const addTags = mock(async (_tags: string | string[]) => {});
+  const addTags = mock(async (_tags: string | string[], _requestOptions?: unknown) => {});
   const logError = mock();
   const logWarn = mock();
   const waitFor = mock(async () => {});
@@ -119,7 +115,6 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
   beforeEach(() => {
     delete process.env.MEDIA_SERVER_REDIS_URL;
-    rejectShadowSchedule = false;
     for (const fn of [
       projectSingle, projectEq, projectSelect, updatedSingle, updatedOrder,
       updatedSelect, updatedEq, update, from, getKey, batchTriggerAndWait,
@@ -134,12 +129,11 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     }
   });
 
-  for (const mode of ["enabled", "disabled", "rejected"] as const) {
-    test(`media-shadow ${mode}: never schedules shadow; publishes completed live outputs`, async () => {
+  for (const mode of ["configured", "disabled"] as const) {
+    test(`media server ${mode}: never schedules shadow; publishes completed live outputs`, async () => {
       if (mode !== "disabled") {
         process.env.MEDIA_SERVER_REDIS_URL = "redis://shadow.example.com";
       }
-      rejectShadowSchedule = mode === "rejected";
       const configCredentials = {
         access_token: "config-token", refresh_token: "config-refresh-token",
         api_key: "config-api-key", app_id: credentials.app_id, app_secret: credentials.app_secret,
@@ -255,7 +249,19 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
         expect(selection[0]).toContain("social_provider_app_credentials");
         expect(projectEq).toHaveBeenCalledWith("id", post.project_id);
         expect(projectSingle).toHaveBeenCalledTimes(1);
-        expect(addTags.mock.calls).toEqual([[[post.id, post.project_id]], [project.team_id]]);
+        const tagRequestOptions = {
+          retry: {
+            maxAttempts: 3,
+            minTimeoutInMs: 1_000,
+            maxTimeoutInMs: 5_000,
+            factor: 2,
+            randomize: true,
+          },
+        };
+        expect(addTags.mock.calls).toEqual([
+          [[post.id, post.project_id], tagRequestOptions],
+          [project.team_id, tagRequestOptions],
+        ]);
         expect(update).toHaveBeenCalledWith({ status: "processed" });
         expect(updatedEq).toHaveBeenCalledWith("id", post.id);
         expect(updatedOrder).toHaveBeenCalledWith("index", { referencedTable: "social_post_media" });

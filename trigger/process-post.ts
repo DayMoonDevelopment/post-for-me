@@ -1,4 +1,5 @@
-import { logger, task, tasks, tags, wait } from "@trigger.dev/sdk";
+import { logger, task, tasks, wait } from "@trigger.dev/sdk";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -208,7 +209,7 @@ export const processPost = task({
     const { post } = payload;
     logger.info("Starting post processing", { post });
 
-    await tags.add([`${post.id}`, `${post.project_id}`]);
+    await addTagsBestEffort([`${post.id}`, `${post.project_id}`]);
 
     logger.info("Getting post accounts");
     const accounts = post.social_post_provider_connections?.map(
@@ -298,7 +299,7 @@ export const processPost = task({
         throw new Error("No project found");
       }
 
-      await tags.add(`${project.team_id}`);
+      await addTagsBestEffort(`${project.team_id}`);
       const postMedia: ProcessedMedium[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
         logger.info("Localizing Media", { media: post.social_post_media });

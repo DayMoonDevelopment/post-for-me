@@ -8,6 +8,7 @@ credentials. R2 credentials remain necessary for the two legacy exceptions below
 
 `process-post` no longer schedules `media-shadow`. The old diagnostic task remains
 available for manual diagnostics only; its results are never used for publishing.
+Already queued or running shadow tasks are not cancelled by this change.
 
 ## Publishing graph
 

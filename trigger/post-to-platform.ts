@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
+import { idempotencyKeys, logger, task, tasks } from "@trigger.dev/sdk";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -161,7 +162,7 @@ export const postToPlatform = task({
     } = payload;
     let postResult: PostResult | null = null;
     try {
-      await tags.add(`${account.id}`);
+      await addTagsBestEffort(`${account.id}`);
 
       logger.info("Starting post processing", { ...payload });
 
@@ -289,7 +290,7 @@ export const postToPlatform = task({
       }
     }
 
-    await tags.add(`result_${postResult.success ? "success" : "error"}`);
+    await addTagsBestEffort(`result_${postResult.success ? "success" : "error"}`);
 
     logger.info("Saving Post Result", { postResult });
     const { data: insertedPostResult, error: insertResultError } =
