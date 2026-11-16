@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 export type MediaProcessingBackend = "trigger" | "zenith";
-export type MediaProcessingRouting = { mediaProcessingBackend?: MediaProcessingBackend };
+export type MediaProcessingRouting = { mediaProcessingBackend?: MediaProcessingBackend; postId?: string };
 
 export function zenithMediaPercentage(value = process.env.ZENITH_MEDIA_PERCENTAGE): number {
   const percentage = Number(value);

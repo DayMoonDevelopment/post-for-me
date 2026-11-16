@@ -35,7 +35,7 @@ if (!process.env.PFM_IMAGE_DISPATCH_TEST_CHILD) {
           // An explicit parent's backend must win over the rollout percentage.
           process.env.ZENITH_MEDIA_PERCENTAGE = (backend === "zenith") !== inherited ? "100" : "0";
           const input: LiveImageInput = {
-            platform, mediumId: "medium-id", url: "https://source.example/image",
+            platform, mediumId: "medium-id", postId: "social-post-id", url: "https://source.example/image",
             ...(inherited ? { mediaProcessingBackend: backend } : {}),
           };
           const result = await dispatch(input);
@@ -45,7 +45,7 @@ if (!process.env.PFM_IMAGE_DISPATCH_TEST_CHILD) {
             : platform === "instagram" ? "transform-instagram-image"
             : platform === "tiktok" || platform === "tiktok_business" ? "transform-tiktok-image"
             : "transform-buffered-image");
-          expect(payload).toMatchObject({ mediaProcessingBackend: backend });
+          expect(payload).toMatchObject({ mediaProcessingBackend: backend, postId: input.postId });
           expect(result.ok).toBe(true);
           if (!result.ok) throw new Error("Expected success");
           expect(result.output).toMatchObject({ url: outputUrl, signedUrl: outputUrl });

@@ -129,7 +129,7 @@ export class TwitterMediaUploader extends PostClient {
     let mimeType: string | undefined = medium.stored?.contentType;
     if (!shouldSkipProcessing(medium)) {
       const result = await triggerImageTransform(
-        { url, mediumId: medium.id, stored: medium.stored, platform: "twitter", mediaProcessingBackend: medium.mediaProcessingBackend },
+        { url, mediumId: medium.id, stored: medium.stored, platform: "twitter", mediaProcessingBackend: medium.mediaProcessingBackend, postId: medium.postId },
       );
       if (!result.ok) {
         throw new Error("Failed to prepare Twitter image", { cause: result.error });

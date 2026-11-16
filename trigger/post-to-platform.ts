@@ -150,7 +150,7 @@ export const postToPlatform = task({
   run: async (payload: IndividualPostData): Promise<PostResult> => {
     const {
       platform,
-      media,
+      media: inputMedia,
       caption,
       account,
       platformConfig,
@@ -161,6 +161,7 @@ export const postToPlatform = task({
       isSystemProject,
       projectId,
     } = payload;
+    const media = inputMedia.map((medium) => ({ ...medium, postId }));
     let postResult: PostResult | null = null;
     try {
       await addTagsBestEffort(`${account.id}`);

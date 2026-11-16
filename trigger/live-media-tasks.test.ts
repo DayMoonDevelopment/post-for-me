@@ -21,7 +21,10 @@ mock.module("@trigger.dev/sdk", () => ({ task: definition => definition, logger:
       : id === "transform-tiktok-image" ? "https://legacy.example/image" : { url: "https://legacy.example/image" } };
   } } }));
 const { ZenithWorkerError } = await import("./live-media");
-mock.module("./live-media-runtime", () => ({ liveMediaExecutor: () => async (stage, id, job) => {
+mock.module("./live-media-runtime", () => ({ liveMediaExecutor: (runId, postId) => {
+  expect(runId).toBe("run");
+  expect(postId).toBe("social-post-id");
+  return async (stage, id, job) => {
   expect(activeWaits++).toBe(0);
   calls.push({ stage, id, job });
   await Promise.resolve();
@@ -33,12 +36,12 @@ mock.module("./live-media-runtime", () => ({ liveMediaExecutor: () => async (sta
     if (scenario.startsWith("animated") || scenario === "legacy-failed") throw new ZenithWorkerError("UNSUPPORTED", "Animated images are not supported");
   }
   return stored(stage, scenario === "video" || scenario === "skip-video");
-} }));
+}; } }));
 const ctx = { ctx: { run: { id: "run" } } };
 if (["video", "skip-video", "image", "thumbnail-failed", "localize-failed"].includes(scenario)) {
   const { processLiveMedium } = await import("./process-live-medium");
   expect(processLiveMedium.maxDuration).toBe(1200);
-  const medium = { id: "medium", url: "https://source.example/main", thumbnail_url: "https://source.example/thumbnail",
+  const medium = { id: "medium", postId: "social-post-id", url: "https://source.example/main", thumbnail_url: "https://source.example/thumbnail",
     position: 7, provider: "instagram", alt_text: "alt", tags: [{ id: "tag" }], skip_processing: scenario === "skip-video", thumbnail_timestamp_ms: 123 };
   if (scenario === "localize-failed") {
     await expect(processLiveMedium.run({ medium }, ctx)).rejects.toThrow("Main media failed");
@@ -55,7 +58,7 @@ if (["video", "skip-video", "image", "thumbnail-failed", "localize-failed"].incl
 } else {
   const { transformLiveImageTask } = await import("./transform-live-image");
   const platform = scenario.startsWith("animated-") ? scenario.slice("animated-".length) : "instagram";
-  const input = { url: "https://source.example/image", stored: stored("already-localized"), platform,
+  const input = { postId: "social-post-id", url: "https://source.example/image", stored: stored("already-localized"), platform,
     skipProcessing: scenario === "skip-image", options: { firstImage: { width: 600, height: 800 }, placement: "feed", is_feed: true } };
   // Buffered platforms transform only oversized images.
   input.stored.size = 30 * 1024 * 1024;
@@ -94,6 +97,29 @@ for (const scenario of ["video", "skip-video", "image", "thumbnail-failed", "loc
     expect({ exitCode, stdout, stderr }).toEqual({ exitCode: 0, stdout: "", stderr: "" });
   });
 }
+
+test("runtime derives lookup keys from the post ID, never the run ID", async () => {
+  const child = Bun.spawn([process.execPath, "--eval", `
+    import { expect, mock } from "bun:test";
+    const calls = [];
+    mock.module("./live-media", () => ({ createLiveMediaExecutor: (runId, deps) => {
+      calls.push({ runId, lookupKeys: deps.lookupKeys });
+      return () => {};
+    } }));
+    process.env.MEDIA_SERVER_REDIS_URL = "redis://unused.example";
+    const { liveMediaExecutor } = await import("./live-media-runtime");
+    liveMediaExecutor("trigger-run-id", "social-post-id");
+    liveMediaExecutor("standalone-run-id");
+    expect(calls).toEqual([
+      { runId: "trigger-run-id", lookupKeys: [{ key: "social_post", refId: "social-post-id" }] },
+      { runId: "standalone-run-id", lookupKeys: undefined },
+    ]);
+  `], { cwd: __dirname, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+  ]);
+  expect({ exitCode, stdout, stderr }).toEqual({ exitCode: 0, stdout: "", stderr: "" });
+});
 
 test("missing live Redis configuration fails explicitly", async () => {
   const child = Bun.spawn([process.execPath, "--eval", `

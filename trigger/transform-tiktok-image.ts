@@ -11,7 +11,7 @@ export const transformTikTokImage = task({
   id: "transform-tiktok-image",
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
-  run: async ({ signedUrl, platform, maxFileSize, allowedAspectRatios, mediaProcessingBackend }: MediaProcessingRouting & {
+  run: async ({ signedUrl, platform, maxFileSize, allowedAspectRatios, mediaProcessingBackend, postId }: MediaProcessingRouting & {
     signedUrl: string;
     platform: "tiktok" | "tiktok_business";
     maxFileSize: number;
@@ -20,7 +20,7 @@ export const transformTikTokImage = task({
     if (resolveMediaProcessingBackend(signedUrl, mediaProcessingBackend) === "zenith") {
       const { tasks } = await import("@trigger.dev/sdk");
       const result = await tasks.triggerAndWait<typeof transformLiveImageTask>("transform-live-image", {
-        url: signedUrl, platform, tiktokLimits: { maxFileSize, allowedAspectRatios }, mediaProcessingBackend: "zenith",
+        url: signedUrl, platform, tiktokLimits: { maxFileSize, allowedAspectRatios }, mediaProcessingBackend: "zenith", postId,
       });
       if (!result.ok) throw new Error("Zenith TikTok transform failed", { cause: result.error });
       return result.output.url;

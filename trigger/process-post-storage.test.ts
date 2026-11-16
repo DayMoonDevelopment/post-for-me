@@ -185,6 +185,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       expect(batchTriggerAndWait.mock.calls[0][1]).toEqual([{
         payload: { medium: {
           mediaProcessingBackend: backend,
+          postId: post.id,
           id: medium.id, url: "https://external.example.com/original.jpg",
           thumbnail_url: "https://external.example.com/thumbnail.jpg",
           thumbnail_timestamp_ms: 1234, provider: null, provider_connection_id: null,
@@ -196,7 +197,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       for (const [index, { payload }] of published.entries()) {
         expect(payload).toMatchObject({
           account: { id: `account-${index + 1}`, access_token: "access-token", refresh_token: "refresh-token" },
-          media: [{ ...medium, mediaProcessingBackend: backend }], appCredentials: credentials,
+          media: [{ ...medium, mediaProcessingBackend: backend, postId: post.id }], appCredentials: credentials,
         });
       }
       expect(triggerAndWait).not.toHaveBeenCalled();
@@ -219,7 +220,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
         thumbnail_timestamp_ms: null, provider: null, alt_text: "preserved alt", tags: null,
       }));
       const localized = inputMedia.map((item) => ({
-        ...item, type: item.id === "image" ? "image" : "video", position: item.index,
+        ...item, postId: post.id, type: item.id === "image" ? "image" : "video", position: item.index,
         thumbnail_url: "", mediaProcessingBackend: "trigger" as const,
       }));
       batchTriggerAndWait.mockImplementationOnce(async () => ({

@@ -23,13 +23,14 @@ export const ffmpegCompressVideo = task({
     url,
     maxSizeBytes,
     mediaProcessingBackend,
+    postId,
   }: MediaProcessingRouting & {
     url: string;
     maxSizeBytes: number;
   }, context): Promise<string> => {
     if (resolveMediaProcessingBackend(url, mediaProcessingBackend) === "zenith") {
       const { liveMediaExecutor } = await import("./live-media-runtime");
-      const execute = liveMediaExecutor(context.ctx.run.id);
+      const execute = liveMediaExecutor(context.ctx.run.id, postId);
       const source = await execute("localize", "video", { task: "media.localize", url });
       return (await prepareLiveBlueskyVideo(source, "video", false, execute, maxSizeBytes)).url;
     }

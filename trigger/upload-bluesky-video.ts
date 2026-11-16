@@ -21,14 +21,14 @@ type UploadResult = {
 );
 
 class BlueskyVideoUploader extends PostClient {
-  async upload({ url, token, did, mediumId, stored, skipProcessing, mediaProcessingBackend }: Payload, runId: string) {
+  async upload({ url, token, did, mediumId, stored, skipProcessing, mediaProcessingBackend, postId }: Payload, runId: string) {
     const backend = resolveMediaProcessingBackend(mediumId || url, mediaProcessingBackend);
     let fileUrl = url;
     let contentType: string | undefined;
     let width: number | undefined;
     let height: number | undefined;
     if (backend === "zenith") {
-      const execute = liveMediaExecutor(runId);
+      const execute = liveMediaExecutor(runId, postId);
       const source = stored ?? await execute("localize", mediumId || "video", { task: "media.localize", url });
       const result = await prepareLiveBlueskyVideo(source, mediumId || "video", !!skipProcessing, execute);
       if (result.media.kind !== "video") throw new Error("Expected Bluesky video metadata");
@@ -38,12 +38,12 @@ class BlueskyVideoUploader extends PostClient {
     } else {
       if (!skipProcessing) {
         const compressed = await tasks.triggerAndWait<typeof ffmpegCompressVideo>("ffmpeg-compress-video", {
-          url, maxSizeBytes: 100_000_000, mediaProcessingBackend: "trigger",
+          url, maxSizeBytes: 100_000_000, mediaProcessingBackend: "trigger", postId,
         });
         fileUrl = compressed.ok ? compressed.output : url;
       }
       const dimensions = await tasks.triggerAndWait<typeof probeVideoDimensions>("probe-video-dimensions", {
-        url: fileUrl, mediaProcessingBackend: "trigger",
+        url: fileUrl, mediaProcessingBackend: "trigger", postId,
       });
       if (!dimensions.ok) throw new Error("Failed to probe Bluesky video dimensions", { cause: dimensions.error });
       ({ width, height } = dimensions.output);

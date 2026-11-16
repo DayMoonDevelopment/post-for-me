@@ -96,6 +96,7 @@ export interface RefreshTokenResult {
 }
 
 export interface PostMedia {
+  postId?: string;
   mediaProcessingBackend?: import("../media-processing-backend").MediaProcessingBackend;
   stored?: import("../media-recipes").StoredMedia;
   thumbnail_stored?: import("../media-recipes").StoredMedia;

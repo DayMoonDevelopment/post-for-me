@@ -307,6 +307,7 @@ export const processPostMedium = task({
       skip_processing,
       position,
       mediaProcessingBackend: inheritedBackend,
+      postId,
     },
   }: {
     medium: MediaProcessingRouting & {
@@ -340,7 +341,7 @@ export const processPostMedium = task({
     const mediaProcessingBackend = resolveMediaProcessingBackend(id || url, inheritedBackend);
     if (mediaProcessingBackend === "zenith") {
       const { liveMediaExecutor } = await import("./live-media-runtime");
-      const execute = liveMediaExecutor(context.ctx.run.id);
+      const execute = liveMediaExecutor(context.ctx.run.id, postId);
       const stored = await execute("localize", id, { task: "media.localize", url });
       let thumbnail;
       if (thumbnail_url) {
@@ -348,7 +349,7 @@ export const processPostMedium = task({
         catch { logger.warn("Optional thumbnail localization failed", { mediumId: id }); }
       }
       return { id, url: stored.url, thumbnail_url: thumbnail?.url || thumbnail_url || "", type: stored.media.kind,
-        stored, thumbnail_stored: thumbnail, provider, provider_connection_id, thumbnail_timestamp_ms, alt_text, tags, skip_processing, position, mediaProcessingBackend };
+        stored, thumbnail_stored: thumbnail, provider, provider_connection_id, thumbnail_timestamp_ms, alt_text, tags, skip_processing, position, mediaProcessingBackend, postId };
     }
 
     try {
@@ -381,6 +382,7 @@ export const processPostMedium = task({
 
       const result = {
         mediaProcessingBackend,
+        postId,
         id: id,
         url: mediaResult.publicUrl,
         thumbnail_url: thumbnailResult?.publicUrl || thumbnail_url || "",

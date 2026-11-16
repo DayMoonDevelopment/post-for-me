@@ -30,7 +30,7 @@ export const transformLiveImageTask = task({
   id: "transform-live-image",
   maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: { maxAttempts: 1 },
-  run: async ({ mediumId, url, stored, platform, skipProcessing, options, mediaProcessingBackend, instagramLimits, tiktokLimits }: LiveImageInput, { ctx }): Promise<LiveImageOutput> => {
+  run: async ({ mediumId, url, stored, platform, skipProcessing, options, mediaProcessingBackend, instagramLimits, tiktokLimits, postId }: LiveImageInput, { ctx }): Promise<LiveImageOutput> => {
     const backend = resolveMediaProcessingBackend(mediumId || url, mediaProcessingBackend);
     mediumId ||= "image";
     const legacyTransform = async (sourceUrl: string) => {
@@ -47,7 +47,7 @@ export const transformLiveImageTask = task({
       return legacy.output;
     };
     if (backend === "trigger") return { ...await legacyTransform(url), stored: undefined };
-    const execute = liveMediaExecutor(ctx.run.id);
+    const execute = liveMediaExecutor(ctx.run.id, postId);
     const source = stored ?? await execute("localize", mediumId, { task: "media.localize", url });
     if (source.media.kind !== "image") throw new Error("Expected image metadata");
     const result = skipProcessing ? source : await transformLiveImage(source, mediumId, platform, {

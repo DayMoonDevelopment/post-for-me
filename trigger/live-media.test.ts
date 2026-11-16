@@ -15,15 +15,28 @@ const video = (versionId = "source", size = 200_000_000): StoredMedia => ({
     bitrate: 10_000_000, frameRate: 30, video: { codec: "h264", profile: "high", level: 40, pixelFormat: "yuv420p", bitrate: 10_000_000 }, audio: null },
 });
 
-function executor(outcome: unknown = { ok: true, output: image() }, tokenOk = true, now?: () => number) {
+function executor(outcome: unknown = { ok: true, output: image() }, tokenOk = true, now?: () => number, lookupKeys?: { key: string; refId: string }[]) {
   const enqueue = mock<MediaServerTransport["enqueue"]>(async () => {});
   const createToken = mock<WaitpointApi["createToken"]>(async () => ({ id: "token", url: "https://secret.example/callback" }));
   const forToken = mock(async () => tokenOk
     ? { ok: true as const, output: outcome } : { ok: false as const, error: new Error("timeout") });
   const log = mock(() => {});
-  const execute = createLiveMediaExecutor("run", { transport: { enqueue }, wait: { createToken, forToken }, log, now });
+  const execute = createLiveMediaExecutor("run", { transport: { enqueue }, wait: { createToken, forToken }, log, now, lookupKeys });
   return { execute, enqueue, createToken, forToken, log };
 }
+
+test("all sequential media stages and enqueue retries retain the social post lookup key", async () => {
+  const lookupKeys = [{ key: "social_post", refId: "social-post-id" }];
+  const deps = executor({ ok: true, output: { ...image(), decision: "transformed" } }, true, undefined, lookupKeys);
+  deps.enqueue.mockRejectedValueOnce(new Error("Redis unavailable"));
+  await deps.execute("localize", "medium", { task: "media.localize", url: "source" });
+  await deps.execute("localize-thumbnail", "medium", { task: "media.localize", url: "thumbnail" });
+  await deps.execute("image", "medium", { task: "media.transform-image", source: { fileId: "file", versionId: "source" }, output: { type: "image", format: "jpeg" } });
+  deps.forToken.mockResolvedValueOnce({ ok: true, output: { ok: true, output: { ...video(), decision: "encoded" } } });
+  await normalizeLiveVideo(video(), "medium", deps.execute);
+  expect(deps.enqueue).toHaveBeenCalledTimes(5);
+  for (const call of deps.enqueue.mock.calls) expect(call[3]).toEqual(lookupKeys);
+});
 
 test("localization and video waits share a deadline just before the twenty-minute budget", async () => {
   const started = Date.parse("2026-11-16T12:00:00Z");

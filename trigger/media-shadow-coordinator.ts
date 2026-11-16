@@ -91,6 +91,7 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
   }
 
   async function execute(stage: string, mediumId: string, job: MediaServerJob, destination?: { id: string; provider: string }) {
+    const lookupKeys = [{ key: "social_post", refId: post.postId }];
     const requestId = createHash("sha256").update(`${runId}/${stage}/${mediumId}/${destination?.id ?? "shared"}`).digest("hex");
     const record: JobRecord = {
       jobId: `${job.task.replace(".", "-")}/${requestId}`,
@@ -109,12 +110,12 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
     });
     const callback = { url: token.url };
     log("info", `Zenith shadow job request: ${label}`, {
-      ...record, tokenId: token.id, redisJob: mediaServerSubmission(record, job, callback),
+      ...record, tokenId: token.id, redisJob: mediaServerSubmission(record, job, callback, lookupKeys),
     });
     let enqueued = false;
     for (let attempt = 1; attempt <= ENQUEUE_ATTEMPTS && !enqueued; attempt++) {
       try {
-        await redisOperation(() => deps.transport.enqueue(record, job, callback));
+        await redisOperation(() => deps.transport.enqueue(record, job, callback, lookupKeys));
         enqueued = true;
       } catch {
         log("warn", "Zenith enqueue failed", { ...record, attempt });

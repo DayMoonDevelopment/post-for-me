@@ -317,6 +317,7 @@ export const processPost = task({
             payload: {
               medium: {
                 mediaProcessingBackend,
+                postId: post.id,
                 id: medium.id,
                 provider: medium.provider,
                 provider_connection_id: medium.provider_connection_id,
@@ -338,7 +339,7 @@ export const processPost = task({
         // Preserve failed IDs so only accounts selecting them are stopped below.
         localizedMedia.runs.forEach((run, index) => {
           const original = post.social_post_media[index];
-          if (run.ok) postMedia.push({ ...run.output, mediaProcessingBackend });
+          if (run.ok) postMedia.push({ ...run.output, mediaProcessingBackend, postId: post.id });
           else postMedia.push({ ...original, position: original.index, type: "failed", thumbnail_url: original.thumbnail_url || "" });
         });
 

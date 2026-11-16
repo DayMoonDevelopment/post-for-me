@@ -16,7 +16,7 @@ export async function triggerImageTransform(input: LiveImageInput) {
 
   if (!input.skipProcessing && input.platform === "instagram") {
     const result = await tasks.triggerAndWait<typeof transformInstagramImage>("transform-instagram-image", {
-      signedUrl: input.url, options: input.options, mediaProcessingBackend: backend,
+      signedUrl: input.url, options: input.options, mediaProcessingBackend: backend, postId: input.postId,
       limits: input.instagramLimits ?? {
         minAspectRatio: 3 / 4, maxAspectRatio: 1.91, storiesMinAspectRatio: 9 / 16,
         reelsMinAspectRatio: 9 / 16, maxFileSize: 8 * 1024 * 1024,
@@ -32,7 +32,7 @@ export async function triggerImageTransform(input: LiveImageInput) {
 
   if (!input.skipProcessing && (input.platform === "tiktok" || input.platform === "tiktok_business")) {
     const result = await tasks.triggerAndWait<typeof transformTikTokImage>("transform-tiktok-image", {
-      signedUrl: input.url, platform: input.platform, mediaProcessingBackend: backend,
+      signedUrl: input.url, platform: input.platform, mediaProcessingBackend: backend, postId: input.postId,
       maxFileSize: input.tiktokLimits?.maxFileSize ?? 20 * 1024 * 1024,
       allowedAspectRatios: input.tiktokLimits?.allowedAspectRatios ?? [
         { ratio: 9 / 16, width: 1080, height: 1920 }, { ratio: 3 / 4, width: 1080, height: 1440 },
@@ -48,7 +48,7 @@ export async function triggerImageTransform(input: LiveImageInput) {
 
   const result = await tasks.triggerAndWait<typeof transformBufferedImage>("transform-buffered-image", {
     url: input.url, platform: input.platform === "twitter" ? "twitter" : "bluesky",
-    skipProcessing: input.skipProcessing, mediaProcessingBackend: backend,
+    skipProcessing: input.skipProcessing, mediaProcessingBackend: backend, postId: input.postId,
   });
   if (!result.ok) return result;
   return { ...result, output: { ...result.output, signedUrl: result.output.url, stored: undefined } };

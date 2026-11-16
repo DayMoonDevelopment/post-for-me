@@ -4,7 +4,7 @@ import {
   MEDIA_SERVER_INTEROP_LANE, mediaServerSubmission, parseMediaServerResponse, sanitizeMediaServerLog,
   type MediaServerJob, type MediaServerTransport,
 } from "./media-server";
-import type { WaitpointApi } from "./media-server";
+import type { WaitpointApi, MediaServerLookupKey } from "./media-server";
 import {
   blueskyVideoOutput, GENERIC_VIDEO_ACCEPT, GENERIC_VIDEO_MAX_BYTES, genericVideoOutput,
   platformImageRecipe, type StoredMedia,
@@ -22,6 +22,7 @@ export function createLiveMediaExecutor(runId: string, deps: {
   wait: WaitpointApi;
   log: (message: string, data: Record<string, unknown>) => void;
   now?: () => number;
+  lookupKeys?: MediaServerLookupKey[];
 }) {
   const now = deps.now ?? Date.now;
   // All stages share an expiry, including localization, thumbnails and re-encodes.
@@ -47,10 +48,10 @@ export function createLiveMediaExecutor(runId: string, deps: {
       throw new Error("Zenith media waitpoint creation failed");
     }
     const callback = { url: token.url };
-    log("Zenith media request", { redisJob: mediaServerSubmission(handle, job, callback), tokenId: token.id });
+    log("Zenith media request", { redisJob: mediaServerSubmission(handle, job, callback, deps.lookupKeys), tokenId: token.id });
     let enqueued = false;
     for (let attempt = 1; attempt <= 3 && !enqueued; attempt++) {
-      try { await deps.transport.enqueue(handle, job, callback); enqueued = true; }
+      try { await deps.transport.enqueue(handle, job, callback, deps.lookupKeys); enqueued = true; }
       catch { log("Zenith enqueue failed", { attempt }); }
     }
     if (!enqueued) throw new Error("Zenith media enqueue failed");

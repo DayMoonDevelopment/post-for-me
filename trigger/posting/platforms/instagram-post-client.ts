@@ -355,6 +355,7 @@ export class InstagramPostClient extends PostClient {
             url: medium.thumbnail_url,
             stored: medium.thumbnail_stored,
             mediaProcessingBackend: medium.mediaProcessingBackend,
+            postId: medium.postId,
             type: "image",
             skip_processing: medium.skip_processing,
           },
@@ -1000,6 +1001,7 @@ export class InstagramPostClient extends PostClient {
       {
         url: signedUrl,
         mediumId: medium.id,
+        postId: medium.postId,
         stored: medium.stored,
         mediaProcessingBackend: medium.mediaProcessingBackend,
         platform: "instagram",

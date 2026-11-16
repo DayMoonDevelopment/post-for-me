@@ -68,7 +68,7 @@ export const ffmpegProcessVideo = task({
     medium = { ...medium, mediaProcessingBackend };
     if (mediaProcessingBackend === "zenith") {
       const { liveMediaExecutor } = await import("./live-media-runtime");
-      const execute = liveMediaExecutor(context.ctx.run.id);
+      const execute = liveMediaExecutor(context.ctx.run.id, medium.postId);
       const source = medium.stored ?? await execute("localize", medium.id, { task: "media.localize", url });
       const result = medium.skip_processing ? source : await normalizeLiveVideo(source, medium.id, execute);
       return { ...medium, url: result.url, stored: result };

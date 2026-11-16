@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   parseMediaServerResponse,
+  mediaServerSubmission,
   sanitizeMediaServerLog,
   type MediaServerJob,
 } from "./media-server";
@@ -18,6 +19,24 @@ const video = {
 const stored = (media: unknown = image) => ({
   fileId: "file-123", versionId: "version-456", path: "shadow/result.jpg",
   url: "https://media.example/result.jpg", contentType: "image/jpeg", size: 1234, media,
+});
+
+test("lookup keys belong to every interop envelope, not the wrapped media input", () => {
+  const handle = { jobId: "job", requestId: "request", path: "publishing/run/request", queue: "trigger-interop" };
+  const callback = { url: "https://callback.example/token" };
+  const lookupKeys = [{ key: "social_post", refId: "social-post-id" }];
+  const jobs: MediaServerJob[] = [
+    { task: "media.localize", url: "https://source.example/file" },
+    { task: "media.transform-image", source: { fileId: "file", versionId: "version" }, output: { type: "image", format: "jpeg" } },
+    { task: "media.transform-video", source: { fileId: "file", versionId: "version" }, output: { type: "video", container: "mp4", video: { codec: "h264" }, audio: null } },
+  ];
+  for (const job of jobs) {
+    const submission = JSON.parse(JSON.stringify(mediaServerSubmission(handle, job, callback, lookupKeys)));
+    expect(submission.data.lookupKeys).toEqual(lookupKeys);
+    expect(submission.data.input).not.toHaveProperty("lookupKeys");
+    expect(submission.data.callback).toEqual(callback);
+    expect(mediaServerSubmission(handle, job, callback).data).not.toHaveProperty("lookupKeys");
+  }
 });
 
 test("parseMediaServerResponse accepts localized images, videos and documents without copying", () => {
@@ -214,11 +233,12 @@ if (scenario === "routing") {
       video: { codec: "h264", preset: "fast", crf: 23, scale: { width: 1080, height: 1920 }, fps: 30 },
       audio: { codec: "aac", bitrate: 128000, channels: 2, sampleRate: 48000 } } },
   ];
+  const lookupKeys = [{ key: "social_post", refId: "social-post-id" }];
   for (const job of jobs) {
     const laneHandle = { ...handle, queue: MEDIA_SERVER_INTEROP_LANE };
-    expect(await transport.enqueue(laneHandle, job, callback)).toBeUndefined();
+    expect(await transport.enqueue(laneHandle, job, callback, lookupKeys)).toBeUndefined();
     const { task, ...input } = job;
-    expect(adds.at(-1)).toEqual([mediaServerInteropJobs[task], { input: { ...input, requestId: handle.requestId, path: handle.path }, callback }, {
+    expect(adds.at(-1)).toEqual([mediaServerInteropJobs[task], { input: { ...input, requestId: handle.requestId, path: handle.path }, callback, lookupKeys }, {
       jobId: handle.jobId, attempts: 5, backoff: { type: "exponential", delay: 1000 },
       removeOnComplete: { age: 10800 }, removeOnFail: { age: 10800 },
     }]);

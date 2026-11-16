@@ -151,7 +151,7 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         postId: "post-id",
         account,
         caption: "caption",
-        media: [{ id: "media-id", url: sourceUrl, type: "image", ...overrides }, ...extraMedia],
+        media: [{ id: "media-id", postId: "post-id", url: sourceUrl, type: "image", ...overrides }, ...extraMedia.map((medium) => ({ ...medium, postId: "post-id" }))],
         platformConfig,
       });
       return { upload, child, post, downloads, publications };
@@ -214,6 +214,7 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         ? prefix === "instagram" ? "transform-instagram-image" : "transform-tiktok-image"
         : "transform-live-image";
       expect(child.mock.calls.every(([id]) => id === taskId)).toBe(true);
+      expect(child.mock.calls.every(([, payload]) => (payload as { postId?: string }).postId === "post-id")).toBe(true);
       const outputUrls = upload.mock.calls.map(([options]) => `https://media.example.com/${options.key}`);
       const publishedUrls = prefix === "instagram"
         ? publications.filter(({ payload }) => payload.image_url).map(({ payload }) => payload.image_url)

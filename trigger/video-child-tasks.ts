@@ -78,13 +78,13 @@ export const probeVideoDimensions = task({
   maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
-  run: async ({ url, mediaProcessingBackend }: { url: string } & MediaProcessingRouting, context): Promise<{
+  run: async ({ url, mediaProcessingBackend, postId }: { url: string } & MediaProcessingRouting, context): Promise<{
     width: number | undefined;
     height: number | undefined;
   }> => {
     if (resolveMediaProcessingBackend(url, mediaProcessingBackend) === "zenith") {
       const { liveMediaExecutor } = await import("./live-media-runtime");
-      const source = await liveMediaExecutor(context.ctx.run.id)("localize", "video", { task: "media.localize", url });
+      const source = await liveMediaExecutor(context.ctx.run.id, postId)("localize", "video", { task: "media.localize", url });
       if (source.media.kind !== "video") throw new Error("Expected video metadata");
       return { width: source.media.width, height: source.media.height };
     }

@@ -25,7 +25,7 @@ export const processLiveMedium = task({
       if (!normalized.ok) throw new Error("Legacy video normalization failed", { cause: normalized.error });
       return { ...normalized.output, mediaProcessingBackend };
     }
-    const execute = liveMediaExecutor(ctx.run.id);
+    const execute = liveMediaExecutor(ctx.run.id, medium.postId);
     let stored = await execute("localize", medium.id, { task: "media.localize", url: medium.url });
     let thumbnail;
     if (medium.thumbnail_url) {
