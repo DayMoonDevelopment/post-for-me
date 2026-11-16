@@ -82,7 +82,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
   const getKey = mock(async () => ({ data: { enabled: true } }));
   const batchTriggerAndWait = mock(async (id: string, _items: unknown[]): Promise<{ runs: any[] }> => {
-    if (id === "process-live-medium") {
+    if (id === "process-live-medium" || id === "process-post-medium") {
       return { runs: [{ ok: true, output: medium }] };
     }
     if (id === "post-to-platform") return { runs: [] };
@@ -180,7 +180,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       expect(shadowCalls).toEqual([]);
       expect(trigger.mock.calls.map(([id]) => id)).toEqual(["process-webhooks"]);
       expect(batchTriggerAndWait.mock.calls.map(([id]) => id)).toEqual([
-        "process-live-medium", "post-to-platform",
+        backend === "trigger" ? "process-post-medium" : "process-live-medium", "post-to-platform",
       ]);
       expect(batchTriggerAndWait.mock.calls[0][1]).toEqual([{
         payload: { medium: {
@@ -204,6 +204,59 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       expect(logError).not.toHaveBeenCalled();
       expect(update).toHaveBeenCalledWith({ status: "processed" });
       expect(logWarn).not.toHaveBeenCalled();
+    });
+  }
+
+  for (const normalizationFails of [false, true]) {
+    test(`batches Trigger localization and video normalization, normalization fails=${normalizationFails}`, async () => {
+      const inputMedia = [
+        { id: "video", index: 9, skip_processing: false, provider_connection_id: "account-1" },
+        { id: "image", index: 2, skip_processing: false, provider_connection_id: null },
+        { id: "skipped-video", index: 4, skip_processing: true, provider_connection_id: null },
+        { id: "other-video", index: 5, skip_processing: false, provider_connection_id: "account-1" },
+      ].map((item) => ({
+        ...item, url: `https://source.example/${item.id}`, thumbnail_url: null,
+        thumbnail_timestamp_ms: null, provider: null, alt_text: "preserved alt", tags: null,
+      }));
+      const localized = inputMedia.map((item) => ({
+        ...item, type: item.id === "image" ? "image" : "video", position: item.index,
+        thumbnail_url: "", mediaProcessingBackend: "trigger" as const,
+      }));
+      batchTriggerAndWait.mockImplementationOnce(async () => ({
+        runs: localized.map((output) => ({ ok: true, output })),
+      }));
+      batchTriggerAndWait.mockImplementationOnce(async () => ({
+        runs: [localized[0], localized[3]].map((output, index) => normalizationFails && index === 0
+          ? { ok: false, error: { message: "Normalization failed" } }
+          : { ok: true, output: { ...output, url: `https://normalized.example/${output.id}` } }),
+      }));
+
+      await run({ index: 0, post: { ...post, social_post_media: inputMedia } });
+
+      expect(batchTriggerAndWait.mock.calls.map(([id]) => id)).toEqual([
+        "process-post-medium", "ffmpeg-process-video", "post-to-platform",
+      ]);
+      expect(batchTriggerAndWait.mock.calls[0][1]).toHaveLength(4);
+      expect(batchTriggerAndWait.mock.calls[1][1]).toEqual(
+        [localized[0], localized[3]].map((medium) => ({ payload: { medium } })),
+      );
+      const published = batchTriggerAndWait.mock.calls[2][1] as { payload: IndividualPostData }[];
+      expect(published.map(({ payload }) => payload.account.id)).toEqual(
+        normalizationFails ? ["account-2"] : ["account-1", "account-2"],
+      );
+      const defaults = published.find(({ payload }) => payload.account.id === "account-2")!;
+      expect(defaults.payload.media.map((item) => item.id)).toEqual(["image", "skipped-video"]);
+      if (!normalizationFails) {
+        expect(published[0].payload.media.map((item) => item.id)).toEqual(["other-video", "video"]);
+        expect(published[0].payload.media[0]).toMatchObject({
+          url: "https://normalized.example/other-video", alt_text: "preserved alt", mediaProcessingBackend: "trigger",
+        });
+      } else {
+        expect(insertResults).toHaveBeenCalledWith([
+          expect.objectContaining({ provider_connection_id: "account-1", success: false }),
+        ]);
+      }
+      expect(triggerAndWait).not.toHaveBeenCalled();
     });
   }
 
@@ -285,7 +338,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
 
         const batches = batchTriggerAndWait.mock.calls;
         expect(batches.map(([id]) => id)).toEqual(story
-          ? ["process-live-medium"] : ["post-to-platform"]);
+          ? ["process-post-medium"] : ["post-to-platform"]);
         const payloads = story
           ? triggerAndWait.mock.calls.map(([id, payload]) => {
             expect(id).toBe("post-to-platform");

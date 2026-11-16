@@ -312,7 +312,7 @@ export const processPost = task({
         logger.info("Localizing Media", { media: post.social_post_media });
 
         const localizedMedia = await tasks.batchTriggerAndWait(
-          "process-live-medium",
+          mediaProcessingBackend === "trigger" ? "process-post-medium" : "process-live-medium",
           post.social_post_media.map((medium) => ({
             payload: {
               medium: {
@@ -341,6 +341,25 @@ export const processPost = task({
           if (run.ok) postMedia.push({ ...run.output, mediaProcessingBackend });
           else postMedia.push({ ...original, position: original.index, type: "failed", thumbnail_url: original.thumbnail_url || "" });
         });
+
+        // Zenith normalizes inside process-live-medium. For Trigger, dispatch
+        // dependent video work here as one batch instead of one child per file.
+        if (mediaProcessingBackend === "trigger") {
+          const videos = postMedia.filter((medium) => medium.type === "video" && !medium.skip_processing);
+          if (videos.length > 0) {
+            const normalizedMedia = await tasks.batchTriggerAndWait(
+              "ffmpeg-process-video",
+              videos.map((medium) => ({ payload: { medium } })),
+            );
+            normalizedMedia.runs.forEach((run, index) => {
+              const medium = videos[index];
+              const position = postMedia.indexOf(medium);
+              postMedia[position] = run.ok
+                ? { ...medium, ...run.output, mediaProcessingBackend }
+                : { ...medium, type: "failed" };
+            });
+          }
+        }
         postMedia.sort((a, b) => a.position - b.position);
 
         if (postMedia.length == 0) {
