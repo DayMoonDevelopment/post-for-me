@@ -1,14 +1,17 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { randomUUID } from "crypto";
 import { uploadMedia } from "./media-storage";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import { prepareLiveBlueskyVideo } from "./live-media";
 
 export const ffmpegCompressVideo = task({
   id: "ffmpeg-compress-video",
-  maxDuration: 800,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 2,
     outOfMemory: {
@@ -19,10 +22,18 @@ export const ffmpegCompressVideo = task({
   run: async ({
     url,
     maxSizeBytes,
-  }: {
+    mediaProcessingBackend,
+    postId,
+  }: MediaProcessingRouting & {
     url: string;
     maxSizeBytes: number;
-  }): Promise<string> => {
+  }, context): Promise<string> => {
+    if (resolveMediaProcessingBackend(url, mediaProcessingBackend) === "zenith") {
+      const { liveMediaExecutor } = await import("./live-media-runtime");
+      const execute = liveMediaExecutor(context.ctx.run.id, postId);
+      const source = await execute("localize", "video", { task: "media.localize", url });
+      return (await prepareLiveBlueskyVideo(source, "video", false, execute, maxSizeBytes)).url;
+    }
     logger.info("Downloading video from signed URL");
     const videoResponse = await fetch(url);
     if (!videoResponse.ok) {

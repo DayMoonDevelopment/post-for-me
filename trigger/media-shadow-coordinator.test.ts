@@ -84,7 +84,8 @@ function harness(options: {
       },
     },
     transport: {
-      async enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback) {
+      async enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback, lookupKeys?: { key: string; refId: string }[]) {
+        expect(lookupKeys).toEqual([{ key: "social_post", refId: "post" }]);
         const identity = { jobId: handle.jobId, requestId: handle.requestId, queue: handle.queue, path: handle.path };
         enqueueAttempts.push({ handle: identity, job: structuredClone(job), callback });
         if (options.rejectBeforeAdd?.(enqueueAttempts.length)) throw new Error("Enqueue failed before add");
@@ -467,7 +468,7 @@ describe("shadow waitpoint tokens", () => {
       "Zenith shadow job request: media.transform-image [instagram/image-q100]",
     ]);
     for (const [index, entry] of h.entries.entries()) {
-      expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job, entry.callback)));
+      expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job, entry.callback, [{ key: "social_post", refId: "post" }])));
     }
     expect(requests[0].data.redisJob).toMatchObject({
       name: "media.trigger-localize", data: { input: { url: "[redacted URL]" }, callback: "[redacted callback]" },

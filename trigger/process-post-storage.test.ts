@@ -6,7 +6,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   test("process-post storage payloads in an isolated process", async () => {
     const child = Bun.spawn([process.execPath, "test", __filename], {
       cwd: __dirname,
-      env: { ...process.env, PFM_PROCESS_POST_STORAGE_TEST_CHILD: "1" },
+      env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", PFM_PROCESS_POST_STORAGE_TEST_CHILD: "1" },
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -73,14 +73,16 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   const updatedSelect = mock(() => ({ order: updatedOrder }));
   const updatedEq = mock(() => ({ select: updatedSelect }));
   const update = mock(() => ({ eq: updatedEq }));
+  const insertResults = mock((_results: unknown[]) => ({ select: async () => ({ data: [], error: null }) }));
   const from = mock((table: string) => {
     if (table === "projects") return { select: projectSelect };
     if (table === "social_posts") return { update };
+    if (table === "social_post_results") return { insert: insertResults };
     throw new Error(`Unexpected table: ${table}`);
   });
   const getKey = mock(async () => ({ data: { enabled: true } }));
-  const batchTriggerAndWait = mock(async (id: string, _items: unknown[]) => {
-    if (id === "process-post-medium") {
+  const batchTriggerAndWait = mock(async (id: string, _items: unknown[]): Promise<{ runs: any[] }> => {
+    if (id === "process-live-medium" || id === "process-post-medium") {
       return { runs: [{ ok: true, output: medium }] };
     }
     if (id === "post-to-platform") return { runs: [] };
@@ -112,6 +114,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     run = (processPost as unknown as { run: typeof run }).run;
   });
   beforeEach(() => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = "0";
     delete process.env.MEDIA_SERVER_REDIS_URL;
     for (const fn of [
       projectSingle, projectEq, projectSelect, updatedSingle, updatedOrder,
@@ -127,8 +130,11 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     }
   });
 
-  for (const mode of ["configured", "disabled"] as const) {
-    test(`media server ${mode}: live processing never schedules media-shadow`, async () => {
+  for (const { percentage, mode } of ["0", "100"].flatMap((percentage) =>
+    ["configured", "disabled"].map((mode) => ({ percentage, mode })))) {
+    test(`media server ${mode}, Zenith ${percentage}%: propagates backend without scheduling shadow`, async () => {
+      process.env.ZENITH_MEDIA_PERCENTAGE = percentage;
+      const backend = percentage === "0" ? "trigger" : "zenith";
       if (mode !== "disabled") {
         process.env.MEDIA_SERVER_REDIS_URL = "redis://shadow.example.com";
       }
@@ -165,14 +171,21 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
 
       await run({ index: 0, post: input });
 
+      expect(addTags).toHaveBeenCalledWith([
+        post.id,
+        post.project_id,
+        `media-processing-backend:${backend}`,
+      ], expect.anything());
       const shadowCalls = trigger.mock.calls.filter(([id]) => id === "media-shadow");
       expect(shadowCalls).toEqual([]);
       expect(trigger.mock.calls.map(([id]) => id)).toEqual(["process-webhooks"]);
       expect(batchTriggerAndWait.mock.calls.map(([id]) => id)).toEqual([
-        "process-post-medium", "post-to-platform",
+        backend === "trigger" ? "process-post-medium" : "process-live-medium", "post-to-platform",
       ]);
       expect(batchTriggerAndWait.mock.calls[0][1]).toEqual([{
         payload: { medium: {
+          mediaProcessingBackend: backend,
+          postId: post.id,
           id: medium.id, url: "https://external.example.com/original.jpg",
           thumbnail_url: "https://external.example.com/thumbnail.jpg",
           thumbnail_timestamp_ms: 1234, provider: null, provider_connection_id: null,
@@ -184,7 +197,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       for (const [index, { payload }] of published.entries()) {
         expect(payload).toMatchObject({
           account: { id: `account-${index + 1}`, access_token: "access-token", refresh_token: "refresh-token" },
-          media: [medium], appCredentials: credentials,
+          media: [{ ...medium, mediaProcessingBackend: backend, postId: post.id }], appCredentials: credentials,
         });
       }
       expect(triggerAndWait).not.toHaveBeenCalled();
@@ -194,6 +207,81 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       expect(logWarn).not.toHaveBeenCalled();
     });
   }
+
+  for (const normalizationFails of [false, true]) {
+    test(`batches Trigger localization and video normalization, normalization fails=${normalizationFails}`, async () => {
+      const inputMedia = [
+        { id: "video", index: 9, skip_processing: false, provider_connection_id: "account-1" },
+        { id: "image", index: 2, skip_processing: false, provider_connection_id: null },
+        { id: "skipped-video", index: 4, skip_processing: true, provider_connection_id: null },
+        { id: "other-video", index: 5, skip_processing: false, provider_connection_id: "account-1" },
+      ].map((item) => ({
+        ...item, url: `https://source.example/${item.id}`, thumbnail_url: null,
+        thumbnail_timestamp_ms: null, provider: null, alt_text: "preserved alt", tags: null,
+      }));
+      const localized = inputMedia.map((item) => ({
+        ...item, postId: post.id, type: item.id === "image" ? "image" : "video", position: item.index,
+        thumbnail_url: "", mediaProcessingBackend: "trigger" as const,
+      }));
+      batchTriggerAndWait.mockImplementationOnce(async () => ({
+        runs: localized.map((output) => ({ ok: true, output })),
+      }));
+      batchTriggerAndWait.mockImplementationOnce(async () => ({
+        runs: [localized[0], localized[3]].map((output, index) => normalizationFails && index === 0
+          ? { ok: false, error: { message: "Normalization failed" } }
+          : { ok: true, output: { ...output, url: `https://normalized.example/${output.id}` } }),
+      }));
+
+      await run({ index: 0, post: { ...post, social_post_media: inputMedia } });
+
+      expect(batchTriggerAndWait.mock.calls.map(([id]) => id)).toEqual([
+        "process-post-medium", "ffmpeg-process-video", "post-to-platform",
+      ]);
+      expect(batchTriggerAndWait.mock.calls[0][1]).toHaveLength(4);
+      expect(batchTriggerAndWait.mock.calls[1][1]).toEqual(
+        [localized[0], localized[3]].map((medium) => ({ payload: { medium } })),
+      );
+      const published = batchTriggerAndWait.mock.calls[2][1] as { payload: IndividualPostData }[];
+      expect(published.map(({ payload }) => payload.account.id)).toEqual(
+        normalizationFails ? ["account-2"] : ["account-1", "account-2"],
+      );
+      const defaults = published.find(({ payload }) => payload.account.id === "account-2")!;
+      expect(defaults.payload.media.map((item) => item.id)).toEqual(["image", "skipped-video"]);
+      if (!normalizationFails) {
+        expect(published[0].payload.media.map((item) => item.id)).toEqual(["other-video", "video"]);
+        expect(published[0].payload.media[0]).toMatchObject({
+          url: "https://normalized.example/other-video", alt_text: "preserved alt", mediaProcessingBackend: "trigger",
+        });
+      } else {
+        expect(insertResults).toHaveBeenCalledWith([
+          expect.objectContaining({ provider_connection_id: "account-1", success: false }),
+        ]);
+      }
+      expect(triggerAndWait).not.toHaveBeenCalled();
+    });
+  }
+
+  test("failed account override cannot fall back; independent account publishes completed defaults in index order", async () => {
+    const inputMedia = [
+      { id: "last", index: 9, provider_connection_id: null },
+      { id: "failed-override", index: 0, provider_connection_id: "account-1" },
+      { id: "first", index: 2, provider_connection_id: null },
+    ].map((item) => ({
+      url: `https://source.example/${item.id}`, thumbnail_url: null, thumbnail_timestamp_ms: null,
+      provider: null, alt_text: "preserved alt", tags: [{ id: "tag", type: "user", platform: "facebook" }], skip_processing: false, ...item,
+    }));
+    batchTriggerAndWait.mockImplementationOnce(async () => ({ runs: inputMedia.map((item) => item.id === "failed-override"
+      ? { ok: false, error: { message: "Zenith failed" } }
+      : { ok: true, output: { ...item, url: `https://zenith.example/${item.id}`, thumbnail_url: "", type: "image", position: item.index } }) }));
+    await run({ index: 0, post: { ...post, social_post_media: inputMedia } });
+    const publish = batchTriggerAndWait.mock.calls.find(([id]) => id === "post-to-platform")!;
+    const payloads = publish[1] as { payload: IndividualPostData }[];
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].payload.account.id).toBe("account-2");
+    expect(payloads[0].payload.media.map((m) => m.url)).toEqual(["https://zenith.example/first", "https://zenith.example/last"]);
+    expect(payloads[0].payload.media[0]).toMatchObject({ alt_text: "preserved alt", tags: inputMedia[0].tags });
+    expect(insertResults).toHaveBeenCalledWith([expect.objectContaining({ provider_connection_id: "account-1", success: false })]);
+  });
 
   for (const isSystem of [true, false]) {
     for (const story of [false, true]) {
@@ -235,7 +323,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
           },
         };
         expect(addTags.mock.calls).toEqual([
-          [[post.id, post.project_id], tagRequestOptions],
+          [[post.id, post.project_id, "media-processing-backend:trigger"], tagRequestOptions],
           [project.team_id, tagRequestOptions],
         ]);
         expect(update).toHaveBeenCalledWith({ status: "processed" });

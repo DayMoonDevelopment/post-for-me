@@ -1,4 +1,6 @@
 import { task } from "@trigger.dev/sdk";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import type { transformLiveImageTask } from "./transform-live-image";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { uploadMedia } from "./media-storage";
@@ -8,7 +10,7 @@ export const transformBufferedImage = task({
   id: "transform-buffered-image",
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
-  run: async ({ url, platform, skipProcessing }: {
+  run: async ({ url, platform, skipProcessing, mediaProcessingBackend, postId }: MediaProcessingRouting & {
     url: string;
     platform: "bluesky" | "twitter";
     skipProcessing?: boolean;
@@ -18,6 +20,14 @@ export const transformBufferedImage = task({
     width: number | undefined;
     height: number | undefined;
   }> => {
+    if (resolveMediaProcessingBackend(url, mediaProcessingBackend) === "zenith") {
+      const { tasks } = await import("@trigger.dev/sdk");
+      const result = await tasks.triggerAndWait<typeof transformLiveImageTask>("transform-live-image", {
+        url, platform, skipProcessing, mediaProcessingBackend: "zenith", postId,
+      });
+      if (!result.ok) throw new Error("Zenith image transform failed", { cause: result.error });
+      return result.output;
+    }
     const response = await fetch(url);
     const file = await response.blob();
     const buffer = Buffer.from(await file.arrayBuffer());

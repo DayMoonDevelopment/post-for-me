@@ -1,10 +1,10 @@
-import { task, tasks, wait } from "@trigger.dev/sdk";
+import { task, wait } from "@trigger.dev/sdk";
 import { readFile } from "fs/promises";
 import { ApiResponseError, EUploadMimeType, TwitterApi, type TwitterApiTokens } from "twitter-api-v2";
 import { PostClient } from "./posting/post-client";
 import { shouldSkipProcessing } from "./posting/image-processing-utils";
 import type { PostMedia, SocialAccount } from "./posting/post.types";
-import type { transformBufferedImage } from "./transform-buffered-image";
+import { triggerImageTransform } from "./trigger-image-transform";
 
 type TwitterMediaAuth = {
   appKey: string;
@@ -45,7 +45,7 @@ export class TwitterMediaUploader extends PostClient {
         return await this.#uploadVideo({
           twitterClient,
           filePath,
-          mimeType,
+          mimeType: medium.stored?.contentType || mimeType,
           isOAuth2: auth.isOAuth2,
         });
       } finally {
@@ -126,11 +126,10 @@ export class TwitterMediaUploader extends PostClient {
     isOAuth2: boolean;
   }): Promise<string> {
     let url = medium.url;
-    let mimeType: string | undefined;
+    let mimeType: string | undefined = medium.stored?.contentType;
     if (!shouldSkipProcessing(medium)) {
-      const result = await tasks.triggerAndWait<typeof transformBufferedImage>(
-        "transform-buffered-image",
-        { url, platform: "twitter" },
+      const result = await triggerImageTransform(
+        { url, mediumId: medium.id, stored: medium.stored, platform: "twitter", mediaProcessingBackend: medium.mediaProcessingBackend, postId: medium.postId },
       );
       if (!result.ok) {
         throw new Error("Failed to prepare Twitter image", { cause: result.error });
