@@ -6,7 +6,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   test("process-post storage payloads in an isolated process", async () => {
     const child = Bun.spawn([process.execPath, "test", __filename], {
       cwd: __dirname,
-      env: { ...process.env, PFM_PROCESS_POST_STORAGE_TEST_CHILD: "1" },
+      env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", PFM_PROCESS_POST_STORAGE_TEST_CHILD: "1" },
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -114,6 +114,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     run = (processPost as unknown as { run: typeof run }).run;
   });
   beforeEach(() => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = "0";
     delete process.env.MEDIA_SERVER_REDIS_URL;
     for (const fn of [
       projectSingle, projectEq, projectSelect, updatedSingle, updatedOrder,
@@ -129,8 +130,11 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     }
   });
 
-  for (const mode of ["configured", "disabled"] as const) {
-    test(`media server ${mode}: never schedules shadow; publishes completed live outputs`, async () => {
+  for (const { percentage, mode } of ["0", "100"].flatMap((percentage) =>
+    ["configured", "disabled"].map((mode) => ({ percentage, mode })))) {
+    test(`media server ${mode}, Zenith ${percentage}%: propagates backend without scheduling shadow`, async () => {
+      process.env.ZENITH_MEDIA_PERCENTAGE = percentage;
+      const backend = percentage === "0" ? "trigger" : "zenith";
       if (mode !== "disabled") {
         process.env.MEDIA_SERVER_REDIS_URL = "redis://shadow.example.com";
       }
@@ -175,6 +179,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       ]);
       expect(batchTriggerAndWait.mock.calls[0][1]).toEqual([{
         payload: { medium: {
+          mediaProcessingBackend: backend,
           id: medium.id, url: "https://external.example.com/original.jpg",
           thumbnail_url: "https://external.example.com/thumbnail.jpg",
           thumbnail_timestamp_ms: 1234, provider: null, provider_connection_id: null,
@@ -186,7 +191,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       for (const [index, { payload }] of published.entries()) {
         expect(payload).toMatchObject({
           account: { id: `account-${index + 1}`, access_token: "access-token", refresh_token: "refresh-token" },
-          media: [medium], appCredentials: credentials,
+          media: [{ ...medium, mediaProcessingBackend: backend }], appCredentials: credentials,
         });
       }
       expect(triggerAndWait).not.toHaveBeenCalled();

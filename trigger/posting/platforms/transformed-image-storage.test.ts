@@ -28,22 +28,24 @@ const platforms = [
 // Existing platform tests globally mock Axios. Keep these real-image tests
 // isolated from those mocks while restoring our own spies between cases.
 if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
-  test("transformed image storage in an isolated process", async () => {
-    const child = Bun.spawn([process.execPath, "test", __filename], {
-      env: { ...process.env, PFM_TRANSFORMED_IMAGE_TEST_CHILD: "1" },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    expect({ exitCode, output: exitCode === 0 ? "" : stdout + stderr }).toEqual({
-      exitCode: 0,
-      output: "",
-    });
-  }, 30_000);
+  for (const percentage of ["0", "100"]) {
+    test(`transformed image storage at ${percentage}% Zenith in an isolated process`, async () => {
+      const child = Bun.spawn([process.execPath, "test", __filename], {
+        env: { ...process.env, PFM_TRANSFORMED_IMAGE_TEST_CHILD: "1", ZENITH_MEDIA_PERCENTAGE: percentage },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect({ exitCode, output: exitCode === 0 ? "" : stdout + stderr }).toEqual({
+        exitCode: 0,
+        output: "",
+      });
+    }, 30_000);
+  }
 } else {
   const definitions = new Map<string, {
     run(payload: any, context: any): Promise<unknown>;
@@ -88,13 +90,14 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
   } }));
   beforeAll(async () => {
     await import("../../transform-live-image");
+    if (process.env.ZENITH_MEDIA_PERCENTAGE === "0") {
+      await import("../../transform-instagram-image");
+      await import("../../transform-tiktok-image");
+    }
   });
 
-  test("live image task waits on Zenith without native-machine escalation", () => {
-    expect(definitions.size).toBe(1);
-    for (const definition of definitions.values()) {
-      expect(definition.retry).toEqual({ maxAttempts: 1 });
-    }
+  test("routing task has no native-machine escalation", () => {
+    expect(definitions.get("transform-live-image")!.retry).toEqual({ maxAttempts: 1 });
   });
 
   for (const { Client, prefix, width, height } of platforms) {
@@ -206,7 +209,7 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       const limit = prefix === "instagram" ? 10 : 32;
       const extra = Array.from({ length: limit + 2 }, (_, index) => ({ id: `extra-${index}`, url: sourceUrl, type: "image" }));
       expect((await post({}, {}, extra)).success).toBe(true);
-      expect(child).toHaveBeenCalledTimes(limit);
+      expect(child).toHaveBeenCalledTimes(limit * (process.env.ZENITH_MEDIA_PERCENTAGE === "0" ? 2 : 1));
       const outputUrls = upload.mock.calls.map(([options]) => `https://media.example.com/${options.key}`);
       const publishedUrls = prefix === "instagram"
         ? publications.filter(({ payload }) => payload.image_url).map(({ payload }) => payload.image_url)
@@ -234,8 +237,9 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         test(`preserves ${placement} cropping and returned carousel dimensions across the child boundary`, async () => {
           const { child, upload, post } = await setup(600, 1200);
           expect((await post({}, { placement }, [{ id: "second", url: sourceUrl, type: "image" }])).success).toBe(true);
-          expect(child).toHaveBeenCalledTimes(2);
-          expect(child.mock.calls[1][1]).toMatchObject({
+          const liveCalls = child.mock.calls.filter(([id]) => id === "transform-live-image");
+          expect(liveCalls).toHaveLength(2);
+          expect(liveCalls[1][1]).toMatchObject({
             options: { firstImage: { width: 600, height: expectedHeight }, placement, is_feed: true },
           });
           for (const [options] of upload.mock.calls) {

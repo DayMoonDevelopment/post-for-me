@@ -130,7 +130,7 @@ export class TwitterMediaUploader extends PostClient {
     if (!shouldSkipProcessing(medium)) {
       const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
         "transform-live-image",
-        { url, mediumId: medium.id, stored: medium.stored, platform: "twitter" },
+        { url, mediumId: medium.id, stored: medium.stored, platform: "twitter", mediaProcessingBackend: medium.mediaProcessingBackend },
       );
       if (!result.ok) {
         throw new Error("Failed to prepare Twitter image", { cause: result.error });

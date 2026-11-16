@@ -1,4 +1,6 @@
 import { task } from "@trigger.dev/sdk";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import type { transformLiveImageTask } from "./transform-live-image";
 import { randomUUID } from "crypto";
 import axios from "axios";
 import sharp from "sharp";
@@ -13,7 +15,7 @@ export const transformInstagramImage = task({
   id: "transform-instagram-image",
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
-  run: async ({ signedUrl, options, limits }: {
+  run: async ({ signedUrl, options, limits, mediaProcessingBackend }: MediaProcessingRouting & {
     signedUrl: string;
     options?: {
       firstImage?: {
@@ -35,6 +37,14 @@ export const transformInstagramImage = task({
     width: number | undefined;
     height: number | undefined;
   }> => {
+    if (resolveMediaProcessingBackend(signedUrl, mediaProcessingBackend) === "zenith") {
+      const { tasks } = await import("@trigger.dev/sdk");
+      const result = await tasks.triggerAndWait<typeof transformLiveImageTask>("transform-live-image", {
+        url: signedUrl, platform: "instagram", options, instagramLimits: limits, mediaProcessingBackend: "zenith",
+      });
+      if (!result.ok) throw new Error("Zenith Instagram transform failed", { cause: result.error });
+      return { signedUrl: result.output.url, width: result.output.width, height: result.output.height };
+    }
     const response = await axios({
       url: signedUrl,
       method: "GET",

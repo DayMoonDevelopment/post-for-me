@@ -23,6 +23,7 @@ import { differenceInDays } from "date-fns";
 import Stripe from "stripe";
 import { Database } from "./supabase.types";
 import { extractPlatformError } from "./posting/platform-error";
+import { resolveMediaProcessingBackend } from "./media-processing-backend";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
@@ -183,7 +184,10 @@ export const postToPlatform = task({
       );
       const supportedMedia = media.filter((m) =>
         postClient.supportedMediaTypes.includes(m.type),
-      );
+      ).map((medium) => ({
+        ...medium,
+        mediaProcessingBackend: resolveMediaProcessingBackend(postId, medium.mediaProcessingBackend),
+      }));
 
       if (unsupportedMedia.length > 0) {
         const unsupportedTypes = [

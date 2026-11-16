@@ -12,6 +12,7 @@ import type {
 import { Unkey } from "@unkey/api";
 import type { StoredMedia } from "./media-recipes";
 import { selectPostMedia } from "./posting/media-selection";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
 
 import { Database, Json } from "./supabase.types";
 
@@ -156,7 +157,7 @@ const unkey = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
 
 const UNKEY_MAX_RETRIES = 3;
 
-export type ProcessedMedium = {
+export type ProcessedMedium = MediaProcessingRouting & {
   stored?: StoredMedia;
   thumbnail_stored?: StoredMedia;
   id: string;
@@ -205,8 +206,10 @@ export const processPost = task({
   id: "process-post",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
-  run: async (payload: { index: number; post: Post }) => {
+  run: async (payload: { index: number; post: Post } & MediaProcessingRouting) => {
     const { post } = payload;
+    const mediaProcessingBackend = resolveMediaProcessingBackend(post.id, payload.mediaProcessingBackend);
+    logger.info("Selected media processing backend", { postId: post.id, mediaProcessingBackend });
     logger.info("Starting post processing", { post });
 
     await addTagsBestEffort([`${post.id}`, `${post.project_id}`]);
@@ -309,6 +312,7 @@ export const processPost = task({
           post.social_post_media.map((medium) => ({
             payload: {
               medium: {
+                mediaProcessingBackend,
                 id: medium.id,
                 provider: medium.provider,
                 provider_connection_id: medium.provider_connection_id,
@@ -330,7 +334,7 @@ export const processPost = task({
         // Preserve failed IDs so only accounts selecting them are stopped below.
         localizedMedia.runs.forEach((run, index) => {
           const original = post.social_post_media[index];
-          if (run.ok) postMedia.push(run.output);
+          if (run.ok) postMedia.push({ ...run.output, mediaProcessingBackend });
           else postMedia.push({ ...original, position: original.index, type: "failed", thumbnail_url: original.thumbnail_url || "" });
         });
         postMedia.sort((a, b) => a.position - b.position);
@@ -463,7 +467,7 @@ export const processPost = task({
             postData.caption;
           const media = selectPostMedia(postData.media, account, !!platformConfig);
           if (media.some((medium) => medium.type === "failed")) {
-            throw new Error("Media failed to process, please check media URLs and Zenith job logs");
+            throw new Error(`Media failed to process, please check media URLs and ${mediaProcessingBackend} job logs`);
           }
 
           const platformData = {

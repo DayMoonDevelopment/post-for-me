@@ -1,10 +1,46 @@
 # Live Zenith Media Processing
 
-`MEDIA_SERVER_REDIS_URL` is **required** for posts with media. Configure it in
+## Percentage rollout
+
+Set `ZENITH_MEDIA_PERCENTAGE` in each Trigger environment (a number from `0` to
+`100`, including fractional percentages). **The default is `0`: all production
+media processing uses the legacy Trigger tasks.** Missing, non-numeric, negative,
+or greater-than-100 values also use `0`. Set `100` to use Zenith wherever supported.
+
+`media-processing-backend.ts` hashes the post ID into a stable bucket. Selection
+is approximate, not a traffic quota. Raising the percentage expands the cohort;
+retries select the same backend while the percentage is unchanged. `process-post`
+resolves once and propagates `mediaProcessingBackend: "trigger" | "zenith"` on
+every medium, including account overrides, stories, and supplied image covers.
+Child tasks always honor this explicit choice, even if the percentage changes.
+Direct `post-to-platform` runs resolve missing choices using the post ID too.
+
+Every individual processing entry point also resolves missing choices using its
+media ID (when available), otherwise its source URL. This includes
+`process-post-medium`, `process-live-medium`, `transform-live-image`, the three
+legacy image-transform tasks, `ffmpeg-process-video`, `ffmpeg-compress-video`,
+`probe-video-dimensions`, and `upload-bluesky-video`. Direct calls therefore
+participate in the rollout without requiring a `process-post` parent. Existing
+payloads remain valid. Use the explicit backend field to pin an individual call;
+for medium-based payloads, put it on `medium`. Legacy workers and animation
+fallback calls are explicitly pinned to Trigger to prevent routing loops.
+
+YouTube timestamp-thumbnail extraction has no Zenith equivalent and explicitly
+stays on FFmpeg for either selection. Uploads, compatibility copies, and manual
+shadow diagnostics retain their existing behavior; shadow diagnostics do not
+participate in the production percentage rollout.
+
+At `0`, no production path needs Zenith/Redis configuration. R2, Sharp, and
+FFmpeg remain required for the legacy cohort and the capability exceptions.
+The following publishing graph describes the **Zenith-selected** cohort; the
+Trigger cohort localizes with `process-post-medium`, normalizes videos with
+`ffmpeg-process-video`, and uses the existing native image and Bluesky tasks.
+
+`MEDIA_SERVER_REDIS_URL` is **required** for Zenith-selected operations. Configure it in
 each Trigger environment using the Redis instance and logical database consumed
-by Zenith (`redis://` or `rediss://`). Missing configuration fails processing;
+by Zenith (`redis://` or `rediss://`). Missing configuration fails selected processing;
 there is no legacy-pipeline fallback. Trigger needs no Zenith database or bucket
-credentials. R2 credentials remain necessary for the two legacy exceptions below.
+credentials. R2 credentials remain necessary for the legacy cohort and exceptions below.
 
 `process-post` no longer schedules `media-shadow`. The old diagnostic task remains
 available for manual diagnostics only; its results are never used for publishing.
@@ -83,19 +119,20 @@ work; it may finish after Trigger stops waiting.
   precedence and optional-thumbnail failures retain existing behavior.
 - When a Zenith image transform specifically reports **"Animated images are not
   supported"**, `transform-live-image` invokes the existing platform-specific
-  legacy image task. It then localizes that completed output to recover real
+  legacy image task, explicitly pinned to Trigger. It then localizes that output
+  to recover real
   stored references and metadata. Other failures never select legacy tasks.
   Localization metadata has no page count, so this is intentionally a targeted
   worker-capability fallback, not an extension-based guess.
 
 Keep Sharp, FFmpeg, their native dependencies, and R2 storage configured for
 these exceptions. Legacy localization, video normalization/compression, and
-dimension probes are no longer called by the publishing flow.
+dimension probes are only called by the legacy cohort, not the Zenith publishing flow.
 
 ## Deployment and retained artifacts
 
 Deploy Zenith's three real lanes (`ingest`, `images`, `videos`) and
-`trigger-interop` before deploying this Trigger release. Verify migrations,
+`trigger-interop` before increasing the percentage above zero. Verify migrations,
 storage, Redis capacity/`noeviction`, source URL reachability and host allowlists.
 Run a staging publish covering image/carousel, video, supplied cover, skipped
 media, animation, and YouTube timestamp thumbnails before sustained traffic.
@@ -104,7 +141,7 @@ Artifacts use `publishing/<child-run-ID>/<request-ID>` with Zenith-resolved
 extensions. No artifact deletion is performed; queue retention does not delete
 files. Source URLs must stay accessible for queueing/retries.
 
-Native versions and encoding may differ from the retired pipeline. Image
+Native versions and encoding may differ between backends. Zenith image
 recipes flatten transparency to black. X's no-auto-orientation conversion keeps
 Zenith's orientation tag (legacy Sharp stripped metadata). Generic video accepts
 good streams in MP4, copies other containers to MP4, and rejects outputs over

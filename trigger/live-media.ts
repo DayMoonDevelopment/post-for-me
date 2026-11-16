@@ -110,13 +110,13 @@ export async function transformLiveImage(source: StoredMedia, id: string, platfo
 }
 
 export async function prepareLiveBlueskyVideo(source: StoredMedia, id: string, skip: boolean,
-  execute: LiveMediaExecutor): Promise<StoredMedia> {
+  execute: LiveMediaExecutor, maxSizeBytes = 100_000_000): Promise<StoredMedia> {
   if (source.media.kind !== "video") throw new Error("Expected Bluesky video metadata");
   let current = source;
-  for (let attempt = 1; !skip && attempt <= 3 && current.size > 100_000_000; attempt++) {
+  for (let attempt = 1; !skip && attempt <= 3 && current.size > maxSizeBytes; attempt++) {
     current = await execute(`bluesky-video-${attempt}`, id, {
       task: "media.transform-video", source: storedSource(current),
-      output: blueskyVideoOutput(current, attempt, source.media.durationSeconds ?? 0),
+      output: blueskyVideoOutput(current, attempt, source.media.durationSeconds ?? 0, maxSizeBytes),
     });
   }
   return current;

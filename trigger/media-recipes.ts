@@ -125,11 +125,11 @@ export function genericVideoOutput(source: StoredMedia): MediaServerVideoOutput 
   return output;
 }
 
-export function blueskyVideoOutput(source: StoredMedia, attempt: number, durationSeconds: number): MediaServerVideoOutput {
+export function blueskyVideoOutput(source: StoredMedia, attempt: number, durationSeconds: number, maxSizeBytes = 100_000_000): MediaServerVideoOutput {
   if (source.media.kind !== "video") throw new Error("Expected video metadata");
   if (!Number.isInteger(attempt) || attempt < 1 || attempt > 3) throw new Error("Expected Bluesky attempt 1, 2 or 3");
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error("Expected a positive video duration");
-  const bitrate = Math.max(Math.floor(100_000_000 * (0.9 - (attempt - 1) * 0.1) * 8 / durationSeconds), 500000);
+  const bitrate = Math.max(Math.floor(maxSizeBytes * (0.9 - (attempt - 1) * 0.1) * 8 / durationSeconds), 500000);
   return {
     type: "video",
     container: "mp4",
@@ -151,10 +151,18 @@ export function blueskyVideoOutput(source: StoredMedia, attempt: number, duratio
   };
 }
 
+export type InstagramImageLimits = {
+  minAspectRatio: number; maxAspectRatio: number; storiesMinAspectRatio: number; reelsMinAspectRatio: number; maxFileSize: number;
+};
+export type TikTokImageLimits = {
+  maxFileSize: number; allowedAspectRatios: { ratio: number; width: number; height: number }[];
+};
+
 export function platformImageRecipe(
   platform: string,
   source: StoredMedia,
-  options: { placement?: string; isFeed?: boolean; firstImage?: { width: number; height: number } },
+  options: { placement?: string; isFeed?: boolean; firstImage?: { width: number; height: number };
+    instagramLimits?: InstagramImageLimits; tiktokLimits?: TikTokImageLimits },
 ): { output: MediaServerImageOutput; maxBytes: number; initialQuality: number } | undefined {
   const media = source.media;
   if (media.kind !== "image") return undefined;
@@ -174,22 +182,24 @@ export function platformImageRecipe(
           width, height,
           minAspectRatio: resolveInstagramMinAspectRatio({
             placement: options.placement, isFeed: options.isFeed,
-            feedMinAspectRatio: 3 / 4, storiesMinAspectRatio: 9 / 16, reelsMinAspectRatio: 9 / 16,
+            feedMinAspectRatio: options.instagramLimits?.minAspectRatio ?? 3 / 4,
+            storiesMinAspectRatio: options.instagramLimits?.storiesMinAspectRatio ?? 9 / 16,
+            reelsMinAspectRatio: options.instagramLimits?.reelsMinAspectRatio ?? 9 / 16,
           }),
-          maxAspectRatio: 1.91,
+          maxAspectRatio: options.instagramLimits?.maxAspectRatio ?? 1.91,
         });
     resize = { width: target.width, height: target.height, fit: "cover", withoutEnlargement: false };
-    maxBytes = 8 * 1024 * 1024;
+    maxBytes = options.instagramLimits?.maxFileSize ?? 8 * 1024 * 1024;
   } else if (platform === "tiktok" || platform === "tiktok_business") {
     const ratio = media.width / media.height;
-    const target = [
+    const target = (options.tiktokLimits?.allowedAspectRatios ?? [
       { ratio: 9 / 16, width: 1080, height: 1920 },
       { ratio: 3 / 4, width: 1080, height: 1440 },
       { ratio: 1, width: 1080, height: 1080 },
       { ratio: 16 / 9, width: 1920, height: 1080 },
-    ].reduce((closest, current) => Math.abs(current.ratio - ratio) < Math.abs(closest.ratio - ratio) ? current : closest);
+    ]).reduce((closest, current) => Math.abs(current.ratio - ratio) < Math.abs(closest.ratio - ratio) ? current : closest);
     resize = { width: target.width, height: target.height, fit: "cover", withoutEnlargement: false };
-    maxBytes = 20 * 1024 * 1024;
+    maxBytes = options.tiktokLimits?.maxFileSize ?? 20 * 1024 * 1024;
   } else if (platform === "twitter" || platform === "x") {
     maxBytes = 5 * 1024 * 1024;
     if (source.size <= maxBytes) return undefined;

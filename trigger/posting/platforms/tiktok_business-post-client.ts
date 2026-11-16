@@ -766,6 +766,7 @@ export class TikTokBusinessPostClient extends PostClient {
         url: signedUrl,
         mediumId: medium.id,
         stored: medium.stored,
+        mediaProcessingBackend: medium.mediaProcessingBackend,
         platform: "tiktok_business",
       },
     );

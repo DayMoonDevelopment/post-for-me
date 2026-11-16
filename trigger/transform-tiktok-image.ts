@@ -1,4 +1,6 @@
 import { task } from "@trigger.dev/sdk";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import type { transformLiveImageTask } from "./transform-live-image";
 import { randomUUID } from "crypto";
 import axios from "axios";
 import sharp from "sharp";
@@ -9,12 +11,20 @@ export const transformTikTokImage = task({
   id: "transform-tiktok-image",
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
-  run: async ({ signedUrl, platform, maxFileSize, allowedAspectRatios }: {
+  run: async ({ signedUrl, platform, maxFileSize, allowedAspectRatios, mediaProcessingBackend }: MediaProcessingRouting & {
     signedUrl: string;
     platform: "tiktok" | "tiktok_business";
     maxFileSize: number;
     allowedAspectRatios: { ratio: number; width: number; height: number }[];
   }): Promise<string> => {
+    if (resolveMediaProcessingBackend(signedUrl, mediaProcessingBackend) === "zenith") {
+      const { tasks } = await import("@trigger.dev/sdk");
+      const result = await tasks.triggerAndWait<typeof transformLiveImageTask>("transform-live-image", {
+        url: signedUrl, platform, tiktokLimits: { maxFileSize, allowedAspectRatios }, mediaProcessingBackend: "zenith",
+      });
+      if (!result.ok) throw new Error("Zenith TikTok transform failed", { cause: result.error });
+      return result.output.url;
+    }
     const response = await axios({
       url: signedUrl,
       method: "GET",

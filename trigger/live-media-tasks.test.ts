@@ -70,7 +70,8 @@ if (["video", "skip-video", "image", "thumbnail-failed", "localize-failed"].incl
       expect(calls[0].job.source).toEqual({ fileId: "already-localized", versionId: "already-localized-version" });
       if (scenario.startsWith("animated-")) {
         expect(legacy).toHaveLength(1);
-        expect(legacy[0].id).toBe(platform === "instagram" ? "transform-instagram-image" : platform.startsWith("tiktok") ? "transform-tiktok-image" : "transform-buffered-image");
+         expect(legacy[0].id).toBe(platform === "instagram" ? "transform-instagram-image" : platform.startsWith("tiktok") ? "transform-tiktok-image" : "transform-buffered-image");
+         expect(legacy[0].payload.mediaProcessingBackend).toBe("trigger");
         expect(calls.at(-1).job).toEqual({ task: "media.localize", url: "https://legacy.example/image" });
         expect(result.url).toBe("https://zenith.example/localize-animated-output");
       } else expect(legacy).toHaveLength(0);
@@ -84,7 +85,7 @@ for (const scenario of ["video", "skip-video", "image", "thumbnail-failed", "loc
   "animated-instagram", "animated-tiktok", "animated-tiktok_business", "animated-twitter", "animated-bluesky"]) {
   test(`live media task boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
-      cwd: __dirname, env: { ...process.env, SCENARIO: scenario }, stdout: "pipe", stderr: "pipe",
+      cwd: __dirname, env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "100", SCENARIO: scenario }, stdout: "pipe", stderr: "pipe",
     });
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
