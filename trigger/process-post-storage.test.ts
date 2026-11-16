@@ -22,7 +22,6 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
 } else {
   const originalMediaServerRedisUrl = process.env.MEDIA_SERVER_REDIS_URL;
-  let rejectShadowSchedule = false;
   const credentials = {
     provider: "facebook",
     app_id: "project-app-id",
@@ -89,9 +88,6 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
   const triggerAndWait = mock(async (_id: string, _payload: IndividualPostData) => ({ ok: true }));
   const trigger = mock(async (id: string, _payload: unknown) => {
-    if (id === "media-shadow" && rejectShadowSchedule) {
-      throw new Error("Shadow scheduling unavailable");
-    }
     return { id: `${id}-run-id` };
   });
   const batchTrigger = mock(async () => {});
@@ -117,7 +113,6 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   });
   beforeEach(() => {
     delete process.env.MEDIA_SERVER_REDIS_URL;
-    rejectShadowSchedule = false;
     for (const fn of [
       projectSingle, projectEq, projectSelect, updatedSingle, updatedOrder,
       updatedSelect, updatedEq, update, from, getKey, batchTriggerAndWait,
@@ -132,12 +127,11 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     }
   });
 
-  for (const mode of ["enabled", "disabled", "rejected"] as const) {
-    test(`media-shadow ${mode}: live localization and publishing proceed independently`, async () => {
+  for (const mode of ["configured", "disabled"] as const) {
+    test(`media server ${mode}: live processing never schedules media-shadow`, async () => {
       if (mode !== "disabled") {
         process.env.MEDIA_SERVER_REDIS_URL = "redis://shadow.example.com";
       }
-      rejectShadowSchedule = mode === "rejected";
       const configCredentials = {
         access_token: "config-token", refresh_token: "config-refresh-token",
         api_key: "config-api-key", app_id: credentials.app_id, app_secret: credentials.app_secret,
@@ -172,30 +166,8 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       await run({ index: 0, post: input });
 
       const shadowCalls = trigger.mock.calls.filter(([id]) => id === "media-shadow");
-      expect(shadowCalls).toEqual(mode === "disabled" ? [] : [["media-shadow", {
-        postId: post.id,
-        projectId: post.project_id,
-        media: [{
-          id: medium.id, url: "https://external.example.com/original.jpg",
-          thumbnail_url: "https://external.example.com/thumbnail.jpg",
-          thumbnail_timestamp_ms: 1234, provider: null, provider_connection_id: null,
-          skip_processing: true, index: 0,
-        }],
-        accounts: [
-          { id: "account-1", provider: "facebook" },
-          { id: "account-2", provider: "facebook" },
-        ],
-        configurations: [{
-          provider: "facebook", provider_connection_id: null,
-          provider_data: { placement: "reels", share_to_feed: false },
-        }, {
-          provider: null, provider_connection_id: "account-2",
-          provider_data: { placement: "reels", share_to_feed: true },
-        }],
-      }]]);
-      expect(trigger.mock.calls.map(([id]) => id)).toEqual(mode === "disabled"
-        ? ["process-webhooks"] : ["media-shadow", "process-webhooks"]);
-      // Only scheduling returns a handle; no shadow completion is supplied or awaited.
+      expect(shadowCalls).toEqual([]);
+      expect(trigger.mock.calls.map(([id]) => id)).toEqual(["process-webhooks"]);
       expect(batchTriggerAndWait.mock.calls.map(([id]) => id)).toEqual([
         "process-post-medium", "post-to-platform",
       ]);
@@ -219,14 +191,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       expect(batchTrigger).not.toHaveBeenCalled();
       expect(logError).not.toHaveBeenCalled();
       expect(update).toHaveBeenCalledWith({ status: "processed" });
-      if (mode === "rejected") {
-        expect(logWarn).toHaveBeenCalledWith(
-          "Shadow media coordinator scheduling failed; continuing live processing",
-          { postId: post.id },
-        );
-      } else {
-        expect(logWarn).not.toHaveBeenCalled();
-      }
+      expect(logWarn).not.toHaveBeenCalled();
     });
   }
 

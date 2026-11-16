@@ -1,15 +1,14 @@
 # Media Server Shadow Coordinator
 
-Set `MEDIA_SERVER_REDIS_URL` in the intended Trigger environment to enable
-shadow processing. Leave it unset to disable it. Use the Redis instance and
-logical database used by Zenith's workers (`redis://` or `rediss://`). Trigger
-does not need Zenith database or bucket credentials.
+Automatic shadow processing is disabled. `process-post` no longer schedules
+`media-shadow`, even when `MEDIA_SERVER_REDIS_URL` is set. Live media processing
+and publishing are unchanged. Already queued or running shadow tasks are not
+cancelled by this change.
 
-`process-post` schedules one detached `media-shadow` task before live
-localization. Scheduling acknowledgement is awaited; shadow processing is not.
-Shadow failures never change live processing, uploads, or publishing results.
-Account credentials, API keys, captions, and app secrets are not forwarded.
-The former individual-task shadow producers have been removed.
+The shadow task remains available for manual use. It requires
+`MEDIA_SERVER_REDIS_URL` pointing to the Redis instance and logical database
+used by Zenith's workers (`redis://` or `rediss://`). Trigger does not need
+Zenith database or bucket credentials.
 
 ## Processing Graph
 
