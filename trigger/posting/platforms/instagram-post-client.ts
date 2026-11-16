@@ -1,5 +1,5 @@
-import { tasks, wait } from "@trigger.dev/sdk";
-import type { transformLiveImageTask } from "../../transform-live-image";
+import { wait } from "@trigger.dev/sdk";
+import { triggerImageTransform } from "../../trigger-image-transform";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import { normalizePlatform } from "../../lib/platform.utils";
@@ -996,8 +996,7 @@ export class InstagramPostClient extends PostClient {
       return { signedUrl, width: undefined, height: undefined };
     }
 
-    const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
-      "transform-live-image",
+    const result = await triggerImageTransform(
       {
         url: signedUrl,
         mediumId: medium.id,

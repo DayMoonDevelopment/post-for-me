@@ -1,10 +1,10 @@
-import { task, tasks, wait } from "@trigger.dev/sdk";
+import { task, wait } from "@trigger.dev/sdk";
 import { readFile } from "fs/promises";
 import { ApiResponseError, EUploadMimeType, TwitterApi, type TwitterApiTokens } from "twitter-api-v2";
 import { PostClient } from "./posting/post-client";
 import { shouldSkipProcessing } from "./posting/image-processing-utils";
 import type { PostMedia, SocialAccount } from "./posting/post.types";
-import type { transformLiveImageTask } from "./transform-live-image";
+import { triggerImageTransform } from "./trigger-image-transform";
 
 type TwitterMediaAuth = {
   appKey: string;
@@ -128,8 +128,7 @@ export class TwitterMediaUploader extends PostClient {
     let url = medium.url;
     let mimeType: string | undefined = medium.stored?.contentType;
     if (!shouldSkipProcessing(medium)) {
-      const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
-        "transform-live-image",
+      const result = await triggerImageTransform(
         { url, mediumId: medium.id, stored: medium.stored, platform: "twitter", mediaProcessingBackend: medium.mediaProcessingBackend },
       );
       if (!result.ok) {

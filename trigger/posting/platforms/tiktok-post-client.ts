@@ -1,7 +1,7 @@
 import { tasks, wait } from "@trigger.dev/sdk";
 import type { uploadTikTokVideo } from "../../upload-tiktok-video";
 import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
-import type { transformLiveImageTask } from "../../transform-live-image";
+import { triggerImageTransform } from "../../trigger-image-transform";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import { shouldSkipProcessing } from "../image-processing-utils";
@@ -632,8 +632,7 @@ export class TikTokPostClient extends PostClient {
       return signedUrl;
     }
 
-    const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
-      "transform-live-image",
+    const result = await triggerImageTransform(
       {
         url: signedUrl,
         mediumId: medium.id,

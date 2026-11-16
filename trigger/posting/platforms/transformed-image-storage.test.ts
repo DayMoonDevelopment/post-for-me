@@ -209,7 +209,11 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       const limit = prefix === "instagram" ? 10 : 32;
       const extra = Array.from({ length: limit + 2 }, (_, index) => ({ id: `extra-${index}`, url: sourceUrl, type: "image" }));
       expect((await post({}, {}, extra)).success).toBe(true);
-      expect(child).toHaveBeenCalledTimes(limit * (process.env.ZENITH_MEDIA_PERCENTAGE === "0" ? 2 : 1));
+      expect(child).toHaveBeenCalledTimes(limit);
+      const taskId = process.env.ZENITH_MEDIA_PERCENTAGE === "0"
+        ? prefix === "instagram" ? "transform-instagram-image" : "transform-tiktok-image"
+        : "transform-live-image";
+      expect(child.mock.calls.every(([id]) => id === taskId)).toBe(true);
       const outputUrls = upload.mock.calls.map(([options]) => `https://media.example.com/${options.key}`);
       const publishedUrls = prefix === "instagram"
         ? publications.filter(({ payload }) => payload.image_url).map(({ payload }) => payload.image_url)
@@ -237,7 +241,8 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         test(`preserves ${placement} cropping and returned carousel dimensions across the child boundary`, async () => {
           const { child, upload, post } = await setup(600, 1200);
           expect((await post({}, { placement }, [{ id: "second", url: sourceUrl, type: "image" }])).success).toBe(true);
-          const liveCalls = child.mock.calls.filter(([id]) => id === "transform-live-image");
+          const taskId = process.env.ZENITH_MEDIA_PERCENTAGE === "0" ? "transform-instagram-image" : "transform-live-image";
+          const liveCalls = child.mock.calls.filter(([id]) => id === taskId);
           expect(liveCalls).toHaveLength(2);
           expect(liveCalls[1][1]).toMatchObject({
             options: { firstImage: { width: 600, height: expectedHeight }, placement, is_feed: true },

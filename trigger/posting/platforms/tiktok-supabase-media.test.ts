@@ -4,7 +4,7 @@ import type { PostMedia, SocialAccount } from "../post.types";
 if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
   test("TikTok Supabase media in an isolated process", async () => {
     const child = Bun.spawn([process.execPath, "test", __filename], {
-      env: { ...process.env, PFM_TIKTOK_MEDIA_TEST_CHILD: "1" },
+      env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", PFM_TIKTOK_MEDIA_TEST_CHILD: "1" },
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -91,11 +91,11 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       return `https://media.example.com/${key}`;
     });
     const copy = spyOn(tasks, "triggerAndWait").mockImplementation((async (id: string, payload: any) => {
-      if (id === "transform-live-image") {
-        // Simulate a completed Zenith output; the copy must use this URL, never the source.
+      if (id === "transform-tiktok-image") {
+        // Simulate a completed legacy output; the copy must use this URL, never the source.
         const body = await sharp(image).resize(1080, 1080).jpeg().toBuffer();
         const url = await storage.uploadMedia({ key: "tiktok_1234-abcd.jpg", body, contentType: "image/jpeg" });
-        return { ok: true, output: { url } };
+        return { ok: true, output: url };
       }
       if (id === "upload-tiktok-video") {
         inChild = true;
@@ -155,7 +155,7 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       expect((await post()).success).toBe(true);
       expect(upload).toHaveBeenCalledTimes(1);
       expect(copy).toHaveBeenCalledTimes(1);
-      expect(copy.mock.calls[0][0]).toBe("transform-live-image");
+      expect(copy.mock.calls[0][0]).toBe("transform-tiktok-image");
       expect(publications[0].payload.source_info.photo_images).toEqual([`https://media.example.com/${upload.mock.calls[0][0].key}`]);
     });
   }

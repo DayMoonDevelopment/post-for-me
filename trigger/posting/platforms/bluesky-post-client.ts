@@ -1,7 +1,7 @@
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs, jsonToLex } from "@atproto/api";
 import type { uploadBlueskyImage, uploadBlueskyLinkPreview } from "../../upload-bluesky-media";
-import type { transformLiveImageTask } from "../../transform-live-image";
+import { triggerImageTransform } from "../../trigger-image-transform";
 import type { uploadBlueskyVideo } from "../../upload-bluesky-video";
 import { shouldSkipProcessing } from "../image-processing-utils";
 import {
@@ -389,8 +389,7 @@ export class BlueskyPostClient extends PostClient {
         continue;
       }
 
-      const result = await tasks.triggerAndWait<typeof transformLiveImageTask>(
-        "transform-live-image",
+      const result = await triggerImageTransform(
         { url: medium.url, mediumId: medium.id, stored: medium.stored, platform: "bluesky", skipProcessing: shouldSkipProcessing(medium), mediaProcessingBackend: medium.mediaProcessingBackend },
       );
       if (!result.ok) {

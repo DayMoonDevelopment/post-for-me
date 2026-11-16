@@ -43,8 +43,8 @@ mock.module("twitter-api-v2", () => ({
 }));
 const transformError = { message: "transform rejected" };
 const transform = mock(async (id, payload) => {
-  expect(id).toBe("transform-live-image");
-  expect(payload).toEqual({ url: "https://source.example/image", stored: undefined, platform: "twitter" });
+  expect(id).toBe("transform-buffered-image");
+  expect(payload).toEqual({ url: "https://source.example/image", platform: "twitter", mediaProcessingBackend: "trigger" });
   if (scenario === "transform-throw") throw new Error("dispatch rejected");
   return scenario === "transform-failure" ? { ok: false, error: transformError }
     : { ok: true, output: { url: "https://media.example/artifact", mimeType: scenario === "mime-fallback" ? undefined : mime } };
@@ -116,7 +116,7 @@ for (const oauth2 of [false, true]) {
       test(`Twitter upload task: ${scenario}, OAuth2=${oauth2}, attempt=${attempt}`, async () => {
         const child = Bun.spawn([process.execPath, "--eval", harness], {
           cwd: __dirname,
-          env: { ...process.env, SCENARIO: scenario, OAUTH2: String(oauth2), ATTEMPT: String(attempt) },
+          env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", SCENARIO: scenario, OAUTH2: String(oauth2), ATTEMPT: String(attempt) },
           stdout: "pipe",
           stderr: "pipe",
         });
