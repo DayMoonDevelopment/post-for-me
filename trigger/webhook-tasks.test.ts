@@ -87,7 +87,9 @@ if (process.env.TASK === "fanout") {
   }
 } else {
   await delivery.run({ id: "event", webhookId: "webhook", url: webhook.url, type: event.type, data, secret: webhook.secret_key });
-  expect(addTags).toHaveBeenCalledWith(["webhook", "event"]);
+  expect(addTags).toHaveBeenCalledWith(["webhook", "event"], {
+    retry: { maxAttempts: 3, minTimeoutInMs: 1000, maxTimeoutInMs: 5000, factor: 2, randomize: true },
+  });
   expect(fetch).toHaveBeenCalledWith(webhook.url, {
     method: "POST", headers: { "Content-Type": "application/json", "Post-For-Me-Webhook-Secret": "secret" },
     body: JSON.stringify({ event_type: event.type, data }), timeoutInMs: 1000,
