@@ -95,7 +95,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     return { id: `${id}-run-id` };
   });
   const batchTrigger = mock(async () => {});
-  const addTags = mock(async (_tags: string | string[]) => {});
+  const addTags = mock(async (_tags: string | string[], _requestOptions?: unknown) => {});
   const logError = mock();
   const logWarn = mock();
   const waitFor = mock(async () => {});
@@ -260,7 +260,19 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
         expect(selection[0]).toContain("social_provider_app_credentials");
         expect(projectEq).toHaveBeenCalledWith("id", post.project_id);
         expect(projectSingle).toHaveBeenCalledTimes(1);
-        expect(addTags.mock.calls).toEqual([[[post.id, post.project_id]], [project.team_id]]);
+        const tagRequestOptions = {
+          retry: {
+            maxAttempts: 3,
+            minTimeoutInMs: 1_000,
+            maxTimeoutInMs: 5_000,
+            factor: 2,
+            randomize: true,
+          },
+        };
+        expect(addTags.mock.calls).toEqual([
+          [[post.id, post.project_id], tagRequestOptions],
+          [project.team_id, tagRequestOptions],
+        ]);
         expect(update).toHaveBeenCalledWith({ status: "processed" });
         expect(updatedEq).toHaveBeenCalledWith("id", post.id);
         expect(updatedOrder).toHaveBeenCalledWith("index", { referencedTable: "social_post_media" });
