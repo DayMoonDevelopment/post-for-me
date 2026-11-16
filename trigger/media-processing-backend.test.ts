@@ -77,21 +77,25 @@ const legacyRouting = process.env.SCENARIO.startsWith("default-") ? {} : { media
 const forced = scenario.startsWith("forced-") ? { mediaProcessingBackend: "zenith" } : {};
 if (scenario === "localize") {
   const { processPostMedium } = await import("./process-post-medium");
+  expect(processPostMedium.maxDuration).toBe(1200);
   const result = await processPostMedium.run({ medium }, context);
   expect(result).toMatchObject({ url: outputUrl, stored: image, mediaProcessingBackend: "zenith" });
   expect(calls.map(c => c.job.task)).toEqual(["media.localize"]);
 } else if (scenario === "normalize" || scenario === "compress" || scenario === "probe") {
   if (scenario === "normalize") {
     const { ffmpegProcessVideo } = await import("./ffmpeg-process-video");
+    expect(ffmpegProcessVideo.maxDuration).toBe(1200);
     expect(await ffmpegProcessVideo.run({ medium }, context)).toMatchObject({ url: outputUrl, stored: video, mediaProcessingBackend: "zenith" });
     expect(calls.map(c => c.job.task)).toEqual(["media.localize", "media.transform-video"]);
   } else if (scenario === "compress") {
     const { ffmpegCompressVideo } = await import("./ffmpeg-compress-video");
+    expect(ffmpegCompressVideo.maxDuration).toBe(1200);
     expect(await ffmpegCompressVideo.run({ url: sourceUrl, maxSizeBytes: 500000 }, context)).toBe(outputUrl);
     expect(calls).toHaveLength(4);
     expect(calls[1].job.output.video.bitrate).toBe(Math.max(Math.floor(500000 * .9 * 8 / 60), 500000));
   } else {
     const { probeVideoDimensions } = await import("./video-child-tasks");
+    expect(probeVideoDimensions.maxDuration).toBe(1200);
     expect(await probeVideoDimensions.run({ url: sourceUrl }, context)).toEqual({ width: 1920, height: 1080 });
     expect(calls.map(c => c.job.task)).toEqual(["media.localize"]);
   }
@@ -108,6 +112,7 @@ if (scenario === "localize") {
   const platform = scenario.split(":")[1];
   const skipProcessing = scenario.startsWith("legacy-image-skip");
   const { transformLiveImageTask } = await import("./transform-live-image");
+  expect(transformLiveImageTask.maxDuration).toBe(1200);
   const result = await transformLiveImageTask.run({ url: sourceUrl, platform, skipProcessing, ...legacyRouting }, context);
   expect(result).toMatchObject({ url: outputUrl });
   expect(children[0].id).toBe(skipProcessing ? "transform-buffered-image" : platform === "instagram" ? "transform-instagram-image" : platform.startsWith("tiktok") ? "transform-tiktok-image" : "transform-buffered-image");

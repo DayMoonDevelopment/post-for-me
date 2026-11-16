@@ -9,6 +9,7 @@ import type { UserTag } from "./posting/post.types";
 import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
 import { normalizeLiveVideo } from "./live-media";
 import type { StoredMedia } from "./media-recipes";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 
 // Constants
 const DEFAULT_FRAME_RATE = 24;
@@ -49,7 +50,7 @@ type ProcessPostVideoMedium = MediaProcessingRouting & {
 
 export const ffmpegProcessVideo = task({
   id: "ffmpeg-process-video",
-  maxDuration: 800,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 2,
     outOfMemory: {

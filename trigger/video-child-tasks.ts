@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import ffmpeg from "fluent-ffmpeg";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -74,6 +75,7 @@ export const generateYoutubeTimestampThumbnail = task({
 
 export const probeVideoDimensions = task({
   id: "probe-video-dimensions",
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
   run: async ({ url, mediaProcessingBackend }: { url: string } & MediaProcessingRouting, context): Promise<{

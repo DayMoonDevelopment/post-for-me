@@ -105,7 +105,7 @@ export interface MediaServerTransport {
 
 /** The slice of Trigger's wait API used by live and diagnostic processing. */
 export type WaitpointApi = {
-  createToken(options: { timeout: string; tags: string[]; idempotencyKey: string }): Promise<{ id: string; url: string }>;
+  createToken(options: { timeout: string | Date; tags: string[]; idempotencyKey: string }): Promise<{ id: string; url: string }>;
   forToken(token: { id: string }): PromiseLike<{ ok: true; output: unknown } | { ok: false; error: Error }>;
 };
 

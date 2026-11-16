@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS, LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS } from "./live-media-timeout";
 import {
   MEDIA_SERVER_INTEROP_LANE, mediaServerSubmission, parseMediaServerResponse, sanitizeMediaServerLog,
   type MediaServerJob, type MediaServerTransport,
@@ -20,8 +21,14 @@ export function createLiveMediaExecutor(runId: string, deps: {
   transport: MediaServerTransport;
   wait: WaitpointApi;
   log: (message: string, data: Record<string, unknown>) => void;
+  now?: () => number;
 }) {
+  const now = deps.now ?? Date.now;
+  // All stages share an expiry, including localization, thumbnails and re-encodes.
+  // A fresh relative timeout per stage could keep one run waiting for hours.
+  const deadline = new Date(now() + (LIVE_MEDIA_MAX_DURATION_SECONDS - LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS) * 1000);
   return async (stage: string, mediumId: string, job: MediaServerJob): Promise<StoredMedia> => {
+    if (now() >= deadline.getTime()) throw new Error("Zenith media processing deadline exceeded");
     const requestId = createHash("sha256").update(`${runId}/${stage}/${mediumId}`).digest("hex");
     const handle = {
       jobId: `${job.task.replace(".", "-")}/${requestId}`, requestId,
@@ -32,7 +39,7 @@ export function createLiveMediaExecutor(runId: string, deps: {
     let token: { id: string; url: string };
     try {
       token = await deps.wait.createToken({
-        timeout: job.task === "media.transform-video" ? "30m" : "10m",
+        timeout: deadline,
         tags: [runId], idempotencyKey: handle.jobId,
       });
     } catch {

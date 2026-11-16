@@ -5,6 +5,7 @@ import type { AppBskyVideoDefs } from "@atproto/api";
 import { PostClient } from "./posting/post-client";
 import type { StoredMedia } from "./media-recipes";
 import { liveMediaExecutor } from "./live-media-runtime";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import { prepareLiveBlueskyVideo } from "./live-media";
 import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
 import type { probeVideoDimensions } from "./video-child-tasks";
@@ -79,6 +80,7 @@ class BlueskyVideoUploader extends PostClient {
 
 export const uploadBlueskyVideo = task({
   id: "upload-bluesky-video",
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
   run: async (payload: Payload, { ctx }): Promise<UploadResult> => {

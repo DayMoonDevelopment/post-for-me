@@ -1,5 +1,6 @@
 import { task } from "@trigger.dev/sdk";
 import { liveMediaExecutor } from "./live-media-runtime";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import { transformLiveImage } from "./live-media";
 import type { StoredMedia, InstagramImageLimits, TikTokImageLimits } from "./media-recipes";
 import { triggerImageTransform } from "./trigger-image-transform";
@@ -27,7 +28,7 @@ export type LiveImageOutput = {
 
 export const transformLiveImageTask = task({
   id: "transform-live-image",
-  maxDuration: 600,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: { maxAttempts: 1 },
   run: async ({ mediumId, url, stored, platform, skipProcessing, options, mediaProcessingBackend, instagramLimits, tiktokLimits }: LiveImageInput, { ctx }): Promise<LiveImageOutput> => {
     const backend = resolveMediaProcessingBackend(mediumId || url, mediaProcessingBackend);

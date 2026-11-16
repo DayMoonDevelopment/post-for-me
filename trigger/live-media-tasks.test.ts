@@ -37,6 +37,7 @@ mock.module("./live-media-runtime", () => ({ liveMediaExecutor: () => async (sta
 const ctx = { ctx: { run: { id: "run" } } };
 if (["video", "skip-video", "image", "thumbnail-failed", "localize-failed"].includes(scenario)) {
   const { processLiveMedium } = await import("./process-live-medium");
+  expect(processLiveMedium.maxDuration).toBe(1200);
   const medium = { id: "medium", url: "https://source.example/main", thumbnail_url: "https://source.example/thumbnail",
     position: 7, provider: "instagram", alt_text: "alt", tags: [{ id: "tag" }], skip_processing: scenario === "skip-video", thumbnail_timestamp_ms: 123 };
   if (scenario === "localize-failed") {

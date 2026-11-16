@@ -1,6 +1,7 @@
 import { logger, task, tasks } from "@trigger.dev/sdk";
 import type { ProcessedMedium } from "./process-post";
 import { liveMediaExecutor } from "./live-media-runtime";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import { normalizeLiveVideo } from "./live-media";
 import { resolveMediaProcessingBackend } from "./media-processing-backend";
 import type { processPostMedium } from "./process-post-medium";
@@ -8,7 +9,7 @@ import type { ffmpegProcessVideo } from "./ffmpeg-process-video";
 
 export const processLiveMedium = task({
   id: "process-live-medium",
-  maxDuration: 600,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: { maxAttempts: 1 },
   run: async ({ medium }: { medium: Omit<ProcessedMedium, "type" | "thumbnail_url"> & { thumbnail_url?: string | null } }, { ctx }): Promise<ProcessedMedium> => {
     const mediaProcessingBackend = resolveMediaProcessingBackend(medium.id || medium.url, medium.mediaProcessingBackend);

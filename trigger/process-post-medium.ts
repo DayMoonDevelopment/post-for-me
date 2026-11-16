@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import fetch from "node-fetch";
 import * as fs from "fs";
 import os from "os";
@@ -285,7 +286,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
 
 export const processPostMedium = task({
   id: "process-post-medium",
-  maxDuration: 800,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 3,
     outOfMemory: {

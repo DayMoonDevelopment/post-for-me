@@ -1,7 +1,8 @@
 import { expect, mock, test } from "bun:test";
 import { createLiveMediaExecutor, normalizeLiveVideo, prepareLiveBlueskyVideo, transformLiveImage, ZenithWorkerError } from "./live-media";
 import type { StoredMedia } from "./media-shadow-recipes";
-import type { MediaServerTransport, MediaServerJob } from "./media-server";
+import type { MediaServerTransport, MediaServerJob, WaitpointApi } from "./media-server";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS, LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS } from "./live-media-timeout";
 
 const image = (versionId = "source", size = 100): StoredMedia => ({
   fileId: "file", versionId, path: "publishing/file", url: `https://media.example/${versionId}`,
@@ -14,15 +15,39 @@ const video = (versionId = "source", size = 200_000_000): StoredMedia => ({
     bitrate: 10_000_000, frameRate: 30, video: { codec: "h264", profile: "high", level: 40, pixelFormat: "yuv420p", bitrate: 10_000_000 }, audio: null },
 });
 
-function executor(outcome: unknown = { ok: true, output: image() }, tokenOk = true) {
+function executor(outcome: unknown = { ok: true, output: image() }, tokenOk = true, now?: () => number) {
   const enqueue = mock<MediaServerTransport["enqueue"]>(async () => {});
-  const createToken = mock(async () => ({ id: "token", url: "https://secret.example/callback" }));
+  const createToken = mock<WaitpointApi["createToken"]>(async () => ({ id: "token", url: "https://secret.example/callback" }));
   const forToken = mock(async () => tokenOk
     ? { ok: true as const, output: outcome } : { ok: false as const, error: new Error("timeout") });
   const log = mock(() => {});
-  const execute = createLiveMediaExecutor("run", { transport: { enqueue }, wait: { createToken, forToken }, log });
+  const execute = createLiveMediaExecutor("run", { transport: { enqueue }, wait: { createToken, forToken }, log, now });
   return { execute, enqueue, createToken, forToken, log };
 }
+
+test("localization and video waits share a deadline just before the twenty-minute budget", async () => {
+  const started = Date.parse("2026-11-16T12:00:00Z");
+  let now = started;
+  const deps = executor({ ok: true, output: { ...video(), decision: "encoded" } }, true, () => now);
+  await deps.execute("localize", "medium", { task: "media.localize", url: "source" });
+  // Localization can consume much longer than the old ten-minute timeout.
+  now += 15 * 60 * 1000;
+  await normalizeLiveVideo(video(), "medium", deps.execute);
+  const expected = new Date(started + (LIVE_MEDIA_MAX_DURATION_SECONDS - LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS) * 1000);
+  expect(LIVE_MEDIA_MAX_DURATION_SECONDS).toBe(1200);
+  expect(expected.getTime() - started).toBe(1_170_000);
+  expect(deps.createToken.mock.calls.map(([options]) => options.timeout)).toEqual([expected, expected]);
+});
+
+test("expired processing budget does not create tokens or enqueue more work", async () => {
+  let now = 0;
+  const deps = executor(undefined, true, () => now);
+  now = (LIVE_MEDIA_MAX_DURATION_SECONDS - LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS) * 1000;
+  await expect(deps.execute("localize", "medium", { task: "media.localize", url: "source" }))
+    .rejects.toThrow("deadline exceeded");
+  expect(deps.createToken).not.toHaveBeenCalled();
+  expect(deps.enqueue).not.toHaveBeenCalled();
+});
 
 test("completed output is propagated; deterministic IDs, live prefix and secrets are redacted", async () => {
   const deps = executor();

@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import os from "os";
@@ -10,7 +11,7 @@ import { prepareLiveBlueskyVideo } from "./live-media";
 
 export const ffmpegCompressVideo = task({
   id: "ffmpeg-compress-video",
-  maxDuration: 800,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 2,
     outOfMemory: {
