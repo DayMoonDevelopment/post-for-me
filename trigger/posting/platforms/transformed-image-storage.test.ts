@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import axios, { type AxiosAdapter } from "axios";
 import sharp from "sharp";
+import { randomUUID } from "node:crypto";
 import { tasks, wait } from "@trigger.dev/sdk";
 import * as mediaStorage from "../../media-storage";
 import { InstagramPostClient } from "./instagram-post-client";
@@ -27,27 +28,29 @@ const platforms = [
 // Existing platform tests globally mock Axios. Keep these real-image tests
 // isolated from those mocks while restoring our own spies between cases.
 if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
-  test("transformed image storage in an isolated process", async () => {
-    const child = Bun.spawn([process.execPath, "test", __filename], {
-      env: { ...process.env, PFM_TRANSFORMED_IMAGE_TEST_CHILD: "1" },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    expect({ exitCode, output: exitCode === 0 ? "" : stdout + stderr }).toEqual({
-      exitCode: 0,
-      output: "",
-    });
-  });
+  for (const percentage of ["0", "100"]) {
+    test(`transformed image storage at ${percentage}% Zenith in an isolated process`, async () => {
+      const child = Bun.spawn([process.execPath, "test", __filename], {
+        env: { ...process.env, PFM_TRANSFORMED_IMAGE_TEST_CHILD: "1", ZENITH_MEDIA_PERCENTAGE: percentage },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect({ exitCode, output: exitCode === 0 ? "" : stdout + stderr }).toEqual({
+        exitCode: 0,
+        output: "",
+      });
+    }, 30_000);
+  }
 } else {
   const definitions = new Map<string, {
-    run(payload: any): Promise<unknown>;
+    run(payload: any, context: any): Promise<unknown>;
     machine: string;
-    retry: { maxAttempts: number; outOfMemory: { machine: string } };
+    retry: { maxAttempts: number };
   }>();
   mock.module("@trigger.dev/sdk", () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -57,17 +60,44 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       return definition;
     } };
   });
+  // Simulate Zenith's stored-version contract, not the retired Trigger image tasks.
+  mock.module("../../live-media-runtime", () => ({ liveMediaExecutor: () => {
+    const artifacts = new Map<string, Buffer>();
+    return async (stage: string, _id: string, job: any) => {
+      let buffer: Buffer;
+      if (job.task === "media.localize") {
+        buffer = Buffer.from((await axios({ url: job.url, responseType: "arraybuffer" })).data);
+      } else {
+        const source = artifacts.get(job.source.versionId)!;
+        let image = sharp(source);
+        if (job.output.autoOrient) image = image.rotate();
+        if (job.output.resize) image = image.resize(job.output.resize);
+        buffer = await image.jpeg({ quality: job.output.quality }).toBuffer();
+      }
+      const metadata = await sharp(buffer).metadata();
+      const versionId = randomUUID();
+      artifacts.set(versionId, buffer);
+      const platform = stage.split("-")[1];
+      const url = job.task === "media.localize" ? job.url : await mediaStorage.uploadMedia({
+        key: `${platform}_${versionId}.jpg`, body: buffer, contentType: "image/jpeg", cacheControl: "public, max-age=31536000",
+      });
+      const rotated = [5, 6, 7, 8].includes(metadata.orientation || 1);
+      return { fileId: "file", versionId, url, path: "publishing/test", size: buffer.length,
+        contentType: job.task === "media.localize" ? "image/png" : "image/jpeg",
+        media: { kind: "image", format: metadata.format, width: rotated ? metadata.height : metadata.width,
+          height: rotated ? metadata.width : metadata.height, orientation: metadata.orientation || 1, hasAlpha: false } };
+    };
+  } }));
   beforeAll(async () => {
-    await import("../../transform-instagram-image");
-    await import("../../transform-tiktok-image");
+    await import("../../transform-live-image");
+    if (process.env.ZENITH_MEDIA_PERCENTAGE === "0") {
+      await import("../../transform-instagram-image");
+      await import("../../transform-tiktok-image");
+    }
   });
 
-  test("image tasks use medium machines with one retry and large OOM escalation", () => {
-    expect(definitions.size).toBe(2);
-    for (const definition of definitions.values()) {
-      expect(definition.machine).toBe("medium-1x");
-      expect(definition.retry).toEqual({ maxAttempts: 2, outOfMemory: { machine: "large-1x" } });
-    }
+  test("routing task has no native-machine escalation", () => {
+    expect(definitions.get("transform-live-image")!.retry).toEqual({ maxAttempts: 1 });
   });
 
   for (const { Client, prefix, width, height } of platforms) {
@@ -109,7 +139,7 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         const definition = definitions.get(id);
         if (!definition) throw new Error(`Unexpected child task: ${id}`);
         try {
-          const output = await definition.run(JSON.parse(JSON.stringify(payload)));
+          const output = await definition.run(JSON.parse(JSON.stringify(payload)), { ctx: { run: { id: randomUUID() } } });
           return { ok: true, output };
         } catch (error) {
           return { ok: false, error };
@@ -121,7 +151,7 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         postId: "post-id",
         account,
         caption: "caption",
-        media: [{ id: "media-id", url: sourceUrl, type: "image", ...overrides }, ...extraMedia],
+        media: [{ id: "media-id", postId: "post-id", url: sourceUrl, type: "image", ...overrides }, ...extraMedia.map((medium) => ({ ...medium, postId: "post-id" }))],
         platformConfig,
       });
       return { upload, child, post, downloads, publications };
@@ -174,6 +204,25 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
       expect(JSON.stringify(publications)).toContain(sourceUrl);
     });
 
+    test("retains platform item limits and completed transformation output order", async () => {
+      const { child, upload, post, publications } = await setup();
+      const limit = prefix === "instagram" ? 10 : 32;
+      const extra = Array.from({ length: limit + 2 }, (_, index) => ({ id: `extra-${index}`, url: sourceUrl, type: "image" }));
+      expect((await post({}, {}, extra)).success).toBe(true);
+      expect(child).toHaveBeenCalledTimes(limit);
+      const taskId = process.env.ZENITH_MEDIA_PERCENTAGE === "0"
+        ? prefix === "instagram" ? "transform-instagram-image" : "transform-tiktok-image"
+        : "transform-live-image";
+      expect(child.mock.calls.every(([id]) => id === taskId)).toBe(true);
+      expect(child.mock.calls.every(([, payload]) => (payload as { postId?: string }).postId === "post-id")).toBe(true);
+      const outputUrls = upload.mock.calls.map(([options]) => `https://media.example.com/${options.key}`);
+      const publishedUrls = prefix === "instagram"
+        ? publications.filter(({ payload }) => payload.image_url).map(({ payload }) => payload.image_url)
+        : prefix === "tiktok_business" ? publications.find(({ payload }) => payload.photo_images)?.payload.photo_images
+        : publications.find(({ payload }) => payload.source_info)?.payload.source_info.photo_images;
+      expect(publishedUrls).toEqual(outputUrls);
+    });
+
     for (const failure of ["failed result", "rejection"]) {
       test(`child ${failure} prevents in-process fallback and publication`, async () => {
         const { child, upload, post, downloads, publications } = await setup();
@@ -193,8 +242,10 @@ if (!process.env.PFM_TRANSFORMED_IMAGE_TEST_CHILD) {
         test(`preserves ${placement} cropping and returned carousel dimensions across the child boundary`, async () => {
           const { child, upload, post } = await setup(600, 1200);
           expect((await post({}, { placement }, [{ id: "second", url: sourceUrl, type: "image" }])).success).toBe(true);
-          expect(child).toHaveBeenCalledTimes(2);
-          expect(child.mock.calls[1][1]).toMatchObject({
+          const taskId = process.env.ZENITH_MEDIA_PERCENTAGE === "0" ? "transform-instagram-image" : "transform-live-image";
+          const liveCalls = child.mock.calls.filter(([id]) => id === taskId);
+          expect(liveCalls).toHaveLength(2);
+          expect(liveCalls[1][1]).toMatchObject({
             options: { firstImage: { width: 600, height: expectedHeight }, placement, is_feed: true },
           });
           for (const [options] of upload.mock.calls) {

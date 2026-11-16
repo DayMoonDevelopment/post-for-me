@@ -3,9 +3,15 @@ import { createReadStream } from "fs";
 import fetch from "node-fetch";
 import type { AppBskyVideoDefs } from "@atproto/api";
 import { PostClient } from "./posting/post-client";
+import type { StoredMedia } from "./media-recipes";
+import { liveMediaExecutor } from "./live-media-runtime";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
+import { prepareLiveBlueskyVideo } from "./live-media";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
 import type { probeVideoDimensions } from "./video-child-tasks";
+import type { ffmpegCompressVideo } from "./ffmpeg-compress-video";
 
-type Payload = { url: string; token: string; did: string };
+type Payload = MediaProcessingRouting & { url: string; token: string; did: string; mediumId?: string; stored?: StoredMedia; skipProcessing?: boolean };
 type UploadResult = {
   requests: Record<string, unknown>[];
   responses: Record<string, unknown>[];
@@ -15,18 +21,34 @@ type UploadResult = {
 );
 
 class BlueskyVideoUploader extends PostClient {
-  async upload({ url, token, did }: Payload) {
-    const processedFile = await tasks.triggerAndWait("ffmpeg-compress-video", {
-      url, maxSizeBytes: 100_000_000,
-    });
-    const fileUrl = processedFile.ok ? processedFile.output as string : url;
-    const remoteName = new URL(fileUrl).pathname.split("/").pop() || "video.mp4";
-    const dimensions = await tasks.triggerAndWait<typeof probeVideoDimensions>(
-      "probe-video-dimensions", { url: fileUrl },
-    );
-    if (!dimensions.ok) {
-      throw new Error("Failed to probe Bluesky video dimensions", { cause: dimensions.error });
+  async upload({ url, token, did, mediumId, stored, skipProcessing, mediaProcessingBackend, postId }: Payload, runId: string) {
+    const backend = resolveMediaProcessingBackend(mediumId || url, mediaProcessingBackend);
+    let fileUrl = url;
+    let contentType: string | undefined;
+    let width: number | undefined;
+    let height: number | undefined;
+    if (backend === "zenith") {
+      const execute = liveMediaExecutor(runId, postId);
+      const source = stored ?? await execute("localize", mediumId || "video", { task: "media.localize", url });
+      const result = await prepareLiveBlueskyVideo(source, mediumId || "video", !!skipProcessing, execute);
+      if (result.media.kind !== "video") throw new Error("Expected Bluesky video metadata");
+      fileUrl = result.url;
+      contentType = result.contentType;
+      ({ width, height } = result.media);
+    } else {
+      if (!skipProcessing) {
+        const compressed = await tasks.triggerAndWait<typeof ffmpegCompressVideo>("ffmpeg-compress-video", {
+          url, maxSizeBytes: 100_000_000, mediaProcessingBackend: "trigger", postId,
+        });
+        fileUrl = compressed.ok ? compressed.output : url;
+      }
+      const dimensions = await tasks.triggerAndWait<typeof probeVideoDimensions>("probe-video-dimensions", {
+        url: fileUrl, mediaProcessingBackend: "trigger", postId,
+      });
+      if (!dimensions.ok) throw new Error("Failed to probe Bluesky video dimensions", { cause: dimensions.error });
+      ({ width, height } = dimensions.output);
     }
+    const remoteName = new URL(fileUrl).pathname.split("/").pop() || "video.mp4";
     const tmp = await this.downloadToTempFile(fileUrl, {
       prefix: "bluesky_video", filename: remoteName,
     });
@@ -40,7 +62,7 @@ class BlueskyVideoUploader extends PostClient {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": tmp.mimeType || "video/mp4",
+          "Content-Type": contentType || tmp.mimeType || "video/mp4",
           "Content-Length": tmp.size.toString(),
         },
         body: createReadStream(tmp.filePath) as any,
@@ -50,7 +72,7 @@ class BlueskyVideoUploader extends PostClient {
       await this.unlinkQuiet(tmp.filePath);
     }
     this.responses.push({ uploadVideoResponse: uploadResponseData });
-    return { jobStatus: uploadResponseData as AppBskyVideoDefs.JobStatus, ...dimensions.output };
+    return { jobStatus: uploadResponseData as AppBskyVideoDefs.JobStatus, width, height };
   }
 
   diagnostics() { return { requests: this.requests, responses: this.responses }; }
@@ -58,12 +80,13 @@ class BlueskyVideoUploader extends PostClient {
 
 export const uploadBlueskyVideo = task({
   id: "upload-bluesky-video",
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
   run: async (payload: Payload, { ctx }): Promise<UploadResult> => {
     const uploader = new BlueskyVideoUploader({ app_id: "", app_secret: "" });
     try {
-      return { success: true, ...await uploader.upload(payload), ...uploader.diagnostics() };
+      return { success: true, ...await uploader.upload(payload, ctx.run.id), ...uploader.diagnostics() };
     } catch (error) {
       if (ctx.attempt.number < 2) throw error;
       return {

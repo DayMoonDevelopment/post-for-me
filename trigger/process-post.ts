@@ -1,4 +1,5 @@
-import { logger, task, tasks, tags, wait } from "@trigger.dev/sdk";
+import { logger, task, tasks, wait } from "@trigger.dev/sdk";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -9,8 +10,9 @@ import type {
   UserTag,
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
-import type { mediaShadow } from "./media-shadow";
+import type { StoredMedia } from "./media-recipes";
 import { selectPostMedia } from "./posting/media-selection";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
 
 import { Database, Json } from "./supabase.types";
 
@@ -155,7 +157,9 @@ const unkey = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
 
 const UNKEY_MAX_RETRIES = 3;
 
-export type ProcessedMedium = {
+export type ProcessedMedium = MediaProcessingRouting & {
+  stored?: StoredMedia;
+  thumbnail_stored?: StoredMedia;
   id: string;
   provider?: string | null;
   provider_connection_id?: string | null;
@@ -202,11 +206,17 @@ export const processPost = task({
   id: "process-post",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
-  run: async (payload: { index: number; post: Post }) => {
+  run: async (payload: { index: number; post: Post } & MediaProcessingRouting) => {
     const { post } = payload;
+    const mediaProcessingBackend = resolveMediaProcessingBackend(post.id, payload.mediaProcessingBackend);
+    logger.info("Selected media processing backend", { postId: post.id, mediaProcessingBackend });
     logger.info("Starting post processing", { post });
 
-    await tags.add([`${post.id}`, `${post.project_id}`]);
+    await addTagsBestEffort([
+      `${post.id}`,
+      `${post.project_id}`,
+      `media-processing-backend:${mediaProcessingBackend}`,
+    ]);
 
     logger.info("Getting post accounts");
     const accounts = post.social_post_provider_connections?.map(
@@ -296,41 +306,18 @@ export const processPost = task({
         throw new Error("No project found");
       }
 
-      await tags.add(`${project.team_id}`);
+      await addTagsBestEffort(`${project.team_id}`);
       const postMedia: ProcessedMedium[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
-        if (process.env.MEDIA_SERVER_REDIS_URL) {
-          try {
-            const shadow = await tasks.trigger<typeof mediaShadow>("media-shadow", {
-              postId: post.id,
-              projectId: post.project_id,
-              media: post.social_post_media.map((medium) => ({
-                id: medium.id, url: medium.url, thumbnail_url: medium.thumbnail_url,
-                thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
-                provider: medium.provider, provider_connection_id: medium.provider_connection_id,
-                skip_processing: medium.skip_processing, index: medium.index,
-              })),
-              accounts: accounts.map(({ id, provider }) => ({ id, provider })),
-              configurations: post.social_post_configurations.map((config) => {
-                const data = config.provider_data as { placement?: string; share_to_feed?: boolean };
-                return {
-                  provider: config.provider, provider_connection_id: config.provider_connection_id,
-                  provider_data: { placement: data?.placement, share_to_feed: data?.share_to_feed },
-                };
-              }),
-            });
-            logger.info("Shadow media coordinator scheduled", { postId: post.id, shadowRunId: shadow.id });
-          } catch {
-            logger.warn("Shadow media coordinator scheduling failed; continuing live processing", { postId: post.id });
-          }
-        }
         logger.info("Localizing Media", { media: post.social_post_media });
 
         const localizedMedia = await tasks.batchTriggerAndWait(
-          "process-post-medium",
+          mediaProcessingBackend === "trigger" ? "process-post-medium" : "process-live-medium",
           post.social_post_media.map((medium) => ({
             payload: {
               medium: {
+                mediaProcessingBackend,
+                postId: post.id,
                 id: medium.id,
                 provider: medium.provider,
                 provider_connection_id: medium.provider_connection_id,
@@ -348,38 +335,33 @@ export const processPost = task({
 
         logger.info("Localizing Media Complete", { localizedMedia });
 
-        const succesfulMedia = localizedMedia.runs
-          .filter((run) => run.ok)
-          .map((run) => run.output);
+        // Do not silently remove failed items or fall back to a lower-precedence override.
+        // Preserve failed IDs so only accounts selecting them are stopped below.
+        localizedMedia.runs.forEach((run, index) => {
+          const original = post.social_post_media[index];
+          if (run.ok) postMedia.push({ ...run.output, mediaProcessingBackend, postId: post.id });
+          else postMedia.push({ ...original, position: original.index, type: "failed", thumbnail_url: original.thumbnail_url || "" });
+        });
 
-        const { readyMedia, videosToProcess } =
-          splitLocalizedMediaForProcessing(succesfulMedia);
-
-        let processedVideos: ProcessedMedium[] = [];
-
-        if (videosToProcess.length > 0) {
-          logger.info("Processing Videos");
-          const processVideosResult = await tasks.batchTriggerAndWait(
-            "ffmpeg-process-video",
-            videosToProcess.map((video) => ({
-              payload: {
-                medium: video,
-              },
-            })),
-          );
-
-          logger.info("Processing Videos Complete", { processVideosResult });
-
-          processedVideos = processVideosResult.runs
-            .filter((run) => run.ok)
-            .map((run) => run.output);
-
-          logger.info("Updated post media with processed video URLs", {
-            processedVideos,
-          });
+        // Zenith normalizes inside process-live-medium. For Trigger, dispatch
+        // dependent video work here as one batch instead of one child per file.
+        if (mediaProcessingBackend === "trigger") {
+          const videos = postMedia.filter((medium) => medium.type === "video" && !medium.skip_processing);
+          if (videos.length > 0) {
+            const normalizedMedia = await tasks.batchTriggerAndWait(
+              "ffmpeg-process-video",
+              videos.map((medium) => ({ payload: { medium } })),
+            );
+            normalizedMedia.runs.forEach((run, index) => {
+              const medium = videos[index];
+              const position = postMedia.indexOf(medium);
+              postMedia[position] = run.ok
+                ? { ...medium, ...run.output, mediaProcessingBackend }
+                : { ...medium, type: "failed" };
+            });
+          }
         }
-
-        postMedia.push(...orderProcessedMedia(readyMedia, processedVideos));
+        postMedia.sort((a, b) => a.position - b.position);
 
         if (postMedia.length == 0) {
           logger.error("All Media Failed");
@@ -508,6 +490,9 @@ export const processPost = task({
             platformConfig?.caption ||
             postData.caption;
           const media = selectPostMedia(postData.media, account, !!platformConfig);
+          if (media.some((medium) => medium.type === "failed")) {
+            throw new Error(`Media failed to process, please check media URLs and ${mediaProcessingBackend} job logs`);
+          }
 
           const platformData = {
             ...platformConfig?.provider_data,

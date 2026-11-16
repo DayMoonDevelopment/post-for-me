@@ -4,7 +4,7 @@ import type { PostMedia, SocialAccount } from "../post.types";
 if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
   test("TikTok Supabase media in an isolated process", async () => {
     const child = Bun.spawn([process.execPath, "test", __filename], {
-      env: { ...process.env, PFM_TIKTOK_MEDIA_TEST_CHILD: "1" },
+      env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", PFM_TIKTOK_MEDIA_TEST_CHILD: "1" },
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -22,7 +22,6 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
   let storage: typeof import("../../media-storage");
   let TikTokPostClient: typeof import("./tiktok-post-client").TikTokPostClient;
   let originalAdapter: typeof axios.defaults.adapter;
-  let transformRun: (payload: any) => Promise<string>;
   let videoRun: (payload: any, context: any) => Promise<any>;
   beforeAll(async () => {
     ({ default: axios } = await import("axios"));
@@ -32,13 +31,11 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const actual = require("@trigger.dev/sdk");
       return { ...actual, task: (definition: any) => {
-        if (definition.id === "transform-tiktok-image") transformRun = definition.run;
         if (definition.id === "upload-tiktok-video") videoRun = definition.run;
         return definition;
       } };
     });
     ({ tasks } = await import("@trigger.dev/sdk"));
-    await import("../../transform-tiktok-image");
     await import("../../upload-tiktok-video");
     storage = await import("../../media-storage");
     ({ TikTokPostClient } = await import("./tiktok-post-client"));
@@ -95,7 +92,10 @@ if (!process.env.PFM_TIKTOK_MEDIA_TEST_CHILD) {
     });
     const copy = spyOn(tasks, "triggerAndWait").mockImplementation((async (id: string, payload: any) => {
       if (id === "transform-tiktok-image") {
-        return { ok: true, output: await transformRun(JSON.parse(JSON.stringify(payload))) };
+        // Simulate a completed legacy output; the copy must use this URL, never the source.
+        const body = await sharp(image).resize(1080, 1080).jpeg().toBuffer();
+        const url = await storage.uploadMedia({ key: "tiktok_1234-abcd.jpg", body, contentType: "image/jpeg" });
+        return { ok: true, output: url };
       }
       if (id === "upload-tiktok-video") {
         inChild = true;

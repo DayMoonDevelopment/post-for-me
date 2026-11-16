@@ -103,6 +103,7 @@ try {
     expect(errors.length).toBeGreaterThan(0);
   } else {
     expect(await processPostMedium.run({ medium })).toEqual({
+      mediaProcessingBackend: "trigger",
       ...medium,
       url: mainUrl,
       thumbnail_url: isThumbnailFailure ? thumbnailUrl : withThumbnail ? uploadedThumbnailUrl : "",
@@ -158,7 +159,7 @@ for (const scenario of [
   test(`process medium storage: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
       cwd: __dirname,
-      env: { ...process.env, MEDIUM_SCENARIO: scenario },
+      env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", MEDIUM_SCENARIO: scenario },
       stdout: "pipe",
       stderr: "pipe",
     });

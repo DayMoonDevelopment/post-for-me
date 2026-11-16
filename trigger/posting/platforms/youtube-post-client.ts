@@ -287,7 +287,7 @@ export class YouTubePostClient extends PostClient {
     if (medium.thumbnail_timestamp_ms == null) return;
     const result = await tasks.triggerAndWait<typeof generateYoutubeTimestampThumbnail>(
       "generate-youtube-timestamp-thumbnail",
-      { url: medium.url, timestampMs: medium.thumbnail_timestamp_ms, mediaId: medium.id },
+      { url: medium.url, timestampMs: medium.thumbnail_timestamp_ms, mediaId: medium.id, mediaProcessingBackend: medium.mediaProcessingBackend },
     );
     if (!result.ok) throw new Error("Failed to generate YouTube timestamp thumbnail");
     await this.#uploadThumbnail(videoId, result.output, { thumbnailTimestampMs: medium.thumbnail_timestamp_ms });

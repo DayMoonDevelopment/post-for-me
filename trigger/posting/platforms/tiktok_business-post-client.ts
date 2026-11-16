@@ -1,5 +1,5 @@
-import { tasks, wait } from "@trigger.dev/sdk";
-import type { transformTikTokImage } from "../../transform-tiktok-image";
+import { wait } from "@trigger.dev/sdk";
+import { triggerImageTransform } from "../../trigger-image-transform";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import { shouldSkipProcessing } from "../image-processing-utils";
@@ -35,13 +35,6 @@ export class TikTokBusinessPostClient extends PostClient {
   };
   #clientKey: string;
   #clientSecret: string;
-  #maxFileSize = 20 * 1024 * 1024;
-  #allowedAspectRatios = [
-    { ratio: 9 / 16, width: 1080, height: 1920 },
-    { ratio: 3 / 4, width: 1080, height: 1440 },
-    { ratio: 1, width: 1080, height: 1080 },
-    { ratio: 16 / 9, width: 1920, height: 1080 },
-  ];
   #maxRequestRetries = 3;
   #requestRetryInitialDelayMs = 2000;
   #maxRequestRetryDelayMs = 15000;
@@ -767,18 +760,19 @@ export class TikTokBusinessPostClient extends PostClient {
       return signedUrl;
     }
 
-    const result = await tasks.triggerAndWait<typeof transformTikTokImage>(
-      "transform-tiktok-image",
+    const result = await triggerImageTransform(
       {
-        signedUrl,
+        url: signedUrl,
+        mediumId: medium.id,
+        postId: medium.postId,
+        stored: medium.stored,
+        mediaProcessingBackend: medium.mediaProcessingBackend,
         platform: "tiktok_business",
-        maxFileSize: this.#maxFileSize,
-        allowedAspectRatios: this.#allowedAspectRatios,
       },
     );
     if (!result.ok) {
       throw new Error("Failed to transform TikTok Business image");
     }
-    return result.output;
+    return result.output.url;
   }
 }

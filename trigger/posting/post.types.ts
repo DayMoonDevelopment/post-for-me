@@ -96,6 +96,10 @@ export interface RefreshTokenResult {
 }
 
 export interface PostMedia {
+  postId?: string;
+  mediaProcessingBackend?: import("../media-processing-backend").MediaProcessingBackend;
+  stored?: import("../media-recipes").StoredMedia;
+  thumbnail_stored?: import("../media-recipes").StoredMedia;
   id: string;
   url: string;
   thumbnail_url?: string | null;
@@ -157,6 +161,7 @@ export interface TwitterConfiguration {
   poll?: TwitterPoll;
   community_id?: string;
   quote_tweet_id?: string;
+  reply_to_tweet_id?: string;
   reply_settings?: string;
 }
 
