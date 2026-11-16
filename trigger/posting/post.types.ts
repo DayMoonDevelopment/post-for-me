@@ -157,6 +157,7 @@ export interface TwitterConfiguration {
   poll?: TwitterPoll;
   community_id?: string;
   quote_tweet_id?: string;
+  reply_to_tweet_id?: string;
   reply_settings?: string;
 }
 
