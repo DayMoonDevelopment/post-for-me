@@ -171,6 +171,11 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
 
       await run({ index: 0, post: input });
 
+      expect(addTags).toHaveBeenCalledWith([
+        post.id,
+        post.project_id,
+        `media-processing-backend:${backend}`,
+      ], expect.anything());
       const shadowCalls = trigger.mock.calls.filter(([id]) => id === "media-shadow");
       expect(shadowCalls).toEqual([]);
       expect(trigger.mock.calls.map(([id]) => id)).toEqual(["process-webhooks"]);
@@ -264,7 +269,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
           },
         };
         expect(addTags.mock.calls).toEqual([
-          [[post.id, post.project_id], tagRequestOptions],
+          [[post.id, post.project_id, "media-processing-backend:trigger"], tagRequestOptions],
           [project.team_id, tagRequestOptions],
         ]);
         expect(update).toHaveBeenCalledWith({ status: "processed" });

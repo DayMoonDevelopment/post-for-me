@@ -212,7 +212,11 @@ export const processPost = task({
     logger.info("Selected media processing backend", { postId: post.id, mediaProcessingBackend });
     logger.info("Starting post processing", { post });
 
-    await addTagsBestEffort([`${post.id}`, `${post.project_id}`]);
+    await addTagsBestEffort([
+      `${post.id}`,
+      `${post.project_id}`,
+      `media-processing-backend:${mediaProcessingBackend}`,
+    ]);
 
     logger.info("Getting post accounts");
     const accounts = post.social_post_provider_connections?.map(
