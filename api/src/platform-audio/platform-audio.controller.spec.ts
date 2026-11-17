@@ -8,6 +8,8 @@ import * as request from 'supertest';
 import { AuthGuard } from '../auth/auth.guard';
 import { PlatformAudioController } from './platform-audio.controller';
 import { PlatformAudioService } from './platform-audio.service';
+import type { ParameterObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
+import { TIKTOK_BUSINESS_AUDIO_GENRES } from '../tiktok-business/dto/tiktok-business-audio-query.dto';
 
 describe('PlatformAudioController HTTP boundary', () => {
   let app: NestExpressApplication;
@@ -81,6 +83,8 @@ describe('PlatformAudioController HTTP boundary', () => {
 
   it.each([
     { access_token: 'secret' },
+    { instagram: '{"audio_type":"music"}' },
+    { tiktok_business: '{"country_code":"US"}' },
     { projectId: 'another-project' },
     { cursor: 'invented' },
     { 'platform_configurations[instagram][audio_type]': 'invalid' },
@@ -141,5 +145,40 @@ describe('PlatformAudioController HTTP boundary', () => {
         },
       },
     });
+  });
+
+  it('documents only optional scalar bracket queries without cross-provider defaults', () => {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().addBearerAuth().build(),
+    );
+    const operation =
+      document.paths['/v1/platform-audio/{social_account_id}'].get;
+    const queries = (operation?.parameters as ParameterObject[]).filter(
+      (parameter) => parameter.in === 'query',
+    );
+    expect(queries.map(({ name }) => name).sort()).toEqual(
+      [
+        'platform_configurations[instagram][audio_type]',
+        'platform_configurations[instagram][search_query]',
+        'platform_configurations[tiktok_business][country_code]',
+        'platform_configurations[tiktok_business][date_range]',
+        'platform_configurations[tiktok_business][genre]',
+      ].sort(),
+    );
+    for (const parameter of queries) {
+      expect(parameter.required).toBe(false);
+      expect(parameter.schema).toMatchObject({ type: 'string' });
+      expect(parameter.schema).not.toHaveProperty('default');
+    }
+    expect(
+      queries.find(({ name }) => name.endsWith('[audio_type]'))?.schema,
+    ).toMatchObject({ enum: ['music', 'original_sound'] });
+    expect(
+      queries.find(({ name }) => name.endsWith('[date_range]'))?.schema,
+    ).toMatchObject({ enum: ['1DAY', '7DAY', '30DAY', '90DAY'] });
+    expect(
+      queries.find(({ name }) => name.endsWith('[genre]'))?.schema,
+    ).toMatchObject({ enum: [...TIKTOK_BUSINESS_AUDIO_GENRES] });
   });
 });

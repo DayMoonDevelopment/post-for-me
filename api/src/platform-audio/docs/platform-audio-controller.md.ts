@@ -7,20 +7,36 @@ This endpoint lists audio; it does not download audio or attach it to a post.
 - **Instagram**, connected through **Facebook Login**. Instagram Login is not supported.
 - **TikTok Business**, for popular tracks from the Commercial Music Library.
 
-Regular TikTok and other platforms are not supported.
+Regular TikTok and other platforms are not supported as they do not provide audio endpoints.
 
 ## Filters
 
 Use nested bracket query parameters under **platform_configurations**. Supply only
 the configuration matching the social account's provider, or omit filters to use defaults.
 
-| Provider | Filter | Allowed values | Default |
-| --- | --- | --- | --- |
-| instagram | audio_type | music, original_sound | music |
-| instagram | search_query | String; omit for trending audio | Omitted |
-| tiktok_business | country_code | Uppercase ISO 3166-1 alpha-2 country code | US |
-| tiktok_business | date_range | 1DAY, 7DAY, 30DAY, 90DAY | 7DAY |
-| tiktok_business | genre | Enum in the query schema, including ALL, FOLK, HIP_HOP/RAP | ALL |
+### Instagram
+
+Use **platform_configurations[instagram]**.
+
+| Filter | Values | Default |
+| --- | --- | --- |
+| audio_type | music or original_sound | music |
+| search_query | Search text | None |
+
+Omit search_query to discover trending audio.
+
+### TikTok Business
+
+Use **platform_configurations[tiktok_business]**.
+
+| Filter | Values | Default |
+| --- | --- | --- |
+| country_code | ISO country code | US |
+| date_range | 1DAY, 7DAY, 30DAY, 90DAY | 7DAY |
+| genre | Supported genre | ALL |
+
+Country codes must be uppercase ISO 3166-1 alpha-2 codes.
+Genre accepts the enum in the query schema, including ALL, FOLK, and HIP_HOP/RAP.
 
 Example Instagram query:
 

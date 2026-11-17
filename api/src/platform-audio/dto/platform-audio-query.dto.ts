@@ -1,5 +1,5 @@
 import type { ValidationPipeOptions } from '@nestjs/common';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiHideProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsObject, ValidateIf, ValidateNested } from 'class-validator';
 import { InstagramAudioQueryDto } from '../../instagram/dto/instagram-audio-query.dto';
@@ -28,11 +28,8 @@ export class PlatformAudioConfigurationsDto {
 }
 
 export class PlatformAudioQueryDto {
-  @ApiPropertyOptional({
-    type: PlatformAudioConfigurationsDto,
-    description:
-      'Nested bracket query filters. Only the account provider configuration may be supplied.',
-  })
+  // The controller documents scalar bracket parameters for correct query serialization.
+  @ApiHideProperty()
   @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsObject()
   @ValidateNested()

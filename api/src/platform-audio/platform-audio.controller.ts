@@ -8,6 +8,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -28,6 +29,7 @@ import {
   TikTokBusinessPlatformAudioDto,
 } from '../tiktok-business/dto/tiktok-business-audio.dto';
 import { PlatformAudioService } from './platform-audio.service';
+import { TIKTOK_BUSINESS_AUDIO_GENRES } from '../tiktok-business/dto/tiktok-business-audio-query.dto';
 
 @Controller('platform-audio')
 @ApiTags('Platform Audio')
@@ -55,6 +57,37 @@ export class PlatformAudioController {
     type: String,
   })
   @ApiOkResponse({ type: PlatformAudioResponseDto })
+  @ApiQuery({
+    name: 'platform_configurations[instagram][audio_type]',
+    required: false,
+    enum: ['music', 'original_sound'],
+    description: 'Instagram only. Defaults to music when omitted.',
+  })
+  @ApiQuery({
+    name: 'platform_configurations[instagram][search_query]',
+    required: false,
+    type: String,
+    description: 'Instagram only. Omit to retrieve trending audio.',
+  })
+  @ApiQuery({
+    name: 'platform_configurations[tiktok_business][country_code]',
+    required: false,
+    type: String,
+    description:
+      'TikTok Business only. Uppercase ISO country code; defaults to US.',
+  })
+  @ApiQuery({
+    name: 'platform_configurations[tiktok_business][date_range]',
+    required: false,
+    enum: ['1DAY', '7DAY', '30DAY', '90DAY'],
+    description: 'TikTok Business only. Defaults to 7DAY when omitted.',
+  })
+  @ApiQuery({
+    name: 'platform_configurations[tiktok_business][genre]',
+    required: false,
+    enum: TIKTOK_BUSINESS_AUDIO_GENRES,
+    description: 'TikTok Business only. Defaults to ALL when omitted.',
+  })
   @ApiBadRequestResponse({
     description: 'Invalid filters or unsupported platform/connection',
   })
