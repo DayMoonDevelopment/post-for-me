@@ -105,8 +105,7 @@ export function Component() {
               you unexpectedly go over the limits of your plan, we won't shut
               you down or charge you extra immediately. If you exceed your plan's
               limits, we'll automatically upgrade you to the next tier at the
-              start of your next billing cycle. That's when the higher-tier
-              charge takes effect.`}
+              start of your next billing cycle.`}
             </p>
           </div>
         </div>
