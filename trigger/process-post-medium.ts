@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import fetch from "node-fetch";
 import * as fs from "fs";
 import os from "os";
@@ -7,6 +8,8 @@ import { pipeline } from "stream/promises";
 import { uploadMedia } from "./media-storage";
 import { v4 as uuidv4 } from "uuid";
 import type { UserTag } from "./posting/post.types";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import type { StoredMedia } from "./media-recipes";
 
 // Helper function to determine media type
 export const getMediaType = (
@@ -283,7 +286,7 @@ const streamDownloadAndUpload = async (fileUrl: string, prefix: string) => {
 
 export const processPostMedium = task({
   id: "process-post-medium",
-  maxDuration: 800,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 3,
     outOfMemory: {
@@ -303,9 +306,11 @@ export const processPostMedium = task({
       tags,
       skip_processing,
       position,
+      mediaProcessingBackend: inheritedBackend,
+      postId,
     },
   }: {
-    medium: {
+    medium: MediaProcessingRouting & {
       id: string;
       provider?: string | null;
       provider_connection_id?: string | null;
@@ -317,7 +322,9 @@ export const processPostMedium = task({
       skip_processing?: boolean | null;
       position: number;
     };
-  }): Promise<{
+  }, context): Promise<MediaProcessingRouting & {
+    stored?: StoredMedia;
+    thumbnail_stored?: StoredMedia;
     provider?: string | null;
     id: string;
     provider_connection_id?: string | null;
@@ -331,6 +338,19 @@ export const processPostMedium = task({
     position: number;
   }> => {
     logger.info("Starting media processing", { url, thumbnail_url });
+    const mediaProcessingBackend = resolveMediaProcessingBackend(id || url, inheritedBackend);
+    if (mediaProcessingBackend === "zenith") {
+      const { liveMediaExecutor } = await import("./live-media-runtime");
+      const execute = liveMediaExecutor(context.ctx.run.id, postId);
+      const stored = await execute("localize", id, { task: "media.localize", url });
+      let thumbnail;
+      if (thumbnail_url) {
+        try { thumbnail = await execute("localize-thumbnail", id, { task: "media.localize", url: thumbnail_url }); }
+        catch { logger.warn("Optional thumbnail localization failed", { mediumId: id }); }
+      }
+      return { id, url: stored.url, thumbnail_url: thumbnail?.url || thumbnail_url || "", type: stored.media.kind,
+        stored, thumbnail_stored: thumbnail, provider, provider_connection_id, thumbnail_timestamp_ms, alt_text, tags, skip_processing, position, mediaProcessingBackend, postId };
+    }
 
     try {
       // Stream download and upload main media file
@@ -361,6 +381,8 @@ export const processPostMedium = task({
       }
 
       const result = {
+        mediaProcessingBackend,
+        postId,
         id: id,
         url: mediaResult.publicUrl,
         thumbnail_url: thumbnailResult?.publicUrl || thumbnail_url || "",

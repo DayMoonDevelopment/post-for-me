@@ -33,7 +33,7 @@ mock.module("@atproto/api", () => ({
 const child = mock(async (id, payload) => {
   events.push(id);
   if (id === "upload-bluesky-video") {
-    expect(payload).toEqual({ url: "https://source.example/video", token: "token", did: "did:test" });
+    expect(payload).toEqual({ url: "https://source.example/video", stored: undefined, skipProcessing: false, token: "token", did: "did:test" });
     return { ok: true, output: JSON.parse(JSON.stringify({
       success: scenario !== "video-failure",
       error: { name: "Error", message: "Failed to probe Bluesky video dimensions" },
@@ -57,8 +57,8 @@ const child = mock(async (id, payload) => {
     if (scenario === "upload-provider-rejection") return { ok: false, error: JSON.parse(JSON.stringify(providerError)) };
     return scenario === "upload-failure" ? { ok: false, error: {} } : { ok: true, output: "image-blob" };
   }
-  expect(id).toBe("transform-buffered-image");
-  expect(payload).toEqual({ url: "https://source.example/image", platform: "bluesky", skipProcessing: scenario === "skip" });
+   expect(id).toBe("transform-buffered-image");
+   expect(payload).toEqual({ url: "https://source.example/image", platform: "bluesky", skipProcessing: scenario === "skip", mediaProcessingBackend: "trigger" });
   if (scenario === "throw") throw new Error("child failed");
   return scenario === "failure" ? { ok: false, error: {} } : { ok: true, output: {
     url: "https://media.example/artifact", mimeType: "image/png", width: 4000, height: 3000,
@@ -111,7 +111,7 @@ for (const scenario of ["success", "skip", "multi", "caption-alt", "default-alt"
   test(`Bluesky child boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
       cwd: __dirname,
-      env: { ...process.env, SCENARIO: scenario },
+      env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", SCENARIO: scenario },
       stdout: "pipe",
       stderr: "pipe",
     });

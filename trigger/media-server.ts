@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
-import type { StoredMedia } from "./media-shadow-recipes";
+import type { StoredMedia } from "./media-recipes";
 
 // Vendored subset of Zenith's jobs catalogue; no cross-repository imports.
 export type MediaServerImageOutput = {
@@ -87,6 +87,8 @@ export const mediaServerInteropJobs = {
 /** The URL media POSTs a task's outcome to; it completes the waitpoint token and is a secret. */
 export type MediaServerCallback = { url: string };
 
+export type MediaServerLookupKey = { key: string; refId: string };
+
 /** What media POSTs to the callback: the real task's output, or a coded error. */
 export type MediaServerTokenOutput =
   | { ok: true; output: unknown }
@@ -100,17 +102,25 @@ export type MediaServerHandle = {
 };
 
 export interface MediaServerTransport {
-  enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback): Promise<void>;
+  enqueue(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback, lookupKeys?: MediaServerLookupKey[]): Promise<void>;
 }
+
+/** The slice of Trigger's wait API used by live and diagnostic processing. */
+export type WaitpointApi = {
+  createToken(options: { timeout: string | Date; tags: string[]; idempotencyKey: string }): Promise<{ id: string; url: string }>;
+  forToken(token: { id: string }): PromiseLike<{ ok: true; output: unknown } | { ok: false; error: Error }>;
+};
 
 const OPERATION_TIMEOUT_MS = 2500;
 
 /** The BullMQ job for a task on the interop lane: the real task's input plus the callback. */
-export function mediaServerSubmission(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback) {
+export function mediaServerSubmission(handle: MediaServerHandle, job: MediaServerJob, callback: MediaServerCallback, lookupKeys?: MediaServerLookupKey[]) {
   const { task, ...input } = job;
   return {
     name: mediaServerInteropJobs[task],
-    data: { input: { ...input, requestId: handle.requestId, path: handle.path }, callback },
+    data: { input: { ...input, requestId: handle.requestId, path: handle.path }, callback,
+      ...(lookupKeys?.length ? { lookupKeys } : {}),
+    },
     options: {
       jobId: handle.jobId,
       attempts: 5,
@@ -154,9 +164,9 @@ async function withQueue<T>(redisUrl: string, name: string, operation: (queue: Q
 
 export function createMediaServerTransport(redisUrl: string): MediaServerTransport {
   return {
-    async enqueue(handle, job, callback) {
+    async enqueue(handle, job, callback, lookupKeys) {
       await withQueue(redisUrl, handle.queue, async (queue) => {
-        const { name, data, options } = mediaServerSubmission(handle, job, callback);
+        const { name, data, options } = mediaServerSubmission(handle, job, callback, lookupKeys);
         await queue.add(name, data, options);
       });
     },

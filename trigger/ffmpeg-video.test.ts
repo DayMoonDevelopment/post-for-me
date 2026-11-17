@@ -109,9 +109,9 @@ try {
   } else {
     const result = await execute();
     if (scenario.startsWith("skip")) {
-      expect(result).toBe(kind === "process" ? medium : url);
+      expect(result).toEqual(kind === "process" ? { ...medium, mediaProcessingBackend: "trigger" } : url);
     } else {
-      expect(result).toEqual(kind === "process" ? { ...medium, url: uploadedUrl } : uploadedUrl);
+      expect(result).toEqual(kind === "process" ? { ...medium, url: uploadedUrl, mediaProcessingBackend: "trigger" } : uploadedUrl);
     }
   }
 
@@ -181,7 +181,7 @@ for (const kind of ["process", "compress"]) {
     test(`${kind}: ${scenario} (${url})`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {
         cwd: __dirname,
-        env: { ...process.env, VIDEO_TASK: kind, VIDEO_SCENARIO: scenario, VIDEO_URL: url },
+        env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", VIDEO_TASK: kind, VIDEO_SCENARIO: scenario, VIDEO_URL: url },
         stdout: "pipe",
         stderr: "pipe",
       });

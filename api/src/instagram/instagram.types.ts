@@ -128,3 +128,33 @@ export interface FacebookRefreshTokenResponse {
 export interface InstagramAccountMetadata {
   connection_type?: 'instagram' | 'facebook';
 }
+
+/** Organic audio discovery has no documented paging parameters. */
+export interface InstagramAudioRequest {
+  audio_type: 'music' | 'original_sound';
+  user_id: string;
+  access_token: string;
+  search_query?: string;
+}
+
+export interface InstagramAudioAsset {
+  audio_id: string;
+  audio_type: 'music' | 'original_sound';
+  title?: string;
+  duration_in_ms?: number;
+  cover_artwork_thumbnail_uri?: string | null;
+  display_artist?: string;
+  download_url?: string | null;
+  on_platform_audio_preview_link?: string | null;
+  ig_username?: string;
+  profile_picture_url?: string | null;
+  is_ads_eligible?: boolean | null;
+}
+
+export interface InstagramAudioResponse {
+  audio?: InstagramAudioAsset[];
+  error?: {
+    code?: number;
+    error_subcode?: number;
+  };
+}

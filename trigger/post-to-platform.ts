@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { idempotencyKeys, logger, task, tags, tasks } from "@trigger.dev/sdk";
+import { idempotencyKeys, logger, task, tasks } from "@trigger.dev/sdk";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -22,6 +23,7 @@ import { differenceInDays } from "date-fns";
 import Stripe from "stripe";
 import { Database } from "./supabase.types";
 import { extractPlatformError } from "./posting/platform-error";
+import { resolveMediaProcessingBackend } from "./media-processing-backend";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
@@ -144,11 +146,11 @@ export const postToPlatform = task({
       machine: "large-1x",
     },
   },
-  machine: "small-1x",
+  machine: "small-2x",
   run: async (payload: IndividualPostData): Promise<PostResult> => {
     const {
       platform,
-      media,
+      media: inputMedia,
       caption,
       account,
       platformConfig,
@@ -159,9 +161,10 @@ export const postToPlatform = task({
       isSystemProject,
       projectId,
     } = payload;
+    const media = inputMedia.map((medium) => ({ ...medium, postId }));
     let postResult: PostResult | null = null;
     try {
-      await tags.add(`${account.id}`);
+      await addTagsBestEffort(`${account.id}`);
 
       logger.info("Starting post processing", { ...payload });
 
@@ -182,7 +185,10 @@ export const postToPlatform = task({
       );
       const supportedMedia = media.filter((m) =>
         postClient.supportedMediaTypes.includes(m.type),
-      );
+      ).map((medium) => ({
+        ...medium,
+        mediaProcessingBackend: resolveMediaProcessingBackend(postId, medium.mediaProcessingBackend),
+      }));
 
       if (unsupportedMedia.length > 0) {
         const unsupportedTypes = [
@@ -289,7 +295,7 @@ export const postToPlatform = task({
       }
     }
 
-    await tags.add(`result_${postResult.success ? "success" : "error"}`);
+    await addTagsBestEffort(`result_${postResult.success ? "success" : "error"}`);
 
     logger.info("Saving Post Result", { postResult });
     const { data: insertedPostResult, error: insertResultError } =
