@@ -118,7 +118,7 @@ for (const scenario of ["image", "image-download-error", "image-upload-error", "
   test(`Bluesky media child: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
       cwd: __dirname,
-      env: { ...process.env, SCENARIO: scenario },
+      env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", SCENARIO: scenario },
       stdout: "pipe",
       stderr: "pipe",
     });

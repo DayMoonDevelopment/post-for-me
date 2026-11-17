@@ -11,7 +11,8 @@ const supabaseClient = createClient<Database>(
 
 export const processWebhooks = task({
   id: "process-webhooks",
-  machine: "medium-1x",
+  // Fanout serializes event data per subscriber; see WEBHOOK_SIZING.md.
+  machine: "small-2x",
   maxDuration: 3600,
   retry: { maxAttempts: 3 },
   run: async (payload: {

@@ -194,6 +194,12 @@ export class TwitterPostClient extends PostClient {
         postPayload.quote_tweet_id = platformConfig.quote_tweet_id;
       }
 
+      if (platformConfig?.reply_to_tweet_id) {
+        postPayload.reply = {
+          in_reply_to_tweet_id: platformConfig.reply_to_tweet_id,
+        };
+      }
+
       this.requests.push({
         postRequest: postPayload,
       });

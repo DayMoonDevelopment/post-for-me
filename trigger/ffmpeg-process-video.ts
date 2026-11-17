@@ -6,6 +6,10 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { uploadMedia } from "./media-storage";
 import type { UserTag } from "./posting/post.types";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import { normalizeLiveVideo } from "./live-media";
+import type { StoredMedia } from "./media-recipes";
+import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 
 // Constants
 const DEFAULT_FRAME_RATE = 24;
@@ -30,7 +34,8 @@ const detectAspectRatio = (width: number, height: number) => {
   ); // Default to landscape if no match
 };
 
-type ProcessPostVideoMedium = {
+type ProcessPostVideoMedium = MediaProcessingRouting & {
+  stored?: StoredMedia;
   id: string;
   provider?: string | null;
   provider_connection_id?: string | null;
@@ -45,7 +50,7 @@ type ProcessPostVideoMedium = {
 
 export const ffmpegProcessVideo = task({
   id: "ffmpeg-process-video",
-  maxDuration: 800,
+  maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
   retry: {
     maxAttempts: 2,
     outOfMemory: {
@@ -57,8 +62,17 @@ export const ffmpegProcessVideo = task({
     medium,
   }: {
     medium: ProcessPostVideoMedium;
-  }): Promise<ProcessPostVideoMedium> => {
+  }, context): Promise<ProcessPostVideoMedium> => {
     const { url } = medium;
+    const mediaProcessingBackend = resolveMediaProcessingBackend(medium.id || url, medium.mediaProcessingBackend);
+    medium = { ...medium, mediaProcessingBackend };
+    if (mediaProcessingBackend === "zenith") {
+      const { liveMediaExecutor } = await import("./live-media-runtime");
+      const execute = liveMediaExecutor(context.ctx.run.id, medium.postId);
+      const source = medium.stored ?? await execute("localize", medium.id, { task: "media.localize", url });
+      const result = medium.skip_processing ? source : await normalizeLiveVideo(source, medium.id, execute);
+      return { ...medium, url: result.url, stored: result };
+    }
     logger.info("Starting video processing", { url });
     const tempDir = os.tmpdir();
     const extension = path.extname(new URL(url).pathname);
