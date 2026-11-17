@@ -1,3 +1,5 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import {
   BadRequestException,
   HttpException,
@@ -39,31 +41,31 @@ describe('PlatformAudioService', () => {
   };
   let lookup: { data: typeof account | null; error: unknown };
   let persistence: { error: unknown };
-  const select = jest.fn();
-  const eq = jest.fn();
-  const update = jest.fn();
-  const updateEq = jest.fn();
+  const select = vi.fn();
+  const eq = vi.fn();
+  const update = vi.fn();
+  const updateEq = vi.fn();
   const instagram = {
-    initService: jest.fn(),
-    initFacebookService: jest.fn(),
-    refreshAccessToken: jest.fn(),
-    getPlatformAudio: jest.fn(),
+    initService: vi.fn(),
+    initFacebookService: vi.fn(),
+    refreshAccessToken: vi.fn(),
+    getPlatformAudio: vi.fn(),
   };
   const tiktok = {
-    initService: jest.fn(),
-    refreshAccessToken: jest.fn(),
-    getPlatformAudio: jest.fn(),
+    initService: vi.fn(),
+    refreshAccessToken: vi.fn(),
+    getPlatformAudio: vi.fn(),
   };
   let service: PlatformAudioService;
   const request = { accountId: 'sa_123', projectId: 'project-1', query: {} };
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     lookup = { data: { ...account }, error: null };
     persistence = { error: null };
     const readBuilder = {
       eq,
-      maybeSingle: jest.fn(() =>
+      maybeSingle: vi.fn(() =>
         Promise.resolve(
           eq.mock.calls.some(
             ([column, value]: unknown[]) =>
@@ -79,7 +81,7 @@ describe('PlatformAudioService', () => {
     // The second scope predicate executes the update.
     update.mockReturnValue({ eq: updateEq });
     updateEq.mockImplementation(() => ({
-      eq: jest.fn(() => Promise.resolve(persistence)),
+      eq: vi.fn(() => Promise.resolve(persistence)),
     }));
     instagram.getPlatformAudio.mockResolvedValue({
       data: [audio],
@@ -92,7 +94,7 @@ describe('PlatformAudioService', () => {
     tiktok.getPlatformAudio.mockResolvedValue({ data: [], meta: {} });
     service = new PlatformAudioService(
       {
-        supabaseClient: { from: jest.fn(() => ({ select, update })) },
+        supabaseClient: { from: vi.fn(() => ({ select, update })) },
       } as unknown as SupabaseService,
       instagram as unknown as InstagramService,
       tiktok as unknown as TikTokBusinessService,
@@ -288,7 +290,7 @@ describe('PlatformAudioService', () => {
         refresh_token_expires_at: '2099-03-01T00:00:00.000Z',
       });
       expect(updateEq).toHaveBeenCalledWith('id', request.accountId);
-      const scopedUpdate = updateEq.mock.results[0].value as { eq: jest.Mock };
+      const scopedUpdate = updateEq.mock.results[0].value as { eq: Mock };
       expect(scopedUpdate.eq).toHaveBeenCalledWith(
         'project_id',
         request.projectId,

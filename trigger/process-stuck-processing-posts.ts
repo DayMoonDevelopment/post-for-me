@@ -88,8 +88,10 @@ const POST_SELECT = `
     thumbnail_timestamp_ms,
     provider,
     provider_connection_id,
+    alt_text,
     tags,
-    skip_processing
+    skip_processing,
+    index
   ),
   social_post_configurations (
     caption,
@@ -164,6 +166,7 @@ export const processStuckProcessingPosts = task({
         .lt("post_at", POST_AT_END)
         .order("post_at", { ascending: true })
         .order("id", { ascending: true })
+        .order("index", { referencedTable: "social_post_media" })
         .range(from, to);
 
       if (postsError) {

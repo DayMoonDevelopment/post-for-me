@@ -1,13 +1,28 @@
-import { defineConfig } from "@trigger.dev/sdk";
+import { configure, defineConfig } from "@trigger.dev/sdk";
 import { ffmpeg } from "@trigger.dev/build/extensions/core";
 import * as dotenv from "dotenv";
 
 dotenv.config();
 export default defineConfig({
   project: process.env.TRIGGER_PROJECT_ID!,
+  // Configure each worker before task execution. These retry individual SDK
+  // requests, not the entire task (which could repeat publishing side effects).
+  init: async () => {
+    configure({
+      requestOptions: {
+        retry: {
+          maxAttempts: 20,
+          minTimeoutInMs: 1_000,
+          maxTimeoutInMs: 60_000,
+          factor: 2,
+          randomize: true,
+        },
+      },
+    });
+  },
   build: {
     extensions: [ffmpeg()],
-    external: ["fluent-ffmpeg", "jsdom", "sharp", "tus-js-client"],
+    external: ["bullmq", "ioredis", "fluent-ffmpeg", "jsdom", "sharp", "tus-js-client"],
   },
   runtime: "node-22",
   logLevel: "log",
@@ -26,4 +41,9 @@ export default defineConfig({
     },
   },
   dirs: ["."],
+  // Keep the local profiler out of task discovery; preserve the default test exclusions.
+  ignorePatterns: [
+    "**/*.{test,spec}.{ts,mts,cts,js,mjs,cjs}",
+    "**/scripts/profile-webhooks.ts",
+  ],
 });

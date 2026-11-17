@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { describe, expect, it } from 'vitest';
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import { ModelPropertiesAccessor } from '@nestjs/swagger/dist/services/model-properties-accessor';
 import { SchemaObjectFactory } from '@nestjs/swagger/dist/services/schema-object-factory';

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { describe, expect, it } from 'vitest';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';

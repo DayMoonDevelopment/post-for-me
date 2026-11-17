@@ -1,17 +1,13 @@
 import { PostClient } from "../post-client";
 import {
-  EUploadMimeType,
   SendTweetV2Params,
   TwitterApi,
   TwitterApiTokens,
 } from "twitter-api-v2";
-import { readFile } from "fs/promises";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { wait } from "@trigger.dev/sdk";
-import {
-  compressJpegToLimit,
-  shouldSkipProcessing,
-} from "../image-processing-utils";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { uploadTwitterMedia } from "../../upload-twitter-media";
+import * as twitterText from "twitter-text";
+import type { ParseTweetOptions } from "twitter-text";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -20,22 +16,72 @@ import {
   TwitterConfiguration,
 } from "../post.types";
 
+const { parseTweet } = twitterText;
+
+// `configs` isn't part of twitter-text's typed public API
+// (@types/twitter-text doesn't declare it), but the package does export it
+// at runtime alongside `parseTweet`. Sourcing the v3 weighting config
+// directly from the installed package - instead of hand-copying its ranges -
+// keeps our weighting in sync with whatever version of twitter-text we ship.
+const TWITTER_TEXT_V3_CONFIG = (
+  twitterText as unknown as {
+    configs: { version3: ParseTweetOptions };
+  }
+).configs.version3;
+
+export function getAllowedCaption(
+  caption: string,
+  characterLimit: number,
+): { allowedCaption: string; trimmed: boolean } {
+  if (!caption) return { allowedCaption: caption, trimmed: false };
+
+  const parseOptions = {
+    ...TWITTER_TEXT_V3_CONFIG,
+    maxWeightedTweetLength: characterLimit,
+  };
+
+  const parsed = parseTweet(caption, parseOptions);
+
+  if (parsed.weightedLength <= characterLimit) {
+    return { allowedCaption: caption, trimmed: false };
+  }
+
+  // Binary search for the longest prefix (by Unicode code point, so we
+  // never split a surrogate pair) whose weighted length fits the limit.
+  // We can't use `validRangeEnd` here: twitter-text freezes it at the first
+  // character it considers "invalid" (e.g. a stray BOM) and never advances
+  // it again even as weightedLength keeps growing past the limit, which
+  // can collapse a caption down to just a few characters.
+  const codePoints = Array.from(caption);
+  let low = 0;
+  let high = codePoints.length;
+
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = codePoints.slice(0, mid).join("");
+
+    if (parseTweet(candidate, parseOptions).weightedLength <= characterLimit) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return {
+    allowedCaption: codePoints.slice(0, low).join(""),
+    trimmed: true,
+  };
+}
+
 export class TwitterPostClient extends PostClient {
   #IMAGE_LIMIT = 4;
   #PREMIUM_CHARACTER_LIMIT = 2200;
   #CHARACTER_LIMIT = 280;
   #appKey;
   #appSecret;
-  #requests: any[] = [];
-  #responses: any[] = [];
-  #maxFileSize = 5 * 1024 * 1024;
-  #uploadChunkSize = 5 * 1024 * 1024;
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
 
     this.#appKey = appCredentials.app_id;
     this.#appSecret = appCredentials.app_secret;
@@ -103,13 +149,16 @@ export class TwitterPostClient extends PostClient {
         twitterClient,
         media,
         isOAuth2,
+        account,
       });
 
-      const allowedCaption = caption.slice(
-        0,
-        account.social_provider_metadata?.has_platform_premium
-          ? this.#PREMIUM_CHARACTER_LIMIT
-          : this.#CHARACTER_LIMIT,
+      const characterLimit = account.social_provider_metadata?.has_platform_premium
+        ? this.#PREMIUM_CHARACTER_LIMIT
+        : this.#CHARACTER_LIMIT;
+
+      const { allowedCaption, trimmed } = getAllowedCaption(
+        caption,
+        characterLimit,
       );
 
       const postPayload: SendTweetV2Params = {
@@ -145,13 +194,19 @@ export class TwitterPostClient extends PostClient {
         postPayload.quote_tweet_id = platformConfig.quote_tweet_id;
       }
 
-      this.#requests.push({
+      if (platformConfig?.reply_to_tweet_id) {
+        postPayload.reply = {
+          in_reply_to_tweet_id: platformConfig.reply_to_tweet_id,
+        };
+      }
+
+      this.requests.push({
         postRequest: postPayload,
       });
 
       const tweet = await twitterClient.v2.tweet(postPayload);
 
-      this.#responses.push({
+      this.responses.push({
         postResponse: tweet,
       });
 
@@ -162,9 +217,9 @@ export class TwitterPostClient extends PostClient {
         provider_post_id: tweet.data.id,
         provider_post_url: `https://twitter.com/user/status/${tweet.data.id}`,
         details: {
-          trimmed: caption.length > allowedCaption.length,
-          requests: this.#requests,
-          responses: this.#responses,
+          trimmed,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -185,8 +240,8 @@ export class TwitterPostClient extends PostClient {
         error_message: `Failed to post to Twitter: ${error.message}`,
         details: {
           error,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -196,67 +251,45 @@ export class TwitterPostClient extends PostClient {
     twitterClient,
     media,
     isOAuth2,
+    account,
   }: {
     twitterClient: TwitterApi;
     media: PostMedia[];
     isOAuth2: boolean;
+    account: SocialAccount;
   }): Promise<string[]> {
     const mediaIds: string[] = [];
     if (media.length == 1) {
       const medium = media[0];
-      this.#requests.push({ uploadRequest: { file: medium } });
-      const isVideo = medium.type === "video";
+      this.requests.push({ uploadRequest: { file: medium } });
+      const mediaId = await this.#uploadMedium(medium, account, isOAuth2);
 
-      let mediaId: string;
-      if (isVideo) {
-        const { filePath, mimeType } = await this.downloadToTempFile(
-          medium.url,
-          { prefix: "twitter" },
-        );
-        try {
-          mediaId = await this.#uploadVideo({
-            twitterClient,
-            filePath,
-            mimeType,
-            isOAuth2,
-          });
-        } finally {
-          await this.unlinkQuiet(filePath);
-        }
-      } else {
-        const file = await this.getFile(medium);
-        const buffer = Buffer.from(await file.arrayBuffer());
-        mediaId = await this.#uploadImage({
-          twitterClient,
-          file,
-          buffer,
-          isOAuth2,
-          skipProcessing: shouldSkipProcessing(medium),
+      this.responses.push({ uploadResponse: { mediaId } });
+      mediaIds.push(mediaId);
+
+      if (medium.alt_text) {
+        await twitterClient.v1.createMediaMetadata(mediaId, {
+          alt_text: { text: medium.alt_text },
         });
       }
 
-      this.#responses.push({ uploadResponse: { mediaId } });
-      mediaIds.push(mediaId);
       // Add a small delay after successful upload
       await wait.for({ seconds: 1 });
     } else {
       const allowedMedia = media.slice(0, this.#IMAGE_LIMIT);
       for (const medium of allowedMedia) {
         if (medium.type === "video") continue;
-        this.#requests.push({ uploadRequest: { file: medium } });
-        const file = await this.getFile(medium);
-        const buffer = Buffer.from(await file.arrayBuffer());
+        this.requests.push({ uploadRequest: { file: medium } });
+        const mediaId = await this.#uploadMedium(medium, account, isOAuth2);
 
-        const mediaId = await this.#uploadImage({
-          twitterClient,
-          file,
-          buffer,
-          isOAuth2,
-          skipProcessing: shouldSkipProcessing(medium),
-        });
-
-        this.#responses.push({ uploadResponse: { mediaId } });
+        this.responses.push({ uploadResponse: { mediaId } });
         mediaIds.push(mediaId);
+
+        if (medium.alt_text) {
+          await twitterClient.v1.createMediaMetadata(mediaId, {
+            alt_text: { text: medium.alt_text },
+          });
+        }
       }
       // Add a small delay after uploads
       await wait.for({ seconds: 1 });
@@ -265,108 +298,39 @@ export class TwitterPostClient extends PostClient {
     return mediaIds;
   }
 
-  async #uploadVideo({
-    twitterClient,
-    filePath,
-    mimeType,
-    isOAuth2,
-  }: {
-    twitterClient: TwitterApi;
-    filePath: string;
-    mimeType: string;
-    isOAuth2: boolean;
-  }): Promise<string> {
-    if (isOAuth2) {
-      // The v2 client chunks, finalizes, and polls processing status
-      // internally - the v1.1 endpoint used below doesn't support OAuth2.
-      const buffer = await readFile(filePath);
-      return await twitterClient.v2.uploadMedia(
-        buffer,
-        { media_type: this.#toUploadMimeType(mimeType) },
-        this.#uploadChunkSize,
-      );
+  async #uploadMedium(
+    medium: PostMedia,
+    account: SocialAccount,
+    isOAuth2: boolean,
+  ): Promise<string> {
+    const result = await tasks.triggerAndWait<typeof uploadTwitterMedia>(
+      "upload-twitter-media",
+      {
+        medium,
+        auth: {
+          appKey: this.#appKey,
+          appSecret: this.#appSecret,
+          accessToken: account.access_token,
+          refreshToken: account.refresh_token,
+          isOAuth2,
+        },
+      },
+    );
+    if (!result.ok) {
+      const error = result.error;
+      const message = error && typeof error === "object" && "message" in error
+        && typeof error.message === "string" ? error.message : undefined;
+      throw new Error(message || "Failed to upload Twitter media", {
+        cause: error,
+      });
     }
-
-    const mediaId = await twitterClient.v1.uploadMedia(filePath, {
-      mimeType,
-      longVideo: true,
-    });
-
-    // Add delay and media status check
-    let mediaInfo;
-    let attempts = 0;
-    const maxAttempts = 4;
-
-    while (attempts < maxAttempts) {
-      try {
-        mediaInfo = await twitterClient.v1.mediaInfo(mediaId);
-
-        if (mediaInfo.processing_info?.state === "succeeded") {
-          break;
-        } else if (mediaInfo.processing_info?.state === "failed") {
-          throw new Error("Media processing failed");
-        }
-
-        console.log(
-          `Media processing status: ${mediaInfo.processing_info?.state}`,
-        );
-        await wait.for({ seconds: 2 });
-        attempts++;
-      } catch (error) {
-        console.error("Error checking media status:", error);
-        throw error;
-      }
+    if (!result.output.success) {
+      const { message, error } = result.output;
+      throw Object.assign(new Error(message, { cause: error }), {
+        data: "error" in error ? error.error : undefined,
+        toJSON: () => error,
+      });
     }
-
-    if (attempts >= maxAttempts) {
-      throw new Error("Media processing timeout");
-    }
-
-    return mediaId;
-  }
-
-  async #uploadImage({
-    twitterClient,
-    file,
-    buffer,
-    isOAuth2,
-    skipProcessing,
-  }: {
-    twitterClient: TwitterApi;
-    file: File;
-    buffer: Buffer;
-    isOAuth2: boolean;
-    skipProcessing: boolean;
-  }): Promise<string> {
-    let processedImage = buffer;
-    if (!skipProcessing) {
-      processedImage = await compressJpegToLimit(
-        processedImage,
-        this.#maxFileSize,
-      );
-    }
-
-    if (isOAuth2) {
-      // The v1.1 endpoint used below doesn't support OAuth2.
-      return await twitterClient.v2.uploadMedia(
-        processedImage,
-        { media_type: this.#toUploadMimeType(file.type) },
-        this.#uploadChunkSize,
-      );
-    }
-
-    return await twitterClient.v1.uploadMedia(processedImage, {
-      mimeType: file.type,
-    });
-  }
-
-  #toUploadMimeType(mimeType: string): EUploadMimeType {
-    if (
-      !Object.values(EUploadMimeType).includes(mimeType as EUploadMimeType)
-    ) {
-      throw new Error(`Unsupported media type for X: ${mimeType}`);
-    }
-
-    return mimeType as EUploadMimeType;
+    return result.output.mediaId;
   }
 }

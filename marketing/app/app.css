@@ -61,6 +61,14 @@ body {
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-brand-threads-mark: var(--brand-threads-mark);
+  --color-brand-x-mark: var(--brand-x-mark);
+  --color-brand-youtube-icon: var(--brand-youtube-icon);
+  --color-brand-youtube-icon-foreground: var(--brand-youtube-icon-foreground);
+  --color-brand-youtube-mark: var(--brand-youtube-mark);
+  --color-brand-tiktok-accent-1: var(--brand-tiktok-accent-1);
+  --color-brand-tiktok-accent-2: var(--brand-tiktok-accent-2);
+  --color-brand-tiktok-mark: var(--brand-tiktok-mark);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -120,6 +128,29 @@ body {
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /*
+   * Brand colors
+   *
+   * Official third-party logo colors, kept on their own `--brand-*` tokens
+   * instead of the app's semantic `--foreground`/`--background` tokens. This
+   * way a brand logo always renders in its real colors, independent of
+   * whatever shade the UI theme happens to use for text.
+   *
+   * Pattern: --brand-<name>-<identifier>. `-mark` is the single-color part of
+   * a logo that's officially published as both a black and a white variant
+   * (and so is allowed to flip with the theme). `-accent-N` and
+   * `-icon`/`-icon-foreground` are brand colors that never change between
+   * light and dark mode.
+   */
+  --brand-threads-mark: #000000;
+  --brand-x-mark: #000000;
+  --brand-youtube-icon: #ff0033;
+  --brand-youtube-icon-foreground: #ffffff;
+  --brand-youtube-mark: #252323;
+  --brand-tiktok-accent-1: #25f4ee;
+  --brand-tiktok-accent-2: #fe2c55;
+  --brand-tiktok-mark: #000000;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -158,6 +189,11 @@ body {
     --sidebar-accent-foreground: oklch(0.95 0.005 264.695);
     --sidebar-border: oklch(0.25 0.01 264.695);
     --sidebar-ring: oklch(0.5 0.02 265.755);
+
+    --brand-threads-mark: #ffffff;
+    --brand-x-mark: #ffffff;
+    --brand-youtube-mark: #ffffff;
+    --brand-tiktok-mark: #ffffff;
   }
 }
 
@@ -196,6 +232,11 @@ body {
   --sidebar-accent-foreground: oklch(0.95 0.005 264.695);
   --sidebar-border: oklch(0.25 0.01 264.695);
   --sidebar-ring: oklch(0.5 0.02 265.755);
+
+  --brand-threads-mark: #ffffff;
+  --brand-x-mark: #ffffff;
+  --brand-youtube-mark: #ffffff;
+  --brand-tiktok-mark: #ffffff;
 }
 
 .light {
@@ -222,6 +263,11 @@ body {
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.704 0.04 256.788);
+
+  --brand-threads-mark: #000000;
+  --brand-x-mark: #000000;
+  --brand-youtube-mark: #252323;
+  --brand-tiktok-mark: #000000;
 }
 
 @layer base {

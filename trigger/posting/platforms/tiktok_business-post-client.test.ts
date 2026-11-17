@@ -57,7 +57,7 @@ const publish = (
   platformConfig: TiktokBusinessConfiguration,
   media = [video],
 ) =>
-  new TikTokBusinessPostClient({} as any, {
+  new TikTokBusinessPostClient({
     app_id: "app",
     app_secret: "secret",
   }).post({

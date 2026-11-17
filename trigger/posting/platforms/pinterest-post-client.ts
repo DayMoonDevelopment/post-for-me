@@ -1,7 +1,7 @@
 import { PostClient } from "../post-client";
 import axios from "axios";
-import FormData from "form-data";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { uploadPinterestVideo } from "../../upload-pinterest-video";
 import {
   PinterestConfiguration,
   PlatformAppCredentials,
@@ -10,17 +10,11 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-import { SupabaseClient } from "@supabase/supabase-js";
 
 export class PinterestPostClient extends PostClient {
-  #requests: any[] = [];
-  #responses: any[] = [];
   #appCredentials: PlatformAppCredentials;
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
     this.#appCredentials = appCredentials;
   }
 
@@ -42,7 +36,7 @@ export class PinterestPostClient extends PostClient {
       requestUrl = "https://api-sandbox.pinterest.com/v5/oauth/token";
     }
 
-    this.#requests.push({
+    this.requests.push({
       refreshRequest: requestUrl,
       params,
     });
@@ -54,7 +48,7 @@ export class PinterestPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     const { access_token, expires_in, refresh_token } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
@@ -108,7 +102,14 @@ export class PinterestPostClient extends PostClient {
 
       // Create the pin
       const pinTitle = platformConfig?.title?.trim() || caption;
-      const pinData = {
+      const pinData: {
+        board_id: string;
+        title: string;
+        link?: string;
+        description: string;
+        media_source: typeof mediaSource;
+        alt_text?: string;
+      } = {
         board_id: boardId,
         title: pinTitle.slice(0, 100),
         link: platformConfig?.link,
@@ -116,7 +117,11 @@ export class PinterestPostClient extends PostClient {
         media_source: mediaSource,
       };
 
-      this.#requests.push({ postRequest: pinData });
+      if (medium.alt_text) {
+        pinData.alt_text = medium.alt_text.slice(0, 500);
+      }
+
+      this.requests.push({ postRequest: pinData });
 
       let publishUrl = "https://api.pinterest.com/v5/pins";
       if (account.social_provider_metadata?.is_sandbox) {
@@ -130,7 +135,7 @@ export class PinterestPostClient extends PostClient {
         },
       });
 
-      this.#responses.push({ postResponse: response.data });
+      this.responses.push({ postResponse: response.data });
 
       return {
         success: true,
@@ -139,8 +144,8 @@ export class PinterestPostClient extends PostClient {
         provider_post_id: response.data.id,
         provider_post_url: `https://pinterest.com/pin/${response.data.id}`,
         details: {
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -153,8 +158,8 @@ export class PinterestPostClient extends PostClient {
         error_message: "Failed to post to Pinterest",
         details: {
           error: error.response?.data || error.message,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -166,7 +171,7 @@ export class PinterestPostClient extends PostClient {
       boardsUrl = "https://api-sandbox.pinterest.com/v5/boards";
     }
 
-    this.#requests.push({
+    this.requests.push({
       getBoardsRequest: boardsUrl,
     });
     const boardsResponse = await axios.get(boardsUrl, {
@@ -175,7 +180,7 @@ export class PinterestPostClient extends PostClient {
         "Content-Type": "application/json",
       },
     });
-    this.#responses.push({ getBoardsResponse: boardsResponse.data });
+    this.responses.push({ getBoardsResponse: boardsResponse.data });
 
     if (boardsResponse.data.items && boardsResponse.data.items.length > 0) {
       return boardsResponse.data.items[0].id;
@@ -185,7 +190,7 @@ export class PinterestPostClient extends PostClient {
       name: "Post For Me",
       description: "Posts from Post For Me",
     };
-    this.#requests.push({
+    this.requests.push({
       createBoardRequest: {
         url: boardsUrl,
         params: createBoardParams,
@@ -198,7 +203,7 @@ export class PinterestPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ createBoardResponse: createBoardResponse.data });
+    this.responses.push({ createBoardResponse: createBoardResponse.data });
 
     return createBoardResponse.data.id;
   }
@@ -217,94 +222,19 @@ export class PinterestPostClient extends PostClient {
       mediaUrl = "https://api-sandbox.pinterest.com/v5/media";
     }
 
-    this.#requests.push({
-      registerMediaRequest: mediaUrl,
-    });
-    // Step 1: Register media with Pinterest
-    const registerMediaResponse = await axios.post(
-      mediaUrl,
-      {
-        media_type: "video",
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          "Content-Type": "application/json",
-        },
-      },
+    const result = await tasks.triggerAndWait<typeof uploadPinterestVideo>(
+      "upload-pinterest-video", { medium, accessToken: account.access_token, mediaUrl },
     );
-
-    this.#responses.push({ registerMediaResponse: registerMediaResponse.data });
-
-    const mediaId = registerMediaResponse.data.media_id;
-    const { upload_url, upload_parameters } = registerMediaResponse.data;
-
-    const fileUrl = await this.getSignedUrlForFile(medium);
-    const fileResponse = await axios.get(fileUrl, {
-      responseType: "stream",
-    });
-    const filename =
-      new URL(fileUrl).pathname.split("/").pop() || `video_${mediaId}.mp4`;
-    const contentTypeHeader = fileResponse.headers["content-type"];
-    const contentType =
-      typeof contentTypeHeader === "string" && contentTypeHeader
-        ? contentTypeHeader
-        : "video/mp4";
-    const knownLengthRaw = fileResponse.headers["content-length"];
-    const knownLength = knownLengthRaw ? Number(knownLengthRaw) : undefined;
-
-    // Create form data
-    const form = new FormData();
-
-    // Add Content-Type first
-    form.append("Content-Type", "multipart/form-data");
-
-    // Then add all other AWS parameters
-    Object.entries(upload_parameters).forEach(([key, value]) => {
-      if (key !== "Content-Type") {
-        form.append(key, value);
-      }
-    });
-
-    // Add the file last
-    form.append("file", fileResponse.data, {
-      filename,
-      contentType,
-      ...(Number.isFinite(knownLength as number) && (knownLength as number) > 0
-        ? { knownLength: knownLength as number }
-        : {}),
-    });
-
-    this.#requests.push({ uploadRequest: { file: medium } });
-
-    const headers: Record<string, string> = {
-      ...(form.getHeaders() as Record<string, string>),
-    };
-
-    // Best-effort Content-Length (helps some S3-compatible endpoints).
-    try {
-      const formLength = await new Promise<number>((resolve, reject) => {
-        form.getLength((err, length) => {
-          if (err) reject(err);
-          else resolve(length);
-        });
-      });
-      headers["Content-Length"] = String(formLength);
-    } catch {
-      // ignore
+    if (!result.ok) {
+      const error = result.error as { message?: string };
+      throw new Error(error?.message || "Failed to upload Pinterest video", { cause: result.error });
     }
-
-    const uploadResponse = await axios.post(upload_url, form, {
-      headers,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-    });
-
-    this.#responses.push({ uploadResponse: uploadResponse.status });
-
-    if (uploadResponse.status !== 204) {
-      throw new Error(`Upload failed with status: ${uploadResponse.status}`);
+    this.requests.push(...result.output.requests);
+    this.responses.push(...result.output.responses);
+    if (!result.output.success) {
+      throw Object.assign(new Error(result.output.message), { response: { data: result.output.error } });
     }
+    const { mediaId } = result.output;
 
     // Step 3: Check media status with exponential backoff
     let mediaStatus;
@@ -313,7 +243,7 @@ export class PinterestPostClient extends PostClient {
     let delay = 4000;
 
     while (attempts < maxAttempts) {
-      this.#requests.push({
+      this.requests.push({
         checkMediaStatusRequest: `${mediaUrl}/${mediaId}`,
       });
       const statusResponse = await axios.get(`${mediaUrl}/${mediaId}`, {
@@ -322,7 +252,7 @@ export class PinterestPostClient extends PostClient {
         },
       });
 
-      this.#responses.push({ checkMediaStatusResponse: statusResponse.data });
+      this.responses.push({ checkMediaStatusResponse: statusResponse.data });
 
       mediaStatus = statusResponse.data.status;
 

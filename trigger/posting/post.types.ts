@@ -59,8 +59,10 @@ export interface Post {
     thumbnail_timestamp_ms: number | null;
     provider: Provider | null;
     provider_connection_id: string | null;
+    alt_text: string | null;
     tags: UserTag[] | null;
     skip_processing: boolean | null;
+    index: number;
   }[];
   social_post_configurations: {
     caption: string | null;
@@ -94,11 +96,16 @@ export interface RefreshTokenResult {
 }
 
 export interface PostMedia {
+  postId?: string;
+  mediaProcessingBackend?: import("../media-processing-backend").MediaProcessingBackend;
+  stored?: import("../media-recipes").StoredMedia;
+  thumbnail_stored?: import("../media-recipes").StoredMedia;
   id: string;
   url: string;
   thumbnail_url?: string | null;
   thumbnail_timestamp_ms?: number | null;
   type: string;
+  alt_text?: string | null;
   tags?: UserTag[] | null;
   skip_processing?: boolean | null;
 }
@@ -137,6 +144,7 @@ export interface InstagramConfiguration {
   trial_reel_type?: string;
   audio_name?: string;
   audio_configuration?: InstagramAudioConfiguration;
+  is_ai_generated?: boolean;
 }
 
 export interface TiktokConfiguration {
@@ -175,6 +183,7 @@ export interface TwitterConfiguration {
   poll?: TwitterPoll;
   community_id?: string;
   quote_tweet_id?: string;
+  reply_to_tweet_id?: string;
   reply_settings?: string;
 }
 
@@ -200,6 +209,8 @@ export interface YoutubeConfiguration {
   publish_at?: string;
   made_for_kids?: boolean;
   contains_synthetic_media?: boolean;
+  // paidProductPlacementDetails fields
+  has_paid_product_placement?: boolean;
   // recordingDetails fields
   recording_date?: string;
   media?: PostMedia[];
@@ -216,6 +227,7 @@ export interface FacebookConfiguration {
 
 export interface LinkedinConfiguration {
   caption?: string;
+  title?: string;
   media?: PostMedia[];
   reshare_post_id?: string;
 }
@@ -262,6 +274,7 @@ export interface IndividualPostData {
   caption: string;
   account: SocialAccount;
   projectId: string;
+  isSystemProject: boolean;
   platformConfig: PlatformConfiguration;
   appCredentials: PlatformAppCredentials;
 }

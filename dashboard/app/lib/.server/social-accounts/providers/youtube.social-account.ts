@@ -25,8 +25,9 @@ export async function getYoutubeSocialProviderConnection({
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
 
-  if (!tokens.access_token) {
-    return [];
+  if (!tokens?.access_token) {
+    console.error("Error fetching access token", tokens);
+    throw Error("Error fetching access token");
   }
 
   const youtube = google.youtube({ version: "v3", auth: oauth2Client });
@@ -54,7 +55,7 @@ export async function getYoutubeSocialProviderConnection({
         access_token: tokens.access_token!,
         refresh_token: tokens.refresh_token ?? "",
         access_token_expires_at: new Date(
-          Date.now() + (tokens.expiry_date ?? 1000),
+          tokens.expiry_date ?? Date.now() + 1000,
         ),
       };
     });

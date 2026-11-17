@@ -1,3 +1,5 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConfigService } from '@nestjs/config';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import axios from 'axios';
 import type { SocialAccount } from '../lib/dto/global.dto';
@@ -6,16 +8,16 @@ import type { SupabaseService } from '../supabase/supabase.service';
 import { InstagramService } from './instagram.service';
 import type { InstagramAudioAsset } from './instagram.types';
 
-jest.mock('axios');
-const get = jest.spyOn(axios, 'get');
+vi.mock('axios');
+const get = vi.spyOn(axios, 'get');
 
 describe('Instagram audio discovery', () => {
   let service: InstagramService;
   let account: SocialAccount;
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    service = new InstagramService({} as SupabaseService);
+    vi.resetAllMocks();
+    service = new InstagramService({} as SupabaseService, new ConfigService());
     account = {
       provider: 'instagram',
       id: 'account',
@@ -58,7 +60,7 @@ describe('Instagram audio discovery', () => {
     } as PlatformAudioQueryDto;
     const result = await service.getPlatformAudio({ account, query });
     expect(get).toHaveBeenCalledWith(
-      'https://graph.facebook.com/v23.0/ig_audio',
+      'https://graph.facebook.com/v25.0/ig_audio',
       {
         params: {
           audio_type: 'music',
@@ -222,7 +224,7 @@ describe('Instagram audio discovery', () => {
       } else {
         get.mockRejectedValue(new Error(upstream.error.message));
       }
-      const logging = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const logging = vi.spyOn(console, 'error').mockImplementation(() => {});
       try {
         const error: unknown = await service
           .getPlatformAudio({ account, query: {} })

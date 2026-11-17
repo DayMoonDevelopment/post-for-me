@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpStatus } from '@nestjs/common';
 import axios from 'axios';
 import type { SocialAccount } from '../lib/dto/global.dto';
@@ -8,8 +9,8 @@ import { TIKTOK_BUSINESS_AUDIO_GENRES } from './dto/tiktok-business-audio-query.
 import type { TikTokBusinessAudioPlatformDataDto } from './dto/tiktok-business-audio.dto';
 import { TikTokBusinessService } from './tiktok-business.service';
 
-jest.mock('axios');
-const get = jest.spyOn(axios, 'get');
+vi.mock('axios');
+const get = vi.spyOn(axios, 'get');
 
 describe('TikTok Business Commercial Music Library discovery', () => {
   const account: SocialAccount = {
@@ -33,7 +34,7 @@ describe('TikTok Business Commercial Music Library discovery', () => {
     get.mockResolvedValue({ data: { code: 0, message: 'OK', data: { list } } });
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     // Discovery uses only the supplied account, not application credentials or DB state.
     service = new TikTokBusinessService({} as SupabaseService);
     success();

@@ -1,10 +1,11 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '@nestjs/common';
 import { HttpException, ValidationPipe, VersioningType } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AuthGuard } from '../auth/auth.guard';
 import { PlatformAudioController } from './platform-audio.controller';
 import { PlatformAudioService } from './platform-audio.service';
@@ -13,7 +14,7 @@ import { TIKTOK_BUSINESS_AUDIO_GENRES } from '../tiktok-business/dto/tiktok-busi
 
 describe('PlatformAudioController HTTP boundary', () => {
   let app: NestExpressApplication;
-  const getPlatformAudio = jest.fn();
+  const getPlatformAudio = vi.fn();
   let authorized = true;
 
   beforeAll(async () => {

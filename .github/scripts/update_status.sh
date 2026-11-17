@@ -3,12 +3,11 @@
 PRECHECK=$1
 SUPABASE=$2
 TRIGGER=$3
-API_RAILWAY=$4
-API_UNKEY=$5
-DASHBOARD_UNKEY=$6
-DASHBOARD_VERCEL=$7
-MARKETING_UNKEY=$8
-MARKETING_VERCEL=$9
+API_UNKEY=$4
+DASHBOARD_UNKEY=$5
+DASHBOARD_VERCEL=$6
+MARKETING_UNKEY=$7
+MARKETING_VERCEL=$8
 
 DASHBOARD_URL="https://post-for-me-app.vercel.app/"
 
@@ -20,7 +19,6 @@ Step                 | Status
 Precheck             | ${PRECHECK}
 Supabase             | ${SUPABASE}
 Trigger.dev          | ${TRIGGER}
-API (Railway)        | ${API_RAILWAY}
 API (Unkey)          | ${API_UNKEY}
 Dashboard (Unkey)    | ${DASHBOARD_UNKEY}
 Dashboard (Vercel)   | ${DASHBOARD_VERCEL}

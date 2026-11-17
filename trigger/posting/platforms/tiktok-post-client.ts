@@ -1,13 +1,10 @@
-import { createReadStream } from "fs";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { uploadTikTokVideo } from "../../upload-tiktok-video";
+import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
+import { triggerImageTransform } from "../../trigger-image-transform";
 import { PostClient } from "../post-client";
 import axios from "axios";
-import sharp from "sharp";
-import {
-  compressJpegToLimit,
-  shouldSkipProcessing,
-} from "../image-processing-utils";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   PlatformAppCredentials,
   PostMedia,
@@ -39,29 +36,14 @@ export class TikTokPostClient extends PostClient {
   };
   #clientKey: string;
   #clientSecret: string;
-  #localSupabaseClient;
-  #maxFileSize = 20 * 1024 * 1024;
-  #allowedAspectRatios = [
-    { ratio: 9 / 16, width: 1080, height: 1920 },
-    { ratio: 3 / 4, width: 1080, height: 1440 },
-    { ratio: 1, width: 1080, height: 1080 },
-    { ratio: 16 / 9, width: 1920, height: 1080 },
-  ];
-  #addedMedia: any[] = [];
-  #requests: any[] = [];
-  #responses: any[] = [];
-  #bucket: string = "post-media";
+  #useSupabaseMedia: boolean;
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials, useSupabaseMedia = false) {
+    super(appCredentials);
 
     this.#clientKey = appCredentials.app_id;
     this.#clientSecret = appCredentials.app_secret;
-
-    this.#localSupabaseClient = supabaseClient;
+    this.#useSupabaseMedia = useSupabaseMedia;
   }
 
   async refreshAccessToken(
@@ -73,7 +55,7 @@ export class TikTokPostClient extends PostClient {
     formData.append("grant_type", "refresh_token");
     formData.append("refresh_token", account.refresh_token!);
 
-    this.#requests.push({ refreshRequest: { url: this.#tokenUrl } });
+    this.requests.push({ refreshRequest: { url: this.#tokenUrl } });
     const refreshResponse = await axios.post(this.#tokenUrl, formData, {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -81,7 +63,7 @@ export class TikTokPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({ refreshResponse: refreshResponse.data });
+    this.responses.push({ refreshResponse: refreshResponse.data });
 
     if (refreshResponse.data.error) {
       throw new Error(
@@ -155,23 +137,52 @@ export class TikTokPostClient extends PostClient {
         });
       }
 
-      if (platformConfig?.is_draft) {
-        const { status } = await this.#getPublishStatus({ publishId, account });
+      const { status, failReason, publicPostId } = await this.#getPublishStatus({
+        publishId,
+        account,
+        waitForPublicPostId: !platformConfig?.is_draft,
+      });
 
+      if (
+        (!this.#processedStatuses.includes(status) &&
+          !this.#processingStatuses.includes(status)) ||
+        (!platformConfig?.is_draft && status === "SEND_TO_USER_INBOX")
+      ) {
         return {
-          success: true,
+          success: false,
           post_id: postId,
           provider_connection_id: account.id,
-          error_message: this.#processingStatuses.includes(status)
-            ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
+          error_message: `TikTok publication could not be confirmed. Status: ${status}.${
+            failReason ? ` Fail reason: ${failReason}` : ""
+          }`,
+          details: {
+            status,
+            fail_reason: failReason,
+            publish_id: publishId,
+            requests: this.requests,
+            responses: this.responses,
+          },
+          provider_post_id: publicPostId ?? publishId,
+        };
+      }
+
+      if (platformConfig?.is_draft) {
+        const isProcessing = this.#processingStatuses.includes(status);
+
+        return {
+          success: !isProcessing,
+          post_id: postId,
+          provider_connection_id: account.id,
+          error_message: isProcessing
+            ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
             : undefined,
           details: {
-            status: "Saved as draft",
-            message:
-              "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
-            addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+            status: isProcessing ? "Processing" : "Saved as draft",
+            message: isProcessing
+              ? "TikTok is still processing this draft after the task timed out. Check with TikTok to confirm its final status."
+              : "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
             publish_id: publishId,
           },
@@ -180,24 +191,19 @@ export class TikTokPostClient extends PostClient {
         };
       }
 
-      const { status, publicPostId } = await this.#getPublishStatus({
-        publishId,
-        account,
-        waitForPublicPostId: true,
-      });
-
       if (this.#processingStatuses.includes(status)) {
         return {
           success: false,
           post_id: postId,
           provider_connection_id: account.id,
+          error_message:
+            "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
           details: {
             status: "Processing",
             message:
-              "Still Proccessing, check TikTok account to confirm status",
-            addedMedia: this.#addedMedia,
-            requests: this.#requests,
-            responses: this.#responses,
+              "TikTok is still processing this post after the task timed out. Publication could not be confirmed. Check with TikTok to confirm its final status.",
+            requests: this.requests,
+            responses: this.responses,
             username: creatorInfoResponse.data.data.creator_username,
             publish_id: publishId,
           },
@@ -213,9 +219,8 @@ export class TikTokPostClient extends PostClient {
         provider_post_id: publicPostId ?? publishId,
         details: {
           status: "Published successfully",
-          addedMedia: this.#addedMedia,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
           username: creatorInfoResponse.data.data.creator_username,
           publish_id: publishId,
         },
@@ -238,8 +243,8 @@ export class TikTokPostClient extends PostClient {
         error_message: errorMessage,
         details: {
           error: errorDetails,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     }
@@ -272,7 +277,7 @@ export class TikTokPostClient extends PostClient {
   }
 
   async #getCreatorInfo(account: SocialAccount) {
-    this.#requests.push({
+    this.requests.push({
       creatorRequest:
         "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
     });
@@ -288,7 +293,7 @@ export class TikTokPostClient extends PostClient {
       },
     );
 
-    this.#responses.push({ creatorResponse: response.data });
+    this.responses.push({ creatorResponse: response.data });
 
     return response;
   }
@@ -319,7 +324,7 @@ export class TikTokPostClient extends PostClient {
           publicPostIdAttempts < maxPublicPostIdAttempts)) &&
       attempts < maxAttempts
     ) {
-      this.#requests.push({
+      this.requests.push({
         statusRequest: {
           url: "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
           params: {
@@ -345,7 +350,7 @@ export class TikTokPostClient extends PostClient {
         statusResponse.data,
       );
 
-      this.#responses.push({ statusResponse: parsedStatusResponse.data });
+      this.responses.push({ statusResponse: parsedStatusResponse.data });
 
       status = parsedStatusResponse.data.data.status;
       failReason = parsedStatusResponse.data.data.fail_reason;
@@ -372,24 +377,6 @@ export class TikTokPostClient extends PostClient {
           : initialDelayMs * Math.pow(1.5, attempts - 1);
         await wait.for({ seconds: delay / 1000 });
       }
-    }
-
-    if (
-      !this.#processedStatuses.includes(status) &&
-      !this.#processingStatuses.includes(status)
-    ) {
-      if (failReason) {
-        console.error("TikTok upload failed", {
-          status,
-          fail_reason: failReason,
-        });
-      }
-
-      throw new Error(
-        `Upload failed with status: ${status}.${
-          failReason ? ` Fail reason: ${failReason}` : ""
-        }`,
-      );
     }
 
     return { status, failReason, publicPostId };
@@ -432,7 +419,7 @@ export class TikTokPostClient extends PostClient {
     payload: any;
     account: SocialAccount;
   }): Promise<{ publishId: string; uploadUrl?: string }> {
-    this.#requests.push({
+    this.requests.push({
       publishIdRequest: {
         postUrl: postUrl,
         payload: payload,
@@ -446,123 +433,13 @@ export class TikTokPostClient extends PostClient {
       },
     });
 
-    this.#responses.push({
+    this.responses.push({
       publishIdResponse: initResponse.data,
     });
 
     const { publish_id, upload_url } = initResponse.data.data;
 
     return { publishId: publish_id, uploadUrl: upload_url };
-  }
-
-  #planVideoUploadChunks(size: number): {
-    chunkSize: number;
-    totalChunkCount: number;
-  } {
-    if (size <= 0) {
-      throw new Error(`Invalid TikTok video size: ${size}`);
-    }
-
-    const minChunkSize = 5 * 1024 * 1024;
-    const maxChunkSize = 64 * 1024 * 1024;
-
-    // Files smaller than 5MB must be uploaded as a whole.
-    if (size < minChunkSize) {
-      return { chunkSize: size, totalChunkCount: 1 };
-    }
-
-    // Files up to 64MB can be uploaded as a single chunk.
-    if (size <= maxChunkSize) {
-      return { chunkSize: size, totalChunkCount: 1 };
-    }
-
-    // Files over 64MB must use multiple chunks. Choose a chunk size that keeps
-    // chunks within bounds, then compute total_chunk_count as floor(size/chunk).
-    const minChunkCount = Math.ceil(size / maxChunkSize);
-
-    if (minChunkCount > 1000) {
-      throw new Error(
-        `TikTok upload requires too many chunks (${minChunkCount}). Max is 1000.`,
-      );
-    }
-
-    const chunkSize = Math.max(
-      minChunkSize,
-      Math.min(maxChunkSize, Math.floor(size / minChunkCount)),
-    );
-    const totalChunkCount = Math.floor(size / chunkSize);
-
-    if (totalChunkCount < 2) {
-      throw new Error(
-        `TikTok upload requires multiple chunks for files over 64MB (size=${size}, chunk_size=${chunkSize}, total_chunk_count=${totalChunkCount})`,
-      );
-    }
-
-    if (totalChunkCount > 1000) {
-      throw new Error(
-        `TikTok upload exceeds maximum chunk count (total_chunk_count=${totalChunkCount}). Max is 1000.`,
-      );
-    }
-
-    return { chunkSize, totalChunkCount };
-  }
-
-  #resolveVideoContentType(mimeType: string): string {
-    const allowedContentTypes = ["video/mp4", "video/quicktime", "video/webm"];
-    const baseMimeType = mimeType.split(";")[0].trim().toLowerCase();
-    return allowedContentTypes.includes(baseMimeType)
-      ? baseMimeType
-      : "video/mp4";
-  }
-
-  async #uploadVideoFile({
-    filePath,
-    uploadUrl,
-    mimeType,
-    size,
-  }: {
-    filePath: string;
-    uploadUrl: string;
-    mimeType: string;
-    size: number;
-  }): Promise<void> {
-    if (size <= 0) {
-      throw new Error(
-        `Cannot upload video to TikTok: downloaded file is empty (${size} bytes)`,
-      );
-    }
-
-    const contentType = this.#resolveVideoContentType(mimeType);
-    const { chunkSize, totalChunkCount } = this.#planVideoUploadChunks(size);
-
-    for (let chunkIndex = 0; chunkIndex < totalChunkCount; chunkIndex++) {
-      const start = chunkIndex * chunkSize;
-      const isLastChunk = chunkIndex === totalChunkCount - 1;
-      const end = isLastChunk ? size - 1 : start + chunkSize - 1;
-      const contentRange = `bytes ${start}-${end}/${size}`;
-
-      this.#requests.push({
-        videoUploadRequest: { chunkIndex, totalChunkCount, contentRange },
-      });
-
-      const uploadResponse = await axios.put(
-        uploadUrl,
-        createReadStream(filePath, { start, end }),
-        {
-          headers: {
-            "Content-Type": contentType,
-            "Content-Length": end - start + 1,
-            "Content-Range": contentRange,
-          },
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-        },
-      );
-
-      this.#responses.push({
-        videoUploadResponse: { chunkIndex, status: uploadResponse.status },
-      });
-    }
   }
 
   async #processVideo({
@@ -580,99 +457,71 @@ export class TikTokPostClient extends PostClient {
     account: SocialAccount;
     creatorInfoResponse: any;
   }) {
-    const { filePath, mimeType, size } = await this.downloadToTempFile(
-      medium.url,
-      { prefix: "tiktok" },
+    const postInfo = platformData?.is_draft
+      ? {
+          title: caption,
+          video_cover_timestamp_ms: coverTimestamp
+            ? coverTimestamp
+            : undefined,
+          is_aigc:
+            platformData?.is_ai_generated === undefined
+              ? false
+              : platformData.is_ai_generated,
+        }
+      : {
+          title: caption,
+          privacy_level: this.#resolvePrivacyLevel({
+            platformData,
+            creatorInfoResponse,
+          }),
+          disable_duet:
+            platformData.allow_duet === undefined
+              ? false
+              : !platformData.allow_duet,
+          disable_comment:
+            platformData.allow_comment === undefined
+              ? false
+              : !platformData.allow_comment,
+          disable_stitch:
+            platformData.allow_stitch === undefined
+              ? false
+              : !platformData.allow_stitch,
+          video_cover_timestamp_ms: coverTimestamp
+            ? coverTimestamp
+            : undefined,
+          brand_content_toggle:
+            platformData.disclose_branded_content === undefined
+              ? false
+              : platformData.disclose_branded_content,
+          brand_organic_toggle:
+            platformData.disclose_your_brand === undefined
+              ? false
+              : platformData.disclose_your_brand,
+          is_aigc:
+            platformData.is_ai_generated === undefined
+              ? false
+              : platformData.is_ai_generated,
+        };
+    const result = await tasks.triggerAndWait<typeof uploadTikTokVideo>(
+      "upload-tiktok-video",
+      {
+        url: await this.#getUploadUrl(medium.url),
+        accessToken: account.access_token,
+        postUrl: platformData?.is_draft
+          ? "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
+          : "https://open.tiktokapis.com/v2/post/publish/video/init/",
+        initBody: { post_info: postInfo },
+      },
     );
-
-    try {
-      const { chunkSize, totalChunkCount } = this.#planVideoUploadChunks(size);
-
-      const sourceInfo = {
-        source: "FILE_UPLOAD",
-        video_size: size,
-        chunk_size: chunkSize,
-        total_chunk_count: totalChunkCount,
-      };
-
-      let publishId: string;
-      let uploadUrl: string | undefined;
-
-      if (platformData?.is_draft) {
-        ({ publishId, uploadUrl } = await this.#getPublishId({
-          postUrl:
-            "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-          payload: {
-            post_info: {
-              title: caption,
-              video_cover_timestamp_ms: coverTimestamp
-                ? coverTimestamp
-                : undefined,
-              is_aigc:
-                platformData?.is_ai_generated === undefined
-                  ? false
-                  : platformData.is_ai_generated,
-            },
-            source_info: sourceInfo,
-          },
-          account,
-        }));
-      } else {
-        ({ publishId, uploadUrl } = await this.#getPublishId({
-          postUrl: "https://open.tiktokapis.com/v2/post/publish/video/init/",
-          payload: {
-            post_info: {
-              title: caption,
-              privacy_level: this.#resolvePrivacyLevel({
-                platformData,
-                creatorInfoResponse,
-              }),
-              disable_duet:
-                platformData.allow_duet === undefined
-                  ? false
-                  : !platformData.allow_duet,
-              disable_comment:
-                platformData.allow_comment === undefined
-                  ? false
-                  : !platformData.allow_comment,
-              disable_stitch:
-                platformData.allow_stitch === undefined
-                  ? false
-                  : !platformData.allow_stitch,
-              video_cover_timestamp_ms: coverTimestamp
-                ? coverTimestamp
-                : undefined,
-              brand_content_toggle:
-                platformData.disclose_branded_content === undefined
-                  ? false
-                  : platformData.disclose_branded_content,
-              brand_organic_toggle:
-                platformData.disclose_your_brand === undefined
-                  ? false
-                  : platformData.disclose_your_brand,
-              is_aigc:
-                platformData.is_ai_generated === undefined
-                  ? false
-                  : platformData.is_ai_generated,
-            },
-            source_info: sourceInfo,
-          },
-          account,
-        }));
-      }
-
-      if (!uploadUrl) {
-        throw new Error(
-          "TikTok did not return an upload_url for FILE_UPLOAD source",
-        );
-      }
-
-      await this.#uploadVideoFile({ filePath, uploadUrl, mimeType, size });
-
-      return publishId;
-    } finally {
-      await this.unlinkQuiet(filePath);
+    if (!result.ok) {
+      throw new Error("Failed to upload TikTok video", { cause: result.error });
     }
+    this.requests.push(...result.output.requests);
+    this.responses.push(...result.output.responses);
+    if (!result.output.success) {
+      throw Object.assign(new Error(result.output.error.message), result.output.error);
+    }
+    return result.output.publishId;
   }
 
   async #processImages({
@@ -698,7 +547,7 @@ export class TikTokPostClient extends PostClient {
       if (medium.type === "video") continue;
 
       const signedUrl = await this.#transformImage(medium);
-      photoUrls.push(signedUrl);
+      photoUrls.push(await this.#getUploadUrl(signedUrl));
     }
 
     const { publishId } = await this.#getPublishId({
@@ -742,6 +591,20 @@ export class TikTokPostClient extends PostClient {
     return publishId;
   }
 
+  async #getUploadUrl(url: string): Promise<string> {
+    if (!this.#useSupabaseMedia) return url;
+
+    // White-label apps have verified the legacy Supabase URL prefix, not R2.
+    const result = await tasks.triggerAndWait<typeof copyMediaToSupabase>(
+      "copy-media-to-supabase",
+      { url },
+    );
+    if (!result.ok) {
+      throw new Error("Failed to copy TikTok media to Supabase");
+    }
+    return result.output;
+  }
+
   async #getErrorDetails(error: any) {
     return {
       message: error.message,
@@ -769,88 +632,19 @@ export class TikTokPostClient extends PostClient {
       return signedUrl;
     }
 
-    const response = await axios({
-      url: signedUrl,
-      method: "GET",
-      responseType: "arraybuffer",
-    });
-
-    const imageBuffer = Buffer.from(response.data);
-
-    // Get image metadata and choose nearest TikTok-allowed ratio
-    const metadata = await sharp(imageBuffer).metadata();
-    const width = metadata.width || 0;
-    const height = metadata.height || 0;
-
-    if (!width || !height) {
-      throw new Error("Unable to read image dimensions for TikTok upload");
-    }
-
-    const orientation = metadata.orientation || 1;
-    const isExifRotated = [5, 6, 7, 8].includes(orientation);
-    const displayedWidth = isExifRotated ? height : width;
-    const displayedHeight = isExifRotated ? width : height;
-
-    const aspectRatio = displayedWidth / displayedHeight;
-    const targetRatio = this.#allowedAspectRatios.reduce((closest, current) =>
-      Math.abs(current.ratio - aspectRatio) <
-      Math.abs(closest.ratio - aspectRatio)
-        ? current
-        : closest,
+    const result = await triggerImageTransform(
+      {
+        url: signedUrl,
+        mediumId: medium.id,
+        postId: medium.postId,
+        stored: medium.stored,
+        mediaProcessingBackend: medium.mediaProcessingBackend,
+        platform: "tiktok",
+      },
     );
-
-    // Process image with Sharp (normalize orientation, crop, resize and compress)
-    let processedImage = await sharp(imageBuffer)
-      .rotate()
-      .resize({
-        width: targetRatio.width,
-        height: targetRatio.height,
-        fit: "cover",
-        position: "center",
-      })
-      .jpeg({ quality: 100 })
-      .toBuffer();
-
-    processedImage = await compressJpegToLimit(
-      processedImage,
-      this.#maxFileSize,
-    );
-
-    const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
-    const processedKey = `${key.split(".")[0]}_tiktok`;
-
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
+    if (!result.ok) {
+      throw new Error("Failed to transform TikTok image");
     }
-
-    this.#addedMedia.push({
-      key: processedKey,
-      bucket: this.#bucket,
-    });
-
-    const { data: processedImageUpload } = this.#localSupabaseClient.storage
-      .from(this.#bucket)
-      .getPublicUrl(processedKey);
-
-    return processedImageUpload!.publicUrl;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
+    return result.output.url;
   }
 }

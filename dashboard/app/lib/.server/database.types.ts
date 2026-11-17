@@ -139,9 +139,11 @@ export type Database = {
       }
       social_post_media: {
         Row: {
+          alt_text: string | null
           created_at: string
           external_id: string | null
           id: string
+          index: number
           meta_data: Json | null
           post_id: string
           provider: Database["public"]["Enums"]["social_provider"] | null
@@ -154,9 +156,11 @@ export type Database = {
           url: string
         }
         Insert: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
+          index?: number
           meta_data?: Json | null
           post_id: string
           provider?: Database["public"]["Enums"]["social_provider"] | null
@@ -169,9 +173,11 @@ export type Database = {
           url: string
         }
         Update: {
+          alt_text?: string | null
           created_at?: string
           external_id?: string | null
           id?: string
+          index?: number
           meta_data?: Json | null
           post_id?: string
           provider?: Database["public"]["Enums"]["social_provider"] | null

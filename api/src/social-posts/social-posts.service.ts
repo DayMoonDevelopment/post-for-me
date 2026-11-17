@@ -215,24 +215,6 @@ export class SocialPostsService {
     return [];
   }
 
-  validatePostCaptionLength({
-    caption,
-    platform,
-  }: {
-    caption: string;
-    platform: string;
-  }): { isValid: boolean; error: string } {
-    const maxCaptionLength = 2200;
-
-    switch (platform) {
-      default:
-        return {
-          isValid: caption.length <= maxCaptionLength,
-          error: `caption must be less than ${maxCaptionLength} characters`,
-        };
-    }
-  }
-
   async createPost({
     post,
     projectId,
@@ -303,7 +285,9 @@ export class SocialPostsService {
       post_id: string;
       provider_connection_id?: string | undefined;
       provider?: Provider;
+      alt_text?: string | null;
       skip_processing?: boolean | null;
+      index: number;
     }[] = [];
 
     const postConfigurations: {
@@ -316,14 +300,16 @@ export class SocialPostsService {
 
     if (post.media) {
       postMedia.push(
-        ...post.media.map((media) => {
+        ...post.media.map((media, i) => {
           return {
             url: media.url,
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
             post_id: data.id,
+            alt_text: media.alt_text,
             tags: media.tags,
             skip_processing: media.skip_processing,
+            index: media.index ?? i,
           };
         }),
       );
@@ -338,29 +324,35 @@ export class SocialPostsService {
               url: string;
               thumbnail_url?: string;
               thumbnail_timestamp_ms?: number;
+              alt_text?: string | null;
               tags: any[];
               skip_processing?: boolean | null;
+              index?: number | null;
             }[];
           },
         ]) => {
           if (config.media) {
             postMedia.push(
-              ...(config.media.map((media) => ({
+              ...(config.media.map((media, i) => ({
                 url: media.url,
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+                alt_text: media.alt_text,
                 tags: media.tags,
                 skip_processing: media.skip_processing,
                 post_id: data.id,
                 provider: provider as Provider,
+                index: media.index ?? i,
               })) as Array<{
                 url: string;
                 thumbnail_url?: string;
                 thumbnail_timestamp_ms?: number;
                 post_id: string;
+                alt_text?: string | null;
                 tags: any[];
                 skip_processing?: boolean | null;
                 provider: Provider;
+                index: number;
               }>),
             );
           }
@@ -385,14 +377,16 @@ export class SocialPostsService {
 
         if (platformConfig.media) {
           postMedia.push(
-            ...platformConfig.media.map((media) => ({
+            ...platformConfig.media.map((media, i) => ({
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
               post_id: data.id,
               provider_connection_id: accountConfig.social_account_id,
+              alt_text: media.alt_text,
               tags: media.tags,
               skip_processing: media.skip_processing,
+              index: media.index ?? i,
             })),
           );
         }
@@ -508,8 +502,10 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
+          alt_text,
           tags,
-          skip_processing
+          skip_processing,
+          index
         ),
         social_post_configurations (
          caption,
@@ -521,6 +517,7 @@ export class SocialPostsService {
       )
       .eq('id', postId)
       .eq('project_id', projectId)
+      .order('index', { referencedTable: 'social_post_media' })
       .single();
 
     if (error) {
@@ -574,8 +571,10 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
+          alt_text,
           tags,
-          skip_processing
+          skip_processing,
+          index
         ),
         social_post_configurations (
          caption,
@@ -587,6 +586,7 @@ export class SocialPostsService {
         { count: 'estimated', head: false },
       )
       .eq('project_id', projectId)
+      .order('index', { referencedTable: 'social_post_media' })
       .range(offset, offset + limit - 1);
 
     if (platform) {
@@ -803,8 +803,10 @@ export class SocialPostsService {
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
+          alt_text,
           tags,
-          skip_processing
+          skip_processing,
+          index
         ),
             social_post_configurations (
               caption,
@@ -815,6 +817,7 @@ export class SocialPostsService {
         `,
         )
         .eq('id', postId)
+        .order('index', { referencedTable: 'social_post_media' })
         .single();
 
       await tasks.trigger(
@@ -860,8 +863,10 @@ export class SocialPostsService {
 
       provider: Provider | null;
       provider_connection_id: string | null;
+      alt_text: string | null;
       tags: Json;
       skip_processing: boolean | null;
+      index: number;
     }>;
     social_post_configurations: Array<{
       caption: string | null;
@@ -877,8 +882,10 @@ export class SocialPostsService {
         url: media.url,
         thumbnail_url: media.thumbnail_url,
         thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+        alt_text: media.alt_text,
         tags: media.tags as any[],
         skip_processing: media.skip_processing,
+        index: media.index,
       }));
 
     const accountConfigurations = data.social_post_configurations
@@ -892,13 +899,19 @@ export class SocialPostsService {
           configuration: {
             caption: config.caption,
             media: data.social_post_media
-              .filter((media) => media.provider_connection_id)
+              .filter(
+                (media) =>
+                  media.provider_connection_id ===
+                  config.provider_connection_id,
+              )
               .map((media) => ({
                 url: media.url,
                 thumbnail_url: media.thumbnail_url,
                 thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+                alt_text: media.alt_text,
                 tags: media.tags as any[],
                 skip_processing: media.skip_processing,
+                index: media.index,
               })),
             ...configData,
           },
@@ -925,13 +938,15 @@ export class SocialPostsService {
         ] = {
           caption: config.caption,
           media: data.social_post_media
-            .filter((media) => media.provider_connection_id)
+            .filter((media) => media.provider === config.provider)
             .map((media) => ({
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+              alt_text: media.alt_text,
               tags: media.tags as any[],
               skip_processing: media.skip_processing,
+              index: media.index,
             })),
           ...(config.provider_data as PlatformConfiguration),
         };

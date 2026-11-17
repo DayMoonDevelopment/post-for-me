@@ -1,4 +1,5 @@
-import { logger, task, tasks, tags, wait } from "@trigger.dev/sdk";
+import { logger, task, tasks, wait } from "@trigger.dev/sdk";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -9,6 +10,9 @@ import type {
   UserTag,
 } from "./posting/post.types";
 import { Unkey } from "@unkey/api";
+import type { StoredMedia } from "./media-recipes";
+import { selectPostMedia } from "./posting/media-selection";
+import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
 
 import { Database, Json } from "./supabase.types";
 
@@ -45,7 +49,9 @@ const transformPostData = (data: {
     thumbnail_timestamp_ms: number | null;
     provider: string | null;
     provider_connection_id: string | null;
+    alt_text?: string | null;
     tags?: Json;
+    index: number;
   }[];
   social_post_configurations: {
     caption: string | null;
@@ -60,7 +66,9 @@ const transformPostData = (data: {
       url: media.url,
       thumbnail_url: media.thumbnail_url,
       thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+      alt_text: media.alt_text,
       tags: media.tags as any[],
+      index: media.index,
     }));
 
   const accountConfigurations = data.social_post_configurations
@@ -74,12 +82,17 @@ const transformPostData = (data: {
         configuration: {
           caption: config.caption,
           media: data.social_post_media
-            .filter((media) => media.provider_connection_id)
+            .filter(
+              (media) =>
+                media.provider_connection_id === config.provider_connection_id,
+            )
             .map((media) => ({
               url: media.url,
               thumbnail_url: media.thumbnail_url,
               thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+              alt_text: media.alt_text,
               tags: media.tags as any[],
+              index: media.index,
             })),
           ...configData,
         },
@@ -94,12 +107,14 @@ const transformPostData = (data: {
       platformConfigurations[config.provider!] = {
         caption: config.caption,
         media: data.social_post_media
-          .filter((media) => media.provider_connection_id)
+          .filter((media) => media.provider === config.provider)
           .map((media) => ({
             url: media.url,
             thumbnail_url: media.thumbnail_url,
             thumbnail_timestamp_ms: media.thumbnail_timestamp_ms,
+            alt_text: media.alt_text,
             tags: media.tags as any[],
+            index: media.index,
           })),
         ...(config.provider_data as PlatformConfiguration),
       };
@@ -142,7 +157,9 @@ const unkey = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
 
 const UNKEY_MAX_RETRIES = 3;
 
-export type ProcessedMedium = {
+export type ProcessedMedium = MediaProcessingRouting & {
+  stored?: StoredMedia;
+  thumbnail_stored?: StoredMedia;
   id: string;
   provider?: string | null;
   provider_connection_id?: string | null;
@@ -150,6 +167,7 @@ export type ProcessedMedium = {
   thumbnail_url: string;
   thumbnail_timestamp_ms?: number | null;
   type: string;
+  alt_text?: string | null;
   tags?: UserTag[] | null;
   skip_processing?: boolean | null;
   position: number;
@@ -160,6 +178,9 @@ export type ProcessedMedium = {
 // re-sorts by `position` via `orderProcessedMedia` once processing
 // completes. See PFM-1141/1129/1131: concatenating images-then-videos
 // silently discarded the original interleaving of mixed-media posts.
+// `position` is seeded from the persisted `social_post_media.index` column
+// (not array read order) so ordering is stable even for an all-image or
+// all-video carousel, where the split above is a no-op.
 export function splitLocalizedMediaForProcessing(
   succesfulMedia: ProcessedMedium[],
 ): { readyMedia: ProcessedMedium[]; videosToProcess: ProcessedMedium[] } {
@@ -185,11 +206,17 @@ export const processPost = task({
   id: "process-post",
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
-  run: async (payload: { index: number; post: Post }) => {
+  run: async (payload: { index: number; post: Post } & MediaProcessingRouting) => {
     const { post } = payload;
+    const mediaProcessingBackend = resolveMediaProcessingBackend(post.id, payload.mediaProcessingBackend);
+    logger.info("Selected media processing backend", { postId: post.id, mediaProcessingBackend });
     logger.info("Starting post processing", { post });
 
-    await tags.add([`${post.id}`, `${post.project_id}`]);
+    await addTagsBestEffort([
+      `${post.id}`,
+      `${post.project_id}`,
+      `media-processing-backend:${mediaProcessingBackend}`,
+    ]);
 
     logger.info("Getting post accounts");
     const accounts = post.social_post_provider_connections?.map(
@@ -279,25 +306,28 @@ export const processPost = task({
         throw new Error("No project found");
       }
 
-      await tags.add(`${project.team_id}`);
+      await addTagsBestEffort(`${project.team_id}`);
       const postMedia: ProcessedMedium[] = [];
       if (post.social_post_media && post.social_post_media.length > 0) {
         logger.info("Localizing Media", { media: post.social_post_media });
 
         const localizedMedia = await tasks.batchTriggerAndWait(
-          "process-post-medium",
-          post.social_post_media.map((medium, position) => ({
+          mediaProcessingBackend === "trigger" ? "process-post-medium" : "process-live-medium",
+          post.social_post_media.map((medium) => ({
             payload: {
               medium: {
+                mediaProcessingBackend,
+                postId: post.id,
                 id: medium.id,
                 provider: medium.provider,
                 provider_connection_id: medium.provider_connection_id,
                 url: medium.url,
                 thumbnail_url: medium.thumbnail_url,
                 thumbnail_timestamp_ms: medium.thumbnail_timestamp_ms,
+                alt_text: medium.alt_text,
                 tags: medium.tags,
                 skip_processing: medium.skip_processing,
-                position,
+                position: medium.index,
               },
             },
           })),
@@ -305,38 +335,33 @@ export const processPost = task({
 
         logger.info("Localizing Media Complete", { localizedMedia });
 
-        const succesfulMedia = localizedMedia.runs
-          .filter((run) => run.ok)
-          .map((run) => run.output);
+        // Do not silently remove failed items or fall back to a lower-precedence override.
+        // Preserve failed IDs so only accounts selecting them are stopped below.
+        localizedMedia.runs.forEach((run, index) => {
+          const original = post.social_post_media[index];
+          if (run.ok) postMedia.push({ ...run.output, mediaProcessingBackend, postId: post.id });
+          else postMedia.push({ ...original, position: original.index, type: "failed", thumbnail_url: original.thumbnail_url || "" });
+        });
 
-        const { readyMedia, videosToProcess } =
-          splitLocalizedMediaForProcessing(succesfulMedia);
-
-        let processedVideos: ProcessedMedium[] = [];
-
-        if (videosToProcess.length > 0) {
-          logger.info("Processing Videos");
-          const processVideosResult = await tasks.batchTriggerAndWait(
-            "ffmpeg-process-video",
-            videosToProcess.map((video) => ({
-              payload: {
-                medium: video,
-              },
-            })),
-          );
-
-          logger.info("Processing Videos Complete", { processVideosResult });
-
-          processedVideos = processVideosResult.runs
-            .filter((run) => run.ok)
-            .map((run) => run.output);
-
-          logger.info("Updated post media with processed video URLs", {
-            processedVideos,
-          });
+        // Zenith normalizes inside process-live-medium. For Trigger, dispatch
+        // dependent video work here as one batch instead of one child per file.
+        if (mediaProcessingBackend === "trigger") {
+          const videos = postMedia.filter((medium) => medium.type === "video" && !medium.skip_processing);
+          if (videos.length > 0) {
+            const normalizedMedia = await tasks.batchTriggerAndWait(
+              "ffmpeg-process-video",
+              videos.map((medium) => ({ payload: { medium } })),
+            );
+            normalizedMedia.runs.forEach((run, index) => {
+              const medium = videos[index];
+              const position = postMedia.indexOf(medium);
+              postMedia[position] = run.ok
+                ? { ...medium, ...run.output, mediaProcessingBackend }
+                : { ...medium, type: "failed" };
+            });
+          }
         }
-
-        postMedia.push(...orderProcessedMedia(readyMedia, processedVideos));
+        postMedia.sort((a, b) => a.position - b.position);
 
         if (postMedia.length == 0) {
           logger.error("All Media Failed");
@@ -464,12 +489,10 @@ export const processPost = task({
             accountConfig?.caption ||
             platformConfig?.caption ||
             postData.caption;
-          const media =
-            accountMedia && accountMedia.length > 0
-              ? accountMedia
-              : platformConfig && platformMedia.length > 0
-                ? platformMedia
-                : defaultMedia;
+          const media = selectPostMedia(postData.media, account, !!platformConfig);
+          if (media.some((medium) => medium.type === "failed")) {
+            throw new Error(`Media failed to process, please check media URLs and ${mediaProcessingBackend} job logs`);
+          }
 
           const platformData = {
             ...platformConfig?.provider_data,
@@ -491,6 +514,7 @@ export const processPost = task({
                 caption,
                 platformConfig: platformData,
                 appCredentials,
+                isSystemProject: project.is_system,
                 projectId: post.project_id,
               });
             }
@@ -505,6 +529,7 @@ export const processPost = task({
               caption,
               platformConfig: platformData,
               appCredentials,
+              isSystemProject: project.is_system,
               projectId: post.project_id,
             });
           }
@@ -621,7 +646,9 @@ export const processPost = task({
           thumbnail_timestamp_ms,
           provider,
           provider_connection_id,
-          tags
+          alt_text,
+          tags,
+          index
         ),
         social_post_configurations (
          caption,
@@ -631,6 +658,7 @@ export const processPost = task({
         )
         `,
         )
+        .order("index", { referencedTable: "social_post_media" })
         .single();
 
       if (updatePostError) {

@@ -1,15 +1,9 @@
-import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import { triggerImageTransform } from "../../trigger-image-transform";
 import { PostClient } from "../post-client";
 import axios from "axios";
-import sharp from "sharp";
 import { normalizePlatform } from "../../lib/platform.utils";
-import {
-  compressJpegToLimit,
-  computeCropDimensions,
-  resolveInstagramMinAspectRatio,
-  shouldSkipProcessing,
-} from "../image-processing-utils";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   InstagramConfiguration,
   InstagramAudioConfiguration,
@@ -28,11 +22,6 @@ import {
 
 export class InstagramPostClient extends PostClient {
   #maxItems = 10;
-  #maxFileSize = 8 * 1024 * 1024;
-  #minAspectRatio = 3 / 4;
-  #maxAspectRatio = 1.91;
-  #storiesMinAspectRatio = 9 / 16;
-  #reelsMinAspectRatio = 9 / 16;
   #mediaRetryAttempts = 30;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
@@ -40,12 +29,17 @@ export class InstagramPostClient extends PostClient {
   #maxRetryDelayMs = 60000;
   #maxTaskDurationMs = 60 * 60 * 1000;
   #postStartedAtMs: number | null = null;
-  #localSupabaseClient;
-  #addedMedia: any[] = [];
-  #requests: any[] = [];
-  #responses: any[] = [];
-  #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
+
+  #graphApiUrl = (
+    process.env.FACEBOOK_GRAPH_API_URL || "https://graph.facebook.com"
+  ).replace(/\/+$/, "");
+  #graphInstagramApiUrl = (
+    process.env.INSTAGRAM_GRAPH_API_URL || "https://graph.instagram.com"
+  ).replace(/\/+$/, "");
+  #apiVersion = process.env.FACEBOOK_API_VERSION || "v25.0";
+  #instagramApiVersion = process.env.INSTAGRAM_API_VERSION || "v23.0";
+  #oauthApiVersion = process.env.FACEBOOK_OAUTH_API_VERSION || "v20.0";
 
   getApiBaseUrl(account: SocialAccount) {
     // Use graph.instagram.com for direct IG tokens, graph.facebook.com otherwise
@@ -53,18 +47,14 @@ export class InstagramPostClient extends PostClient {
       account.social_provider_metadata?.connection_type === "instagram" ||
       (account.access_token && account.access_token.startsWith("IG"))
     ) {
-      return "https://graph.instagram.com/v23.0";
+      return `${this.#graphInstagramApiUrl}/${this.#instagramApiVersion}`;
     }
-    return "https://graph.facebook.com/v23.0";
+    return `${this.#graphApiUrl}/${this.#apiVersion}`;
   }
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
 
-    this.#localSupabaseClient = supabaseClient;
     this.#appCredentials = appCredentials;
   }
 
@@ -76,15 +66,15 @@ export class InstagramPostClient extends PostClient {
         console.log(
           `Refreshing direct Instagram token (via connection_type) for account: ${account.id}`,
         );
-        this.#requests.push({
-          refreshRequest: "https://graph.instagram.com/refresh_access_token",
+        this.requests.push({
+          refreshRequest: `${this.#graphInstagramApiUrl}/refresh_access_token`,
           params: {
             grant_type: "ig_refresh_token",
             access_token: account.access_token,
           },
         });
         const response = await axios.get(
-          `https://graph.instagram.com/refresh_access_token`,
+          `${this.#graphInstagramApiUrl}/refresh_access_token`,
           {
             params: {
               grant_type: "ig_refresh_token",
@@ -93,7 +83,7 @@ export class InstagramPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({ refreshResponse: response.data });
+        this.responses.push({ refreshResponse: response.data });
 
         if (response.data && response.data.access_token) {
           const newAccessToken = response.data.access_token;
@@ -119,18 +109,18 @@ export class InstagramPostClient extends PostClient {
           fb_exchange_token: account.access_token,
         };
 
-        this.#requests.push({
-          refreshRequest: "https://graph.facebook.com/v20.0/oauth/access_token",
+        this.requests.push({
+          refreshRequest: `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
           params: refreshTokenParams,
         });
         const response = await axios.get(
-          `https://graph.facebook.com/v20.0/oauth/access_token`,
+          `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
           {
             params: refreshTokenParams,
           },
         );
 
-        this.#responses.push({ refreshResponse: response.data });
+        this.responses.push({ refreshResponse: response.data });
 
         if (response.data && response.data.access_token) {
           const newAccessToken = response.data.access_token;
@@ -240,7 +230,7 @@ export class InstagramPostClient extends PostClient {
 
         try {
           console.log(`Publish attempt #${publishAttempts + 1}`);
-          this.#requests.push({
+          this.requests.push({
             publishRequest: {
               creation_id: containerId,
               access_token: account.access_token,
@@ -260,7 +250,7 @@ export class InstagramPostClient extends PostClient {
             );
           }
 
-          this.#responses.push({ publishResponse: publishResponse.data });
+          this.responses.push({ publishResponse: publishResponse.data });
 
           platformId = publishResponse.data.id;
         } catch (error) {
@@ -320,9 +310,8 @@ export class InstagramPostClient extends PostClient {
             media.length > this.#maxItems
               ? `Only first ${this.#maxItems} items were posted`
               : null,
-          addedMedia: this.#addedMedia,
-          requests: this.#requests,
-          responses: this.#responses,
+          requests: this.requests,
+          responses: this.responses,
         },
       };
     } catch (error) {
@@ -332,8 +321,8 @@ export class InstagramPostClient extends PostClient {
       const errorDetails = {
         ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
         error: platformError.data ?? { message: platformError.message },
-        requests: this.#requests,
-        responses: this.#responses,
+        requests: this.requests,
+        responses: this.responses,
       };
 
       if (this.isTerminalAuthError(error)) {
@@ -390,6 +379,9 @@ export class InstagramPostClient extends PostClient {
           medium: {
             id: medium.id,
             url: medium.thumbnail_url,
+            stored: medium.thumbnail_stored,
+            mediaProcessingBackend: medium.mediaProcessingBackend,
+            postId: medium.postId,
             type: "image",
             skip_processing: medium.skip_processing,
           },
@@ -417,6 +409,8 @@ export class InstagramPostClient extends PostClient {
       user_tags?: any[];
       audio_name?: string;
       audio_configuration?: InstagramConfiguration["audio_configuration"];
+      alt_text?: string;
+      is_ai_generated?: boolean;
       trial_params?: {
         graduation_strategy: "MANUAL" | "SS_PERFORMANCE";
       };
@@ -425,6 +419,14 @@ export class InstagramPostClient extends PostClient {
       caption: caption,
       access_token: account.access_token,
     };
+
+    if (medium.alt_text) {
+      createMediaParams.alt_text = medium.alt_text;
+    }
+
+    if (platformConfig?.is_ai_generated != null) {
+      createMediaParams.is_ai_generated = platformConfig.is_ai_generated;
+    }
 
     switch (platformConfig?.placement) {
       case "stories":
@@ -585,12 +587,17 @@ export class InstagramPostClient extends PostClient {
         product_tags?: any[];
         location_id?: string;
         user_tags?: any[];
+        alt_text?: string;
       } = {
         media_type: isVideo ? "VIDEO" : undefined,
         [isVideo ? "video_url" : "image_url"]: signedUrl,
         is_carousel_item: true,
         access_token: account.access_token,
       };
+
+      if (medium.alt_text) {
+        itemPayload.alt_text = medium.alt_text;
+      }
 
       if (!isVideo && medium.tags && medium.tags.length > 0) {
         itemPayload.user_tags = medium.tags
@@ -630,12 +637,18 @@ export class InstagramPostClient extends PostClient {
       access_token: string;
       collaborators?: string[];
       location_id?: string;
+      is_ai_generated?: boolean;
     } = {
       media_type: "CAROUSEL",
       children: containerIds,
       caption: caption,
       access_token: account.access_token,
     };
+
+    // Meta rejects this parameter on carousel children; set it only on the parent.
+    if (platformConfig?.is_ai_generated != null) {
+      carouselPayload.is_ai_generated = platformConfig.is_ai_generated;
+    }
 
     if (
       platformConfig?.collaborators &&
@@ -648,7 +661,7 @@ export class InstagramPostClient extends PostClient {
       carouselPayload.location_id = platformConfig.location;
     }
 
-    this.#requests.push({
+    this.requests.push({
       createCarouselRequest: carouselPayload,
     });
     const carouselResponse = await axios.post(
@@ -656,7 +669,7 @@ export class InstagramPostClient extends PostClient {
       carouselPayload,
     );
 
-    this.#responses.push({ createCarouselResponse: carouselResponse.data });
+    this.responses.push({ createCarouselResponse: carouselResponse.data });
 
     if (carouselResponse.data.error) {
       throw wrapResponseDataError(
@@ -695,7 +708,7 @@ export class InstagramPostClient extends PostClient {
           `Creating ${mediaLabel}, attempt ${attempt}/${this.#mediaRetryAttempts}`,
         );
 
-        this.#requests.push({
+        this.requests.push({
           [requestLogKey]: payload,
           attempt,
         });
@@ -705,7 +718,7 @@ export class InstagramPostClient extends PostClient {
           payload,
         );
 
-        this.#responses.push({
+        this.responses.push({
           [responseLogKey]: createMediaResponse.data,
           attempt,
         });
@@ -730,7 +743,7 @@ export class InstagramPostClient extends PostClient {
         lastError = error;
 
         if (error?.response?.data) {
-          this.#responses.push({
+          this.responses.push({
             [responseLogKey]: error.response.data,
             attempt,
             failed: true,
@@ -813,7 +826,7 @@ export class InstagramPostClient extends PostClient {
         `Checking ${mediaLabel} status, attempt ${attempt}/${this.#mediaStatusMaxAttempts}`,
       );
 
-      this.#requests.push({
+      this.requests.push({
         statusRequest: {
           url: `${this.getApiBaseUrl(account)}/${containerId}`,
           mediaLabel,
@@ -830,7 +843,7 @@ export class InstagramPostClient extends PostClient {
         },
       );
 
-      this.#responses.push({ statusResponse: statusResponse.data });
+      this.responses.push({ statusResponse: statusResponse.data });
 
       statusData = statusResponse.data;
       console.log(`${mediaLabel} status:`, statusData);
@@ -942,7 +955,7 @@ export class InstagramPostClient extends PostClient {
       }
 
       try {
-        this.#requests.push({
+        this.requests.push({
           getPostUrlRequest: {
             url: `${this.getApiBaseUrl(account)}/${postId}`,
             attempt,
@@ -960,7 +973,7 @@ export class InstagramPostClient extends PostClient {
           },
         );
 
-        this.#responses.push({
+        this.responses.push({
           getPostUrlResponse: mediaResponse.data,
           attempt,
         });
@@ -986,7 +999,7 @@ export class InstagramPostClient extends PostClient {
         }
 
         if (error?.response?.data) {
-          this.#responses.push({
+          this.responses.push({
             getPostUrlResponse: error.response.data,
             attempt,
             failed: true,
@@ -1042,97 +1055,21 @@ export class InstagramPostClient extends PostClient {
       return { signedUrl, width: undefined, height: undefined };
     }
 
-    const response = await axios({
-      url: signedUrl,
-      method: "GET",
-      responseType: "arraybuffer",
-    });
-
-    const imageBuffer = Buffer.from(response.data);
-
-    // Get image metadata
-    const metadata = await sharp(imageBuffer).metadata();
-
-    const width = metadata.width || 0;
-    const height = metadata.height || 0;
-
-    const aspectRatio = width / height;
-    let targetWidth = metadata.width;
-    let targetHeight = metadata.height;
-
-    const minAspectRatio = resolveInstagramMinAspectRatio({
-      placement: options?.placement,
-      isFeed: options?.is_feed,
-      feedMinAspectRatio: this.#minAspectRatio,
-      storiesMinAspectRatio: this.#storiesMinAspectRatio,
-      reelsMinAspectRatio: this.#reelsMinAspectRatio,
-    });
-
-    if (options?.firstImage?.width && options?.firstImage?.height) {
-      const firstImageRatio =
-        options?.firstImage?.width / options?.firstImage?.height;
-
-      if (firstImageRatio !== aspectRatio) {
-        targetWidth = options?.firstImage?.width;
-        targetHeight = options?.firstImage?.height;
-      }
-    } else {
-      ({ width: targetWidth, height: targetHeight } = computeCropDimensions({
-        width,
-        height,
-        minAspectRatio,
-        maxAspectRatio: this.#maxAspectRatio,
-      }));
-    }
-
-    // Process image with Sharp (resize & compress)
-    let processedImage = await sharp(imageBuffer)
-      .rotate()
-      .resize({ width: targetWidth, height: targetHeight })
-      .jpeg({ quality: 100 })
-      .toBuffer();
-
-    // Ensure size is within Instagram limits
-    processedImage = await compressJpegToLimit(
-      processedImage,
-      this.#maxFileSize,
+    const result = await triggerImageTransform(
+      {
+        url: signedUrl,
+        mediumId: medium.id,
+        postId: medium.postId,
+        stored: medium.stored,
+        mediaProcessingBackend: medium.mediaProcessingBackend,
+        platform: "instagram",
+        options,
+      },
     );
-
-    const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
-    const processedKey = `${key.split(".")[0]}_instagram`;
-
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
+    if (!result.ok) {
+      throw new Error("Failed to transform Instagram image");
     }
-
-    this.#addedMedia.push({
-      key: processedKey,
-      bucket: this.#bucket,
-    });
-
-    const { data: processedImageUpload } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .getPublicUrl(processedKey);
-
-    return {
-      signedUrl: processedImageUpload?.publicUrl,
-      width: targetWidth,
-      height: targetHeight,
-    };
+    return result.output;
   }
 
   #sanitizeCaption(caption: string) {
@@ -1259,11 +1196,5 @@ export class InstagramPostClient extends PostClient {
     }
 
     return cleanedCaption;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
   }
 }
