@@ -2,7 +2,7 @@ import { logger, task, tasks } from "@trigger.dev/sdk";
 import type { ProcessedMedium } from "./process-post";
 import { liveMediaExecutor } from "./live-media-runtime";
 import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
-import { normalizeLiveVideo } from "./live-media";
+import { normalizeLiveVideo, type PendingLiveMediaJob } from "./live-media";
 import { resolveMediaProcessingBackend } from "./media-processing-backend";
 import type { processPostMedium } from "./process-post-medium";
 import type { ffmpegProcessVideo } from "./ffmpeg-process-video";
@@ -26,11 +26,20 @@ export const processLiveMedium = task({
       return { ...normalized.output, mediaProcessingBackend };
     }
     const execute = liveMediaExecutor(ctx.run.id, medium.postId);
-    let stored = await execute("localize", medium.id, { task: "media.localize", url: medium.url });
-    let thumbnail;
+    const mediaJob = await execute.submit("localize", medium.id, { task: "media.localize", url: medium.url });
+    let thumbnailJob: PendingLiveMediaJob | undefined;
     if (medium.thumbnail_url) {
       try {
-        thumbnail = await execute("localize-thumbnail", medium.id, { task: "media.localize", url: medium.thumbnail_url });
+        thumbnailJob = await execute.submit("localize-thumbnail", medium.id, { task: "media.localize", url: medium.thumbnail_url });
+      } catch {
+        logger.warn("Optional thumbnail localization failed", { mediumId: medium.id });
+      }
+    }
+    let stored = await mediaJob.wait();
+    let thumbnail;
+    if (thumbnailJob) {
+      try {
+        thumbnail = await thumbnailJob.wait();
       } catch {
         // A supplied thumbnail is optional; retain the original URL on failure.
         logger.warn("Optional thumbnail localization failed", { mediumId: medium.id });

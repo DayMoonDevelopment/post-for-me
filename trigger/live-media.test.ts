@@ -62,6 +62,49 @@ test("expired processing budget does not create tokens or enqueue more work", as
   expect(deps.enqueue).not.toHaveBeenCalled();
 });
 
+test("independent jobs enqueue before sequential waits and retain an earlier thumbnail completion", async () => {
+  const events: string[] = [];
+  const tokens: { id: string; url: string }[] = [];
+  const completed = new Map<string, StoredMedia>();
+  const lookupKeys = [{ key: "social_post", refId: "social-post-id" }];
+  let activeWaits = 0;
+  const createToken = mock<WaitpointApi["createToken"]>(async () => {
+    const id = String(tokens.length);
+    const token = { id, url: `https://callback.example/${id}` };
+    tokens.push(token);
+    return token;
+  });
+  const enqueue = mock<MediaServerTransport["enqueue"]>(async (_handle, job, callback, keys) => {
+    expect(keys).toEqual(lookupKeys);
+    events.push(`enqueue:${job.task === "media.localize" ? job.url : job.task}`);
+    if (callback.url === tokens[1]?.url) {
+      // Zenith finishes the thumbnail first, before Trigger begins waiting.
+      completed.set(tokens[1].id, image("thumbnail"));
+      completed.set(tokens[0].id, image("main"));
+    }
+  });
+  const forToken = mock<WaitpointApi["forToken"]>(async (token) => {
+    expect(activeWaits++).toBe(0);
+    events.push(`wait:${token.id}`);
+    await Promise.resolve();
+    activeWaits--;
+    const output = completed.get(token.id);
+    if (!output) throw new Error("Token not completed");
+    return { ok: true, output: { ok: true, output } };
+  });
+  const execute = createLiveMediaExecutor("run", {
+    transport: { enqueue }, wait: { createToken, forToken }, log: () => {}, lookupKeys,
+  });
+  const main = await execute.submit("localize", "medium", { task: "media.localize", url: "main" });
+  const thumbnail = await execute.submit("localize-thumbnail", "medium", { task: "media.localize", url: "thumbnail" });
+  expect(forToken).not.toHaveBeenCalled();
+  expect(await main.wait()).toEqual(image("main"));
+  expect(await thumbnail.wait()).toEqual(image("thumbnail"));
+  expect(events).toEqual(["enqueue:main", "enqueue:thumbnail", "wait:0", "wait:1"]);
+  expect(createToken.mock.calls[0][0].timeout).toEqual(createToken.mock.calls[1][0].timeout);
+  expect(activeWaits).toBe(0);
+});
+
 test("completed output is propagated; deterministic IDs, live prefix and secrets are redacted", async () => {
   const deps = executor();
   expect(await deps.execute("localize", "medium", { task: "media.localize", url: "https://source.example/private" })).toEqual(image());
