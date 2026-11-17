@@ -20,8 +20,9 @@ export class TikTokBusinessMusicSoundInfoDto {
   @ApiPropertyOptional({
     minimum: 0,
     maximum: 100,
+    default: 50,
     description:
-      'Required for video sound selection; ignored for photo posts. Send explicitly for videos; provider default is 0.',
+      'Video music volume. Defaults to 50 when omitted; ignored for photo posts.',
   })
   @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsInt()

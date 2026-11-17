@@ -736,7 +736,7 @@ export class TikTokBusinessPostClient extends PostClient {
       "video_original_sound_volume",
     ] as const) {
       const volume = audio[field];
-      if (field === "video_original_sound_volume" && volume === undefined) continue;
+      if (volume === undefined) continue;
       if (
         typeof volume !== "number" ||
         !Number.isInteger(volume) ||
@@ -760,7 +760,8 @@ export class TikTokBusinessPostClient extends PostClient {
     }
     return {
       music_sound_id: audio.music_sound_id,
-      music_sound_volume: audio.music_sound_volume,
+      music_sound_volume:
+        audio.music_sound_volume === undefined ? 50 : audio.music_sound_volume,
       ...(audio.music_sound_start !== undefined && {
         music_sound_start: audio.music_sound_start,
       }),

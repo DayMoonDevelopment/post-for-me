@@ -236,7 +236,7 @@ export class TiktokConfigurationDto extends BaseConfigurationDto {
 export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
     description:
-      'Selected music for a TikTok Business video or photo post. Mapped to post_info.music_sound_info. Videos require a song_clip_id and music_sound_volume; photos use the commercial music library track ID only. Audio is ignored for drafts or unsupported media. Not supported for regular TikTok.',
+      'Selected music for a TikTok Business video or photo post. Mapped to post_info.music_sound_info. Videos use a song_clip_id with music_sound_volume defaulting to 50; photos use the commercial music library track ID only. Audio is ignored for drafts or unsupported media. Not supported for regular TikTok.',
     type: TikTokBusinessMusicSoundInfoDto,
     required: false,
   })

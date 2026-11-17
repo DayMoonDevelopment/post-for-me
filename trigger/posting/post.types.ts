@@ -157,7 +157,7 @@ export interface TiktokConfiguration {
 export interface TikTokBusinessMusicSoundInfo {
   /** Video: discovered song_clip_id. Photos: commercial music library track ID. */
   music_sound_id: string;
-  /** Required for videos; not sent for photos. */
+  /** Defaults to 50 for videos; not sent for photos. */
   music_sound_volume?: number;
   /** Clip offsets in milliseconds. */
   music_sound_start?: number;

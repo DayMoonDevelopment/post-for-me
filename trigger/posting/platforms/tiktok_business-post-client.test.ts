@@ -206,7 +206,6 @@ describe("TikTokBusinessPostClient audio selection", () => {
     null,
     {},
     { music_sound_id: 123, music_sound_volume: 50 },
-    { music_sound_id: "123" },
     { music_sound_id: "123", music_sound_volume: -1 },
     { music_sound_id: "123", music_sound_volume: 50, music_sound_start: -1 },
     { music_sound_id: "123", music_sound_volume: 50, music_sound_end: 1.5 },
@@ -223,5 +222,15 @@ describe("TikTokBusinessPostClient audio selection", () => {
     expect(result.success).toBe(false);
     expect(axiosPost).not.toHaveBeenCalled();
     expect(axiosGet).not.toHaveBeenCalled();
+  });
+
+  test("defaults video music volume to 50 when omitted", async () => {
+    const audio = { music_sound_id: "88888888888888888888" };
+    expect((await publish({ music_sound_info: audio })).success).toBe(true);
+    expect(axiosPost.mock.calls[0][1].post_info.music_sound_info).toEqual({
+      music_sound_id: audio.music_sound_id,
+      music_sound_volume: 50,
+    });
+    expect(audio).not.toHaveProperty("music_sound_volume");
   });
 });
