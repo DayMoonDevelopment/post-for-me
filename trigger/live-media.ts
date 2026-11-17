@@ -16,7 +16,9 @@ export class ZenithWorkerError extends Error {
 
 export const storedSource = ({ fileId, versionId }: StoredMedia) => ({ fileId, versionId });
 
-/** One executor per child run. Call sequentially: Trigger does not support overlapping waits. */
+export type PendingLiveMediaJob = { wait: () => Promise<StoredMedia> };
+
+/** Submit independent jobs before waiting; token waits must remain sequential. */
 export function createLiveMediaExecutor(runId: string, deps: {
   transport: MediaServerTransport;
   wait: WaitpointApi;
@@ -28,7 +30,7 @@ export function createLiveMediaExecutor(runId: string, deps: {
   // All stages share an expiry, including localization, thumbnails and re-encodes.
   // A fresh relative timeout per stage could keep one run waiting for hours.
   const deadline = new Date(now() + (LIVE_MEDIA_MAX_DURATION_SECONDS - LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS) * 1000);
-  return async (stage: string, mediumId: string, job: MediaServerJob): Promise<StoredMedia> => {
+  async function submit(stage: string, mediumId: string, job: MediaServerJob): Promise<PendingLiveMediaJob> {
     if (now() >= deadline.getTime()) throw new Error("Zenith media processing deadline exceeded");
     const requestId = createHash("sha256").update(`${runId}/${stage}/${mediumId}`).digest("hex");
     const handle = {
@@ -55,35 +57,40 @@ export function createLiveMediaExecutor(runId: string, deps: {
       catch { log("Zenith enqueue failed", { attempt }); }
     }
     if (!enqueued) throw new Error("Zenith media enqueue failed");
-    let result;
-    try { result = await deps.wait.forToken(token); }
-    catch {
-      log("Zenith media token wait failed", { tokenId: token.id });
-      throw new Error("Zenith media token wait failed");
-    }
-    if (!result.ok) {
-      log("Zenith media token timed out", { tokenId: token.id });
-      throw new Error("Zenith media token timed out");
-    }
-    const outcome = result.output as { ok?: unknown; output?: unknown; error?: { code?: unknown; message?: unknown } } | null;
-    if (!outcome || typeof outcome !== "object" || typeof outcome.ok !== "boolean") {
-      throw new Error("Invalid Zenith media token response");
-    }
-    if (!outcome.ok) {
-      if (typeof outcome.error?.code !== "string" || typeof outcome.error.message !== "string") {
-        throw new Error("Invalid Zenith media worker error");
+    return { wait: async () => {
+      let result;
+      try { result = await deps.wait.forToken(token); }
+      catch {
+        log("Zenith media token wait failed", { tokenId: token.id });
+        throw new Error("Zenith media token wait failed");
       }
-      log("Zenith media worker failed", { error: outcome.error });
-      // Retain the specific worker error for capability fallback, but never leak URLs.
-      throw new ZenithWorkerError(outcome.error.code, sanitizeMediaServerLog(outcome.error.message) as string);
-    }
-    const output = parseMediaServerResponse(outcome.output, job.task);
-    log("Zenith media completed", { output });
-    return output;
-  };
+      if (!result.ok) {
+        log("Zenith media token timed out", { tokenId: token.id });
+        throw new Error("Zenith media token timed out");
+      }
+      const outcome = result.output as { ok?: unknown; output?: unknown; error?: { code?: unknown; message?: unknown } } | null;
+      if (!outcome || typeof outcome !== "object" || typeof outcome.ok !== "boolean") {
+        throw new Error("Invalid Zenith media token response");
+      }
+      if (!outcome.ok) {
+        if (typeof outcome.error?.code !== "string" || typeof outcome.error.message !== "string") {
+          throw new Error("Invalid Zenith media worker error");
+        }
+        log("Zenith media worker failed", { error: outcome.error });
+        // Retain the specific worker error for capability fallback, but never leak URLs.
+        throw new ZenithWorkerError(outcome.error.code, sanitizeMediaServerLog(outcome.error.message) as string);
+      }
+      const output = parseMediaServerResponse(outcome.output, job.task);
+      log("Zenith media completed", { output });
+      return output;
+    } };
+  }
+
+  const execute: LiveMediaExecutor = async (stage, mediumId, job) => (await submit(stage, mediumId, job)).wait();
+  return Object.assign(execute, { submit });
 }
 
-export type LiveMediaExecutor = ReturnType<typeof createLiveMediaExecutor>;
+export type LiveMediaExecutor = (stage: string, mediumId: string, job: MediaServerJob) => Promise<StoredMedia>;
 
 export async function normalizeLiveVideo(source: StoredMedia, id: string, execute: LiveMediaExecutor) {
   return execute("normalize-video", id, {
