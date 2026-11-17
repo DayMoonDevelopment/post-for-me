@@ -28,7 +28,6 @@ import {
   TikTokBusinessPlatformAudioDto,
 } from '../tiktok-business/dto/tiktok-business-audio.dto';
 import { PlatformAudioService } from './platform-audio.service';
-import { platformAudioControllerDescription } from './docs/platform-audio-controller.md';
 
 @Controller('platform-audio')
 @ApiTags('Platform Audio')
@@ -46,7 +45,8 @@ export class PlatformAudioController {
   @Get(':social_account_id')
   @ApiOperation({
     summary: 'List platform audio for a social account',
-    description: platformAudioControllerDescription,
+    description:
+      'List audio for the connected social account using provider-specific filters. Supports Instagram with Facebook Login and TikTok Business. Results are not paginated.',
   })
   @ApiParam({
     name: 'social_account_id',
