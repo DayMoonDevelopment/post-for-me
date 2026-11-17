@@ -22,7 +22,7 @@ export const transformTikTokImage = task({
       const result = await tasks.triggerAndWait<typeof transformLiveImageTask>("transform-live-image", {
         url: signedUrl, platform, tiktokLimits: { maxFileSize, allowedAspectRatios }, mediaProcessingBackend: "zenith", postId,
       });
-      if (!result.ok) throw new Error("Zenith TikTok transform failed", { cause: result.error });
+      if (!result.ok) throw new Error("TikTok image transform failed", { cause: result.error });
       return result.output.url;
     }
     const response = await axios({

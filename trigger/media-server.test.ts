@@ -72,17 +72,17 @@ test("parseMediaServerResponse accepts each transform decision and nullable vide
 
 test("parseMediaServerResponse rejects invalid stored media envelopes", () => {
   for (const value of [null, undefined, [], "result", 1]) {
-    expect(() => parseMediaServerResponse(value, "media.localize")).toThrow("Invalid Zenith result object");
+    expect(() => parseMediaServerResponse(value, "media.localize")).toThrow("Invalid media result object");
   }
   for (const key of ["fileId", "versionId", "path", "url", "contentType"]) {
     for (const value of [undefined, null, "", 1]) {
       expect(() => parseMediaServerResponse({ ...stored(), [key]: value }, "media.localize"))
-        .toThrow("Invalid Zenith stored media result");
+        .toThrow("Invalid stored media result");
     }
   }
   for (const size of [undefined, null, "12", -1, 1.5, NaN, Infinity]) {
     expect(() => parseMediaServerResponse({ ...stored(), size }, "media.localize"))
-      .toThrow("Invalid Zenith stored media result");
+      .toThrow("Invalid stored media result");
   }
   for (const media of [undefined, null, [], {}, { kind: "audio" }, { kind: "document", contentType: "" }]) {
     expect(() => parseMediaServerResponse({ ...stored(), media }, "media.localize")).toThrow();
@@ -95,7 +95,7 @@ test("parseMediaServerResponse rejects malformed image metadata", () => {
     { orientation: 0 }, { orientation: 9 }, { orientation: 1.5 }, { hasAlpha: undefined }, { hasAlpha: 0 },
   ]) {
     expect(() => parseMediaServerResponse(stored({ ...image, ...patch }), "media.localize"))
-      .toThrow("Invalid Zenith image metadata");
+      .toThrow("Invalid image metadata");
   }
   for (const orientation of [1, 8]) {
     expect<unknown>(parseMediaServerResponse(stored({ ...image, orientation }), "media.localize").media)
@@ -112,18 +112,18 @@ test("parseMediaServerResponse rejects malformed video and audio metadata", () =
     })),
   ]) {
     expect(() => parseMediaServerResponse(stored({ ...video, ...patch }), "media.localize"))
-      .toThrow("Invalid Zenith video metadata");
+      .toThrow("Invalid video metadata");
   }
   for (const audio of [
     { ...video.audio, codec: "" }, { ...video.audio, bitrate: NaN },
     { ...video.audio, channels: "2" }, { ...video.audio, sampleRate: undefined },
   ]) {
     expect(() => parseMediaServerResponse(stored({ ...video, audio }), "media.localize"))
-      .toThrow("Invalid Zenith audio metadata");
+      .toThrow("Invalid audio metadata");
   }
   for (const patch of [{ video: null }, { video: [] }, { audio: undefined }, { audio: [] }]) {
     expect(() => parseMediaServerResponse(stored({ ...video, ...patch }), "media.localize"))
-      .toThrow("Invalid Zenith result object");
+      .toThrow("Invalid media result object");
   }
 });
 
@@ -136,7 +136,7 @@ test("parseMediaServerResponse requires task-specific media kinds and decisions"
   ];
   for (const [task, media, decision] of cases) {
     expect(() => parseMediaServerResponse({ ...stored(media), decision }, task))
-      .toThrow("Invalid Zenith transform decision");
+      .toThrow("Invalid media transform decision");
   }
 });
 

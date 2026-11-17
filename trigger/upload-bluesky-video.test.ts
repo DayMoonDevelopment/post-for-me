@@ -17,8 +17,8 @@ mock.module("./live-media-runtime", () => ({ liveMediaExecutor: () => {
   if (legacy) throw new Error("Legacy uploads must not initialize Zenith");
   return async (stage, id, input) => {
   events.push(input.task);
-  if (scenario === "compression-failure") throw new Error("Zenith worker failed");
-  if (scenario === "probe-error") throw new Error("Invalid Zenith video metadata");
+  if (scenario === "compression-failure") throw new Error("Media processing worker failed");
+  if (scenario === "probe-error") throw new Error("Invalid video metadata");
   return { fileId: "file", versionId: "version", url: compressedUrl, contentType: "video/mp4", size: 11,
     media: { kind: "video", width: 1920, height: 1080 } };
 }; } }));
@@ -124,7 +124,7 @@ if (legacy) {
 }
 if (path) await expect(access(path)).rejects.toThrow();
 if (failure) {
-  expect(result.error_message).toBe({ "compression-failure": "Zenith worker failed", "probe-error": legacy ? "Failed to probe Bluesky video dimensions" : "Invalid Zenith video metadata", "download-error": "Failed to download media: 403 Forbidden", "upload-error": "stream upload failed", "json-error": "invalid JSON" }[scenario]);
+  expect(result.error_message).toBe({ "compression-failure": "Media processing worker failed", "probe-error": legacy ? "Failed to probe Bluesky video dimensions" : "Invalid video metadata", "download-error": "Failed to download media: 403 Forbidden", "upload-error": "stream upload failed", "json-error": "invalid JSON" }[scenario]);
   expect(posted).toBeUndefined();
   if (["upload-error", "json-error"].includes(scenario)) expect(result.details.requests.at(-1).uploadVideoRequest).toContain("https://video.bsky.app/");
 } else if (scenario === "no-job") {

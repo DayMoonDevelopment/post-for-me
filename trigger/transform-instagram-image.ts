@@ -42,7 +42,7 @@ export const transformInstagramImage = task({
       const result = await tasks.triggerAndWait<typeof transformLiveImageTask>("transform-live-image", {
         url: signedUrl, platform: "instagram", options, instagramLimits: limits, mediaProcessingBackend: "zenith", postId,
       });
-      if (!result.ok) throw new Error("Zenith Instagram transform failed", { cause: result.error });
+      if (!result.ok) throw new Error("Instagram image transform failed", { cause: result.error });
       return { signedUrl: result.output.url, width: result.output.width, height: result.output.height };
     }
     const response = await axios({
