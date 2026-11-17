@@ -20,6 +20,7 @@ import type {
   SocialAccount,
   ThreadsConfiguration,
   TiktokConfiguration,
+  TiktokBusinessConfiguration,
   TwitterConfiguration,
   YoutubeConfiguration,
 } from "./post.types";
@@ -71,6 +72,7 @@ export class PostClient {
       | PinterestConfiguration
       | InstagramConfiguration
       | TiktokConfiguration
+      | TiktokBusinessConfiguration
       | TwitterConfiguration
       | YoutubeConfiguration
       | FacebookConfiguration

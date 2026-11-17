@@ -6,6 +6,7 @@ import { normalizePlatform } from "../../lib/platform.utils";
 import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   InstagramConfiguration,
+  InstagramAudioConfiguration,
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -165,9 +166,29 @@ export class InstagramPostClient extends PostClient {
     platformConfig: InstagramConfiguration;
   }): Promise<PostResult> {
     this.#postStartedAtMs = Date.now();
+    let audioIgnoredReason: string | undefined;
 
     try {
       const sanitizedCaption = this.#sanitizeCaption(caption);
+
+      if (platformConfig?.audio_configuration !== undefined) {
+        if (this.getApiBaseUrl(account).includes("graph.instagram.com")) {
+          audioIgnoredReason =
+            "Audio selection requires an Instagram account connected with Facebook Login";
+        } else if (
+          media.length !== 1 ||
+          media[0].type !== "video" ||
+          platformConfig.placement === "stories"
+        ) {
+          audioIgnoredReason =
+            "Audio selection requires a single video Reel, not Stories, photos, or carousels";
+        }
+        if (audioIgnoredReason) {
+          platformConfig = { ...platformConfig, audio_configuration: undefined };
+        } else {
+          this.#buildAudioConfiguration(platformConfig.audio_configuration);
+        }
+      }
 
       let containerId = null;
       if (media.length == 1) {
@@ -192,6 +213,9 @@ export class InstagramPostClient extends PostClient {
           provider_connection_id: account.id,
           success: false,
           error_message: "No media files found",
+          ...(audioIgnoredReason && {
+            details: { audio_ignored_reason: audioIgnoredReason },
+          }),
         };
       }
 
@@ -281,6 +305,7 @@ export class InstagramPostClient extends PostClient {
         provider_post_url: platformUrl,
         provider_post_id: platformId,
         details: {
+          ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
           warning:
             media.length > this.#maxItems
               ? `Only first ${this.#maxItems} items were posted`
@@ -294,6 +319,7 @@ export class InstagramPostClient extends PostClient {
 
       const platformError = extractPlatformError(error);
       const errorDetails = {
+        ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
         error: platformError.data ?? { message: platformError.message },
         requests: this.requests,
         responses: this.responses,
@@ -382,6 +408,7 @@ export class InstagramPostClient extends PostClient {
       location_id?: string;
       user_tags?: any[];
       audio_name?: string;
+      audio_configuration?: InstagramConfiguration["audio_configuration"];
       alt_text?: string;
       is_ai_generated?: boolean;
       trial_params?: {
@@ -409,6 +436,11 @@ export class InstagramPostClient extends PostClient {
         createMediaParams.media_type = isVideo ? "REELS" : undefined;
 
         if (createMediaParams.media_type === "REELS") {
+          if (platformConfig?.audio_configuration !== undefined) {
+            createMediaParams.audio_configuration = this.#buildAudioConfiguration(
+              platformConfig.audio_configuration,
+            );
+          }
           if (platformConfig?.trial_reel_type) {
             createMediaParams.trial_params = {
               graduation_strategy:
@@ -477,6 +509,32 @@ export class InstagramPostClient extends PostClient {
       responseLogKey: "createMediaResponse",
       mediaLabel: isVideo ? "video media" : "image media",
     });
+  }
+
+  #buildAudioConfiguration(
+    audio: InstagramAudioConfiguration,
+  ): InstagramAudioConfiguration {
+    if (!audio || typeof audio !== "object" || Array.isArray(audio)) {
+      throw new Error("audio_configuration must be an object");
+    }
+    if (typeof audio.audio_id !== "string" || !audio.audio_id.trim()) {
+      throw new Error("audio_id must be a non-empty string");
+    }
+    for (const field of ["audio_volume", "video_volume"] as const) {
+      const volume = audio[field];
+      if (
+        volume !== undefined &&
+        (typeof volume !== "number" ||
+          !Number.isInteger(volume) || volume < 0 || volume > 100)
+      ) {
+        throw new Error(`${field} must be an integer between 0 and 100`);
+      }
+    }
+    return {
+      audio_id: audio.audio_id,
+      ...(audio.audio_volume !== undefined && { audio_volume: audio.audio_volume }),
+      ...(audio.video_volume !== undefined && { video_volume: audio.video_volume }),
+    };
   }
 
   async #processCarousel({
