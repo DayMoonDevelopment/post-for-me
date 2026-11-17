@@ -215,7 +215,6 @@ describe('audio publishing selection validation', () => {
   it.each([
     {},
     { music_sound_id: 123, music_sound_volume: 50 },
-    { music_sound_id: '123' },
     { music_sound_id: '', music_sound_volume: 50 },
     { music_sound_id: '123', music_sound_volume: 101 },
     { music_sound_id: '123', music_sound_volume: 50, music_sound_start: -1 },
@@ -241,5 +240,13 @@ describe('audio publishing selection validation', () => {
     });
     expect(await validate(selection)).toEqual([]);
     expect(selection.music_sound_start).toBe(2000);
+  });
+
+  it('accepts ID-only music selection for TikTok Business photo posts', async () => {
+    const selection = plainToInstance(TikTokBusinessMusicSoundInfoDto, {
+      music_sound_id: '99999999999999999999',
+    });
+    expect(await validate(selection)).toEqual([]);
+    expect(selection.music_sound_id).toBe('99999999999999999999');
   });
 });

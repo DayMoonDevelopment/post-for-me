@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type {
   PlatformAppCredentials,
+  InstagramConfiguration,
   PostMedia,
   SocialAccount,
 } from "../post.types";
@@ -206,6 +207,84 @@ describe("InstagramPostClient media tag platform filters", () => {
       expect(JSON.stringify(media)).toBe(originalInput);
     });
   }
+});
+
+describe("InstagramPostClient audio selection", () => {
+  test("sends audio configuration only on Reel container creation and preserves zero volumes", async () => {
+    const audio = { audio_id: "99999999999999999999", audio_volume: 0, video_volume: 0 };
+    const result = await makeClient().post({
+      postId: "post_1",
+      account: makeAccount(),
+      caption: "caption",
+      media: [makeVideoMedium("media_1")],
+      platformConfig: { audio_configuration: audio, audio_name: "Original name" },
+    });
+    expect(result.success).toBe(true);
+    const create = axiosPost.mock.calls.find(([url]) => url.endsWith("/media"));
+    expect(create?.[1]).toMatchObject({ media_type: "REELS", audio_configuration: audio, audio_name: "Original name" });
+    const publish = axiosPost.mock.calls.find(([url]) => url.endsWith("/media_publish"));
+    expect(publish?.[1]).not.toHaveProperty("audio_configuration");
+  });
+
+  test("does not add selection fields when omitted", async () => {
+    await publishSingle();
+    expect(axiosPost.mock.calls[0][1]).not.toHaveProperty("audio_configuration");
+  });
+
+  test.each([
+    { placement: "stories" },
+    { photo: true },
+    { carousel: true },
+  ])("ignores audio for unsupported media and placements: %j", async (options) => {
+    const account = makeAccount();
+    const video = makeVideoMedium("media_1");
+    const media = "carousel" in options ? [video, video] : [{ ...video, type: "photo" in options ? "image" : "video", skip_processing: true }];
+    // Even malformed selection must not fail a post it cannot apply to.
+    const platformConfig = { audio_configuration: {} } as InstagramConfiguration;
+    const originalAudio = platformConfig.audio_configuration;
+    if ("placement" in options) platformConfig.placement = options.placement;
+    const result = await makeClient().post({
+      postId: "post_1", account, caption: "caption", media,
+      platformConfig,
+    });
+    expect(result.success).toBe(true);
+    expect(axiosPost).toHaveBeenCalled();
+    expect(result.details.audio_ignored_reason).toContain("single video Reel");
+    for (const [, payload] of axiosPost.mock.calls) {
+      expect(payload).not.toHaveProperty("audio_configuration");
+    }
+    expect(platformConfig.audio_configuration).toBe(originalAudio);
+  });
+
+  test.each(["direct", "legacy"])("ignores audio on an unsupported connection: %s", async (connection) => {
+    const account = makeAccount();
+    if (connection === "direct") account.social_provider_metadata = { connection_type: "instagram" };
+    else account.access_token = "IG_legacy";
+    const result = await makeClient().post({
+      postId: "post_1", account, caption: "caption",
+      media: [makeVideoMedium("media_1")],
+      platformConfig: { audio_configuration: {} } as InstagramConfiguration,
+    });
+    expect(result.success).toBe(true);
+    expect(result.details.audio_ignored_reason).toContain("Facebook Login");
+    expect(axiosPost).toHaveBeenCalled();
+    for (const [url, payload] of axiosPost.mock.calls) {
+      expect(url).toStartWith("https://graph.instagram.com/");
+      expect(payload).not.toHaveProperty("audio_configuration");
+    }
+  });
+
+  test.each([null, {}, { audio_id: 123 }, { audio_id: "" }, { audio_id: "123", audio_volume: 101 }])(
+    "rejects malformed audio configuration %j", async (audio) => {
+      const result = await makeClient().post({
+        postId: "post_1", account: makeAccount(), caption: "caption",
+        media: [makeVideoMedium("media_1")],
+        platformConfig: { audio_configuration: audio } as InstagramConfiguration,
+      });
+      expect(result.success).toBe(false);
+      expect(axiosPost).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("InstagramPostClient error detail propagation", () => {

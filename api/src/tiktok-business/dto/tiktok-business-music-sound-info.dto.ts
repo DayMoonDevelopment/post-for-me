@@ -11,22 +11,23 @@ import {
 export class TikTokBusinessMusicSoundInfoDto {
   @ApiProperty({
     description:
-      'song_clip_id from full_duration_song_clip or trending_song_clip; never commercial_music_id.',
+      'For videos, song_clip_id from full_duration_song_clip or trending_song_clip. For photo posts, the commercial music library track ID.',
   })
   @IsString()
   @Matches(/\S/)
   music_sound_id: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     minimum: 0,
     maximum: 100,
     description:
-      'Required when selecting a sound. Send explicitly; provider default is 0.',
+      'Required for video sound selection; ignored for photo posts. Send explicitly for videos; provider default is 0.',
   })
+  @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsInt()
   @Min(0)
   @Max(100)
-  music_sound_volume: number;
+  music_sound_volume?: number;
 
   @ApiPropertyOptional({
     minimum: 0,

@@ -236,7 +236,7 @@ export class TiktokConfigurationDto extends BaseConfigurationDto {
 export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
     description:
-      'Selected sound clip for a single TikTok Business video. Mapped to post_info.music_sound_info, not the request root. Not supported for photo posts, drafts, or regular TikTok. Publishing integration follows in PFM-1290.',
+      'Selected music for a TikTok Business video or photo post. Mapped to post_info.music_sound_info. Videos require a song_clip_id and music_sound_volume; photos use the commercial music library track ID only. Audio is ignored for drafts or unsupported media. Not supported for regular TikTok.',
     type: TikTokBusinessMusicSoundInfoDto,
     required: false,
   })
@@ -630,7 +630,7 @@ export class AccountConfigurationDetailsDto {
 
   @ApiProperty({
     description:
-      'Account override for TikTok Business selected sound. Single video only; replaces the entire platform music_sound_info object.',
+      'Account override for TikTok Business selected music on video or photo posts; replaces the entire platform music_sound_info object.',
     type: TikTokBusinessMusicSoundInfoDto,
     required: false,
   })

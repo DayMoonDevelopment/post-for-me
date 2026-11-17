@@ -13,7 +13,8 @@ import {
   PostResult,
   RefreshTokenResult,
   SocialAccount,
-  TiktokConfiguration,
+  TiktokBusinessConfiguration,
+  TikTokBusinessMusicSoundInfo,
 } from "../post.types";
 
 export class TikTokBusinessPostClient extends PostClient {
@@ -140,15 +141,32 @@ export class TikTokBusinessPostClient extends PostClient {
     account: SocialAccount;
     caption: string;
     media: PostMedia[];
-    platformConfig: TiktokConfiguration;
+    platformConfig: TiktokBusinessConfiguration;
   }): Promise<PostResult> {
+    let audioIgnoredReason: string | undefined;
     try {
+      if (platformConfig?.music_sound_info !== undefined) {
+        const isPhotoPost =
+          media.length > 0 && media.every((item) => item.type === "image");
+        const isSingleVideo = media.length === 1 && media[0].type === "video";
+        if ((!isSingleVideo && !isPhotoPost) || platformConfig.is_draft) {
+          // Continue normal publishing when the selected audio cannot be applied.
+          audioIgnoredReason =
+            "Audio selection requires a single video or photo post published directly, not mixed media or drafts";
+          platformConfig = { ...platformConfig, music_sound_info: undefined };
+        } else {
+          this.#buildMusicSoundInfo(platformConfig.music_sound_info, isPhotoPost);
+        }
+      }
       if (media.length === 0) {
         return {
           post_id: postId,
           provider_connection_id: account.id,
           success: false,
           error_message: "No files provided",
+          ...(audioIgnoredReason && {
+            details: { audio_ignored_reason: audioIgnoredReason },
+          }),
         };
       }
 
@@ -188,6 +206,7 @@ export class TikTokBusinessPostClient extends PostClient {
             ? "TikTok is still processing this draft, post will appear in your inbox once finished processing."
             : undefined,
           details: {
+            ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
             status: "Saved as draft",
             message:
               "Content saved as draft in TikTok. Check your TikTok inbox notifications to continue editing and publish.",
@@ -214,6 +233,7 @@ export class TikTokBusinessPostClient extends PostClient {
           post_id: postId,
           provider_connection_id: account.id,
           details: {
+            ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
             status: "Processing",
             message:
               "Still Proccessing, check TikTok account to confirm status",
@@ -234,6 +254,7 @@ export class TikTokBusinessPostClient extends PostClient {
         provider_connection_id: account.id,
         provider_post_id: publicPostId ?? publishId,
         details: {
+          ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
           status: "Published successfully",
           addedMedia: this.#addedMedia,
           requests: this.#requests,
@@ -253,6 +274,7 @@ export class TikTokBusinessPostClient extends PostClient {
         provider_connection_id: account.id,
         error_message: "Failed to post to TikTok",
         details: {
+          ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
           error: errorDetails,
           requests: this.#requests,
           responses: this.#responses,
@@ -644,7 +666,7 @@ export class TikTokBusinessPostClient extends PostClient {
   }: {
     medium: PostMedia;
     caption: string;
-    platformData: TiktokConfiguration;
+    platformData: TiktokBusinessConfiguration;
     coverTimestamp: number | undefined;
     account: SocialAccount;
   }) {
@@ -660,6 +682,11 @@ export class TikTokBusinessPostClient extends PostClient {
         custom_thumbnail_url: medium.thumbnail_url,
         post_info: {
           caption,
+          ...(platformData?.music_sound_info !== undefined && {
+            music_sound_info: this.#buildMusicSoundInfo(
+              platformData.music_sound_info,
+            ),
+          }),
           upload_to_draft: platformData?.is_draft ? true : undefined,
           disable_duet:
             platformData.allow_duet === undefined
@@ -692,6 +719,60 @@ export class TikTokBusinessPostClient extends PostClient {
     });
   }
 
+  #buildMusicSoundInfo(
+    audio: TikTokBusinessMusicSoundInfo,
+    isPhotoPost = false,
+  ): TikTokBusinessMusicSoundInfo {
+    if (!audio || typeof audio !== "object" || Array.isArray(audio)) {
+      throw new Error("music_sound_info must be an object");
+    }
+    if (typeof audio.music_sound_id !== "string" || !audio.music_sound_id.trim()) {
+      throw new Error("music_sound_id must be a non-empty string");
+    }
+    // Photo publishing supports only the ID, not video volumes or clip offsets.
+    if (isPhotoPost) return { music_sound_id: audio.music_sound_id };
+    for (const field of [
+      "music_sound_volume",
+      "video_original_sound_volume",
+    ] as const) {
+      const volume = audio[field];
+      if (field === "video_original_sound_volume" && volume === undefined) continue;
+      if (
+        typeof volume !== "number" ||
+        !Number.isInteger(volume) ||
+        volume < 0 ||
+        volume > 100
+      ) {
+        throw new Error(`${field} must be an integer between 0 and 100`);
+      }
+    }
+    for (const field of ["music_sound_start", "music_sound_end"] as const) {
+      const value = audio[field];
+      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+        throw new Error(`${field} must be a nonnegative integer in milliseconds`);
+      }
+    }
+    if (
+      audio.music_sound_end !== undefined &&
+      audio.music_sound_end <= (audio.music_sound_start ?? 0)
+    ) {
+      throw new Error("music_sound_end must exceed music_sound_start");
+    }
+    return {
+      music_sound_id: audio.music_sound_id,
+      music_sound_volume: audio.music_sound_volume,
+      ...(audio.music_sound_start !== undefined && {
+        music_sound_start: audio.music_sound_start,
+      }),
+      ...(audio.music_sound_end !== undefined && {
+        music_sound_end: audio.music_sound_end,
+      }),
+      ...(audio.video_original_sound_volume !== undefined && {
+        video_original_sound_volume: audio.video_original_sound_volume,
+      }),
+    };
+  }
+
   async #processImages({
     media,
     caption,
@@ -703,7 +784,7 @@ export class TikTokBusinessPostClient extends PostClient {
     caption: string;
     title: string | undefined;
     account: SocialAccount;
-    platformData: TiktokConfiguration;
+    platformData: TiktokBusinessConfiguration;
   }) {
     const allowedMedia = media.slice(0, this.#maxItems);
 
@@ -726,6 +807,12 @@ export class TikTokBusinessPostClient extends PostClient {
         post_info: {
           title: (title ?? "").slice(0, this.#titleLength),
           caption,
+          ...(platformData?.music_sound_info !== undefined && {
+            music_sound_info: this.#buildMusicSoundInfo(
+              platformData.music_sound_info,
+              true,
+            ),
+          }),
           is_draft: platformData?.is_draft ? true : undefined,
           privacy_level:
             this.#privacyLevelMap[platformData.privacy_status ?? "public"] ??
@@ -735,9 +822,11 @@ export class TikTokBusinessPostClient extends PostClient {
               ? false
               : !platformData.allow_comment,
           auto_add_music:
-            platformData.auto_add_music === undefined
-              ? true
-              : platformData.auto_add_music,
+            platformData.music_sound_info !== undefined
+              ? false
+              : platformData.auto_add_music === undefined
+                ? true
+                : platformData.auto_add_music,
           is_branded_content:
             platformData.disclose_branded_content === undefined
               ? false

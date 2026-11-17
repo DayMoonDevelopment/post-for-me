@@ -121,6 +121,12 @@ export interface PinterestConfiguration {
   media?: PostMedia[];
 }
 
+export interface InstagramAudioConfiguration {
+  audio_id: string;
+  audio_volume?: number;
+  video_volume?: number;
+}
+
 export interface InstagramConfiguration {
   caption?: string;
   placement?: string;
@@ -130,6 +136,7 @@ export interface InstagramConfiguration {
   location?: string;
   trial_reel_type?: string;
   audio_name?: string;
+  audio_configuration?: InstagramAudioConfiguration;
 }
 
 export interface TiktokConfiguration {
@@ -145,6 +152,21 @@ export interface TiktokConfiguration {
   is_ai_generated?: boolean;
   is_draft?: boolean;
   auto_add_music?: boolean;
+}
+
+export interface TikTokBusinessMusicSoundInfo {
+  /** Video: discovered song_clip_id. Photos: commercial music library track ID. */
+  music_sound_id: string;
+  /** Required for videos; not sent for photos. */
+  music_sound_volume?: number;
+  /** Clip offsets in milliseconds. */
+  music_sound_start?: number;
+  music_sound_end?: number;
+  video_original_sound_volume?: number;
+}
+
+export interface TiktokBusinessConfiguration extends TiktokConfiguration {
+  music_sound_info?: TikTokBusinessMusicSoundInfo;
 }
 
 export interface TwitterConfiguration {
@@ -218,6 +240,7 @@ export type PlatformConfiguration =
   | PinterestConfiguration
   | InstagramConfiguration
   | TiktokConfiguration
+  | TiktokBusinessConfiguration
   | TwitterConfiguration
   | YoutubeConfiguration
   | FacebookConfiguration

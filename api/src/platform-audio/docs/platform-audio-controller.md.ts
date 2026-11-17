@@ -44,11 +44,12 @@ Preview URLs may be unavailable; Instagram download URLs expire after approximat
 All IDs are opaque **strings**. Never convert them to numbers.
 
 - **Instagram**: id is platform_data.audio_id, the audio selection ID.
-- **TikTok Business**: id is platform_data.commercial_music_id, a discovery track ID,
-  **not a publishable sound clip ID**. Select song_clip_id from
+- **TikTok Business photos**: use the commercial music library track ID
+  (id / platform_data.commercial_music_id) as music_sound_info.music_sound_id.
+- **TikTok Business videos**: select song_clip_id from
   platform_data.full_duration_song_clip or platform_data.trending_song_clip for
   music_sound_info.music_sound_id. Either clip may be missing or null; never fall
-  back to commercial_music_id when a clip is unavailable.
+  back to commercial_music_id for videos when a clip is unavailable.
 
 Discovery does not itself guarantee that an audio selection can be published for
 every media type or connection.
