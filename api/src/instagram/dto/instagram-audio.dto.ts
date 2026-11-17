@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BasePlatformAudioDto } from '../../lib/dto/base-platform-audio.dto';
+import { BasePlatformAudioDto } from '../../platform-audio/dto/base-platform-audio.dto';
 
 export class InstagramAudioPlatformDataDto {
   @ApiProperty({

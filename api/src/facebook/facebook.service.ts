@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable, Scope } from '@nestjs/common';
 import type {
   GetPlatformAudioParams,
   PlatformAudioResponseDto,
-} from '../lib/dto/platform-audio.dto';
+} from '../platform-audio/dto/platform-audio.dto';
 import { ConfigService } from '@nestjs/config';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {

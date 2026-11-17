@@ -6,7 +6,7 @@ import type {
 import type {
   GetPlatformAudioParams,
   PlatformAudioResponseDto,
-} from './dto/platform-audio.dto';
+} from '../platform-audio/dto/platform-audio.dto';
 
 export interface SocialPlatformService {
   /** Unsupported platforms reject with HttpException (HTTP 400), preserving its message. */

@@ -13,8 +13,8 @@ import { InstagramAudioQueryDto } from '../instagram/dto/instagram-audio-query.d
 import { TikTokBusinessAudioQueryDto } from '../tiktok-business/dto/tiktok-business-audio-query.dto';
 import type { SocialAccount } from '../lib/dto/global.dto';
 import type { SocialPlatformService } from '../lib/social-provider-service';
-import type { PlatformAudioQueryDto } from '../lib/dto/platform-audio-query.dto';
-import type { PlatformAudioResponseDto } from '../lib/dto/platform-audio.dto';
+import type { PlatformAudioQueryDto } from './dto/platform-audio-query.dto';
+import type { PlatformAudioResponseDto } from './dto/platform-audio.dto';
 
 @Injectable()
 export class PlatformAudioService {

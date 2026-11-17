@@ -5,15 +5,15 @@ import {
   Scope,
   ValidationPipe,
 } from '@nestjs/common';
-import { platformAudioDurationMs } from '../lib/dto/platform-audio.dto';
+import { platformAudioDurationMs } from '../platform-audio/dto/platform-audio.dto';
 import {
   PLATFORM_AUDIO_VALIDATION_OPTIONS,
   PlatformAudioQueryDto,
-} from '../lib/dto/platform-audio-query.dto';
+} from '../platform-audio/dto/platform-audio-query.dto';
 import type {
   GetPlatformAudioParams,
   PlatformAudioResponseDto,
-} from '../lib/dto/platform-audio.dto';
+} from '../platform-audio/dto/platform-audio.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,

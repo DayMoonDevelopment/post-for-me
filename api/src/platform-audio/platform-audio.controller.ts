@@ -14,8 +14,8 @@ import type { RequestUser } from '../auth/user.interface';
 import {
   PLATFORM_AUDIO_VALIDATION_OPTIONS,
   PlatformAudioQueryDto,
-} from '../lib/dto/platform-audio-query.dto';
-import { PlatformAudioResponseDto } from '../lib/dto/platform-audio.dto';
+} from './dto/platform-audio-query.dto';
+import { PlatformAudioResponseDto } from './dto/platform-audio.dto';
 import {
   InstagramAudioPlatformDataDto,
   InstagramPlatformAudioDto,

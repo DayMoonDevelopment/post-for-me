@@ -1,7 +1,7 @@
 import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
 import { InstagramPlatformAudioDto } from '../../instagram/dto/instagram-audio.dto';
 import { TikTokBusinessPlatformAudioDto } from '../../tiktok-business/dto/tiktok-business-audio.dto';
-import type { SocialAccount } from './global.dto';
+import type { SocialAccount } from '../../lib/dto/global.dto';
 import type { PlatformAudioQueryDto } from './platform-audio-query.dto';
 
 export type PlatformAudio =

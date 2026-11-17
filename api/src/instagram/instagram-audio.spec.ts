@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import axios from 'axios';
 import type { SocialAccount } from '../lib/dto/global.dto';
-import type { PlatformAudioQueryDto } from '../lib/dto/platform-audio-query.dto';
+import type { PlatformAudioQueryDto } from '../platform-audio/dto/platform-audio-query.dto';
 import type { SupabaseService } from '../supabase/supabase.service';
 import { InstagramService } from './instagram.service';
 import type { InstagramAudioAsset } from './instagram.types';
