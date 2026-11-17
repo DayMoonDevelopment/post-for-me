@@ -14,6 +14,7 @@ import { SocialAccountsModule } from './social-provider-connections/social-provi
 import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-previews.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { PlatformAudioModule } from './platform-audio/platform-audio.module';
 
 import { mediaControllerDescription } from './media/docs/media-controller.md';
 import { postsControllerDescription } from './social-posts/docs/posts-controller.md';
@@ -68,6 +69,7 @@ async function bootstrap() {
       SocialPostResultsModule,
       SocialAccountsModule,
       SocialAccountFeedsModule,
+      PlatformAudioModule,
       WebhooksModule,
       SocialPostPreviewsModule,
     ],
