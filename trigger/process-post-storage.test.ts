@@ -261,7 +261,8 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     });
   }
 
-  test("failed account override cannot fall back; independent account publishes completed defaults in index order", async () => {
+  test.each(["0", "100"])("failed account override cannot fall back; independent account publishes completed defaults in index order at %s%% Zenith", async (percentage) => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = percentage;
     const inputMedia = [
       { id: "last", index: 9, provider_connection_id: null },
       { id: "failed-override", index: 0, provider_connection_id: "account-1" },
@@ -280,7 +281,11 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     expect(payloads[0].payload.account.id).toBe("account-2");
     expect(payloads[0].payload.media.map((m) => m.url)).toEqual(["https://zenith.example/first", "https://zenith.example/last"]);
     expect(payloads[0].payload.media[0]).toMatchObject({ alt_text: "preserved alt", tags: inputMedia[0].tags });
-    expect(insertResults).toHaveBeenCalledWith([expect.objectContaining({ provider_connection_id: "account-1", success: false })]);
+    expect(insertResults).toHaveBeenCalledWith([expect.objectContaining({
+      provider_connection_id: "account-1",
+      success: false,
+      error_message: "Media failed to process, please check media URLs",
+    })]);
   });
 
   for (const isSystem of [true, false]) {

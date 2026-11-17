@@ -491,7 +491,7 @@ export const processPost = task({
             postData.caption;
           const media = selectPostMedia(postData.media, account, !!platformConfig);
           if (media.some((medium) => medium.type === "failed")) {
-            throw new Error(`Media failed to process, please check media URLs and ${mediaProcessingBackend} job logs`);
+            throw new Error("Media failed to process, please check media URLs");
           }
 
           const platformData = {
