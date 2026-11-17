@@ -15,9 +15,10 @@ envelope, and service parameter types live in `api/src/lib/dto/`.
 
 Every `SocialPlatformService` requires
 `getPlatformAudio({ account, query }): Promise<PlatformAudioResponseDto>`.
-All ten implementations initially reject with `HttpException`, HTTP **400**, and
-`Platform audio is not supported for this platform`. PFM-1287/PFM-1288 replace
-only the TikTok Business/Instagram stubs. The endpoint must preserve HttpExceptions,
+All implementations initially reject with `HttpException`, HTTP **400**, and
+`Platform audio is not supported for this platform`. TikTok Business discovery
+is implemented in PFM-1287; PFM-1288 replaces only the Instagram stub. Regular
+TikTok remains unsupported. The endpoint must preserve HttpExceptions,
 not mask them as 500s or expose credentials in responses, errors, or metadata.
 
 ## Query and validation
@@ -90,9 +91,15 @@ Each clip has its own **`song_clip_id`**, seconds duration, and preview URL.
 Do not automatically choose a clip or fall back to commercial_music_id if clips
 are unavailable. TikTok preview URLs are documented as non-expiring.
 
-PFM-1287 must check nonzero TikTok response `code` even on HTTP 200 and use
+TikTok Business discovery checks nonzero response `code` even on HTTP 200 and uses
 `account.social_provider_user_id` as `business_id` with the account's access token
-in `Access-Token`. PFM-1288 uses Facebook Graph `/ig_audio`, `user_id` from the
+in `Access-Token`. It validates the strict query contract and rejects mismatched
+provider configurations before requesting. HTTP/network failures, nonzero codes,
+and malformed responses return HTTP **502** without exposing credentials or raw
+provider errors. Empty/null lists return an empty envelope; absent data/list or
+non-string track IDs are invalid responses. Native metadata and both clip objects
+are retained, including nulls; no clip is selected or promoted to the shared ID.
+PFM-1288 uses Facebook Graph `/ig_audio`, `user_id` from the
 account, its access token, and the selected audio filters. Reject Instagram Login
 before any discovery request. No caller-supplied tokens or account IDs in filters.
 

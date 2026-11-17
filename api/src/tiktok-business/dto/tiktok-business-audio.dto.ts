@@ -9,9 +9,11 @@ export class TikTokAudioClipDto {
   song_clip_id: string;
 
   @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
     description: 'Raw provider duration in seconds; zero may mean unknown.',
   })
-  duration?: number;
+  duration?: number | null;
 
   @ApiPropertyOptional({ type: String, nullable: true })
   preview_url?: string | null;
@@ -31,19 +33,21 @@ export class TikTokBusinessAudioPlatformDataDto {
   })
   commercial_music_id: string;
 
-  @ApiPropertyOptional()
-  commercial_music_name?: string;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  commercial_music_name?: string | null;
 
   @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
     description: 'Raw provider duration in seconds; zero may mean unknown.',
   })
-  duration?: number;
+  duration?: number | null;
 
   @ApiPropertyOptional({ type: String, nullable: true })
   thumbnail_url?: string | null;
 
-  @ApiPropertyOptional()
-  artist?: string;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  artist?: string | null;
 
   @ApiPropertyOptional({ type: String, nullable: true })
   preview_url?: string | null;

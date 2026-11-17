@@ -5,7 +5,6 @@ import { InstagramService } from '../instagram/instagram.service';
 import { LinkedInService } from '../linkedin/linkedin.service';
 import { PinterestService } from '../pinterest/pinterest.service';
 import { ThreadsService } from '../threads/threads.service';
-import { TikTokBusinessService } from '../tiktok-business/tiktok-business.service';
 import { TikTokService } from '../tiktok/tiktok.service';
 import { TwitterService } from '../twitter/twitter.service';
 import { YouTubeService } from '../youtube/youtube.service';
@@ -32,7 +31,6 @@ describe('explicit unsupported platform audio implementations', () => {
       LinkedInService,
       PinterestService,
       ThreadsService,
-      TikTokBusinessService,
       TikTokService,
       TwitterService,
       YouTubeService,
