@@ -1,4 +1,8 @@
-import { BadRequestException, HttpException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { PlatformAudioService } from './platform-audio.service';
 import type { SupabaseService } from '../supabase/supabase.service';
 import type { InstagramService } from '../instagram/instagram.service';
@@ -6,6 +10,10 @@ import type { TikTokBusinessService } from '../tiktok-business/tiktok-business.s
 import type { SocialAccount } from '../lib/dto/global.dto';
 import { InstagramAudioQueryDto } from '../instagram/dto/instagram-audio-query.dto';
 import { TikTokBusinessAudioQueryDto } from '../tiktok-business/dto/tiktok-business-audio-query.dto';
+import {
+  PLATFORM_AUDIO_VALIDATION_OPTIONS,
+  PlatformAudioQueryDto,
+} from './dto/platform-audio-query.dto';
 
 describe('PlatformAudioService', () => {
   const account = {
@@ -185,6 +193,38 @@ describe('PlatformAudioService', () => {
       query,
     });
   });
+
+  it.each(['instagram', 'tiktok_business'] as const)(
+    'accepts validated %s filters with undefined properties for the other provider',
+    async (provider) => {
+      lookup.data = { ...account, provider };
+      const query = (await new ValidationPipe(
+        PLATFORM_AUDIO_VALIDATION_OPTIONS,
+      ).transform(
+        { platform_configurations: { [provider]: {} } },
+        { type: 'query', metatype: PlatformAudioQueryDto },
+      )) as PlatformAudioQueryDto;
+      const otherProvider =
+        provider === 'instagram' ? 'tiktok_business' : 'instagram';
+      expect(Object.keys(query.platform_configurations!)).toContain(
+        otherProvider,
+      );
+      expect(query.platform_configurations?.[otherProvider]).toBeUndefined();
+
+      await expect(
+        service.getPlatformAudio({ ...request, query }),
+      ).resolves.toBeDefined();
+      const selectedService = provider === 'instagram' ? instagram : tiktok;
+      expect(selectedService.getPlatformAudio).toHaveBeenCalledWith({
+        account: expect.objectContaining({ provider }) as unknown,
+        query: {
+          platform_configurations: {
+            [provider]: query.platform_configurations?.[provider],
+          },
+        },
+      });
+    },
+  );
 
   it('applies TikTok defaults when no configuration is supplied', async () => {
     lookup.data = { ...account, provider: 'tiktok_business' };

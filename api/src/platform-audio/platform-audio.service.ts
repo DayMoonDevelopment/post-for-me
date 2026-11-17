@@ -69,8 +69,9 @@ export class PlatformAudioService {
     }
 
     if (
-      Object.keys(query.platform_configurations ?? {}).some(
-        (key) => key !== provider,
+      Object.entries(query.platform_configurations ?? {}).some(
+        ([key, configuration]) =>
+          configuration !== undefined && key !== provider,
       )
     ) {
       throw new BadRequestException(
