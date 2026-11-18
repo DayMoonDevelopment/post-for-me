@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   parseMediaServerResponse,
   mediaServerSubmission,
+  mediaServerPostCleanupSubmission,
   sanitizeMediaServerLog,
   type MediaServerJob,
 } from "./media-server";
@@ -19,6 +20,18 @@ const video = {
 const stored = (media: unknown = image) => ({
   fileId: "file-123", versionId: "version-456", path: "shadow/result.jpg",
   url: "https://media.example/result.jpg", contentType: "image/jpeg", size: 1234, media,
+});
+
+test("post cleanup targets the direct worker with no callback, path or lookup keys", () => {
+  expect(mediaServerPostCleanupSubmission("post-id", "request-id")).toEqual({
+    name: "media.trigger-delete-social-post-files",
+    data: { socialPostId: "post-id", requestId: "request-id" },
+    options: {
+      jobId: "media-trigger-delete-social-post-files/request-id",
+      attempts: 5, backoff: { type: "exponential", delay: 1000 },
+      removeOnComplete: { age: 10800 }, removeOnFail: { age: 10800 },
+    },
+  });
 });
 
 test("lookup keys belong to every interop envelope, not the wrapped media input", () => {
@@ -212,13 +225,24 @@ mock.module("bullmq", () => ({
     }
   },
 }));
-const { createMediaServerTransport, MEDIA_SERVER_INTEROP_LANE, mediaServerInteropJobs } = await import("./media-server.ts");
+const { createMediaServerTransport, enqueueMediaServerPostCleanup, MEDIA_SERVER_INTEROP_LANE, mediaServerInteropJobs } = await import("./media-server.ts");
 const transport = createMediaServerTransport(redisUrl);
 const handle = { jobId: "job-123", queue: "custom-queue", requestId: "request-456", path: "shadow/custom/result" };
 const localize = { task: "media.localize", url: "https://source.example/signed?token=secret" };
 const callback = { url: "https://trigger.example/callback/secret" };
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
-if (scenario === "routing") {
+if (scenario === "cleanup") {
+  await enqueueMediaServerPostCleanup(redisUrl, "post-id");
+  await enqueueMediaServerPostCleanup(redisUrl, "post-id");
+  expect(queues.map((queue) => queue.name)).toEqual(["trigger-interop", "trigger-interop"]);
+  for (const [name, data, options] of adds) {
+    expect(name).toBe("media.trigger-delete-social-post-files");
+    expect(data).toEqual({ socialPostId: "post-id", requestId: expect.any(String) });
+    expect(options.jobId).toBe("media-trigger-delete-social-post-files/" + data.requestId);
+    expect(options.attempts).toBe(5);
+  }
+  expect(adds[0][1].requestId).not.toBe(adds[1][1].requestId);
+} else if (scenario === "routing") {
   expect(MEDIA_SERVER_INTEROP_LANE).toBe("trigger-interop");
   expect(mediaServerInteropJobs).toEqual({
     "media.localize": "media.trigger-localize",
@@ -321,7 +345,7 @@ try {
 `;
 
 for (const scenario of [
-  "routing", "acknowledgement", "connect-error", "add-error", "blackhole-enqueue",
+  "cleanup", "routing", "acknowledgement", "connect-error", "add-error", "blackhole-enqueue",
 ]) {
   test(`media server transport: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", scenario.startsWith("blackhole-") ? networkHarness : harness], {

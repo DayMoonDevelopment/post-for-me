@@ -13,6 +13,7 @@ import { Unkey } from "@unkey/api";
 import type { StoredMedia } from "./media-recipes";
 import { selectPostMedia } from "./posting/media-selection";
 import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import { enqueueMediaServerPostCleanup } from "./media-server";
 
 import { Database, Json } from "./supabase.types";
 
@@ -663,6 +664,21 @@ export const processPost = task({
 
       if (updatePostError) {
         logger.error("Failed to update post status", { updatePostError });
+      }
+
+      if (!updatePostError && updatedPost && mediaProcessingBackend === "zenith") {
+        try {
+          const redisUrl = process.env.MEDIA_SERVER_REDIS_URL;
+          if (redisUrl) {
+            await enqueueMediaServerPostCleanup(redisUrl, post.id);
+            logger.info("Queued post media cleanup", { postId: post.id });
+          } else {
+            logger.warn("Failed to queue post media cleanup", { postId: post.id });
+          }
+        } catch {
+          // Transport errors can contain credentials; do not log them verbatim.
+          logger.warn("Failed to queue post media cleanup", { postId: post.id });
+        }
       }
 
       if (updatedPost) {
