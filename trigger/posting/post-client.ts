@@ -6,7 +6,6 @@ import os from "os";
 import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { TimestampedArray } from "./timestamped-array";
 import type {
   BlueskyConfiguration,
@@ -21,6 +20,7 @@ import type {
   SocialAccount,
   ThreadsConfiguration,
   TiktokConfiguration,
+  TiktokBusinessConfiguration,
   TwitterConfiguration,
   YoutubeConfiguration,
 } from "./post.types";
@@ -34,10 +34,7 @@ export class PostClient {
   // representation for it and would otherwise silently mishandle it.
   supportedMediaTypes: string[] = ["image", "video"];
 
-  constructor(
-    _supabaseClient: SupabaseClient,
-    _appCredentials: PlatformAppCredentials,
-  ) {}
+  constructor(_appCredentials: PlatformAppCredentials) {}
 
   //##ABSTRACT METHODS##
   async refreshAccessToken(
@@ -75,6 +72,7 @@ export class PostClient {
       | PinterestConfiguration
       | InstagramConfiguration
       | TiktokConfiguration
+      | TiktokBusinessConfiguration
       | TwitterConfiguration
       | YoutubeConfiguration
       | FacebookConfiguration
@@ -112,7 +110,7 @@ export class PostClient {
         type: data.type,
       });
     } catch (error) {
-      console.error("Error getting file from supa:", error);
+      console.error("Error downloading media file:", error);
       throw error;
     }
   }
@@ -167,9 +165,14 @@ export class PostClient {
     const inputStream =
       typeof body?.getReader === "function" ? Readable.fromWeb(body) : body;
 
-    await pipeline(inputStream, createWriteStream(filePath));
-    const stat = await fsp.stat(filePath);
-    return { filePath, mimeType, size: stat.size };
+    try {
+      await pipeline(inputStream, createWriteStream(filePath));
+      const stat = await fsp.stat(filePath);
+      return { filePath, mimeType, size: stat.size };
+    } catch (error) {
+      await this.unlinkQuiet(filePath);
+      throw error;
+    }
   }
 
   protected async unlinkQuiet(filePath: string): Promise<void> {

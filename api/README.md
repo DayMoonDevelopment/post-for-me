@@ -34,6 +34,7 @@ A robust NestJS API that provides secure endpoints for social media content mana
 - **`media/`** - Handle file uploads and media processing
 - **`social-provider-connections/`** - OAuth connections to social platforms
 - **`social-post-results/`** - Track posting results and analytics
+- **`platform-audio/`** - Discover Instagram and TikTok Business audio
 - **`auth/`** - API key authentication and user decorators
 - **`supabase/`** - Database client and service integration
 

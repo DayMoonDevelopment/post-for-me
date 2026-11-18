@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
 import axios from "axios";
 import { TikTokPostClient } from "./tiktok-post-client";
 import { TikTokBusinessPostClient } from "./tiktok_business-post-client";
@@ -9,6 +8,30 @@ import type { SocialAccount } from "../post.types";
 afterEach(() => {
   mock.restore();
 });
+
+for (const failure of ["task failure", "rejection"]) {
+  test(`TikTok video ${failure} stops before polling or parent media access`, async () => {
+    const client = new TikTokPostClient({ app_id: "app", app_secret: "secret" });
+    const fetchSpy = spyOn(globalThis, "fetch").mockRejectedValue(new Error("Parent media access"));
+    const post = spyOn(axios, "post").mockResolvedValue({ data: { data: { creator_username: "tester" } } });
+    const put = spyOn(axios, "put").mockRejectedValue(new Error("Parent upload"));
+    const dispatch = spyOn(tasks, "triggerAndWait");
+    for (const spy of [fetchSpy, post, put, dispatch]) spy.mockClear();
+    if (failure === "task failure") dispatch.mockResolvedValue({ ok: false, error: { message: "worker unavailable" } } as any);
+    else dispatch.mockRejectedValue(new Error("dispatch rejected"));
+    const result = await client.post({
+      postId: "post", account: { id: "account", access_token: "token" } as SocialAccount,
+      caption: "caption", media: [{ id: "media", type: "video", url: "https://example.com/video" }], platformConfig: {},
+    });
+    expect(result.success).toBe(false);
+    expect(result.error_message).toBe("Failed to post to TikTok");
+    expect(result.details.error.message).toBe(failure === "task failure" ? "Failed to upload TikTok video" : "dispatch rejected");
+    expect(dispatch).toHaveBeenCalledWith("upload-tiktok-video", expect.objectContaining({ url: "https://example.com/video", accessToken: "token" }));
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  });
+}
 
 for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
   describe(Client.name, () => {
@@ -24,7 +47,7 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
         "UNKNOWN",
       ]) {
         test(`${isDraft ? "draft" : "direct post"} with status ${status}`, async () => {
-          const client = new Client({} as SupabaseClient, {
+          const client = new Client({
             app_id: "app-id",
             app_secret: "app-secret",
           });

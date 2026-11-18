@@ -1,9 +1,7 @@
 import { safeConsole as console } from "../../safe-console";
 import { safeLogger as logger } from "../../safe-logger";
-import { SupabaseClient } from "@supabase/supabase-js";
 import { PostClient } from "../post-client";
 import axios from "axios";
-import fetch from "node-fetch";
 import {
   FacebookConfiguration,
   PlatformAppCredentials,
@@ -12,8 +10,9 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-import { wait } from "@trigger.dev/sdk";
-import FormData from "form-data";
+import { tasks, wait } from "@trigger.dev/sdk";
+import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
+import type { uploadFacebookThumbnail } from "../../upload-facebook-thumbnail";
 import { normalizePlatform } from "../../lib/platform.utils";
 import {
   extractPlatformError,
@@ -57,11 +56,8 @@ export class FacebookPostClient extends PostClient {
   static readonly READ_BACK_MAX_DELAY_MS = 4_000;
   static readonly RETRYABLE_RATE_LIMIT_CODES = new Set([4, 17, 32, 613]); // Meta Graph API rate-limit error codes
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
     this.#appCredentials = appCredentials;
   }
 
@@ -132,9 +128,28 @@ export class FacebookPostClient extends PostClient {
         }
         case media.length === 1: {
           // For single media posts (image or video)
-          const medium = media[0];
+          let medium = media[0];
 
           if (medium.type === "video") {
+            if (["stories", "reels"].includes(platformConfig?.placement ?? "")) {
+              // Meta's Reel/story URL fetchers may retain the old R2 robots policy.
+              try {
+                const copied = await tasks.triggerAndWait<typeof copyMediaToSupabase>(
+                  "copy-media-to-supabase",
+                  { url: medium.url },
+                );
+                if (!copied.ok) {
+                  throw new Error("Failed to copy Facebook media to Supabase");
+                }
+                medium = { ...medium, url: copied.output };
+              } catch {
+                logger.warn("Facebook media copy failed; falling back to R2", {
+                  postId,
+                  mediumId: medium.id,
+                  placement: platformConfig.placement,
+                });
+              }
+            }
             switch (platformConfig?.placement) {
               case "stories": {
                 platformId = await this.#publishVideoStory({ account, medium });
@@ -171,7 +186,7 @@ export class FacebookPostClient extends PostClient {
 
                 if (medium.thumbnail_url) {
                   await this.#uploadThumbnail({
-                    medium,
+                    thumbnailUrl: medium.thumbnail_url,
                     videoId: platformId,
                     accessToken: account.access_token,
                   });
@@ -1080,7 +1095,7 @@ export class FacebookPostClient extends PostClient {
 
     if (medium.thumbnail_url) {
       await this.#uploadThumbnail({
-        medium,
+        thumbnailUrl: medium.thumbnail_url,
         videoId: createdMediaId,
         accessToken: account.access_token,
       });
@@ -1188,41 +1203,31 @@ export class FacebookPostClient extends PostClient {
   }
 
   async #uploadThumbnail({
-    medium,
+    thumbnailUrl,
     videoId,
     accessToken,
   }: {
-    medium: PostMedia;
+    thumbnailUrl: string;
     videoId: string;
     accessToken: string;
   }) {
-    if (!medium.thumbnail_url) {
-      return;
-    }
-
-    const file = await this.getFile({
-      type: medium.type,
-      url: medium.thumbnail_url,
-      id: medium.id,
-    });
-    const form = new FormData();
-    form.append("access_token", accessToken);
-    form.append("is_preferred", "true");
-
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    form.append("source", buffer, {
-      filename: file.name,
-      contentType: file.type,
-    });
-
-    await fetch(`${this.#baseUrl}/${videoId}/thumbnails`, {
-      method: "POST",
-      body: form,
-      headers: {
-        ...form.getHeaders(),
+    const result = await tasks.triggerAndWait<typeof uploadFacebookThumbnail>(
+      "upload-facebook-thumbnail",
+      {
+        thumbnailUrl,
+        videoId,
+        accessToken,
+        baseUrl: this.#baseUrl,
       },
-    });
+    );
+    if (!result.ok) {
+      const error = result.error;
+      throw new Error(
+        error && typeof error === "object" && "message" in error &&
+        typeof error.message === "string"
+          ? error.message
+          : "Failed to upload Facebook thumbnail",
+      );
+    }
   }
 }

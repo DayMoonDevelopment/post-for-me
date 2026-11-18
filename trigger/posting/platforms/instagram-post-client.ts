@@ -1,18 +1,13 @@
 import { safeConsole as console } from "../../safe-console";
-import { SupabaseClient } from "@supabase/supabase-js";
 import { wait } from "@trigger.dev/sdk";
+import { triggerImageTransform } from "../../trigger-image-transform";
 import { PostClient } from "../post-client";
 import axios from "axios";
-import sharp from "sharp";
 import { normalizePlatform } from "../../lib/platform.utils";
-import {
-  compressJpegToLimit,
-  computeCropDimensions,
-  resolveInstagramMinAspectRatio,
-  shouldSkipProcessing,
-} from "../image-processing-utils";
+import { shouldSkipProcessing } from "../image-processing-utils";
 import {
   InstagramConfiguration,
+  InstagramAudioConfiguration,
   PlatformAppCredentials,
   PostMedia,
   PostResult,
@@ -28,11 +23,6 @@ import {
 
 export class InstagramPostClient extends PostClient {
   #maxItems = 10;
-  #maxFileSize = 8 * 1024 * 1024;
-  #minAspectRatio = 3 / 4;
-  #maxAspectRatio = 1.91;
-  #storiesMinAspectRatio = 9 / 16;
-  #reelsMinAspectRatio = 9 / 16;
   #mediaRetryAttempts = 30;
   #mediaStatusMaxAttempts = 30;
   #mediaStatusInitialDelayMs = 5000;
@@ -40,9 +30,6 @@ export class InstagramPostClient extends PostClient {
   #maxRetryDelayMs = 60000;
   #maxTaskDurationMs = 60 * 60 * 1000;
   #postStartedAtMs: number | null = null;
-  #localSupabaseClient;
-  #addedMedia: any[] = [];
-  #bucket: string = "post-media";
   #appCredentials: PlatformAppCredentials;
 
   #graphApiUrl = (
@@ -66,13 +53,9 @@ export class InstagramPostClient extends PostClient {
     return `${this.#graphApiUrl}/${this.#apiVersion}`;
   }
 
-  constructor(
-    supabaseClient: SupabaseClient,
-    appCredentials: PlatformAppCredentials,
-  ) {
-    super(supabaseClient, appCredentials);
+  constructor(appCredentials: PlatformAppCredentials) {
+    super(appCredentials);
 
-    this.#localSupabaseClient = supabaseClient;
     this.#appCredentials = appCredentials;
   }
 
@@ -184,9 +167,29 @@ export class InstagramPostClient extends PostClient {
     platformConfig: InstagramConfiguration;
   }): Promise<PostResult> {
     this.#postStartedAtMs = Date.now();
+    let audioIgnoredReason: string | undefined;
 
     try {
       const sanitizedCaption = this.#sanitizeCaption(caption);
+
+      if (platformConfig?.audio_configuration !== undefined) {
+        if (this.getApiBaseUrl(account).includes("graph.instagram.com")) {
+          audioIgnoredReason =
+            "Audio selection requires an Instagram account connected with Facebook Login";
+        } else if (
+          media.length !== 1 ||
+          media[0].type !== "video" ||
+          platformConfig.placement === "stories"
+        ) {
+          audioIgnoredReason =
+            "Audio selection requires a single video Reel, not Stories, photos, or carousels";
+        }
+        if (audioIgnoredReason) {
+          platformConfig = { ...platformConfig, audio_configuration: undefined };
+        } else {
+          this.#buildAudioConfiguration(platformConfig.audio_configuration);
+        }
+      }
 
       let containerId = null;
       if (media.length == 1) {
@@ -211,6 +214,9 @@ export class InstagramPostClient extends PostClient {
           provider_connection_id: account.id,
           success: false,
           error_message: "No media files found",
+          ...(audioIgnoredReason && {
+            details: { audio_ignored_reason: audioIgnoredReason },
+          }),
         };
       }
 
@@ -300,11 +306,11 @@ export class InstagramPostClient extends PostClient {
         provider_post_url: platformUrl,
         provider_post_id: platformId,
         details: {
+          ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
           warning:
             media.length > this.#maxItems
               ? `Only first ${this.#maxItems} items were posted`
               : null,
-          addedMedia: this.#addedMedia,
           requests: this.requests,
           responses: this.responses,
         },
@@ -314,6 +320,7 @@ export class InstagramPostClient extends PostClient {
 
       const platformError = extractPlatformError(error);
       const errorDetails = {
+        ...(audioIgnoredReason && { audio_ignored_reason: audioIgnoredReason }),
         error: platformError.data ?? { message: platformError.message },
         requests: this.requests,
         responses: this.responses,
@@ -373,6 +380,9 @@ export class InstagramPostClient extends PostClient {
           medium: {
             id: medium.id,
             url: medium.thumbnail_url,
+            stored: medium.thumbnail_stored,
+            mediaProcessingBackend: medium.mediaProcessingBackend,
+            postId: medium.postId,
             type: "image",
             skip_processing: medium.skip_processing,
           },
@@ -399,6 +409,7 @@ export class InstagramPostClient extends PostClient {
       location_id?: string;
       user_tags?: any[];
       audio_name?: string;
+      audio_configuration?: InstagramConfiguration["audio_configuration"];
       alt_text?: string;
       is_ai_generated?: boolean;
       trial_params?: {
@@ -426,6 +437,11 @@ export class InstagramPostClient extends PostClient {
         createMediaParams.media_type = isVideo ? "REELS" : undefined;
 
         if (createMediaParams.media_type === "REELS") {
+          if (platformConfig?.audio_configuration !== undefined) {
+            createMediaParams.audio_configuration = this.#buildAudioConfiguration(
+              platformConfig.audio_configuration,
+            );
+          }
           if (platformConfig?.trial_reel_type) {
             createMediaParams.trial_params = {
               graduation_strategy:
@@ -494,6 +510,32 @@ export class InstagramPostClient extends PostClient {
       responseLogKey: "createMediaResponse",
       mediaLabel: isVideo ? "video media" : "image media",
     });
+  }
+
+  #buildAudioConfiguration(
+    audio: InstagramAudioConfiguration,
+  ): InstagramAudioConfiguration {
+    if (!audio || typeof audio !== "object" || Array.isArray(audio)) {
+      throw new Error("audio_configuration must be an object");
+    }
+    if (typeof audio.audio_id !== "string" || !audio.audio_id.trim()) {
+      throw new Error("audio_id must be a non-empty string");
+    }
+    for (const field of ["audio_volume", "video_volume"] as const) {
+      const volume = audio[field];
+      if (
+        volume !== undefined &&
+        (typeof volume !== "number" ||
+          !Number.isInteger(volume) || volume < 0 || volume > 100)
+      ) {
+        throw new Error(`${field} must be an integer between 0 and 100`);
+      }
+    }
+    return {
+      audio_id: audio.audio_id,
+      ...(audio.audio_volume !== undefined && { audio_volume: audio.audio_volume }),
+      ...(audio.video_volume !== undefined && { video_volume: audio.video_volume }),
+    };
   }
 
   async #processCarousel({
@@ -1014,97 +1056,21 @@ export class InstagramPostClient extends PostClient {
       return { signedUrl, width: undefined, height: undefined };
     }
 
-    const response = await axios({
-      url: signedUrl,
-      method: "GET",
-      responseType: "arraybuffer",
-    });
-
-    const imageBuffer = Buffer.from(response.data);
-
-    // Get image metadata
-    const metadata = await sharp(imageBuffer).metadata();
-
-    const width = metadata.width || 0;
-    const height = metadata.height || 0;
-
-    const aspectRatio = width / height;
-    let targetWidth = metadata.width;
-    let targetHeight = metadata.height;
-
-    const minAspectRatio = resolveInstagramMinAspectRatio({
-      placement: options?.placement,
-      isFeed: options?.is_feed,
-      feedMinAspectRatio: this.#minAspectRatio,
-      storiesMinAspectRatio: this.#storiesMinAspectRatio,
-      reelsMinAspectRatio: this.#reelsMinAspectRatio,
-    });
-
-    if (options?.firstImage?.width && options?.firstImage?.height) {
-      const firstImageRatio =
-        options?.firstImage?.width / options?.firstImage?.height;
-
-      if (firstImageRatio !== aspectRatio) {
-        targetWidth = options?.firstImage?.width;
-        targetHeight = options?.firstImage?.height;
-      }
-    } else {
-      ({ width: targetWidth, height: targetHeight } = computeCropDimensions({
-        width,
-        height,
-        minAspectRatio,
-        maxAspectRatio: this.#maxAspectRatio,
-      }));
-    }
-
-    // Process image with Sharp (resize & compress)
-    let processedImage = await sharp(imageBuffer)
-      .rotate()
-      .resize({ width: targetWidth, height: targetHeight })
-      .jpeg({ quality: 100 })
-      .toBuffer();
-
-    // Ensure size is within Instagram limits
-    processedImage = await compressJpegToLimit(
-      processedImage,
-      this.#maxFileSize,
+    const result = await triggerImageTransform(
+      {
+        url: signedUrl,
+        mediumId: medium.id,
+        postId: medium.postId,
+        stored: medium.stored,
+        mediaProcessingBackend: medium.mediaProcessingBackend,
+        platform: "instagram",
+        options,
+      },
     );
-
-    const key =
-      this.#getFileKeyFromPublicUrl(signedUrl, this.#bucket) || "fileupload";
-    const processedKey = `${key.split(".")[0]}_instagram`;
-
-    const { error: processedImageUploadError } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .upload(processedKey, processedImage, {
-          contentType: "image/jpeg",
-          cacheControl: "public, max-age=31536000",
-          upsert: true,
-        });
-
-    if (processedImageUploadError) {
-      console.error("Error Processing Image", processedImageUploadError);
-      throw new Error(
-        `Error Processing Image: ${processedImageUploadError.message}`,
-      );
+    if (!result.ok) {
+      throw new Error("Failed to transform Instagram image");
     }
-
-    this.#addedMedia.push({
-      key: processedKey,
-      bucket: this.#bucket,
-    });
-
-    const { data: processedImageUpload } =
-      await this.#localSupabaseClient.storage
-        .from(this.#bucket)
-        .getPublicUrl(processedKey);
-
-    return {
-      signedUrl: processedImageUpload?.publicUrl,
-      width: targetWidth,
-      height: targetHeight,
-    };
+    return result.output;
   }
 
   #sanitizeCaption(caption: string) {
@@ -1231,11 +1197,5 @@ export class InstagramPostClient extends PostClient {
     }
 
     return cleanedCaption;
-  }
-
-  #getFileKeyFromPublicUrl(publicUrl: string, bucket: string): string | null {
-    const pattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
-    const match = publicUrl.match(pattern);
-    return match ? match[1] : null;
   }
 }

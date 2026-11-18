@@ -1,6 +1,12 @@
 import { safeConsole as console } from '../logging/safe-console';
-import { Injectable, Scope } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Scope } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type {
+  GetPlatformAudioParams,
+  PlatformAudioResponseDto,
+} from '../platform-audio/dto/platform-audio.dto';
+import { platformAudioDurationMs } from '../platform-audio/dto/platform-audio.dto';
+import type { InstagramPlatformAudioDto } from './dto/instagram-audio.dto';
 import { SocialPlatformService } from '../lib/social-provider-service';
 import type {
   PlatformPost,
@@ -19,6 +25,8 @@ import type {
   InstagramAccountMetadata,
   InstagramInsightsResponse,
   InstagramInsight,
+  InstagramAudioRequest,
+  InstagramAudioResponse,
 } from './instagram.types';
 import { mapWithConcurrency } from '../lib/async.utils';
 import {
@@ -31,6 +39,86 @@ const GRAPH_INSTAGRAM_DOMAIN = 'https://graph.instagram.com';
 
 @Injectable({ scope: Scope.REQUEST })
 export class InstagramService implements SocialPlatformService {
+  async getPlatformAudio({
+    account,
+    query,
+  }: GetPlatformAudioParams): Promise<PlatformAudioResponseDto> {
+    const baseUrl = this.getApiBaseUrl(account);
+    if (!baseUrl.startsWith('https://graph.facebook.com/')) {
+      throw new HttpException(
+        'Instagram audio discovery requires Facebook Login; Instagram Login connections are not supported',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const filters = query.platform_configurations?.instagram;
+    const params: InstagramAudioRequest = {
+      audio_type: filters?.audio_type ?? 'music',
+      user_id: account.social_provider_user_id,
+      access_token: account.access_token,
+      ...(filters?.search_query !== undefined
+        ? { search_query: filters.search_query }
+        : {}),
+    };
+
+    let result: InstagramAudioResponse;
+    try {
+      const response = await axios.get<InstagramAudioResponse>(
+        `${baseUrl}/ig_audio`,
+        { params },
+      );
+      result = response.data;
+    } catch {
+      // Axios errors include request config/tokens and Graph messages can echo URLs.
+      // Never log, attach a cause, or return the raw upstream error.
+      throw new HttpException(
+        'Instagram audio discovery failed',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    if (result.error) {
+      throw new HttpException(
+        'Instagram audio discovery failed',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const data: InstagramPlatformAudioDto[] = (result.audio ?? []).map(
+      (audio) => ({
+        provider: 'instagram',
+        id: audio.audio_id,
+        title: audio.title || undefined,
+        artist: audio.display_artist || undefined,
+        duration_ms: platformAudioDurationMs(
+          audio.duration_in_ms,
+          'milliseconds',
+        ),
+        preview_url: audio.download_url || undefined,
+        artwork_url: audio.cover_artwork_thumbnail_uri || undefined,
+        // Explicit allowlist: never copy paging URLs or arbitrary upstream metadata.
+        platform_data: {
+          audio_id: audio.audio_id,
+          audio_type: audio.audio_type,
+          title: audio.title,
+          duration_in_ms: audio.duration_in_ms,
+          cover_artwork_thumbnail_uri: audio.cover_artwork_thumbnail_uri,
+          display_artist: audio.display_artist,
+          download_url: audio.download_url,
+          on_platform_audio_preview_link: audio.on_platform_audio_preview_link,
+          ig_username: audio.ig_username,
+          profile_picture_url: audio.profile_picture_url,
+          is_ads_eligible: audio.is_ads_eligible,
+        },
+      }),
+    );
+
+    return {
+      data,
+      meta: { count: data.length, has_more: false, next: null },
+    };
+  }
+
   appCredentials: SocialProviderAppCredentials;
 
   constructor(

@@ -112,6 +112,7 @@ describe("post-result diagnostic boundary", () => {
         projectId: "project_1",
         teamId: "team_1",
         stripeCustomerId: "cus_1",
+        isSystemProject: false,
       });
       for (const output of [result, insertedResult, webhookData]) {
         for (const secret of [

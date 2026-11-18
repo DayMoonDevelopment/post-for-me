@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
-import { retry, tags, task } from "@trigger.dev/sdk";
+import { retry, task } from "@trigger.dev/sdk";
 import { safeLogger as logger } from "./safe-logger";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { Database } from "./supabase.types";
 
 type EventTypeEnum = Database["public"]["Enums"]["webhook_event_type"];
@@ -13,6 +14,7 @@ const supabaseClient = createClient<Database>(
 
 export const processWebhooks = task({
   id: "process-webhook-event",
+  // Customer response bodies are unbounded; retain headroom (WEBHOOK_SIZING.md).
   machine: "medium-1x",
   maxDuration: 3600,
   retry: { maxAttempts: 2 },
@@ -31,7 +33,7 @@ export const processWebhooks = task({
       error?: string;
     } = {};
 
-    await tags.add([`${webhookId}`, `${id}`]);
+    await addTagsBestEffort([`${webhookId}`, `${id}`]);
 
     try {
       const backoffResponse = await retry.fetch(url, {

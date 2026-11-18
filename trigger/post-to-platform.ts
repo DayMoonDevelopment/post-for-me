@@ -1,8 +1,9 @@
 import { safeConsole as console } from "./safe-console";
 import { safeLogger as logger } from "./safe-logger";
 import { redactSecrets } from "./redact-secrets";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { idempotencyKeys, task, tags, tasks } from "@trigger.dev/sdk";
+import { createClient } from "@supabase/supabase-js";
+import { idempotencyKeys, task, tasks } from "@trigger.dev/sdk";
+import { addTagsBestEffort } from "./best-effort-tags";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
 import { InstagramPostClient } from "./posting/platforms/instagram-post-client";
@@ -25,6 +26,7 @@ import { differenceInDays } from "date-fns";
 import Stripe from "stripe";
 import { Database } from "./supabase.types";
 import { extractPlatformError } from "./posting/platform-error";
+import { resolveMediaProcessingBackend } from "./media-processing-backend";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const STRIPE_METER_EVENT = process.env.STRIPE_METER_EVENT || "successful_post";
@@ -35,35 +37,35 @@ const supabaseClient = createClient<Database>(
 );
 
 const createPostClient = ({
-  supabaseClient,
   platformName,
   appCredentials,
+  useSupabaseMedia = false,
 }: {
-  supabaseClient: SupabaseClient;
   platformName: string;
   appCredentials: PlatformAppCredentials;
+  useSupabaseMedia?: boolean;
 }): PostClient => {
   switch (platformName) {
     case "x":
-      return new TwitterPostClient(supabaseClient, appCredentials);
+      return new TwitterPostClient(appCredentials);
     case "instagram":
-      return new InstagramPostClient(supabaseClient, appCredentials);
+      return new InstagramPostClient(appCredentials);
     case "facebook":
-      return new FacebookPostClient(supabaseClient, appCredentials);
+      return new FacebookPostClient(appCredentials);
     case "linkedin":
-      return new LinkedInPostClient(supabaseClient, appCredentials);
+      return new LinkedInPostClient(appCredentials);
     case "tiktok":
-      return new TikTokPostClient(supabaseClient, appCredentials);
+      return new TikTokPostClient(appCredentials, useSupabaseMedia);
     case "bluesky":
-      return new BlueskyPostClient(supabaseClient, appCredentials);
+      return new BlueskyPostClient(appCredentials);
     case "threads":
-      return new ThreadsPostClient(supabaseClient, appCredentials);
+      return new ThreadsPostClient(appCredentials);
     case "pinterest":
-      return new PinterestPostClient(supabaseClient, appCredentials);
+      return new PinterestPostClient(appCredentials);
     case "youtube":
-      return new YouTubePostClient(supabaseClient, appCredentials);
+      return new YouTubePostClient(appCredentials);
     case "tiktok_business":
-      return new TikTokBusinessPostClient(supabaseClient, appCredentials);
+      return new TikTokBusinessPostClient(appCredentials);
     default:
       throw Error("Invalid Platform");
   }
@@ -153,11 +155,11 @@ export const postToPlatform = task({
       machine: "large-1x",
     },
   },
-  machine: "medium-2x",
+  machine: "small-2x",
   run: async (payload: IndividualPostData): Promise<PostResult> => {
     const {
       platform,
-      media,
+      media: inputMedia,
       caption,
       account,
       platformConfig,
@@ -165,8 +167,10 @@ export const postToPlatform = task({
       stripeCustomerId,
       teamId,
       appCredentials,
+      isSystemProject,
       projectId,
     } = payload;
+    const media = inputMedia.map((medium) => ({ ...medium, postId }));
     let postResult: PostResult | null = null;
     const originalSecrets = [
       account.access_token,
@@ -174,15 +178,15 @@ export const postToPlatform = task({
       appCredentials.app_secret,
     ];
     try {
-      await tags.add(`${account.id}`);
+      await addTagsBestEffort(`${account.id}`);
 
       logger.info("Starting post processing", { ...payload });
 
       logger.info("Creating Post Client");
       const postClient = createPostClient({
-        supabaseClient: supabaseClient,
         platformName: platform,
         appCredentials,
+        useSupabaseMedia: platform === "tiktok" && isSystemProject === false,
       });
 
       // Each PostClient declares which media types it can publish (e.g.
@@ -195,7 +199,10 @@ export const postToPlatform = task({
       );
       const supportedMedia = media.filter((m) =>
         postClient.supportedMediaTypes.includes(m.type),
-      );
+      ).map((medium) => ({
+        ...medium,
+        mediaProcessingBackend: resolveMediaProcessingBackend(postId, medium.mediaProcessingBackend),
+      }));
 
       if (unsupportedMedia.length > 0) {
         const unsupportedTypes = [
@@ -286,7 +293,6 @@ export const postToPlatform = task({
             error,
           });
         }
-
       }
     } catch (error) {
       logger.error("Failed Processing Platform Post", {
@@ -310,7 +316,7 @@ export const postToPlatform = task({
       }
     }
 
-    await tags.add(`result_${postResult.success ? "success" : "error"}`);
+    await addTagsBestEffort(`result_${postResult.success ? "success" : "error"}`);
 
     // Sanitize before persistence, logging, task output, and webhook delivery.
     postResult = redactSecrets(
