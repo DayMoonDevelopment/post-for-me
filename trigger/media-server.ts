@@ -1,4 +1,5 @@
 import { Queue } from "bullmq";
+import { randomUUID } from "node:crypto";
 import { Redis } from "ioredis";
 import type { StoredMedia } from "./media-recipes";
 
@@ -171,6 +172,29 @@ export function createMediaServerTransport(redisUrl: string): MediaServerTranspo
       });
     },
   };
+}
+
+/** Direct worker submission: deletion produces no media and needs no callback. */
+export function mediaServerPostCleanupSubmission(socialPostId: string, requestId: string) {
+  return {
+    name: "media.trigger-delete-social-post-files",
+    data: { socialPostId, requestId },
+    options: {
+      jobId: `media-trigger-delete-social-post-files/${requestId}`,
+      attempts: 5,
+      backoff: { type: "exponential", delay: 1000 },
+      removeOnComplete: { age: 3 * 60 * 60 },
+      removeOnFail: { age: 3 * 60 * 60 },
+    },
+  };
+}
+
+export async function enqueueMediaServerPostCleanup(redisUrl: string, socialPostId: string): Promise<void> {
+  // A new processing attempt may have created new files for the same post.
+  const { name, data, options } = mediaServerPostCleanupSubmission(socialPostId, randomUUID());
+  await withQueue(redisUrl, MEDIA_SERVER_INTEROP_LANE, async (queue) => {
+    await queue.add(name, data, options);
+  });
 }
 
 export function sanitizeMediaServerLog(value: unknown): unknown {
