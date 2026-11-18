@@ -1,4 +1,5 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
+import { task } from "@trigger.dev/sdk/v3";
+import { safeLogger as logger } from "./safe-logger";
 import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";

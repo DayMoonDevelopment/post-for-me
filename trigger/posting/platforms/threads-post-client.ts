@@ -1,3 +1,4 @@
+import { safeConsole as console } from "../../safe-console";
 import { PostClient } from "../post-client";
 import axios, { AxiosResponse } from "axios";
 import { wait } from "@trigger.dev/sdk";

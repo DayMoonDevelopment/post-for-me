@@ -1,3 +1,4 @@
+import { safeConsole as console } from '../logging/safe-console';
 import {
   Controller,
   Get,

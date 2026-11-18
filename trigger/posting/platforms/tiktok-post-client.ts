@@ -1,3 +1,4 @@
+import { safeConsole as console } from "../../safe-console";
 import { tasks, wait } from "@trigger.dev/sdk";
 import type { uploadTikTokVideo } from "../../upload-tiktok-video";
 import type { copyMediaToSupabase } from "../../copy-media-to-supabase";

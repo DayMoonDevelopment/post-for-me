@@ -1,3 +1,5 @@
+import { safeConsole as console } from "../../safe-console";
+import { safeLogger as logger } from "../../safe-logger";
 import { PostClient } from "../post-client";
 import axios from "axios";
 import {
@@ -8,7 +10,7 @@ import {
   RefreshTokenResult,
   SocialAccount,
 } from "../post.types";
-import { logger, tasks, wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
 import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
 import type { uploadFacebookThumbnail } from "../../upload-facebook-thumbnail";
 import { normalizePlatform } from "../../lib/platform.utils";

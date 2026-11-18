@@ -1,4 +1,4 @@
- 
+import { safeConsole as console } from "../safe-console";
 import { randomUUID } from "crypto";
 import { createWriteStream } from "fs";
 import * as fsp from "fs/promises";

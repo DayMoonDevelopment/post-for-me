@@ -101,7 +101,7 @@ if (process.env.TASK === "fanout") {
   expect(calls).toContainEqual(["eq", "id", "event"]);
   if (scenario === "network-error") expect(update.response).toEqual({ error: "network failed" });
   else expect(update.response.response).toEqual({ status: scenario === "http-error" ? 503 : 200, statusText: "response", ...(scenario === "body-error" ? {} : { body: "customer response" }) });
-  if (scenario === "update-error") expect(errorLog).toHaveBeenCalledWith("Failed to update webhook event", expect.objectContaining({ error: dbError }));
+  if (scenario === "update-error") expect(errorLog).toHaveBeenCalledWith("Failed to update webhook event", expect.objectContaining({ error: expect.objectContaining({ name: "Error", message: dbError.message }) }));
 }
 `;
 

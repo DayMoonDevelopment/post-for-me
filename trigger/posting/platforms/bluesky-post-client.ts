@@ -1,3 +1,5 @@
+import { safeConsole as console } from "../../safe-console";
+import { safeLogger as logger } from "../../safe-logger";
 import { PostClient } from "../post-client";
 import { BlobRef, AtpAgent, RichText, AppBskyVideoDefs, jsonToLex } from "@atproto/api";
 import type { uploadBlueskyImage, uploadBlueskyLinkPreview } from "../../upload-bluesky-media";
@@ -12,7 +14,7 @@ import {
   SocialAccount,
 } from "../post.types";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
-import { logger, tasks, wait } from "@trigger.dev/sdk/v3";
+import { tasks, wait } from "@trigger.dev/sdk/v3";
 
 export class BlueskyPostClient extends PostClient {
   #agent: AtpAgent;

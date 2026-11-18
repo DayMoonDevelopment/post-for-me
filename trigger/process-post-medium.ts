@@ -1,4 +1,5 @@
-import { logger, task } from "@trigger.dev/sdk";
+import { task } from "@trigger.dev/sdk";
+import { safeLogger as logger } from "./safe-logger";
 import { LIVE_MEDIA_MAX_DURATION_SECONDS } from "./live-media-timeout";
 import fetch from "node-fetch";
 import * as fs from "fs";

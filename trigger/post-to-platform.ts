@@ -1,5 +1,8 @@
+import { safeConsole as console } from "./safe-console";
+import { safeLogger as logger } from "./safe-logger";
+import { redactSecrets } from "./redact-secrets";
 import { createClient } from "@supabase/supabase-js";
-import { idempotencyKeys, logger, task, tasks } from "@trigger.dev/sdk";
+import { idempotencyKeys, task, tasks } from "@trigger.dev/sdk";
 import { addTagsBestEffort } from "./best-effort-tags";
 import { PostClient } from "./posting/post-client";
 import { TwitterPostClient } from "./posting/platforms/twitter-post-client";
@@ -123,13 +126,19 @@ export const handleTokenRefresh = async ({
       };
     }
   } catch (refreshError) {
-    console.error(refreshError);
+    const secrets = [account.access_token, account.refresh_token].filter(
+      (value): value is string => Boolean(value),
+    );
+    console.error(redactSecrets(refreshError, secrets));
     const platformError = extractPlatformError(refreshError);
-    return {
-      success: false,
-      error: platformError.message,
-      details: platformError.data,
-    };
+    return redactSecrets(
+      {
+        success: false,
+        error: platformError.message,
+        details: platformError.data,
+      },
+      secrets,
+    );
   }
 
   return {
@@ -163,6 +172,11 @@ export const postToPlatform = task({
     } = payload;
     const media = inputMedia.map((medium) => ({ ...medium, postId }));
     let postResult: PostResult | null = null;
+    const originalSecrets = [
+      account.access_token,
+      account.refresh_token,
+      appCredentials.app_secret,
+    ];
     try {
       await addTagsBestEffort(`${account.id}`);
 
@@ -281,7 +295,14 @@ export const postToPlatform = task({
         }
       }
     } catch (error) {
-      logger.error("Failed Processing Platform Post", { error });
+      logger.error("Failed Processing Platform Post", {
+        error: redactSecrets(
+          error,
+          [...originalSecrets, account.access_token, account.refresh_token].filter(
+            (value): value is string => Boolean(value),
+          ),
+        ),
+      });
 
       if (!postResult) {
         postResult = {
@@ -297,6 +318,13 @@ export const postToPlatform = task({
 
     await addTagsBestEffort(`result_${postResult.success ? "success" : "error"}`);
 
+    // Sanitize before persistence, logging, task output, and webhook delivery.
+    postResult = redactSecrets(
+      postResult,
+      [...originalSecrets, account.access_token, account.refresh_token].filter(
+        (value): value is string => Boolean(value),
+      ),
+    );
     logger.info("Saving Post Result", { postResult });
     const { data: insertedPostResult, error: insertResultError } =
       await supabaseClient

@@ -1,6 +1,8 @@
+import { safeConsole as console } from "../../safe-console";
+import { safeLogger as logger } from "../../safe-logger";
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
-import { logger, tasks, wait } from "@trigger.dev/sdk";
+import { tasks, wait } from "@trigger.dev/sdk";
 import type { generateYoutubeTimestampThumbnail } from "../../video-child-tasks";
 import type { uploadYoutubeThumbnail } from "../../upload-youtube-thumbnail";
 import type { uploadYoutubeVideo } from "../../upload-youtube-video";

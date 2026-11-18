@@ -1,3 +1,4 @@
+import { safeConsole as console } from '../logging/safe-console';
 import { HttpException, HttpStatus, Injectable, Scope } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {

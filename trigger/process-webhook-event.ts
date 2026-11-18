@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { logger, retry, task } from "@trigger.dev/sdk";
+import { retry, task } from "@trigger.dev/sdk";
+import { safeLogger as logger } from "./safe-logger";
 import { addTagsBestEffort } from "./best-effort-tags";
 import { Database } from "./supabase.types";
 

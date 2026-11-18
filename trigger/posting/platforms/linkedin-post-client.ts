@@ -1,3 +1,4 @@
+import { safeConsole as console } from "../../safe-console";
 import { tasks } from "@trigger.dev/sdk";
 import type { uploadLinkedInMedia } from "../../upload-linkedin-media";
 import { PostClient } from "../post-client";

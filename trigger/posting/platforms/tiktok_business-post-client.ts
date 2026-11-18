@@ -1,3 +1,4 @@
+import { safeConsole as console } from "../../safe-console";
 import { wait } from "@trigger.dev/sdk";
 import { triggerImageTransform } from "../../trigger-image-transform";
 import { PostClient } from "../post-client";
