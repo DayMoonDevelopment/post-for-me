@@ -104,17 +104,9 @@ export async function transformLiveImage(source: StoredMedia, id: string, platfo
   options: Parameters<typeof platformImageRecipe>[2], execute: LiveMediaExecutor): Promise<StoredMedia> {
   const recipe = platformImageRecipe(platform, source, options);
   if (!recipe) return source;
-  let current = await execute(`image-${platform}-q${recipe.initialQuality}`, id, {
-    task: "media.transform-image", source: storedSource(source), output: recipe.output,
+  return execute(`image-${platform}`, id, {
+    task: "media.transform-image", source: storedSource(source), output: recipe.output, maxBytes: recipe.maxBytes,
   });
-  for (const quality of [80, 60]) {
-    if (quality >= recipe.initialQuality || current.size <= recipe.maxBytes) continue;
-    current = await execute(`image-${platform}-q${quality}`, id, {
-      task: "media.transform-image", source: storedSource(current),
-      output: { type: "image", format: "jpeg", quality, autoOrient: false, background: "#000000" },
-    });
-  }
-  return current;
 }
 
 export async function prepareLiveBlueskyVideo(source: StoredMedia, id: string, skip: boolean,

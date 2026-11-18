@@ -179,20 +179,9 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
     options: Parameters<typeof platformImageRecipe>[2], role = "image") {
     const recipe = platformImageRecipe(destination.provider, source, options);
     if (!recipe) return source;
-    let current = await execute(`${role}-q${recipe.initialQuality}`, medium.id, {
-      task: "media.transform-image", source: sourceOf(source), output: recipe.output,
+    return execute(role, medium.id, {
+      task: "media.transform-image", source: sourceOf(source), output: recipe.output, maxBytes: recipe.maxBytes,
     }, destination);
-    for (const quality of [80, 60]) {
-      if (quality >= recipe.initialQuality || current.size <= recipe.maxBytes) continue;
-      current = await execute(`${role}-q${quality}`, medium.id, {
-        task: "media.transform-image", source: sourceOf(current),
-        output: { type: "image", format: "jpeg", quality, autoOrient: false, background: "#000000" },
-      }, destination);
-    }
-    if (current.size > recipe.maxBytes) log("warn", "Shadow image exceeds platform size after compression ladder", {
-      mediumId: medium.id, accountId: destination.id, size: current.size, maxBytes: recipe.maxBytes,
-    });
-    return current;
   }
 
   const localized = new Map<string, StoredMedia>();
