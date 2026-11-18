@@ -265,19 +265,13 @@ describe("shadow media coordinator graph", () => {
     for (const entry of h.entries.slice(2)) expect(entry.job).toMatchObject({ output: { resize: { width: 900, height: 1600 } } });
   });
 
-  test("100 -> 80 -> 60 compression consumes the previous stored result without repeating crop", async () => {
-    const h = harness({ result: (entry) => ({ ...entry.response,
-      size: entry.job.task === "media.transform-image" && entry.job.output.quality === 60 ? 1024 : 10 * 1024 * 1024,
-    }) });
+  test("each image is one job carrying the platform maxBytes, with no follow-up quality jobs", async () => {
+    const h = harness({ result: (entry) => ({ ...entry.response, size: 10 * 1024 * 1024 }) });
     const summary = await h.run();
-    expect(summary).toMatchObject({ status: "completed", completed: 4 });
-    for (const [index, quality] of [100, 80, 60].entries()) {
-      expect(h.entries[index + 1].job).toMatchObject({ source: sourceOf(h.entries[index]), output: { quality } });
-    }
-    for (const entry of h.entries.slice(2)) {
-      expect(entry.job).toMatchObject({ output: { autoOrient: false } });
-      expect(entry.job.task === "media.transform-image" && entry.job.output.resize).toBeUndefined();
-    }
+    expect(summary).toMatchObject({ status: "completed", completed: 2 });
+    const transforms = h.entries.filter((entry) => entry.job.task === "media.transform-image");
+    expect(transforms).toHaveLength(1);
+    expect(transforms[0].job).toMatchObject({ output: { quality: 100 }, maxBytes: 8 * 1024 * 1024 });
   });
 
   test("skip_processing still localizes media and thumbnails but skips generic and image transforms", async () => {
@@ -458,7 +452,7 @@ describe("shadow waitpoint tokens", () => {
     const requests = h.logs.filter((log) => log.message.startsWith("Zenith shadow job request:"));
     expect(requests.map((log) => log.message)).toEqual([
       "Zenith shadow job request: media.localize [localize]",
-      "Zenith shadow job request: media.transform-image [instagram/image-q100]",
+      "Zenith shadow job request: media.transform-image [instagram/image]",
     ]);
     for (const [index, entry] of h.entries.entries()) {
       expect(requests[index].data.redisJob).toEqual(sanitizeMediaServerLog(mediaServerSubmission(entry.handle, entry.job, entry.callback, [{ key: "social_post", refId: "post" }])));

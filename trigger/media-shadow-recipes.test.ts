@@ -106,7 +106,6 @@ describe("platform image policy", () => {
     const recipe = platformImageRecipe("instagram", image(3000, 1000), { isFeed: true });
     expect(recipe?.output.resize).toEqual({ width: 1910, height: 1000, fit: "cover", withoutEnlargement: false });
     expect(recipe?.output.quality).toBe(100);
-    expect(recipe?.initialQuality).toBe(100);
     expect(recipe?.maxBytes).toBe(8 * 1024 * 1024);
   });
 
@@ -141,7 +140,7 @@ describe("platform image policy", () => {
       expect(platformImageRecipe(platform, image(4000, 3000, 6, 5 * 1024 * 1024), {})).toBeUndefined();
       expect(platformImageRecipe(platform, image(4000, 3000, 6, 5 * 1024 * 1024 + 1), {})).toEqual({
         output: { type: "image", format: "jpeg", quality: 80, autoOrient: false, background: "#000000" },
-        maxBytes: 5 * 1024 * 1024, initialQuality: 80,
+        maxBytes: 5 * 1024 * 1024,
       });
     }
   });
@@ -152,7 +151,7 @@ describe("platform image policy", () => {
     expect(platformImageRecipe("bluesky", image(3000, 4000, 1, Math.ceil(limit)), {})).toEqual({
       output: { type: "image", format: "jpeg", quality: 80, autoOrient: true, background: "#000000",
         resize: { width: 2000, height: 2000, fit: "inside", withoutEnlargement: true } },
-      maxBytes: Math.floor(limit), initialQuality: 80,
+      maxBytes: Math.floor(limit),
     });
   });
 
