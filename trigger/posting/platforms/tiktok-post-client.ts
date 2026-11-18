@@ -63,8 +63,6 @@ export class TikTokPostClient extends PostClient {
       },
     });
 
-    this.responses.push({ refreshResponse: refreshResponse.data });
-
     if (refreshResponse.data.error) {
       throw new Error(
         `TikTok API error: ${
@@ -619,7 +617,6 @@ export class TikTokPostClient extends PostClient {
         ? {
             method: error.request.method,
             url: error.request.path,
-            headers: error.request.headers,
           }
         : "No request data",
     };

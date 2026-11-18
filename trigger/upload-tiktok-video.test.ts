@@ -141,7 +141,7 @@ if (message) {
   if (["init-failure", "upload-failure", "multi-upload-failure"].includes(scenario)) {
     expect(result.error_message).toContain("daily cap");
     expect(result.details.error.response).toEqual(apiError.response);
-    expect(result.details.error.request).toEqual({ method: "POST", url: "/video/init/", headers: { "x-test": "value" } });
+    expect(result.details.error.request).toEqual({ method: "POST", url: "/video/init/" });
   } else expect(result.error_message).toBe("Failed to post to TikTok");
 } else {
   const processing = status.startsWith("PROCESSING");

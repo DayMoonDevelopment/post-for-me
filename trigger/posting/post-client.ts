@@ -41,7 +41,6 @@ export class PostClient {
     account: SocialAccount
   ): Promise<RefreshTokenResult> {
     //Implement at platform level
-    console.log(account);
     return {
       access_token: account.access_token,
       refresh_token: account.refresh_token,
@@ -60,9 +59,6 @@ export class PostClient {
   async post({
     postId,
     account,
-    caption,
-    media,
-    platformConfig,
   }: {
     postId: string;
     account: SocialAccount;
@@ -81,7 +77,6 @@ export class PostClient {
       | ThreadsConfiguration;
   }): Promise<PostResult> {
     //Implement at platform level
-    console.log(postId, account, caption, media, platformConfig);
     return {
       post_id: postId,
       provider_connection_id: account.id,

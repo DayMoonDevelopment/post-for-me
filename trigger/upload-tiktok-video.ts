@@ -161,7 +161,6 @@ export const uploadTikTokVideo = task({
           request: error.request ? {
             method: error.request.method,
             path: error.request.path,
-            headers: error.request.headers,
           } : undefined,
         },
       };

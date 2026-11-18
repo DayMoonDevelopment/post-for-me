@@ -75,8 +75,6 @@ export class TikTokBusinessPostClient extends PostClient {
           },
         );
 
-        this.responses.push({ refreshResponse: refreshResponse.data, attempt });
-
         if (refreshResponse.data.code !== 0) {
           const refreshError = new Error(
             `TikTok API error: ${refreshResponse.data.message}`,
@@ -838,7 +836,6 @@ export class TikTokBusinessPostClient extends PostClient {
         ? {
             method: error.request.method,
             url: error.request.path,
-            headers: error.request.headers,
           }
         : "No request data",
     };

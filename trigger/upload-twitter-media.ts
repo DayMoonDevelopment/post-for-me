@@ -104,7 +104,7 @@ export class TwitterMediaUploader extends PostClient {
         await wait.for({ seconds: 2 });
         attempts++;
       } catch (error) {
-        console.error("Error checking media status:", error);
+        console.error("Error checking media status:", error.message);
         throw error;
       }
     }

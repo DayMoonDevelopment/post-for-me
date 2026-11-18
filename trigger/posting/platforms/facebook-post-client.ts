@@ -71,7 +71,6 @@ export class FacebookPostClient extends PostClient {
       };
       this.requests.push({
         refreshRequest: `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
-        params: refreshParams,
       });
       const response = await axios.get(
         `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
@@ -79,7 +78,6 @@ export class FacebookPostClient extends PostClient {
           params: refreshParams,
         },
       );
-      this.responses.push({ refreshResponse: response.data });
 
       if (!response.data.access_token) {
         console.error("Failed to refresh Facebook token", response.data);
@@ -95,7 +93,7 @@ export class FacebookPostClient extends PostClient {
     } catch (error) {
       console.error(
         "Error refreshing Facebook token:",
-        error.response?.data || error,
+        error.response?.data || error.message,
       );
       throw error;
     }
@@ -243,7 +241,6 @@ export class FacebookPostClient extends PostClient {
             url: `${this.#baseUrl}/${platformId}`,
             params: {
               fields: "permalink_url",
-              access_token: account.access_token,
             },
           },
         });
@@ -277,7 +274,7 @@ export class FacebookPostClient extends PostClient {
     } catch (error) {
       console.error(
         "Error posting to Facebook:",
-        error.response?.data || error,
+        error.response?.data || error.message,
       );
 
       const platformError = extractPlatformError(error);
@@ -342,7 +339,6 @@ export class FacebookPostClient extends PostClient {
     this.requests.push({
       createTextRequest: {
         url: `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
-        body: postData,
       },
     });
 
@@ -409,7 +405,6 @@ export class FacebookPostClient extends PostClient {
     this.requests.push({
       photoRequest: {
         url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
-        data: payload,
       },
     });
     const photoResponse = await axios.post(
@@ -489,7 +484,6 @@ export class FacebookPostClient extends PostClient {
       this.requests.push({
         photoRequest: {
           url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
-          data: payload,
         },
       });
       const photoResponse = await axios.post(
@@ -509,7 +503,6 @@ export class FacebookPostClient extends PostClient {
         url: `${this.#baseUrl}/${account.social_provider_user_id}/feed`,
         body: {
           message: caption,
-          access_token: account.access_token,
           attached_media: mediaIds,
         },
       },
@@ -692,7 +685,6 @@ export class FacebookPostClient extends PostClient {
         data: {
           file_url: fileUrl,
           description: caption,
-          access_token: account.access_token,
         },
       },
     });
@@ -948,7 +940,6 @@ export class FacebookPostClient extends PostClient {
     this.requests.push({
       photoRequest: {
         url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
-        data: payload,
       },
     });
     const photoResponse = await axios.post(
@@ -1187,7 +1178,7 @@ export class FacebookPostClient extends PostClient {
             data: collaboratorResponse.data,
           });
         } catch (err) {
-          logger.error("Error adding collaborator", { error: err });
+          logger.error("Error adding collaborator", { error: err.message });
         }
       }
     }

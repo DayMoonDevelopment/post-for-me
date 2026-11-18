@@ -66,7 +66,7 @@ for (const platform of ["bluesky", "twitter"]) {
     test(`${platform} buffered image: ${scenario}`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {
         cwd: __dirname,
-        env: { ...process.env, PLATFORM: platform, SCENARIO: scenario },
+        env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", PLATFORM: platform, SCENARIO: scenario },
         stdout: "pipe",
         stderr: "pipe",
       });

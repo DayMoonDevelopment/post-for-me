@@ -118,7 +118,7 @@ export const handleTokenRefresh = async ({
   } catch (refreshError) {
     const platformError = extractPlatformError(refreshError);
     logger.error(`Token refresh error for account ${account.id}:`, {
-      error: refreshError,
+      error: platformError.message,
       platformError,
     });
     return {
