@@ -59,9 +59,6 @@ export class PostClient {
   async post({
     postId,
     account,
-    caption,
-    media,
-    platformConfig,
   }: {
     postId: string;
     account: SocialAccount;
