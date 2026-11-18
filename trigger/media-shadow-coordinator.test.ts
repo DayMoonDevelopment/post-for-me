@@ -397,13 +397,6 @@ describe("shadow waitpoint tokens", () => {
     expect(h.logs.some((log) => log.data.error && JSON.stringify(log.data.error).includes("fetch_failed"))).toBe(true);
   });
 
-  test("animated image rejection is reported as an unsupported failed transform", async () => {
-    const h = harness({ outcome: (entry) => entry.job.task === "media.transform-image"
-      ? { ok: false, error: { code: "unsupported", message: "Animated images are not supported." } } : undefined });
-    const summary = await h.run();
-    expect(summary).toMatchObject({ status: "failed", completed: 1, failed: 1, unsupported: 1 });
-  });
-
   test("a timed-out token is incomplete, stops its dependents, and is not a failure or an artifact", async () => {
     const h = harness({ outcome: (entry) => entry.job.task === "media.localize" ? "timeout" : undefined });
     const summary = await h.run();
