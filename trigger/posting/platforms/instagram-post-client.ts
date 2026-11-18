@@ -70,7 +70,6 @@ export class InstagramPostClient extends PostClient {
           refreshRequest: `${this.#graphInstagramApiUrl}/refresh_access_token`,
           params: {
             grant_type: "ig_refresh_token",
-            access_token: account.access_token,
           },
         });
         const response = await axios.get(
@@ -82,8 +81,6 @@ export class InstagramPostClient extends PostClient {
             },
           },
         );
-
-        this.responses.push({ refreshResponse: response.data });
 
         if (response.data && response.data.access_token) {
           const newAccessToken = response.data.access_token;
@@ -111,7 +108,6 @@ export class InstagramPostClient extends PostClient {
 
         this.requests.push({
           refreshRequest: `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
-          params: refreshTokenParams,
         });
         const response = await axios.get(
           `${this.#graphApiUrl}/${this.#oauthApiVersion}/oauth/access_token`,
@@ -119,8 +115,6 @@ export class InstagramPostClient extends PostClient {
             params: refreshTokenParams,
           },
         );
-
-        this.responses.push({ refreshResponse: response.data });
 
         if (response.data && response.data.access_token) {
           const newAccessToken = response.data.access_token;
@@ -233,7 +227,6 @@ export class InstagramPostClient extends PostClient {
           this.requests.push({
             publishRequest: {
               creation_id: containerId,
-              access_token: account.access_token,
             },
           });
           const publishResponse = await axios.post(
@@ -315,7 +308,7 @@ export class InstagramPostClient extends PostClient {
         },
       };
     } catch (error) {
-      console.error("Error posting to Instagram:", error);
+      console.error("Error posting to Instagram:", error.message);
 
       const platformError = extractPlatformError(error);
       const errorDetails = {
@@ -662,7 +655,9 @@ export class InstagramPostClient extends PostClient {
     }
 
     this.requests.push({
-      createCarouselRequest: carouselPayload,
+      createCarouselRequest: {
+        url: `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
+      },
     });
     const carouselResponse = await axios.post(
       `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
@@ -709,7 +704,9 @@ export class InstagramPostClient extends PostClient {
         );
 
         this.requests.push({
-          [requestLogKey]: payload,
+          [requestLogKey]: {
+            url: `${this.getApiBaseUrl(account)}/${account.social_provider_user_id}/media`,
+          },
           attempt,
         });
 

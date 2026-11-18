@@ -44,8 +44,6 @@ export class LinkedInPostClient extends PostClient {
 
     const data = await response.json();
 
-    this.responses.push({ refreshResponse: data });
-
     if (!response.ok) {
       throw new Error(
         `Failed to refresh LinkedIn token: ${data.error_description}`,
@@ -186,7 +184,7 @@ export class LinkedInPostClient extends PostClient {
     } catch (error) {
       console.error(
         `Failed to post to linked for account: ${account.id}`,
-        error,
+        error.message,
       );
       return {
         success: false,

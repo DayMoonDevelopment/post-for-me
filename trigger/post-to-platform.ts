@@ -123,8 +123,8 @@ export const handleTokenRefresh = async ({
       };
     }
   } catch (refreshError) {
-    console.error(refreshError);
     const platformError = extractPlatformError(refreshError);
+    console.error(platformError.message);
     return {
       success: false,
       error: platformError.message,
@@ -166,7 +166,11 @@ export const postToPlatform = task({
     try {
       await addTagsBestEffort(`${account.id}`);
 
-      logger.info("Starting post processing", { ...payload });
+      logger.info("Starting post processing", {
+        postId,
+        platform,
+        accountId: account.id,
+      });
 
       logger.info("Creating Post Client");
       const postClient = createPostClient({
@@ -226,7 +230,7 @@ export const postToPlatform = task({
       ) {
         logger.info("Refreshing Token", {
           platform: account.provider,
-          account,
+          accountId: account.id,
         });
         const refreshed = await handleTokenRefresh({
           postClient,
@@ -235,7 +239,7 @@ export const postToPlatform = task({
 
         if (!refreshed.success) {
           logger.error("Failed to refresh token", {
-            account,
+            accountId: account.id,
             error: refreshed.error,
           });
           postResult = {
@@ -281,7 +285,9 @@ export const postToPlatform = task({
         }
       }
     } catch (error) {
-      logger.error("Failed Processing Platform Post", { error });
+      logger.error("Failed Processing Platform Post", {
+        error: extractPlatformError(error).message,
+      });
 
       if (!postResult) {
         postResult = {
@@ -290,7 +296,7 @@ export const postToPlatform = task({
           error_message:
             "Unexcpted Error: Post Status Unavailable, Please check the social account.",
           post_id: postId,
-          details: { error: error },
+          details: { error: extractPlatformError(error).message },
         };
       }
     }

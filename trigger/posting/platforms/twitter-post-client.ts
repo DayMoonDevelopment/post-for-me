@@ -225,7 +225,7 @@ export class TwitterPostClient extends PostClient {
     } catch (error) {
       console.error(
         `Error posting to Twitter for account ${account.id} :`,
-        error,
+        error.message,
       );
       if (error.data && error.data.errors) {
         console.error(

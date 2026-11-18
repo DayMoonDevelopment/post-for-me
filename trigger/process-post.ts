@@ -210,7 +210,7 @@ export const processPost = task({
     const { post } = payload;
     const mediaProcessingBackend = resolveMediaProcessingBackend(post.id, payload.mediaProcessingBackend);
     logger.info("Selected media processing backend", { postId: post.id, mediaProcessingBackend });
-    logger.info("Starting post processing", { post });
+    logger.info("Starting post processing", { postId: post.id });
 
     await addTagsBestEffort([
       `${post.id}`,
@@ -229,7 +229,7 @@ export const processPost = task({
 
     try {
       if (!accounts || accounts.length === 0) {
-        logger.error("No accounts found for post", { post });
+        logger.error("No accounts found for post", { postId: post.id });
         return [];
       }
 
@@ -389,7 +389,7 @@ export const processPost = task({
         accounts: accounts,
       };
 
-      logger.info("Constructed Post Data", { postData });
+      logger.info("Constructed Post Data", { postId: post.id });
 
       const bulkPostData: IndividualPostData[] = [];
       const storyBulkPostData: IndividualPostData[] = [];
@@ -537,9 +537,9 @@ export const processPost = task({
           logger.info("Created Indidividual Post Configuration");
         } catch (error: any) {
           logger.error("Failed Posting To Account", {
-            account,
-            postData,
-            error,
+            accountId: account.id,
+            postId: post.id,
+            error: error?.message,
           });
 
           errorResults.push({
@@ -547,13 +547,13 @@ export const processPost = task({
             error_message: error?.message || "Unkown error",
             provider_connection_id: account.id,
             post_id: postData.id,
-            details: { error },
+            details: { error: error?.message },
           });
         }
       }
 
       if (bulkPostData.length > 0) {
-        logger.info("Posting To Accounts", { bulkPostData });
+        logger.info("Posting To Accounts", { count: bulkPostData.length });
         const batchPostResult = await tasks.batchTriggerAndWait(
           "post-to-platform",
           bulkPostData.map((data) => ({ payload: data })),

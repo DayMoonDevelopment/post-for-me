@@ -50,7 +50,7 @@ export const uploadYoutubeThumbnail = task({
       console.log("Thumbnail uploaded successfully for video:", videoId);
       return { request, response: { thumbnailResponse: thumbnailResponse.data } };
     } catch (error) {
-      console.error("Error uploading thumbnail:", error);
+      console.error("Error uploading thumbnail:", error.message);
       if (ctx.attempt.number < 2) throw error;
       // Return the final API failure so the parent retains its nonfatal diagnostics.
       return {
