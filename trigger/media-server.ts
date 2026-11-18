@@ -74,7 +74,8 @@ export type MediaServerJob =
     output: MediaServerVideoOutput;
     accept?: MediaServerVideoAccept;
     maxBytes?: number;
-  };
+  }
+  | { task: "media.extract-video-frame"; source: StoredSource; atMs: number; output: MediaServerImageOutput; maxBytes?: number };
 
 /** The BullMQ lane whose coordinators run the real task and complete a Trigger waitpoint token. */
 export const MEDIA_SERVER_INTEROP_LANE = "trigger-interop";
@@ -83,6 +84,7 @@ export const mediaServerInteropJobs = {
   "media.localize": "media.trigger-localize",
   "media.transform-image": "media.trigger-transform-image",
   "media.transform-video": "media.trigger-transform-video",
+  "media.extract-video-frame": "media.trigger-extract-video-frame",
 } as const;
 
 /** The URL media POSTs a task's outcome to; it completes the waitpoint token and is a secret. */
@@ -249,7 +251,9 @@ export function parseMediaServerResponse(value: unknown, task: MediaServerJob["t
       }
     }
   } else if (media.kind !== "document" || !text(media.contentType)) throw new Error("Invalid media kind");
-  if (task !== "media.localize") {
+  if (task === "media.extract-video-frame") {
+    if (media.kind !== "image") throw new Error("Invalid extracted frame");
+  } else if (task !== "media.localize") {
     const image = task === "media.transform-image";
     if (media.kind !== (image ? "image" : "video") ||
       !(image ? ["unchanged", "transformed"] : ["unchanged", "copied", "encoded"]).includes(result.decision as string)) {

@@ -15,6 +15,7 @@ const events = [];
 let inChild = false;
 let polls = 0;
 const artifactUrl = "https://media.example.com/thumbnail.jpg";
+const stored = { fileId: "file", versionId: "version", path: "p", url: "https://media.example.com/video.mp4", contentType: "video/mp4", size: 1, media: {} };
 const thumbnailSet = mock(async (request) => {
   events.push("thumbnail");
   expect(request.media.body).toEqual(Buffer.from("jpeg"));
@@ -80,9 +81,15 @@ const triggerAndWait = mock(async (id, payload) => {
     catch (error) { return { ok: false, error }; }
     finally { inChild = false; }
   }
+  if (id === "extract-live-video-frame") {
+    events.push("frame-child");
+    expect(payload).toEqual({ postId: "post", mediumId: "medium", stored, atMs: 1250 });
+    if (scenario === "zenith-throw") throw new Error("frame child failed");
+    return scenario === "zenith-failed" ? { ok: false, error: { message: "failed" } } : { ok: true, output: { url: artifactUrl } };
+  }
   events.push("child");
   expect(id).toBe("generate-youtube-timestamp-thumbnail");
-  expect(payload).toEqual({ url: "https://example.com/video.mp4", timestampMs: 1250, mediaId: "medium" });
+  expect(payload).toEqual({ url: "https://example.com/video.mp4", timestampMs: 1250, mediaId: "medium", ...(scenario === "zenith-unstored" ? { mediaProcessingBackend: "zenith" } : {}) });
   if (scenario === "throw") throw new Error("child failed");
   return scenario === "child-error" ? { ok: false, error: { message: "failed" } } : { ok: true, output: artifactUrl };
 });
@@ -117,7 +124,8 @@ await client.refreshAccessToken(account);
 const result = JSON.parse(JSON.stringify(await client.post({ postId: "post", account, caption: "caption", media: [{
   id: "medium", type: "video", url: "https://example.com/video.mp4",
   ...(!["none", "paid-true", "paid-false"].includes(scenario) ? { thumbnail_timestamp_ms: 1250 } : {}),
-  ...(scenario === "explicit" ? { thumbnail_url: "https://example.com/explicit.jpg" } : {}),
+  ...(scenario.startsWith("zenith") ? { mediaProcessingBackend: "zenith", ...(scenario === "zenith-unstored" ? {} : { stored }) } : {}),
+  ...(scenario === "explicit" ?  { thumbnail_url: "https://example.com/explicit.jpg" } : {}),
 }], platformConfig: scenario === "configured" ? {
   title: " <A>\ntitle ", description: "x".repeat(5001), tags: ["tag"], category_id: "22", default_language: "en",
   privacy_status: "private", made_for_kids: true, contains_synthetic_media: true, embeddable: false, license: "creativeCommon", public_stats_viewable: false, publish_at: "2030-01-01T00:00:00Z",
@@ -143,7 +151,7 @@ if (scenario === "processing-timeout") {
 if (scenario === "configured") expect(result.details.warning).toContain("truncated to 5000 bytes");
 expect(result.details.requests.some((r) => r.postRequest?.upload.chunkSizeBytes === 8 * 1024 * 1024)).toBe(true);
 const noThumbnail = ["none", "paid-true", "paid-false"].includes(scenario);
-expect(triggerAndWait).toHaveBeenCalledTimes(noThumbnail ? 1 : ["explicit", "child-error", "throw"].includes(scenario) ? 2 : 3);
+expect(triggerAndWait).toHaveBeenCalledTimes(noThumbnail ? 1 : ["explicit", "child-error", "throw", "zenith-failed", "zenith-throw"].includes(scenario) ? 2 : 3);
 expect(events.shift()).toBe("video-child");
 if (["processing-pending", "processing-timeout"].includes(scenario)) {
   expect(events.slice(-polls)).toEqual(Array(polls).fill("poll"));
@@ -152,10 +160,12 @@ if (["processing-pending", "processing-timeout"].includes(scenario)) {
 expect(events).toEqual(noThumbnail ? ["video", "poll"]
   : scenario === "explicit" ? ["video", "upload-child", "download-thumbnail", "thumbnail", "poll"]
   : ["child-error", "throw"].includes(scenario) ? ["video", "child", "poll"]
+  : ["zenith-failed", "zenith-throw"].includes(scenario) ? ["video", "frame-child", "poll"]
+  : scenario === "zenith" ? ["video", "frame-child", "upload-child", "download-thumbnail", "thumbnail", "poll"]
   : ["upload-child-error", "upload-throw"].includes(scenario) ? ["video", "child", "upload-child", "poll"]
   : scenario === "download-error" ? ["video", "child", "upload-child", "download-thumbnail", "poll"]
   : ["video", "child", "upload-child", "download-thumbnail", "thumbnail", "poll"]);
-if (["success", "upload-error"].includes(scenario)) {
+if (["success", "upload-error", "zenith"].includes(scenario)) {
   const request = result.details.requests.find((entry) => entry.thumbnailUploadRequest).thumbnailUploadRequest;
   expect(request.thumbnailTimestampMs).toBe(1250);
   expect(request).not.toHaveProperty("thumbnailUrl");
@@ -163,7 +173,7 @@ if (["success", "upload-error"].includes(scenario)) {
 if (scenario === "upload-error") expect(result.details.responses.some((entry) => entry.thumbnailError?.error === "thumbnail upload failed")).toBe(true);
 `;
 
-for (const scenario of ["success", "explicit", "none", "child-error", "throw", "download-error", "upload-error", "upload-child-error", "upload-throw", "paid-true", "paid-false", "video-error", "video-framework", "configured", "processing-failed", "processing-pending", "processing-timeout"]) {
+for (const scenario of ["success", "explicit", "none", "child-error", "throw", "download-error", "upload-error", "upload-child-error", "upload-throw", "paid-true", "paid-false", "zenith", "zenith-failed", "zenith-throw", "zenith-unstored", "video-error", "video-framework", "configured", "processing-failed", "processing-pending", "processing-timeout"]) {
   test(`YouTube thumbnail child boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", thumbnailHarness], {
       cwd: __dirname,

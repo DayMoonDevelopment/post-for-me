@@ -25,8 +25,7 @@ payloads remain valid. Use the explicit backend field to pin an individual call;
 for medium-based payloads, put it on `medium`. Legacy workers and animation
 fallback calls are explicitly pinned to Trigger to prevent routing loops.
 
-YouTube timestamp-thumbnail extraction has no Zenith equivalent and explicitly
-stays on FFmpeg for either selection. Uploads, compatibility copies, and manual
+Uploads, compatibility copies, and manual
 shadow diagnostics retain their existing behavior; shadow diagnostics do not
 participate in the production percentage rollout.
 
@@ -86,6 +85,7 @@ on BullMQ's `trigger-interop` queue (`bull` prefix):
 | `media.localize` | `media.trigger-localize` |
 | `media.transform-image` | `media.trigger-transform-image` |
 | `media.transform-video` | `media.trigger-transform-video` |
+| `media.extract-video-frame` | `media.trigger-extract-video-frame` |
 
 Input is `{ input, callback: { url } }`, with the real task's input and callback
 URL. Zenith completes the token with `{ ok: true, output }` or
@@ -112,11 +112,22 @@ Requests and completed outputs log run/stage/medium/job IDs and stored versions.
 Transport exceptions are not logged verbatim. Timeout does not cancel Zenith
 work; it may finish after Trigger stops waiting.
 
+## YouTube timestamp thumbnails
+
+Supplied thumbnail URLs keep precedence. For a medium with
+`mediaProcessingBackend: "zenith"`, a stored video and `thumbnail_timestamp_ms`,
+the YouTube client runs the `extract-live-video-frame` child task, which runs
+`media.extract-video-frame` on the stored file/version at that time. The job's
+`output` and `maxBytes` state YouTube's limits (JPEG, at most 1280x720, 2 MiB), and
+it carries the post's `social_post` lookup key, so the frame is deleted with the
+post's other media. The frame's URL goes to `upload-youtube-thumbnail`. The child
+run keeps its token wait apart from the client's `triggerAndWait` and processing polls.
+A failed extraction is logged and the post goes out without the custom thumbnail;
+it never falls back to `generate-youtube-timestamp-thumbnail`, which still serves
+the legacy cohort (and a Zenith medium with no stored reference).
+
 ## Explicit legacy exceptions
 
-- YouTube timestamp-thumbnail generation remains
-  `generate-youtube-timestamp-thumbnail` (FFmpeg). Supplied thumbnails retain
-  precedence and optional-thumbnail failures retain existing behavior.
 - When a Zenith image transform specifically reports **"Animated images are not
   supported"**, `transform-live-image` invokes the existing platform-specific
   legacy image task, explicitly pinned to Trigger. It then localizes that output

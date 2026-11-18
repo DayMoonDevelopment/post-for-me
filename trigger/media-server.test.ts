@@ -248,6 +248,7 @@ if (scenario === "cleanup") {
     "media.localize": "media.trigger-localize",
     "media.transform-image": "media.trigger-transform-image",
     "media.transform-video": "media.trigger-transform-video",
+    "media.extract-video-frame": "media.trigger-extract-video-frame",
   });
   const source = { fileId: "source-file", versionId: "source-version" };
   const jobs = [localize,
@@ -364,3 +365,27 @@ for (const scenario of [
     }
   }, 5000);
 }
+
+test("a frame job is submitted to its coordinator with the frame input and lookup key", () => {
+  const handle = { jobId: "job", requestId: "request", path: "publishing/run/request", queue: "trigger-interop" };
+  const output = { type: "image" as const, format: "jpeg" as const, quality: 90 };
+  const submission = mediaServerSubmission(handle, {
+    task: "media.extract-video-frame", source: { fileId: "file", versionId: "version" }, atMs: 1250, output, maxBytes: 2097152,
+  }, { url: "https://callback.example/token" }, [{ key: "social_post", refId: "post" }]);
+  expect(submission.name).toBe("media.trigger-extract-video-frame");
+  expect(submission.data).toEqual({
+    input: { source: { fileId: "file", versionId: "version" }, atMs: 1250, output, maxBytes: 2097152, requestId: "request", path: "publishing/run/request" },
+    callback: { url: "https://callback.example/token" },
+    lookupKeys: [{ key: "social_post", refId: "post" }],
+  });
+});
+
+test("parseMediaServerResponse accepts a frame image with no decision and rejects anything else", () => {
+  const frame = { ...stored(), source: { fileId: "video", versionId: "video-version" } };
+  expect<unknown>(parseMediaServerResponse(frame, "media.extract-video-frame")).toBe(frame);
+  expect(() => parseMediaServerResponse(stored(video), "media.extract-video-frame")).toThrow("Invalid extracted frame");
+  expect(() => parseMediaServerResponse(stored({ kind: "document", contentType: "application/pdf" }), "media.extract-video-frame"))
+    .toThrow("Invalid extracted frame");
+  expect(() => parseMediaServerResponse({ ...stored(), url: "" }, "media.extract-video-frame")).toThrow("Invalid stored media result");
+  expect(() => parseMediaServerResponse(stored({ ...image, width: 0 }), "media.extract-video-frame")).toThrow("Invalid image metadata");
+});
