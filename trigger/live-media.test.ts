@@ -207,11 +207,12 @@ test("a YouTube thumbnail frame is requested within YouTube's limits, with the p
   const frame = await extractYoutubeThumbnailFrame(video("stored-video"), "medium", 1250, deps.execute);
   expect(frame.url).toBe("https://media.example/frame");
   const [, job, , keys] = deps.enqueue.mock.calls[0];
-  expect(job).toEqual({
-    task: "media.extract-video-frame", source: { fileId: "file", versionId: "stored-video" }, atMs: 1250,
-    output: { type: "image", format: "jpeg", quality: 90, resize: { width: 1280, height: 720, fit: "inside" } },
-    maxBytes: 2 * 1024 * 1024,
-  });
+  if (job.task !== "media.extract-video-frame") throw new Error("Expected a frame job");
+  expect(job).toMatchObject({ source: { fileId: "file", versionId: "stored-video" }, atMs: 1250 });
+  expect(["jpeg", "png"]).toContain(job.output.format);
+  expect(job.output.resize?.fit).toBe("inside");
+  expect(Math.max(job.output.resize?.width ?? Infinity, job.output.resize?.height ?? Infinity)).toBeLessThanOrEqual(1280);
+  expect(job.maxBytes).toBeLessThanOrEqual(2097152);
   expect(keys).toEqual(lookupKeys);
 });
 

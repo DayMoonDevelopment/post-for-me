@@ -123,7 +123,7 @@ const account = { id: "account" };
 await client.refreshAccessToken(account);
 const result = JSON.parse(JSON.stringify(await client.post({ postId: "post", account, caption: "caption", media: [{
   id: "medium", type: "video", url: "https://example.com/video.mp4",
-  ...(!["none", "paid-true", "paid-false"].includes(scenario) ? { thumbnail_timestamp_ms: 1250 } : {}),
+  ...(!["none", "paid-true", "paid-false"].includes(scenario) ? { thumbnail_timestamp_ms: scenario === "zenith-negative" ? -5 : 1250 } : {}),
   ...(scenario.startsWith("zenith") ? { mediaProcessingBackend: "zenith", ...(scenario === "zenith-unstored" ? {} : { stored }) } : {}),
   ...(scenario === "explicit" ?  { thumbnail_url: "https://example.com/explicit.jpg" } : {}),
 }], platformConfig: scenario === "configured" ? {
@@ -150,7 +150,7 @@ if (scenario === "processing-timeout") {
 }
 if (scenario === "configured") expect(result.details.warning).toContain("truncated to 5000 bytes");
 expect(result.details.requests.some((r) => r.postRequest?.upload.chunkSizeBytes === 8 * 1024 * 1024)).toBe(true);
-const noThumbnail = ["none", "paid-true", "paid-false"].includes(scenario);
+const noThumbnail = ["none", "paid-true", "paid-false", "zenith-negative"].includes(scenario);
 expect(triggerAndWait).toHaveBeenCalledTimes(noThumbnail ? 1 : ["explicit", "child-error", "throw", "zenith-failed", "zenith-throw"].includes(scenario) ? 2 : 3);
 expect(events.shift()).toBe("video-child");
 if (["processing-pending", "processing-timeout"].includes(scenario)) {
@@ -173,7 +173,7 @@ if (["success", "upload-error", "zenith"].includes(scenario)) {
 if (scenario === "upload-error") expect(result.details.responses.some((entry) => entry.thumbnailError?.error === "thumbnail upload failed")).toBe(true);
 `;
 
-for (const scenario of ["success", "explicit", "none", "child-error", "throw", "download-error", "upload-error", "upload-child-error", "upload-throw", "paid-true", "paid-false", "zenith", "zenith-failed", "zenith-throw", "zenith-unstored", "video-error", "video-framework", "configured", "processing-failed", "processing-pending", "processing-timeout"]) {
+for (const scenario of ["success", "explicit", "none", "child-error", "throw", "download-error", "upload-error", "upload-child-error", "upload-throw", "paid-true", "paid-false", "zenith", "zenith-failed", "zenith-throw", "zenith-negative", "zenith-unstored", "video-error", "video-framework", "configured", "processing-failed", "processing-pending", "processing-timeout"]) {
   test(`YouTube thumbnail child boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", thumbnailHarness], {
       cwd: __dirname,

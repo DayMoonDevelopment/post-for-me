@@ -25,9 +25,9 @@ payloads remain valid. Use the explicit backend field to pin an individual call;
 for medium-based payloads, put it on `medium`. Legacy workers and animation
 fallback calls are explicitly pinned to Trigger to prevent routing loops.
 
-Uploads, compatibility copies, and manual
-shadow diagnostics retain their existing behavior; shadow diagnostics do not
-participate in the production percentage rollout.
+Uploads, compatibility copies, and manual shadow diagnostics retain their
+existing behavior; shadow diagnostics do not participate in the production
+percentage rollout.
 
 At `0`, no production path needs Zenith/Redis configuration. R2, Sharp, and
 FFmpeg remain required for the legacy cohort and the capability exceptions.
@@ -93,9 +93,11 @@ URL. Zenith completes the token with `{ ok: true, output }` or
 before use. Invalid envelopes/results, worker failures, failed enqueues, and
 token timeouts fail the child; they never count as processed media.
 
-Token timeouts cover queue wait plus execution: 30 minutes for video transforms,
-10 minutes otherwise. Waiting time does not consume the child's 600-second
-compute budget. Enqueue has three bounded attempts with the same deterministic
+Every token shares one deadline: `LIVE_MEDIA_MAX_DURATION_SECONDS` minus
+`LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS` (1200 - 30 = 1170 seconds) from the start of
+each child run's executor, covering queue wait plus execution. Once it passes, no
+new token is created. Waiting time does not consume the child's `maxDuration` of
+1200 seconds. Enqueue has three bounded attempts with the same deterministic
 run/stage/medium ID and callback. Child run IDs isolate account destinations.
 BullMQ has five worker attempts with exponential backoff and three-hour job
 retention. Redis operations have 2.5-second timeouts and close their connections.
@@ -118,7 +120,7 @@ Supplied thumbnail URLs keep precedence. For a medium with
 `mediaProcessingBackend: "zenith"`, a stored video and `thumbnail_timestamp_ms`,
 the YouTube client runs the `extract-live-video-frame` child task, which runs
 `media.extract-video-frame` on the stored file/version at that time. The job's
-`output` and `maxBytes` state YouTube's limits (JPEG, at most 1280x720, 2 MiB), and
+`output` and `maxBytes` state YouTube's limits (JPEG, long edge at most 1280 px so portrait frames stay at least 640 px wide, 2 MiB), and
 it carries the post's `social_post` lookup key, so the frame is deleted with the
 post's other media. The frame's URL goes to `upload-youtube-thumbnail`. The child
 run keeps its token wait apart from the client's `triggerAndWait` and processing polls.

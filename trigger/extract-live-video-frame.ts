@@ -5,13 +5,13 @@ import { extractYoutubeThumbnailFrame } from "./live-media";
 import type { StoredMedia } from "./media-recipes";
 
 export type ExtractLiveVideoFrameInput = {
-  postId?: string;
+  postId: string;
   mediumId: string;
   stored: StoredMedia;
   atMs: number;
 };
 
-/** Runs in its own run so its token wait never overlaps the YouTube client's other waits. */
+/** Extracts the frame of a stored video at `atMs` for a YouTube thumbnail and returns its URL. */
 export const extractLiveVideoFrameTask = task({
   id: "extract-live-video-frame",
   maxDuration: LIVE_MEDIA_MAX_DURATION_SECONDS,
