@@ -19,11 +19,14 @@ process.env.STRIPE_SECRET_KEY = "sk_test_dummy";
 // body now flows through `error`/`details`.
 
 let updateEq: ReturnType<typeof mock>;
+let reloadSingle: ReturnType<typeof mock>;
+let reloadEq: ReturnType<typeof mock>;
 
 mock.module("@supabase/supabase-js", () => ({
   createClient: () => ({
     from: () => ({
       update: () => ({ eq: updateEq }),
+      select: () => ({ eq: reloadEq }),
     }),
   }),
 }));
@@ -36,6 +39,17 @@ beforeAll(async () => {
 
 beforeEach(() => {
   updateEq = mock(async () => ({ error: null }));
+  reloadSingle = mock(async () => ({
+    data: null,
+    error: { message: "reload unavailable" },
+  }));
+  reloadEq = mock(() => ({ single: reloadSingle }));
+  Object.assign(account, {
+    access_token: "old_token",
+    refresh_token: null,
+    access_token_expires_at: null,
+    refresh_token_expires_at: null,
+  });
 });
 
 const account: SocialAccount = {
@@ -70,6 +84,122 @@ const postClientWith = (
 ): PostClient => ({ refreshAccessToken }) as PostClient;
 
 describe("handleTokenRefresh", () => {
+  for (const provider of [
+    "x",
+    "instagram",
+    "facebook",
+    "threads",
+    "pinterest",
+    "youtube",
+    "bluesky",
+    "linkedin",
+    "tiktok",
+    "tiktok_business",
+  ]) {
+    test(`reloads latest credentials and continues after ${provider} refresh throws`, async () => {
+      const current = { ...account, provider } as SocialAccount;
+      const latest = {
+        ...current,
+        access_token: "latest_access",
+        refresh_token: "latest_refresh",
+        access_token_expires_at: "2026-12-01T00:00:00.000Z",
+        refresh_token_expires_at: "2027-01-01T00:00:00.000Z",
+        social_provider_metadata: { connection_type: "oauth2" },
+      };
+      reloadSingle = mock(async () => ({ data: latest, error: null }));
+      const refresh = mock(async () => {
+        throw new Error("invalid_request");
+      });
+
+      expect(
+        await mod.handleTokenRefresh({
+          postClient: postClientWith(refresh),
+          account: current,
+        }),
+      ).toEqual({ success: true });
+      expect(current.access_token).toBe("latest_access");
+      expect(current.refresh_token).toBe("latest_refresh");
+      expect(current.access_token_expires_at).toEqual(
+        new Date(latest.access_token_expires_at),
+      );
+      expect(current.refresh_token_expires_at).toEqual(
+        new Date(latest.refresh_token_expires_at),
+      );
+      expect(current.social_provider_metadata).toEqual(
+        latest.social_provider_metadata,
+      );
+      expect(reloadEq).toHaveBeenCalledWith("id", current.id);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(updateEq).not.toHaveBeenCalled();
+    });
+  }
+
+  test("continues with stored credentials even when they have not changed", async () => {
+    reloadSingle = mock(async () => ({ data: { ...account }, error: null }));
+    const result = await mod.handleTokenRefresh({
+      postClient: postClientWith(async () => {
+        throw new Error("temporary failure");
+      }),
+      account,
+    });
+    expect(result).toEqual({ success: true });
+    expect(account.access_token).toBe("old_token");
+  });
+
+  test("reloads after refresh returns no access token", async () => {
+    reloadSingle = mock(async () => ({
+      data: { ...account, access_token: "latest" },
+      error: null,
+    }));
+    const result = await mod.handleTokenRefresh({
+      postClient: postClientWith(async () => ({
+        access_token: undefined,
+        expires_at: "2026-12-01T00:00:00Z",
+      })),
+      account,
+    });
+    expect(result).toEqual({ success: true });
+    expect(account.access_token).toBe("latest");
+  });
+
+  test("reloads after persisting refreshed tokens fails", async () => {
+    updateEq = mock(async () => ({ error: { message: "write failed" } }));
+    reloadSingle = mock(async () => ({
+      data: { ...account, access_token: "stored" },
+      error: null,
+    }));
+    const result = await mod.handleTokenRefresh({
+      postClient: postClientWith(async () => ({
+        access_token: "unpersisted",
+        expires_at: "2026-12-01T00:00:00Z",
+      })),
+      account,
+    });
+    expect(result).toEqual({ success: true });
+    expect(account.access_token).toBe("stored");
+  });
+
+  for (const scenario of ["missing", "no token", "throws"]) {
+    test(`stops when account reload ${scenario}`, async () => {
+      reloadSingle = mock(async () => {
+        if (scenario === "throws") throw new Error("read failed");
+        return {
+          data:
+            scenario === "missing" ? null : { ...account, access_token: null },
+          error: null,
+        };
+      });
+      const result = await mod.handleTokenRefresh({
+        postClient: postClientWith(async () => {
+          throw new Error("refresh failed");
+        }),
+        account,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("refresh failed");
+    });
+  }
+
   test("returns success and updates the connection when refresh succeeds", async () => {
     const postClient = postClientWith(async () => ({
       access_token: "new_token",
@@ -80,6 +210,7 @@ describe("handleTokenRefresh", () => {
 
     expect(result).toEqual({ success: true });
     expect(updateEq).toHaveBeenCalledTimes(1);
+    expect(reloadSingle).not.toHaveBeenCalled();
   });
 
   test("surfaces the platform's structured error body instead of the generic axios message", async () => {
@@ -119,7 +250,11 @@ describe("handleTokenRefresh", () => {
 
     const result = await mod.handleTokenRefresh({ postClient, account });
 
-    expect(result).toEqual({ success: false, error: "socket hang up", details: undefined });
+    expect(result).toEqual({
+      success: false,
+      error: "socket hang up",
+      details: undefined,
+    });
   });
 
   test("reports a generic error and no details when the platform returns no access token", async () => {

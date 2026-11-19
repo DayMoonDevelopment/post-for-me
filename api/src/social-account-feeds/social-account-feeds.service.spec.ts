@@ -79,6 +79,50 @@ function makeService(
 }
 
 describe('SocialAccountFeedsService', () => {
+  it.each([2, 120])(
+    'refreshes X OAuth2 only near expiry (%i minutes remaining)',
+    async (minutes) => {
+      const fromMock = vi.fn().mockImplementation((table: string) =>
+        makeSupabaseChain({
+          data:
+            table === 'social_provider_connections'
+              ? {
+                  id: 'spc_test',
+                  provider: 'x',
+                  social_provider_user_id: '12345',
+                  access_token: 'test',
+                  refresh_token: 'refresh',
+                  social_provider_metadata: { connection_type: 'oauth2' },
+                  access_token_expires_at: new Date(
+                    Date.now() + minutes * 60_000,
+                  ).toISOString(),
+                }
+              : [],
+        }),
+      );
+      const service = makeService(fromMock);
+      const refreshAccessToken = vi
+        .fn()
+        .mockImplementation((account) => Promise.resolve(account));
+      const getAccountPosts = vi
+        .fn()
+        .mockResolvedValue({ posts: [], count: 0, has_more: false });
+      vi.spyOn(service, 'getPlatformService').mockResolvedValue({
+        refreshAccessToken,
+        getAccountPosts,
+      } as never);
+
+      await service.getPlatformPosts({
+        accountId: 'spc_test',
+        projectId: 'project_test',
+        queryParams: { limit: 10 },
+      });
+
+      expect(refreshAccessToken).toHaveBeenCalledTimes(minutes <= 5 ? 1 : 0);
+      expect(getAccountPosts).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('reports the clamped LinkedIn limit in the adapter call, metadata, and next URL', async () => {
     const fromMock = vi.fn().mockImplementation((table: string) =>
       makeSupabaseChain({
