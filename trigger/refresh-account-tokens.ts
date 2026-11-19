@@ -13,6 +13,7 @@ import { YouTubePostClient } from "./posting/platforms/youtube-post-client";
 import { TikTokBusinessPostClient } from "./posting/platforms/tiktok_business-post-client";
 import { PlatformAppCredentials, SocialAccount } from "./posting/post.types";
 import { extractPlatformError } from "./posting/platform-error";
+import { X_OAUTH2_REFRESH_BUFFER_MS } from "./posting/token-refresh";
 
 import { Database } from "./supabase.types";
 
@@ -232,7 +233,10 @@ export const refreshAccountTokens = schedules.task({
         .select("*")
         .eq("provider", "x")
         .contains("social_provider_metadata", { connection_type: "oauth2" })
-        .lte("access_token_expires_at", sevenDaysFromNow.toISOString())
+        .lte(
+          "access_token_expires_at",
+          new Date(Date.now() + X_OAUTH2_REFRESH_BUFFER_MS).toISOString(),
+        )
         .order("access_token_expires_at", { ascending: true })
         .limit(50);
 
