@@ -24,8 +24,6 @@ export class PinterestController {
   @Get('boards/:social_account_id')
   @ApiOperation({
     summary: 'List Pinterest boards',
-    description:
-      "Returns one page of owned boards and group boards where the connected account is a collaborator, unchanged from Pinterest. No privacy or publishability filter is applied. Requires boards:read; visibility (including secret/protected boards) is limited by the connected token's scopes and Pinterest permissions. Follow meta.next to enumerate all accessible boards. Does not discover boards through other ad accounts or Business Access identities.",
   })
   @ApiParam({
     name: 'social_account_id',

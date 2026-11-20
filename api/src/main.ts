@@ -30,6 +30,7 @@ import { webhookControllerDescription } from './webhooks/docs/webhooks-controlle
 import { socialPostPreviewControllerDescription } from './social-posts-previews/docs/social-posts-preview-controller.md';
 import { socialAccountFeedsControllerDescription } from './social-account-feeds/docs/social-account-feeds-controller.md';
 import { platformAudioControllerDescription } from './platform-audio/docs/platform-audio-controller.md';
+import { pinterestControllerDescription } from './pinterest/docs/pinterest.controller.md';
 
 async function bootstrap() {
   const app: NestExpressApplication = await NestFactory.create(AppModule, {
@@ -58,6 +59,7 @@ async function bootstrap() {
     .addTag('Social Post Results', postResultsControllerDescription)
     .addTag('Social Account Feeds', socialAccountFeedsControllerDescription)
     .addTag('Platform Audio', platformAudioControllerDescription)
+    .addTag('Pinterest', pinterestControllerDescription)
     .addTag('Webhooks', webhookControllerDescription)
     .addTag('Social Post Previews', socialPostPreviewControllerDescription)
     .setVersion('1.0')
