@@ -153,35 +153,28 @@ for (const [name, outcome, ok, error] of [
 test("image compression chains completed versions and returns the final URL/content type/metadata", async () => {
   let pass = 0;
   const execute = mock(async () => ({ ...image(`pass-${++pass}`, pass < 3 ? 10_000_000 : 100), contentType: "image/jpeg" }));
-  const fallback = mock(async () => image("legacy"));
-  const result = await transformLiveImage(image(), "id", "instagram", {}, execute, fallback);
+  const result = await transformLiveImage(image(), "id", "instagram", {}, execute);
   expect(result.url).toEndWith("pass-3");
   expect(execute.mock.calls.map((call: any) => call[2].source.versionId)).toEqual(["source", "pass-1", "pass-2"]);
-  expect(fallback).not.toHaveBeenCalled();
 });
 
 test("Instagram carousel uses completed first-image geometry, not localization dimensions", async () => {
   const execute = mock(async (_stage: string, _id: string, job: any) => ({
     ...image("cropped"), media: { ...image().media, kind: "image" as const, width: job.output.resize.width, height: job.output.resize.height },
   } as StoredMedia));
-  const fallback = async () => image();
-  const first = await transformLiveImage(image(), "1", "instagram", { isFeed: true }, execute, fallback);
+  const first = await transformLiveImage(image(), "1", "instagram", { isFeed: true }, execute);
   expect(first.media).toMatchObject({ width: 600, height: 800 });
-  await transformLiveImage(image(), "2", "instagram", { firstImage: { width: 600, height: 800 } }, execute, fallback);
+  await transformLiveImage(image(), "2", "instagram", { firstImage: { width: 600, height: 800 } }, execute);
   expect(execute.mock.calls[1][2].output.resize).toMatchObject({ width: 600, height: 800 });
 });
 
-for (const [error, fallbackExpected] of [
-  [new ZenithWorkerError("UNSUPPORTED", "Animated images are not supported"), true],
-  [new ZenithWorkerError("FAILED", "decode failed"), false],
-  [new Error("Animated images are not supported"), false],
-] as const) {
-  test(`animation fallback is targeted: ${error.constructor.name}/${error.message}`, async () => {
-    const fallback = mock(async () => image("legacy"));
-    const operation = transformLiveImage(image(), "id", "instagram", {}, async () => { throw error; }, fallback);
-    if (fallbackExpected) expect((await operation).versionId).toBe("legacy");
-    else await expect(operation).rejects.toBe(error);
-    expect(fallback).toHaveBeenCalledTimes(fallbackExpected ? 1 : 0);
+for (const error of [
+  new ZenithWorkerError("UNSUPPORTED", "Animated images are not supported"),
+  new ZenithWorkerError("FAILED", "decode failed"),
+  new Error("Media processing token timed out"),
+]) {
+  test(`a failed image transform surfaces unchanged: ${error.constructor.name}/${error.message}`, async () => {
+    await expect(transformLiveImage(image(), "id", "instagram", {}, async () => { throw error; })).rejects.toBe(error);
   });
 }
 
