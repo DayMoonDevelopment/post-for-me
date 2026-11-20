@@ -6,8 +6,19 @@ import type { FormSchema } from "./schema";
 
 const INVALID_FIELDS = ["_disclose_content", "_providers"];
 
+export const selectPlatformConfigurations = (obj: FormSchema): FormSchema => ({
+  ...obj,
+  platform_configurations: obj.platform_configurations
+    ? Object.fromEntries(
+        Object.entries(obj.platform_configurations).filter(([provider]) =>
+          obj._providers?.includes(provider),
+        ),
+      )
+    : undefined,
+});
+
 export const cleanPayload = (obj: FormSchema) => {
-  const result = { ...obj };
+  const result = selectPlatformConfigurations(obj);
 
   INVALID_FIELDS.forEach((key) => {
     unset(result, key);
