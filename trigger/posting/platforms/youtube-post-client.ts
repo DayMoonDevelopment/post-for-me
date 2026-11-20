@@ -203,13 +203,13 @@ export class YouTubePostClient extends PostClient {
         try {
           await this.#uploadThumbnail(videoId, medium.thumbnail_url, { thumbnailUrl: medium.thumbnail_url });
         } catch (thumbnailError) {
-          console.error("Failed to upload thumbnail:", thumbnailError);
+          console.error("Failed to upload thumbnail:", thumbnailError.message);
         }
       } else if (medium.thumbnail_timestamp_ms != null) {
         try {
           await this.#uploadThumbnailFromTimestamp(videoId, medium);
         } catch (thumbnailError) {
-          console.error("Failed to upload thumbnail from timestamp:", thumbnailError);
+          console.error("Failed to upload thumbnail from timestamp:", thumbnailError.message);
         }
       }
       const processingResult = await this.#pollProcessingDetails(youtube, videoId);
@@ -233,7 +233,7 @@ export class YouTubePostClient extends PostClient {
         details: { message: processingResult.message, warning, requests: this.requests, responses: this.responses },
       };
     } catch (error: any) {
-      console.error("Error Posting to YouTube:", error);
+      console.error("Error Posting to YouTube:", error.message);
       if (error.response) console.error("YouTube API error response:", error.response.data);
       return {
         success: false,
@@ -242,8 +242,8 @@ export class YouTubePostClient extends PostClient {
         error_message: `Failed to post to Youtube: ${error.message}`,
         details: {
           error: error?.response?.data || (error instanceof Error
-            ? { name: error.name, message: error.message, stack: error.stack, cause: error.cause }
-            : error),
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : { name: error?.name, message: error?.message }),
           requests: this.requests,
           responses: this.responses,
         },

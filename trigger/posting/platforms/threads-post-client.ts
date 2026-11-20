@@ -58,8 +58,6 @@ export class ThreadsPostClient extends PostClient {
       },
     });
 
-    this.responses.push({ refreshResponse: refreshResponse.data });
-
     const { access_token, expires_in } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
 
@@ -123,7 +121,6 @@ export class ThreadsPostClient extends PostClient {
               url: `https://graph.threads.net/v1.0/me/threads_publish`,
               params: {
                 creation_id: containerId,
-                access_token: account.access_token,
               },
             },
           });
@@ -195,7 +192,7 @@ export class ThreadsPostClient extends PostClient {
         },
       };
     } catch (error: any) {
-      console.error("Error posting to Threads:", error.response?.data || error);
+      console.error("Error posting to Threads:", error.response?.data || error.message);
 
       const platformError = extractPlatformError(error);
       const errorDetails = {
@@ -349,7 +346,6 @@ export class ThreadsPostClient extends PostClient {
             url: `https://graph.threads.net/v1.0/${containerId}`,
             params: {
               fields: "status,error_message",
-              access_token: account.access_token,
             },
           },
         });

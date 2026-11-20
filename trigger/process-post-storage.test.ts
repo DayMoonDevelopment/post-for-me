@@ -65,7 +65,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   const projectSingle = mock(async () => ({ data: project, error: null }));
   const projectEq = mock(() => ({ single: projectSingle }));
   const projectSelect = mock((_selection: string) => ({ eq: projectEq }));
-  const updatedSingle = mock(async () => ({
+  const updatedSingle = mock(async (): Promise<{ data: (Post & { status: string }) | null; error: { message: string } | null }> => ({
     data: { ...post, status: "processed" },
     error: null,
   }));
@@ -97,7 +97,9 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
   const logError = mock();
   const logWarn = mock();
   const waitFor = mock(async () => {});
+  const enqueueCleanup = mock(async (_redisUrl: string, _postId: string) => {});
 
+  mock.module("./media-server", () => ({ enqueueMediaServerPostCleanup: enqueueCleanup }));
   mock.module("@supabase/supabase-js", () => ({ createClient: () => ({ from }) }));
   mock.module("@unkey/api", () => ({ Unkey: class { keys = { getKey }; } }));
   mock.module("@trigger.dev/sdk", () => ({
@@ -120,6 +122,7 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       projectSingle, projectEq, projectSelect, updatedSingle, updatedOrder,
       updatedSelect, updatedEq, update, from, getKey, batchTriggerAndWait,
       triggerAndWait, trigger, batchTrigger, addTags, logError, logWarn, waitFor,
+      enqueueCleanup,
     ]) fn.mockClear();
   });
   afterEach(() => {
@@ -204,9 +207,67 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
       expect(batchTrigger).not.toHaveBeenCalled();
       expect(logError).not.toHaveBeenCalled();
       expect(update).toHaveBeenCalledWith({ status: "processed" });
-      expect(logWarn).not.toHaveBeenCalled();
+      if (backend === "zenith" && mode === "disabled") {
+        expect(logWarn).toHaveBeenCalledWith("Failed to queue post media cleanup", { postId: post.id });
+        expect(enqueueCleanup).not.toHaveBeenCalled();
+      } else {
+        expect(logWarn).not.toHaveBeenCalled();
+        if (backend === "zenith") expect(enqueueCleanup).toHaveBeenCalledWith("redis://shadow.example.com", post.id);
+        else expect(enqueueCleanup).not.toHaveBeenCalled();
+      }
     });
   }
+
+  test("Zenith cleanup follows all sequential stories and confirmed status, before the webhook", async () => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = "100";
+    process.env.MEDIA_SERVER_REDIS_URL = "redis://media.example.com";
+    const events: string[] = [];
+    triggerAndWait.mockImplementationOnce(async () => { events.push("story-1"); return { ok: true }; });
+    triggerAndWait.mockImplementationOnce(async () => { events.push("story-2"); return { ok: true }; });
+    updatedSingle.mockImplementationOnce(async () => {
+      events.push("processed");
+      return { data: { ...post, status: "processed" }, error: null };
+    });
+    enqueueCleanup.mockImplementationOnce(async () => { events.push("cleanup-enqueued"); });
+    trigger.mockImplementationOnce(async () => { events.push("webhook"); return { id: "webhook-run" }; });
+    await run({ index: 0, post: {
+      ...post,
+      social_post_media: [{
+        id: medium.id, url: medium.url, thumbnail_url: null, thumbnail_timestamp_ms: null,
+        provider: null, provider_connection_id: null, alt_text: null, tags: null, skip_processing: true, index: 0,
+      }],
+      social_post_configurations: [{ provider: "facebook", provider_connection_id: null, caption: null, provider_data: { placement: "stories" } }],
+    } });
+    expect(events).toEqual(["story-1", "story-2", "processed", "cleanup-enqueued", "webhook"]);
+    expect(enqueueCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(["error", "missing"])("does not clean up without a confirmed status update: %s", async (outcome) => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = "100";
+    process.env.MEDIA_SERVER_REDIS_URL = "redis://media.example.com";
+    updatedSingle.mockResolvedValueOnce({ data: null, error: outcome === "error" ? { message: "update failed" } : null });
+    await run({ index: 0, post });
+    expect(enqueueCleanup).not.toHaveBeenCalled();
+  });
+
+  test("cleanup enqueue failure does not prevent the completion webhook or change results", async () => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = "100";
+    process.env.MEDIA_SERVER_REDIS_URL = "redis://media.example.com";
+    enqueueCleanup.mockRejectedValueOnce(new Error("redis://user:secret@media.example.com"));
+    await expect(run({ index: 0, post })).resolves.toBeUndefined();
+    expect(logWarn).toHaveBeenCalledWith("Failed to queue post media cleanup", { postId: post.id });
+    expect(trigger).toHaveBeenCalledWith("process-webhooks", expect.anything());
+    expect(insertResults).not.toHaveBeenCalled();
+  });
+
+  test("a failed publish still cleans up once the post is processed", async () => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = "100";
+    process.env.MEDIA_SERVER_REDIS_URL = "redis://media.example.com";
+    batchTriggerAndWait.mockResolvedValueOnce({ runs: [{ ok: false, error: { message: "publish failed" } }] });
+    await run({ index: 0, post });
+    expect(update).toHaveBeenCalledWith({ status: "processed" });
+    expect(enqueueCleanup).toHaveBeenCalledTimes(1);
+  });
 
   for (const normalizationFails of [false, true]) {
     test(`batches Trigger localization and video normalization, normalization fails=${normalizationFails}`, async () => {
@@ -261,7 +322,8 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     });
   }
 
-  test("failed account override cannot fall back; independent account publishes completed defaults in index order", async () => {
+  test.each(["0", "100"])("failed account override cannot fall back; independent account publishes completed defaults in index order at %s%% Zenith", async (percentage) => {
+    process.env.ZENITH_MEDIA_PERCENTAGE = percentage;
     const inputMedia = [
       { id: "last", index: 9, provider_connection_id: null },
       { id: "failed-override", index: 0, provider_connection_id: "account-1" },
@@ -280,7 +342,11 @@ if (!process.env.PFM_PROCESS_POST_STORAGE_TEST_CHILD) {
     expect(payloads[0].payload.account.id).toBe("account-2");
     expect(payloads[0].payload.media.map((m) => m.url)).toEqual(["https://zenith.example/first", "https://zenith.example/last"]);
     expect(payloads[0].payload.media[0]).toMatchObject({ alt_text: "preserved alt", tags: inputMedia[0].tags });
-    expect(insertResults).toHaveBeenCalledWith([expect.objectContaining({ provider_connection_id: "account-1", success: false })]);
+    expect(insertResults).toHaveBeenCalledWith([expect.objectContaining({
+      provider_connection_id: "account-1",
+      success: false,
+      error_message: "Media failed to process, please check media URLs",
+    })]);
   });
 
   for (const isSystem of [true, false]) {

@@ -82,7 +82,7 @@ for (const kind of ["thumbnail", "probe"]) {
     test(`${kind} child: ${scenario}`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {
         cwd: __dirname,
-        env: { ...process.env, VIDEO_CHILD_KIND: kind, VIDEO_CHILD_SCENARIO: scenario },
+        env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", VIDEO_CHILD_KIND: kind, VIDEO_CHILD_SCENARIO: scenario },
         stdout: "pipe",
         stderr: "pipe",
       });

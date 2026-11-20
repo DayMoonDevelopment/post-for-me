@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   parseMediaServerResponse,
   mediaServerSubmission,
+  mediaServerPostCleanupSubmission,
   sanitizeMediaServerLog,
   type MediaServerJob,
 } from "./media-server";
@@ -19,6 +20,18 @@ const video = {
 const stored = (media: unknown = image) => ({
   fileId: "file-123", versionId: "version-456", path: "shadow/result.jpg",
   url: "https://media.example/result.jpg", contentType: "image/jpeg", size: 1234, media,
+});
+
+test("post cleanup targets the direct worker with no callback, path or lookup keys", () => {
+  expect(mediaServerPostCleanupSubmission("post-id", "request-id")).toEqual({
+    name: "media.trigger-delete-social-post-files",
+    data: { socialPostId: "post-id", requestId: "request-id" },
+    options: {
+      jobId: "media-trigger-delete-social-post-files/request-id",
+      attempts: 5, backoff: { type: "exponential", delay: 1000 },
+      removeOnComplete: { age: 10800 }, removeOnFail: { age: 10800 },
+    },
+  });
 });
 
 test("lookup keys belong to every interop envelope, not the wrapped media input", () => {
@@ -72,17 +85,17 @@ test("parseMediaServerResponse accepts each transform decision and nullable vide
 
 test("parseMediaServerResponse rejects invalid stored media envelopes", () => {
   for (const value of [null, undefined, [], "result", 1]) {
-    expect(() => parseMediaServerResponse(value, "media.localize")).toThrow("Invalid Zenith result object");
+    expect(() => parseMediaServerResponse(value, "media.localize")).toThrow("Invalid media result object");
   }
   for (const key of ["fileId", "versionId", "path", "url", "contentType"]) {
     for (const value of [undefined, null, "", 1]) {
       expect(() => parseMediaServerResponse({ ...stored(), [key]: value }, "media.localize"))
-        .toThrow("Invalid Zenith stored media result");
+        .toThrow("Invalid stored media result");
     }
   }
   for (const size of [undefined, null, "12", -1, 1.5, NaN, Infinity]) {
     expect(() => parseMediaServerResponse({ ...stored(), size }, "media.localize"))
-      .toThrow("Invalid Zenith stored media result");
+      .toThrow("Invalid stored media result");
   }
   for (const media of [undefined, null, [], {}, { kind: "audio" }, { kind: "document", contentType: "" }]) {
     expect(() => parseMediaServerResponse({ ...stored(), media }, "media.localize")).toThrow();
@@ -95,7 +108,7 @@ test("parseMediaServerResponse rejects malformed image metadata", () => {
     { orientation: 0 }, { orientation: 9 }, { orientation: 1.5 }, { hasAlpha: undefined }, { hasAlpha: 0 },
   ]) {
     expect(() => parseMediaServerResponse(stored({ ...image, ...patch }), "media.localize"))
-      .toThrow("Invalid Zenith image metadata");
+      .toThrow("Invalid image metadata");
   }
   for (const orientation of [1, 8]) {
     expect<unknown>(parseMediaServerResponse(stored({ ...image, orientation }), "media.localize").media)
@@ -112,18 +125,18 @@ test("parseMediaServerResponse rejects malformed video and audio metadata", () =
     })),
   ]) {
     expect(() => parseMediaServerResponse(stored({ ...video, ...patch }), "media.localize"))
-      .toThrow("Invalid Zenith video metadata");
+      .toThrow("Invalid video metadata");
   }
   for (const audio of [
     { ...video.audio, codec: "" }, { ...video.audio, bitrate: NaN },
     { ...video.audio, channels: "2" }, { ...video.audio, sampleRate: undefined },
   ]) {
     expect(() => parseMediaServerResponse(stored({ ...video, audio }), "media.localize"))
-      .toThrow("Invalid Zenith audio metadata");
+      .toThrow("Invalid audio metadata");
   }
   for (const patch of [{ video: null }, { video: [] }, { audio: undefined }, { audio: [] }]) {
     expect(() => parseMediaServerResponse(stored({ ...video, ...patch }), "media.localize"))
-      .toThrow("Invalid Zenith result object");
+      .toThrow("Invalid media result object");
   }
 });
 
@@ -136,7 +149,7 @@ test("parseMediaServerResponse requires task-specific media kinds and decisions"
   ];
   for (const [task, media, decision] of cases) {
     expect(() => parseMediaServerResponse({ ...stored(media), decision }, task))
-      .toThrow("Invalid Zenith transform decision");
+      .toThrow("Invalid media transform decision");
   }
 });
 
@@ -212,13 +225,24 @@ mock.module("bullmq", () => ({
     }
   },
 }));
-const { createMediaServerTransport, MEDIA_SERVER_INTEROP_LANE, mediaServerInteropJobs } = await import("./media-server.ts");
+const { createMediaServerTransport, enqueueMediaServerPostCleanup, MEDIA_SERVER_INTEROP_LANE, mediaServerInteropJobs } = await import("./media-server.ts");
 const transport = createMediaServerTransport(redisUrl);
 const handle = { jobId: "job-123", queue: "custom-queue", requestId: "request-456", path: "shadow/custom/result" };
 const localize = { task: "media.localize", url: "https://source.example/signed?token=secret" };
 const callback = { url: "https://trigger.example/callback/secret" };
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
-if (scenario === "routing") {
+if (scenario === "cleanup") {
+  await enqueueMediaServerPostCleanup(redisUrl, "post-id");
+  await enqueueMediaServerPostCleanup(redisUrl, "post-id");
+  expect(queues.map((queue) => queue.name)).toEqual(["trigger-interop", "trigger-interop"]);
+  for (const [name, data, options] of adds) {
+    expect(name).toBe("media.trigger-delete-social-post-files");
+    expect(data).toEqual({ socialPostId: "post-id", requestId: expect.any(String) });
+    expect(options.jobId).toBe("media-trigger-delete-social-post-files/" + data.requestId);
+    expect(options.attempts).toBe(5);
+  }
+  expect(adds[0][1].requestId).not.toBe(adds[1][1].requestId);
+} else if (scenario === "routing") {
   expect(MEDIA_SERVER_INTEROP_LANE).toBe("trigger-interop");
   expect(mediaServerInteropJobs).toEqual({
     "media.localize": "media.trigger-localize",
@@ -321,7 +345,7 @@ try {
 `;
 
 for (const scenario of [
-  "routing", "acknowledgement", "connect-error", "add-error", "blackhole-enqueue",
+  "cleanup", "routing", "acknowledgement", "connect-error", "add-error", "blackhole-enqueue",
 ]) {
   test(`media server transport: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", scenario.startsWith("blackhole-") ? networkHarness : harness], {

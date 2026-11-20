@@ -31,7 +31,7 @@ export function createLiveMediaExecutor(runId: string, deps: {
   // A fresh relative timeout per stage could keep one run waiting for hours.
   const deadline = new Date(now() + (LIVE_MEDIA_MAX_DURATION_SECONDS - LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS) * 1000);
   async function submit(stage: string, mediumId: string, job: MediaServerJob): Promise<PendingLiveMediaJob> {
-    if (now() >= deadline.getTime()) throw new Error("Zenith media processing deadline exceeded");
+    if (now() >= deadline.getTime()) throw new Error("Media processing deadline exceeded");
     const requestId = createHash("sha256").update(`${runId}/${stage}/${mediumId}`).digest("hex");
     const handle = {
       jobId: `${job.task.replace(".", "-")}/${requestId}`, requestId,
@@ -47,7 +47,7 @@ export function createLiveMediaExecutor(runId: string, deps: {
       });
     } catch {
       log("Zenith media waitpoint creation failed", {});
-      throw new Error("Zenith media waitpoint creation failed");
+      throw new Error("Media processing waitpoint creation failed");
     }
     const callback = { url: token.url };
     log("Zenith media request", { redisJob: mediaServerSubmission(handle, job, callback, deps.lookupKeys), tokenId: token.id });
@@ -56,29 +56,30 @@ export function createLiveMediaExecutor(runId: string, deps: {
       try { await deps.transport.enqueue(handle, job, callback, deps.lookupKeys); enqueued = true; }
       catch { log("Zenith enqueue failed", { attempt }); }
     }
-    if (!enqueued) throw new Error("Zenith media enqueue failed");
+    if (!enqueued) throw new Error("Media processing enqueue failed");
     return { wait: async () => {
       let result;
       try { result = await deps.wait.forToken(token); }
       catch {
         log("Zenith media token wait failed", { tokenId: token.id });
-        throw new Error("Zenith media token wait failed");
+        throw new Error("Media processing token wait failed");
       }
       if (!result.ok) {
         log("Zenith media token timed out", { tokenId: token.id });
-        throw new Error("Zenith media token timed out");
+        throw new Error("Media processing token timed out");
       }
       const outcome = result.output as { ok?: unknown; output?: unknown; error?: { code?: unknown; message?: unknown } } | null;
       if (!outcome || typeof outcome !== "object" || typeof outcome.ok !== "boolean") {
-        throw new Error("Invalid Zenith media token response");
+        throw new Error("Invalid media processing token response");
       }
       if (!outcome.ok) {
         if (typeof outcome.error?.code !== "string" || typeof outcome.error.message !== "string") {
-          throw new Error("Invalid Zenith media worker error");
+          throw new Error("Invalid media processing worker error");
         }
         log("Zenith media worker failed", { error: outcome.error });
-        // Retain the specific worker error for capability fallback, but never leak URLs.
-        throw new ZenithWorkerError(outcome.error.code, sanitizeMediaServerLog(outcome.error.message) as string);
+        // Retain the specific worker error for capability fallback, but never leak URLs or backend names.
+        const message = (sanitizeMediaServerLog(outcome.error.message) as string).replace(/zenith/gi, "media service");
+        throw new ZenithWorkerError(outcome.error.code, message);
       }
       const output = parseMediaServerResponse(outcome.output, job.task);
       log("Zenith media completed", { output });

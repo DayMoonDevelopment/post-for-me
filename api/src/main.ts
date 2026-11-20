@@ -15,6 +15,7 @@ import { SocialPostPreviewsModule } from './social-posts-previews/social-posts-p
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PinterestModule } from './pinterest/pinterest.module';
+import { PlatformAudioModule } from './platform-audio/platform-audio.module';
 
 import { mediaControllerDescription } from './media/docs/media-controller.md';
 import { postsControllerDescription } from './social-posts/docs/posts-controller.md';
@@ -28,6 +29,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { webhookControllerDescription } from './webhooks/docs/webhooks-controller.md';
 import { socialPostPreviewControllerDescription } from './social-posts-previews/docs/social-posts-preview-controller.md';
 import { socialAccountFeedsControllerDescription } from './social-account-feeds/docs/social-account-feeds-controller.md';
+import { platformAudioControllerDescription } from './platform-audio/docs/platform-audio-controller.md';
 
 async function bootstrap() {
   const app: NestExpressApplication = await NestFactory.create(AppModule, {
@@ -55,6 +57,7 @@ async function bootstrap() {
     .addTag('Social Accounts', socialAccountsControllerDescription)
     .addTag('Social Post Results', postResultsControllerDescription)
     .addTag('Social Account Feeds', socialAccountFeedsControllerDescription)
+    .addTag('Platform Audio', platformAudioControllerDescription)
     .addTag('Webhooks', webhookControllerDescription)
     .addTag('Social Post Previews', socialPostPreviewControllerDescription)
     .setVersion('1.0')
@@ -69,6 +72,7 @@ async function bootstrap() {
       SocialPostResultsModule,
       SocialAccountsModule,
       SocialAccountFeedsModule,
+      PlatformAudioModule,
       WebhooksModule,
       SocialPostPreviewsModule,
       PinterestModule,

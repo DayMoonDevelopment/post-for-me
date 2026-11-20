@@ -119,7 +119,7 @@ for (const kind of ["instagram", "tiktok", "bluesky", "twitter"]) {
     test(`${kind} image processing: ${scenario}`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {
         cwd: __dirname,
-        env: { ...process.env, IMAGE_KIND: kind, IMAGE_SCENARIO: scenario },
+        env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "0", IMAGE_KIND: kind, IMAGE_SCENARIO: scenario },
         stdout: "pipe",
         stderr: "pipe",
       });

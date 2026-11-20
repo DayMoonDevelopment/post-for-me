@@ -38,7 +38,6 @@ export class PinterestPostClient extends PostClient {
 
     this.requests.push({
       refreshRequest: requestUrl,
-      params,
     });
 
     const refreshResponse = await axios.post(requestUrl, params.toString(), {
@@ -47,8 +46,6 @@ export class PinterestPostClient extends PostClient {
         "Content-Type": "application/x-www-form-urlencoded",
       },
     });
-
-    this.responses.push({ refreshResponse: refreshResponse.data });
 
     const { access_token, expires_in, refresh_token } = refreshResponse.data;
     const newExpirationDate = new Date(Date.now() + expires_in * 1000);
@@ -149,7 +146,7 @@ export class PinterestPostClient extends PostClient {
         },
       };
     } catch (error) {
-      console.error("Error posting to Pinterest:", error);
+      console.error("Error posting to Pinterest:", error.message);
       console.error("Error details:", error.response?.data || error.message);
       return {
         success: false,

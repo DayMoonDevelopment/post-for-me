@@ -1,4 +1,5 @@
 import { Queue } from "bullmq";
+import { randomUUID } from "node:crypto";
 import { Redis } from "ioredis";
 import type { StoredMedia } from "./media-recipes";
 
@@ -173,6 +174,29 @@ export function createMediaServerTransport(redisUrl: string): MediaServerTranspo
   };
 }
 
+/** Direct worker submission: deletion produces no media and needs no callback. */
+export function mediaServerPostCleanupSubmission(socialPostId: string, requestId: string) {
+  return {
+    name: "media.trigger-delete-social-post-files",
+    data: { socialPostId, requestId },
+    options: {
+      jobId: `media-trigger-delete-social-post-files/${requestId}`,
+      attempts: 5,
+      backoff: { type: "exponential", delay: 1000 },
+      removeOnComplete: { age: 3 * 60 * 60 },
+      removeOnFail: { age: 3 * 60 * 60 },
+    },
+  };
+}
+
+export async function enqueueMediaServerPostCleanup(redisUrl: string, socialPostId: string): Promise<void> {
+  // A new processing attempt may have created new files for the same post.
+  const { name, data, options } = mediaServerPostCleanupSubmission(socialPostId, randomUUID());
+  await withQueue(redisUrl, MEDIA_SERVER_INTEROP_LANE, async (queue) => {
+    await queue.add(name, data, options);
+  });
+}
+
 export function sanitizeMediaServerLog(value: unknown): unknown {
   if (typeof value === "string") {
     return value.replace(/(?:https?|rediss?):\/\/[^\s"'<>]+/gi, "[redacted URL]").slice(0, 4000);
@@ -196,7 +220,7 @@ export function mediaServerDecision(response: unknown): string | undefined {
 
 export function parseMediaServerResponse(value: unknown, task: MediaServerJob["task"]): StoredMedia {
   const object = (item: unknown): Record<string, unknown> => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Invalid Zenith result object");
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Invalid media result object");
     return item as Record<string, unknown>;
   };
   const text = (item: unknown) => typeof item === "string" && item.length > 0;
@@ -205,31 +229,31 @@ export function parseMediaServerResponse(value: unknown, task: MediaServerJob["t
   const nullableNumber = (item: unknown) => item === null || number(item);
   const result = object(value);
   if (![result.fileId, result.versionId, result.path, result.url, result.contentType].every(text) ||
-    !Number.isInteger(result.size) || (result.size as number) < 0) throw new Error("Invalid Zenith stored media result");
+    !Number.isInteger(result.size) || (result.size as number) < 0) throw new Error("Invalid stored media result");
   const media = object(result.media);
   if (media.kind === "image") {
     if (!text(media.format) || !positive(media.width) || !positive(media.height) ||
       !Number.isInteger(media.orientation) || (media.orientation as number) < 1 || (media.orientation as number) > 8 ||
-      typeof media.hasAlpha !== "boolean") throw new Error("Invalid Zenith image metadata");
+      typeof media.hasAlpha !== "boolean") throw new Error("Invalid image metadata");
   } else if (media.kind === "video") {
     const video = object(media.video);
     if (!text(media.container) || !positive(media.width) || !positive(media.height) ||
       ![0, 90, 180, 270].includes(media.rotation as number) ||
       ![media.durationSeconds, media.bitrate, media.frameRate, video.level, video.bitrate].every(nullableNumber) ||
       !text(video.codec) || !(video.profile === null || text(video.profile)) ||
-      !(video.pixelFormat === null || text(video.pixelFormat))) throw new Error("Invalid Zenith video metadata");
+      !(video.pixelFormat === null || text(video.pixelFormat))) throw new Error("Invalid video metadata");
     if (media.audio !== null) {
       const audio = object(media.audio);
       if (!text(audio.codec) || ![audio.bitrate, audio.channels, audio.sampleRate].every(nullableNumber)) {
-        throw new Error("Invalid Zenith audio metadata");
+        throw new Error("Invalid audio metadata");
       }
     }
-  } else if (media.kind !== "document" || !text(media.contentType)) throw new Error("Invalid Zenith media kind");
+  } else if (media.kind !== "document" || !text(media.contentType)) throw new Error("Invalid media kind");
   if (task !== "media.localize") {
     const image = task === "media.transform-image";
     if (media.kind !== (image ? "image" : "video") ||
       !(image ? ["unchanged", "transformed"] : ["unchanged", "copied", "encoded"]).includes(result.decision as string)) {
-      throw new Error("Invalid Zenith transform decision");
+      throw new Error("Invalid media transform decision");
     }
   }
   return value as StoredMedia;

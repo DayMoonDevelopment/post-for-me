@@ -25,7 +25,7 @@ export const transformBufferedImage = task({
       const result = await tasks.triggerAndWait<typeof transformLiveImageTask>("transform-live-image", {
         url, platform, skipProcessing, mediaProcessingBackend: "zenith", postId,
       });
-      if (!result.ok) throw new Error("Zenith image transform failed", { cause: result.error });
+      if (!result.ok) throw new Error("Image transform failed", { cause: result.error });
       return result.output;
     }
     const response = await fetch(url);

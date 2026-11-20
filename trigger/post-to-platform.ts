@@ -19,7 +19,7 @@ import {
   PostResult,
   SocialAccount,
 } from "./posting/post.types";
-import { differenceInDays } from "date-fns";
+import { shouldRefreshToken } from "./posting/token-refresh";
 import Stripe from "stripe";
 import { Database } from "./supabase.types";
 import { extractPlatformError } from "./posting/platform-error";
@@ -68,9 +68,62 @@ const createPostClient = ({
   }
 };
 
-const platformsToAlwaysRefresh = ["youtube", "bluesky"];
-
 export const handleTokenRefresh = async ({
+  postClient,
+  account,
+}: {
+  postClient: PostClient;
+  account: SocialAccount;
+}): Promise<{ success: boolean; error?: string; details?: unknown }> => {
+  const result = await attemptTokenRefresh({ postClient, account });
+  if (result.success) return result;
+
+  logger.warn("Token refresh failed; reloading account before posting", {
+    accountId: account.id,
+    provider: account.provider,
+    error: result.error,
+  });
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("social_provider_connections")
+      .select("*")
+      .eq("id", account.id)
+      .single();
+
+    if (error || !data || !data.access_token) {
+      logger.error("Unable to reload account after token refresh failure", {
+        accountId: account.id,
+        error: error?.message || "Account missing or has no access token",
+      });
+      return result;
+    }
+
+    Object.assign(account, {
+      provider: data.provider,
+      social_provider_user_name: data.social_provider_user_name,
+      social_provider_user_id: data.social_provider_user_id,
+      social_provider_metadata: data.social_provider_metadata,
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      access_token_expires_at: data.access_token_expires_at
+        ? new Date(data.access_token_expires_at)
+        : null,
+      refresh_token_expires_at: data.refresh_token_expires_at
+        ? new Date(data.refresh_token_expires_at)
+        : null,
+    });
+    return { success: true };
+  } catch (error) {
+    logger.error("Unable to reload account after token refresh failure", {
+      accountId: account.id,
+      error: error instanceof Error ? error.message : "Account reload failed",
+    });
+    return result;
+  }
+};
+
+const attemptTokenRefresh = async ({
   postClient,
   account,
 }: {
@@ -123,8 +176,8 @@ export const handleTokenRefresh = async ({
       };
     }
   } catch (refreshError) {
-    console.error(refreshError);
     const platformError = extractPlatformError(refreshError);
+    console.error(platformError.message);
     return {
       success: false,
       error: platformError.message,
@@ -166,7 +219,11 @@ export const postToPlatform = task({
     try {
       await addTagsBestEffort(`${account.id}`);
 
-      logger.info("Starting post processing", { ...payload });
+      logger.info("Starting post processing", {
+        postId,
+        platform,
+        accountId: account.id,
+      });
 
       logger.info("Creating Post Client");
       const postClient = createPostClient({
@@ -217,16 +274,10 @@ export const postToPlatform = task({
         );
       }
 
-      if (
-        platformsToAlwaysRefresh.includes(account.provider) ||
-        differenceInDays(
-          account.access_token_expires_at || new Date(),
-          new Date(),
-        ) <= 7
-      ) {
+      if (shouldRefreshToken(account)) {
         logger.info("Refreshing Token", {
           platform: account.provider,
-          account,
+          accountId: account.id,
         });
         const refreshed = await handleTokenRefresh({
           postClient,
@@ -235,7 +286,7 @@ export const postToPlatform = task({
 
         if (!refreshed.success) {
           logger.error("Failed to refresh token", {
-            account,
+            accountId: account.id,
             error: refreshed.error,
           });
           postResult = {
@@ -281,7 +332,9 @@ export const postToPlatform = task({
         }
       }
     } catch (error) {
-      logger.error("Failed Processing Platform Post", { error });
+      logger.error("Failed Processing Platform Post", {
+        error: extractPlatformError(error).message,
+      });
 
       if (!postResult) {
         postResult = {
@@ -290,7 +343,7 @@ export const postToPlatform = task({
           error_message:
             "Unexcpted Error: Post Status Unavailable, Please check the social account.",
           post_id: postId,
-          details: { error: error },
+          details: { error: extractPlatformError(error).message },
         };
       }
     }

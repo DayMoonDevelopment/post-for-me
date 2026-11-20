@@ -138,8 +138,20 @@ Run a staging publish covering image/carousel, video, supplied cover, skipped
 media, animation, and YouTube timestamp thumbnails before sustained traffic.
 
 Artifacts use `publishing/<child-run-ID>/<request-ID>` with Zenith-resolved
-extensions. No artifact deletion is performed; queue retention does not delete
-files. Source URLs must stay accessible for queueing/retries.
+extensions. After all account and story publishing finishes and the post's
+`processed` status is saved, Zenith-selected posts enqueue
+`media.trigger-delete-social-post-files` directly on `trigger-interop` with
+`{ socialPostId, requestId }`. This also applies to failed/partially successful
+posts. Trigger waits only for enqueue confirmation, not deletion; no callback or
+waitpoint is created. Enqueue failures are logged without changing posting results.
+The worker gets five attempts with exponential backoff. Each processing attempt
+uses a new request ID so reprocessed posts can clean up new files.
+
+Deletion removes every file tagged with the post's `social_post` lookup key,
+including intermediate transforms and thumbnails, even if another post also uses
+the file. It must never be scheduled per account. Legacy Trigger artifacts are
+unaffected. Queue retention alone does not delete files. Source URLs must stay
+accessible for queueing/retries.
 
 Native versions and encoding may differ between backends. Zenith image
 recipes flatten transparency to black. X's no-auto-orientation conversion keeps

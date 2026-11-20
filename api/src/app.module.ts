@@ -20,6 +20,7 @@ import { SocialAccountFeedsModule } from './social-account-feeds/social-account-
 import { PrivateModule } from './private/private.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
 import { PinterestModule } from './pinterest/pinterest.module';
+import { PlatformAudioModule } from './platform-audio/platform-audio.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { PinterestModule } from './pinterest/pinterest.module';
     SocialPostPreviewsModule,
     WebhooksModule,
     SocialAccountFeedsModule,
+    PlatformAudioModule,
     PrivateModule,
     HealthcheckModule,
     PinterestModule,

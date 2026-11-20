@@ -13,6 +13,7 @@ import { Unkey } from "@unkey/api";
 import type { StoredMedia } from "./media-recipes";
 import { selectPostMedia } from "./posting/media-selection";
 import { resolveMediaProcessingBackend, type MediaProcessingRouting } from "./media-processing-backend";
+import { enqueueMediaServerPostCleanup } from "./media-server";
 
 import { Database, Json } from "./supabase.types";
 
@@ -210,7 +211,7 @@ export const processPost = task({
     const { post } = payload;
     const mediaProcessingBackend = resolveMediaProcessingBackend(post.id, payload.mediaProcessingBackend);
     logger.info("Selected media processing backend", { postId: post.id, mediaProcessingBackend });
-    logger.info("Starting post processing", { post });
+    logger.info("Starting post processing", { postId: post.id });
 
     await addTagsBestEffort([
       `${post.id}`,
@@ -229,7 +230,7 @@ export const processPost = task({
 
     try {
       if (!accounts || accounts.length === 0) {
-        logger.error("No accounts found for post", { post });
+        logger.error("No accounts found for post", { postId: post.id });
         return [];
       }
 
@@ -389,7 +390,7 @@ export const processPost = task({
         accounts: accounts,
       };
 
-      logger.info("Constructed Post Data", { postData });
+      logger.info("Constructed Post Data", { postId: post.id });
 
       const bulkPostData: IndividualPostData[] = [];
       const storyBulkPostData: IndividualPostData[] = [];
@@ -491,7 +492,7 @@ export const processPost = task({
             postData.caption;
           const media = selectPostMedia(postData.media, account, !!platformConfig);
           if (media.some((medium) => medium.type === "failed")) {
-            throw new Error(`Media failed to process, please check media URLs and ${mediaProcessingBackend} job logs`);
+            throw new Error("Media failed to process, please check media URLs");
           }
 
           const platformData = {
@@ -537,9 +538,9 @@ export const processPost = task({
           logger.info("Created Indidividual Post Configuration");
         } catch (error: any) {
           logger.error("Failed Posting To Account", {
-            account,
-            postData,
-            error,
+            accountId: account.id,
+            postId: post.id,
+            error: error?.message,
           });
 
           errorResults.push({
@@ -547,13 +548,13 @@ export const processPost = task({
             error_message: error?.message || "Unkown error",
             provider_connection_id: account.id,
             post_id: postData.id,
-            details: { error },
+            details: { error: error?.message },
           });
         }
       }
 
       if (bulkPostData.length > 0) {
-        logger.info("Posting To Accounts", { bulkPostData });
+        logger.info("Posting To Accounts", { count: bulkPostData.length });
         const batchPostResult = await tasks.batchTriggerAndWait(
           "post-to-platform",
           bulkPostData.map((data) => ({ payload: data })),
@@ -663,6 +664,21 @@ export const processPost = task({
 
       if (updatePostError) {
         logger.error("Failed to update post status", { updatePostError });
+      }
+
+      if (!updatePostError && updatedPost && mediaProcessingBackend === "zenith") {
+        try {
+          const redisUrl = process.env.MEDIA_SERVER_REDIS_URL;
+          if (redisUrl) {
+            await enqueueMediaServerPostCleanup(redisUrl, post.id);
+            logger.info("Queued post media cleanup", { postId: post.id });
+          } else {
+            logger.warn("Failed to queue post media cleanup", { postId: post.id });
+          }
+        } catch {
+          // Transport errors can contain credentials; do not log them verbatim.
+          logger.warn("Failed to queue post media cleanup", { postId: post.id });
+        }
       }
 
       if (updatedPost) {

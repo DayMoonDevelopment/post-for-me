@@ -139,10 +139,11 @@ for (const stage of ["create", "wait"]) {
 
 for (const [name, outcome, ok, error] of [
   ["timeout", null, false, "timed out"],
-  ["invalid envelope", { ok: "true" }, true, "Invalid Zenith"],
-  ["invalid output", { ok: true, output: { url: "bad" } }, true, "Invalid Zenith"],
-  ["invalid error", { ok: false, error: {} }, true, "Invalid Zenith"],
+  ["invalid envelope", { ok: "true" }, true, "Invalid media processing token response"],
+  ["invalid output", { ok: true, output: { url: "bad" } }, true, "Invalid stored media result"],
+  ["invalid error", { ok: false, error: {} }, true, "Invalid media processing worker error"],
   ["worker failure", { ok: false, error: { code: "FAILED", message: "worker failed" } }, true, "worker failed"],
+  ["backend name in worker failure", { ok: false, error: { code: "FAILED", message: "Zenith worker failed (ZENITH)" } }, true, "media service worker failed (media service)"],
 ] as const) {
   test(`${name} is not successful processing`, async () => {
     await expect(executor(outcome, ok).execute("localize", "medium", { task: "media.localize", url: "source" })).rejects.toThrow(error);

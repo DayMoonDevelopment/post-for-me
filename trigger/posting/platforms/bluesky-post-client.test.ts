@@ -83,7 +83,7 @@ if (scenario === "upload-provider-rejection" || scenario === "upload-failure") {
   const serialized = JSON.parse(JSON.stringify(result));
   const message = scenario === "upload-provider-rejection" ? providerError.message : "Failed to upload Bluesky image";
   expect(serialized.error_message).toBe(message);
-  expect(serialized.details.error).toEqual({ name: "Error", message, cause: scenario === "upload-provider-rejection" ? providerError : {} });
+  expect(serialized.details.error).toEqual({ name: "Error", message });
   expect(posted).toBeUndefined();
 }
 if (video) {

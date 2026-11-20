@@ -50,7 +50,7 @@ export class BlueskyPostClient extends PostClient {
         expires_at: new Date(account.access_token_expires_at!).toISOString(),
       };
     } catch (error: any) {
-      console.error("Failed to resume session", error);
+      console.error("Failed to resume session", error.message);
       await this.#agent.login({
         identifier: account.social_provider_user_name!,
         password: account.social_provider_metadata.bluesky_app_password!,
@@ -200,14 +200,14 @@ export class BlueskyPostClient extends PostClient {
         },
       };
     } catch (error) {
-      console.error(error);
+      console.error(error.message);
       return {
         post_id: postId,
         provider_connection_id: account.id,
         success: false,
         error_message: error.message,
         details: {
-          error,
+          error: { name: error.name, message: error.message },
           requests: this.requests,
           responses: this.responses,
         },
