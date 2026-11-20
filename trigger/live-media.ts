@@ -7,7 +7,7 @@ import {
 import type { WaitpointApi, MediaServerLookupKey } from "./media-server";
 import {
   blueskyVideoOutput, GENERIC_VIDEO_ACCEPT, GENERIC_VIDEO_MAX_BYTES, genericVideoOutput,
-  platformImageRecipe, type StoredMedia,
+  platformImageRecipe, YOUTUBE_THUMBNAIL_MAX_BYTES, YOUTUBE_THUMBNAIL_OUTPUT, type StoredMedia,
 } from "./media-recipes";
 
 export class ZenithWorkerError extends Error {
@@ -136,4 +136,12 @@ export async function prepareLiveBlueskyVideo(source: StoredMedia, id: string, s
     });
   }
   return current;
+}
+
+/** The frame of a stored video at `atMs`, sized and weighed for a YouTube thumbnail. */
+export async function extractYoutubeThumbnailFrame(source: StoredMedia, id: string, atMs: number, execute: LiveMediaExecutor) {
+  return execute("youtube-thumbnail", id, {
+    task: "media.extract-video-frame", source: storedSource(source), atMs,
+    output: YOUTUBE_THUMBNAIL_OUTPUT, maxBytes: YOUTUBE_THUMBNAIL_MAX_BYTES,
+  });
 }

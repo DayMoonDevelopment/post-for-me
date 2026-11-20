@@ -36,6 +36,7 @@ mock.module("./live-media-runtime", () => ({ liveMediaExecutor: (runId, postId) 
       await Promise.resolve();
       activeWaits--;
       if (stage === "localize-thumbnail" && scenario === "thumbnail-failed") throw new Error("Thumbnail timeout");
+      if (stage === "youtube-thumbnail" && scenario === "frame-failed") throw new Error("Main media failed");
       if (stage === "localize" && scenario === "localize-failed") throw new Error("Main media failed");
       if (job.task === "media.transform-image") {
         if (scenario === "worker-failed") throw new ZenithWorkerError("FAILED", "decode failed");
@@ -47,7 +48,15 @@ mock.module("./live-media-runtime", () => ({ liveMediaExecutor: (runId, postId) 
   return Object.assign(async (stage, id, job) => (await submit(stage, id, job)).wait(), { submit });
 } }));
 const ctx = { ctx: { run: { id: "run" } } };
-if (["video", "skip-video", "image", "thumbnail-failed", "thumbnail-submit-failed", "localize-failed", "no-thumbnail"].includes(scenario)) {
+if (scenario === "frame" || scenario === "frame-failed") {
+  const { extractLiveVideoFrameTask } = await import("./extract-live-video-frame");
+  const input = { postId: "social-post-id", mediumId: "medium", stored: stored("video", true), atMs: 1250 };
+  if (scenario === "frame-failed") await expect(extractLiveVideoFrameTask.run(input, ctx)).rejects.toThrow("Main media failed");
+  else expect(await extractLiveVideoFrameTask.run(input, ctx)).toEqual({ url: "https://zenith.example/youtube-thumbnail" });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ stage: "youtube-thumbnail", id: "medium",
+    job: { task: "media.extract-video-frame", source: { fileId: "video", versionId: "video-version" }, atMs: 1250 } });
+} else if (["video", "skip-video", "image", "thumbnail-failed", "thumbnail-submit-failed", "localize-failed", "no-thumbnail"].includes(scenario)) {
   const { processLiveMedium } = await import("./process-live-medium");
   expect(processLiveMedium.maxDuration).toBe(1200);
   const medium = { id: "medium", postId: "social-post-id", url: "https://source.example/main", thumbnail_url: scenario === "no-thumbnail" ? null : "https://source.example/thumbnail",
@@ -98,7 +107,7 @@ expect(activeWaits).toBe(0);
 `;
 
 for (const scenario of ["video", "skip-video", "image", "thumbnail-failed", "thumbnail-submit-failed", "localize-failed", "no-thumbnail", "compatible-image", "skip-image", "worker-failed", "legacy-failed",
-  "animated-instagram", "animated-tiktok", "animated-tiktok_business", "animated-twitter", "animated-bluesky"]) {
+  "frame", "frame-failed", "animated-instagram", "animated-tiktok", "animated-tiktok_business", "animated-twitter", "animated-bluesky"]) {
   test(`live media task boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
       cwd: __dirname, env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "100", SCENARIO: scenario }, stdout: "pipe", stderr: "pipe",
