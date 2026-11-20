@@ -1,0 +1,17 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "types",
+  "type": "registry:lib",
+  "title": "Post for Me Types",
+  "description": "Shared Post for Me domain types (SocialProvider) used across the components.",
+  "dependencies": [
+    "post-for-me"
+  ],
+  "files": [
+    {
+      "path": "registry/radix-lyra/lib/post-for-me.types.ts",
+      "type": "registry:lib",
+      "content": "import type { PostForMe } from \"post-for-me\";\n\n/**\n * The social providers the API returns, sourced directly from the `post-for-me` SDK's\n * `PlatformConfigurationsDto` keys so it can never drift from the API. This is a\n * TYPE-ONLY import — the SDK's runtime code is erased at build and never ships to the\n * client. `tiktok_business` is a DISTINCT provider (its own API + auth tokens) that\n * happens to reuse the TikTok mark. Instagram is always `instagram` — authenticating\n * via Facebook is a dev auth-config choice at connect time, NOT a provider type, so\n * there is no `instagram_w_facebook` key.\n */\nexport type SocialProvider = keyof PostForMe.PlatformConfigurationsDto;\n\n/**\n * A connected social account, as the API returns it (trimmed to what UI needs).\n * `platform` drives the brand mark; `username` is the handle; `displayName` and\n * `avatarUrl` are optional profile details for a richer chip. Components that render\n * accounts (Account Selector, User Badge blocks) take this shape.\n */\nexport type SocialAccount = {\n  id: string;\n  platform: SocialProvider;\n  username: string;\n  displayName?: string | null;\n  avatarUrl?: string | null;\n};\n"
+    }
+  ]
+}

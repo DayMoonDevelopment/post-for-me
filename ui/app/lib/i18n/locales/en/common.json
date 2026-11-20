@@ -1,0 +1,13 @@
+{
+  "nav": {
+    "home": "Home",
+    "docs": "Docs",
+    "github": "GitHub"
+  },
+  "home": {
+    "tagline": "The Post for Me component registry",
+    "description": "Copy-paste components for building social posting UIs — install them into your app with the shadcn CLI.",
+    "browse": "Browse components",
+    "installLabel": "Add a component"
+  }
+}
