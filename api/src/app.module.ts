@@ -19,6 +19,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { SocialAccountFeedsModule } from './social-account-feeds/social-account-feeds.module';
 import { PrivateModule } from './private/private.module';
 import { HealthcheckModule } from './healthcheck/healthcheck.module';
+import { PinterestModule } from './pinterest/pinterest.module';
 import { PlatformAudioModule } from './platform-audio/platform-audio.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { PlatformAudioModule } from './platform-audio/platform-audio.module';
     PlatformAudioModule,
     PrivateModule,
     HealthcheckModule,
+    PinterestModule,
   ],
   controllers: [],
   providers: [
