@@ -77,7 +77,7 @@ export function createLiveMediaExecutor(runId: string, deps: {
           throw new Error("Invalid media processing worker error");
         }
         log("Zenith media worker failed", { error: outcome.error });
-        // Retain the specific worker error for capability fallback, but never leak URLs or backend names.
+        // Never leak URLs or backend names.
         const message = (sanitizeMediaServerLog(outcome.error.message) as string).replace(/zenith/gi, "media service");
         throw new ZenithWorkerError(outcome.error.code, message);
       }
@@ -101,28 +101,20 @@ export async function normalizeLiveVideo(source: StoredMedia, id: string, execut
 }
 
 export async function transformLiveImage(source: StoredMedia, id: string, platform: string,
-  options: Parameters<typeof platformImageRecipe>[2], execute: LiveMediaExecutor,
-  legacyAnimation: () => Promise<StoredMedia>): Promise<StoredMedia> {
+  options: Parameters<typeof platformImageRecipe>[2], execute: LiveMediaExecutor): Promise<StoredMedia> {
   const recipe = platformImageRecipe(platform, source, options);
   if (!recipe) return source;
-  try {
-    let current = await execute(`image-${platform}-q${recipe.initialQuality}`, id, {
-      task: "media.transform-image", source: storedSource(source), output: recipe.output,
+  let current = await execute(`image-${platform}-q${recipe.initialQuality}`, id, {
+    task: "media.transform-image", source: storedSource(source), output: recipe.output,
+  });
+  for (const quality of [80, 60]) {
+    if (quality >= recipe.initialQuality || current.size <= recipe.maxBytes) continue;
+    current = await execute(`image-${platform}-q${quality}`, id, {
+      task: "media.transform-image", source: storedSource(current),
+      output: { type: "image", format: "jpeg", quality, autoOrient: false, background: "#000000" },
     });
-    for (const quality of [80, 60]) {
-      if (quality >= recipe.initialQuality || current.size <= recipe.maxBytes) continue;
-      current = await execute(`image-${platform}-q${quality}`, id, {
-        task: "media.transform-image", source: storedSource(current),
-        output: { type: "image", format: "jpeg", quality, autoOrient: false, background: "#000000" },
-      });
-    }
-    return current;
-  } catch (error) {
-    if (error instanceof ZenithWorkerError && /animated images are not supported/i.test(error.message)) {
-      return legacyAnimation();
-    }
-    throw error;
   }
+  return current;
 }
 
 export async function prepareLiveBlueskyVideo(source: StoredMedia, id: string, skip: boolean,

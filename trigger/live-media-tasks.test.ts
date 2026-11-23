@@ -40,7 +40,7 @@ mock.module("./live-media-runtime", () => ({ liveMediaExecutor: (runId, postId) 
       if (stage === "localize" && scenario === "localize-failed") throw new Error("Main media failed");
       if (job.task === "media.transform-image") {
         if (scenario === "worker-failed") throw new ZenithWorkerError("FAILED", "decode failed");
-        if (scenario.startsWith("animated") || scenario === "legacy-failed") throw new ZenithWorkerError("UNSUPPORTED", "Animated images are not supported");
+        if (scenario === "animated-unsupported") throw new ZenithWorkerError("UNSUPPORTED", "Animated images are not supported");
       }
       return stored(stage, scenario === "video" || scenario === "skip-video");
     } };
@@ -78,14 +78,14 @@ if (scenario === "frame" || scenario === "frame-failed") {
   }
 } else {
   const { transformLiveImageTask } = await import("./transform-live-image");
-  const platform = scenario.startsWith("animated-") ? scenario.slice("animated-".length) : "instagram";
+  const platform = "instagram";
   const input = { postId: "social-post-id", url: "https://source.example/image", stored: stored("already-localized"), platform,
     skipProcessing: scenario === "skip-image", options: { firstImage: { width: 600, height: 800 }, placement: "feed", is_feed: true } };
   // Buffered platforms transform only oversized images.
   input.stored.size = 30 * 1024 * 1024;
-  if (scenario === "worker-failed" || scenario === "legacy-failed") {
+  if (scenario === "worker-failed" || scenario === "animated-unsupported") {
     await expect(transformLiveImageTask.run(input, ctx)).rejects.toThrow();
-    expect(legacy).toHaveLength(scenario === "legacy-failed" ? 1 : 0);
+    expect(legacy).toHaveLength(0);
   } else {
     const result = await transformLiveImageTask.run(input, ctx);
     expect(result.url).toBe(result.stored.url);
@@ -93,21 +93,15 @@ if (scenario === "frame" || scenario === "frame-failed") {
     if (scenario === "skip-image") { expect(calls).toHaveLength(0); expect(result.url).toBe(input.stored.url); }
     else {
       expect(calls[0].job.source).toEqual({ fileId: "already-localized", versionId: "already-localized-version" });
-      if (scenario.startsWith("animated-")) {
-        expect(legacy).toHaveLength(1);
-         expect(legacy[0].id).toBe(platform === "instagram" ? "transform-instagram-image" : platform.startsWith("tiktok") ? "transform-tiktok-image" : "transform-buffered-image");
-         expect(legacy[0].payload.mediaProcessingBackend).toBe("trigger");
-        expect(calls.at(-1).job).toEqual({ task: "media.localize", url: "https://legacy.example/image" });
-        expect(result.url).toBe("https://zenith.example/localize-animated-output");
-      } else expect(legacy).toHaveLength(0);
+      expect(legacy).toHaveLength(0);
     }
   }
 }
 expect(activeWaits).toBe(0);
 `;
 
-for (const scenario of ["video", "skip-video", "image", "thumbnail-failed", "thumbnail-submit-failed", "localize-failed", "no-thumbnail", "compatible-image", "skip-image", "worker-failed", "legacy-failed",
-  "frame", "frame-failed", "animated-instagram", "animated-tiktok", "animated-tiktok_business", "animated-twitter", "animated-bluesky"]) {
+for (const scenario of ["video", "skip-video", "image", "thumbnail-failed", "thumbnail-submit-failed", "localize-failed", "no-thumbnail", "compatible-image", "skip-image", "worker-failed", "animated-unsupported",
+  "frame", "frame-failed"]) {
   test(`live media task boundary: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", harness], {
       cwd: __dirname, env: { ...process.env, ZENITH_MEDIA_PERCENTAGE: "100", SCENARIO: scenario }, stdout: "pipe", stderr: "pipe",

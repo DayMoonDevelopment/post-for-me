@@ -146,10 +146,6 @@ export async function coordinateShadowMedia(post: ShadowPost, runId: string, dep
       record.status = "failed";
       record.errorCode = outcome.error?.code;
       log("error", `Zenith shadow job terminal response: ${label}`, { ...record, elapsedMs, error: outcome.error });
-      if (job.task === "media.transform-image" && /animated images are not supported/i.test(outcome.error?.message ?? "")) {
-        unsupported++;
-        log("warn", "Shadow animated image transformation unsupported by Zenith", { ...record });
-      }
       throw new Error("Zenith shadow worker failed");
     }
     try {
