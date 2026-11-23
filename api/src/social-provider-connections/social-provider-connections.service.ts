@@ -36,7 +36,7 @@ export class SocialAccountsService {
     const query = this.supabaseService.supabaseClient
       .from('social_provider_connections')
       .select(
-        'id, provider, social_provider_user_name, social_provider_profile_photo_url, social_provider_user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, external_id, social_provider_metadata, created_at',
+        'id, provider, social_provider_user_name, social_provider_profile_photo_url, social_provider_user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, external_id, social_provider_metadata, created_at, projects(is_system)',
         { count: 'estimated', head: false },
       )
       .eq('project_id', projectId)
@@ -164,8 +164,7 @@ export class SocialAccountsService {
       user_id: raw.social_provider_user_id || '',
       status: raw.access_token ? 'connected' : 'disconnected',
       external_id: raw.external_id,
-      access_token: raw.access_token || '',
-      refresh_token: raw.refresh_token || '',
+      ...this.getResponseTokens(raw),
       access_token_expires_at:
         raw.access_token_expires_at || new Date().toISOString(),
       refresh_token_expires_at: raw.refresh_token_expires_at,
@@ -188,7 +187,7 @@ export class SocialAccountsService {
     const socialAccount = await this.supabaseService.supabaseClient
       .from('social_provider_connections')
       .select(
-        'id, provider, social_provider_user_name, social_provider_profile_photo_url, social_provider_user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, external_id, social_provider_metadata',
+        'id, provider, social_provider_user_name, social_provider_profile_photo_url, social_provider_user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, external_id, social_provider_metadata, projects(is_system)',
       )
       .eq('id', id)
       .eq('project_id', projectId)
@@ -210,13 +209,29 @@ export class SocialAccountsService {
       profile_photo_url: socialAccount.data.social_provider_profile_photo_url,
       status: socialAccount.data.access_token ? 'connected' : 'disconnected',
       external_id: socialAccount.data.external_id,
-      access_token: socialAccount.data.access_token || '',
-      refresh_token: socialAccount.data.refresh_token || '',
+      ...this.getResponseTokens(socialAccount.data),
       access_token_expires_at:
         socialAccount.data.access_token_expires_at || new Date().toISOString(),
       refresh_token_expires_at: socialAccount.data.refresh_token_expires_at,
       metadata: socialAccount.data
         .social_provider_metadata as SocialAccountMetadata,
+    };
+  }
+
+  private getResponseTokens(account: {
+    provider: string | null;
+    access_token: string | null;
+    refresh_token: string | null;
+    projects: { is_system: boolean } | null;
+  }): Pick<SocialAccountDto, 'access_token' | 'refresh_token'> {
+    // Quickstart X tokens stay in storage for publishing and refresh. Fail
+    // closed if the joined project is unavailable rather than leaking tokens.
+    const hideTokens =
+      account.provider === 'x' && account.projects?.is_system !== false;
+
+    return {
+      access_token: hideTokens ? '' : account.access_token || '',
+      refresh_token: hideTokens ? '' : account.refresh_token || '',
     };
   }
 

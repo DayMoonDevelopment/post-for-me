@@ -29,13 +29,15 @@ export class SocialAccountDto {
   profile_photo_url?: string | null | undefined;
 
   @ApiProperty({
-    description: 'The access token of the social account',
+    description:
+      'The access token of the social account. Empty for Quickstart X accounts in fetch responses.',
     type: String,
   })
   access_token: string;
 
   @ApiProperty({
-    description: 'The refresh token of the social account',
+    description:
+      'The refresh token of the social account. Empty for Quickstart X accounts in fetch responses.',
     type: String,
     nullable: true,
   })
