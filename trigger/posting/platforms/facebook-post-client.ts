@@ -18,6 +18,16 @@ import {
   wrapResponseDataError,
 } from "../platform-error";
 
+interface FacebookPhotoPayload {
+  url: string;
+  published: boolean;
+  caption?: string;
+  access_token: string;
+  tags?: any[];
+  place?: string;
+  alt_text_custom?: string;
+}
+
 export class FacebookPostClient extends PostClient {
   #appCredentials: PlatformAppCredentials;
   #completeStatuses = [
@@ -53,6 +63,7 @@ export class FacebookPostClient extends PostClient {
   // set to that real ceiling rather than a higher value that's never used.
   static readonly READ_BACK_MAX_DELAY_MS = 4_000;
   static readonly RETRYABLE_RATE_LIMIT_CODES = new Set([4, 17, 32, 613]); // Meta Graph API rate-limit error codes
+  static readonly PHOTO_UPLOAD_RETRY_DELAYS_SECONDS = [5, 15];
 
   constructor(appCredentials: PlatformAppCredentials) {
     super(appCredentials);
@@ -355,6 +366,105 @@ export class FacebookPostClient extends PostClient {
     return response.data.id;
   }
 
+  async #uploadPhoto({
+    account,
+    medium,
+    payload,
+    placement,
+  }: {
+    account: SocialAccount;
+    medium: PostMedia;
+    payload: FacebookPhotoPayload;
+    placement: "feed" | "carousel" | "stories";
+  }): Promise<{ id: string; post_id?: string }> {
+    const url = `${this.#baseUrl}/${account.social_provider_user_id}/photos`;
+    let mediaHostname: string | undefined;
+    try {
+      mediaHostname = new URL(payload.url).hostname;
+    } catch {
+      // Invalid URLs are left to Graph validation; never log the raw URL.
+    }
+    const metadata = {
+      url,
+      placement,
+      mediaId: medium.id,
+      mediaHostname,
+      captionLength: payload.caption?.length ?? 0,
+      tagCount: payload.tags?.length ?? 0,
+      hasLocation: Boolean(payload.place),
+    };
+    const maxAttempts = FacebookPostClient.PHOTO_UPLOAD_RETRY_DELAYS_SECONDS.length + 1;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      this.requests.push({ photoRequest: { ...metadata, attempt } });
+      const startedAt = Date.now();
+      let responseHeaders: Record<string, any> | undefined;
+      try {
+        const response = await axios.post(url, payload);
+        responseHeaders = response.headers;
+        if (response.data?.error) {
+          throw new PlatformApiError("Failed to upload photo", {
+            message: response.data.error.message || "Failed to upload photo",
+            status: response.status,
+            data: response.data,
+          });
+        }
+        const outcome = {
+          ...metadata,
+          attempt,
+          durationMs: Date.now() - startedAt,
+          status: response.status,
+          outcome: "success",
+        };
+        this.responses.push({ photoResponse: response.data, photoUpload: outcome });
+        logger.info("Facebook photo upload succeeded", outcome);
+        return response.data;
+      } catch (error) {
+        const details = extractPlatformError(error);
+        const graphError = (details.data as any)?.error;
+        const code = graphError?.code;
+        const permanent = this.isTerminalAuthError(error) ||
+          code === 10 || code === 100 || code === 324 ||
+          (code >= 200 && code <= 299);
+        // A write can succeed even when Graph returns code 1. These bounded
+        // retries deliberately favor availability, not exactly-once publishing.
+        // Do not broaden this to network errors or generic 5xx responses.
+        const retryable = !permanent && (
+          code === 1 || code === 2 ||
+          FacebookPostClient.RETRYABLE_RATE_LIMIT_CODES.has(code) ||
+          graphError?.is_transient === true || details.status === 429
+        );
+        const willRetry = retryable && attempt < maxAttempts;
+        const headers = responseHeaders ?? (error as any)?.response?.headers;
+        const diagnostics = {
+          ...metadata,
+          attempt,
+          durationMs: Date.now() - startedAt,
+          outcome: "error",
+          status: details.status,
+          code,
+          subcode: graphError?.error_subcode,
+          isTransient: graphError?.is_transient,
+          fbtraceId: graphError?.fbtrace_id,
+          traceId: headers?.["x-fb-trace-id"],
+          requestId: headers?.["x-fb-request-id"],
+          appUsage: headers?.["x-app-usage"],
+          pageUsage: headers?.["x-page-usage"],
+          businessUsage: headers?.["x-business-use-case-usage"],
+          willRetry,
+          retryDelaySeconds: willRetry
+            ? FacebookPostClient.PHOTO_UPLOAD_RETRY_DELAYS_SECONDS[attempt - 1]
+            : undefined,
+        };
+        this.responses.push({ photoUpload: diagnostics });
+        logger.warn("Facebook photo upload failed", diagnostics);
+        if (!willRetry) throw error;
+        await wait.for({ seconds: diagnostics.retryDelaySeconds! });
+      }
+    }
+    throw new Error("Facebook photo upload attempts exhausted");
+  }
+
   async #publishPhoto({
     account,
     caption,
@@ -367,18 +477,10 @@ export class FacebookPostClient extends PostClient {
     platformConfig: FacebookConfiguration;
   }): Promise<string> {
     const fileUrl = await this.getSignedUrlForFile(medium);
-    const payload: {
-      url: string;
-      published: boolean;
-      message: string;
-      access_token: string;
-      tags?: any[];
-      place?: string;
-      alt_text_custom?: string;
-    } = {
+    const payload: FacebookPhotoPayload = {
       url: fileUrl,
       published: true,
-      message: caption,
+      caption,
       access_token: account.access_token,
     };
 
@@ -402,29 +504,17 @@ export class FacebookPostClient extends PostClient {
       payload.alt_text_custom = medium.alt_text;
     }
 
-    this.requests.push({
-      photoRequest: {
-        url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
-      },
+    const photoResponse = await this.#uploadPhoto({
+      account, medium, payload, placement: "feed",
     });
-    const photoResponse = await axios.post(
-      `${this.#baseUrl}/${account.social_provider_user_id}/photos`,
-      payload,
-    );
 
-    this.responses.push({ photoResponse: photoResponse.data });
-
-    if (photoResponse.data.error) {
-      throw wrapResponseDataError(photoResponse.data, "Failed to upload media");
-    }
-
-    if (!photoResponse.data.post_id) {
+    if (!photoResponse.post_id) {
       logger.error("Facebook photo publish response missing post_id", {
-        photoResponse: photoResponse.data,
+        photoResponse,
       });
     }
 
-    return photoResponse.data.post_id || photoResponse.data.id;
+    return photoResponse.post_id || photoResponse.id;
   }
 
   async #createCarouselPost({
@@ -448,21 +538,14 @@ export class FacebookPostClient extends PostClient {
         continue;
       }
       const fileUrl = await this.getSignedUrlForFile(medium);
-      const payload: {
-        url: string;
-        message?: string;
-        published: boolean;
-        access_token: string;
-        tags?: any[];
-        alt_text_custom?: string;
-      } = {
+      const payload: FacebookPhotoPayload = {
         url: fileUrl,
         published: false,
         access_token: account.access_token,
       };
 
       if (setCaptionForEachImage) {
-        payload.message = caption;
+        payload.caption = caption;
       }
 
       if (medium.alt_text) {
@@ -481,21 +564,10 @@ export class FacebookPostClient extends PostClient {
           }));
       }
 
-      this.requests.push({
-        photoRequest: {
-          url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
-        },
+      const photoResponse = await this.#uploadPhoto({
+        account, medium, payload, placement: "carousel",
       });
-      const photoResponse = await axios.post(
-        `${this.#baseUrl}/${account.social_provider_user_id}/photos`,
-        payload,
-      );
-
-      this.responses.push({ photoResponse: photoResponse.data });
-      if (photoResponse.data.error) {
-        throw wrapResponseDataError(photoResponse.data, "Failed to upload image");
-      }
-      mediaIds.push({ media_fbid: photoResponse.data.id });
+      mediaIds.push({ media_fbid: photoResponse.id });
     }
 
     this.requests.push({
@@ -907,16 +979,9 @@ export class FacebookPostClient extends PostClient {
     platformConfig: FacebookConfiguration;
   }): Promise<string> {
     const fileUrl = await this.getSignedUrlForFile(medium);
-    const payload: {
-      url: string;
-      message: string;
-      published: boolean;
-      access_token: string;
-      tags?: any[];
-      place?: string;
-    } = {
+    const payload: FacebookPhotoPayload = {
       url: fileUrl,
-      message: caption,
+      caption,
       published: false,
       access_token: account.access_token,
     };
@@ -937,22 +1002,11 @@ export class FacebookPostClient extends PostClient {
       payload.place = platformConfig.location;
     }
 
-    this.requests.push({
-      photoRequest: {
-        url: `${this.#videoBaseUrl}/${account.social_provider_user_id}/photos`,
-      },
+    const photoResponse = await this.#uploadPhoto({
+      account, medium, payload, placement: "stories",
     });
-    const photoResponse = await axios.post(
-      `${this.#baseUrl}/${account.social_provider_user_id}/photos`,
-      payload,
-    );
 
-    this.responses.push({ photoResponse: photoResponse.data });
-    if (photoResponse.data.error) {
-      throw wrapResponseDataError(photoResponse.data, "Failed to upload image");
-    }
-
-    const createdMediaId = photoResponse.data.id;
+    const createdMediaId = photoResponse.id;
 
     const storyResponse = await axios.post(
       `${this.#baseUrl}/${account.social_provider_user_id}/photo_stories`,
