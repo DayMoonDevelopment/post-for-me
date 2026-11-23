@@ -25,7 +25,7 @@ import { PinterestService } from '../pinterest/pinterest.service';
 import { ThreadsService } from '../threads/threads.service';
 import { TwitterService } from '../twitter/twitter.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
-import { differenceInDays } from 'date-fns';
+import { shouldRefreshToken } from '../lib/token-refresh.util';
 import { PlatformPostDto } from './dto/platform-post.dto';
 
 type TikTokPostResultCandidateSocialPost = {
@@ -62,7 +62,6 @@ type FacebookPostResultCandidate = {
 
 @Injectable()
 export class SocialAccountFeedsService {
-  platformsToAlwaysRefresh = ['youtube', 'bluesky'];
   facebookMetricsLimitCap: number;
   constructor(
     private readonly configService: ConfigService,
@@ -247,13 +246,7 @@ export class SocialAccountFeedsService {
       social_provider_metadata: account.social_provider_metadata,
     };
 
-    if (
-      this.platformsToAlwaysRefresh.includes(account.provider) ||
-      differenceInDays(
-        new Date(account.access_token_expires_at || new Date()),
-        new Date(),
-      ) <= 7
-    ) {
+    if (shouldRefreshToken(socialAccount)) {
       try {
         const updatedAccount =
           await platformService.refreshAccessToken(socialAccount);
