@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
 import { SocialPostMediaDto } from './post-media.dto';
 import { InstagramAudioConfigurationDto } from '../../instagram/dto/instagram-audio-configuration.dto';
 import { TikTokBusinessMusicSoundInfoDto } from '../../tiktok-business/dto/tiktok-business-music-sound-info.dto';
@@ -310,6 +310,26 @@ export class TiktokBusinessConfigurationDto extends BaseConfigurationDto {
 }
 
 export class TwitterConfigurationDto extends BaseConfigurationDto {
+  @ApiProperty({
+    description: 'Disclose that the X post contains AI-generated media.',
+    required: false,
+    nullable: false,
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  made_with_ai?: boolean;
+
+  @ApiProperty({
+    description: 'Disclose that the X post is a paid partnership.',
+    required: false,
+    nullable: false,
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  paid_partnership?: boolean;
+
   @ApiProperty({
     description: 'Poll options for the tweet',
     required: false,
@@ -653,6 +673,26 @@ export class PlatformConfigurationsDto {
 //
 
 export class AccountConfigurationDetailsDto {
+  @ApiProperty({
+    description: 'Disclose that the X post contains AI-generated media.',
+    required: false,
+    nullable: false,
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  made_with_ai?: boolean;
+
+  @ApiProperty({
+    description: 'Disclose that the X post is a paid partnership.',
+    required: false,
+    nullable: false,
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  paid_partnership?: boolean;
+
   @ApiProperty({
     description:
       'Account override for Instagram selected audio. Single video Reels with Facebook Login only; replaces the entire platform audio_configuration object.',
