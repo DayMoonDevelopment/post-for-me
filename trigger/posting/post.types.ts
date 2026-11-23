@@ -178,6 +178,8 @@ export interface TiktokBusinessConfiguration extends TiktokConfiguration {
 }
 
 export interface TwitterConfiguration {
+  made_with_ai?: boolean;
+  paid_partnership?: boolean;
   caption?: string;
   media?: PostMedia[];
   poll?: TwitterPoll;

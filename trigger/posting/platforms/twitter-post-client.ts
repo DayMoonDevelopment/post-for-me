@@ -165,6 +165,14 @@ export class TwitterPostClient extends PostClient {
         text: allowedCaption || " ",
       };
 
+      if (typeof platformConfig?.made_with_ai === "boolean") {
+        postPayload.made_with_ai = platformConfig.made_with_ai;
+      }
+
+      if (typeof platformConfig?.paid_partnership === "boolean") {
+        postPayload.paid_partnership = platformConfig.paid_partnership;
+      }
+
       if (mediaIds?.length > 0) {
         postPayload.media = {
           media_ids: mediaIds as
