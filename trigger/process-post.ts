@@ -1,5 +1,6 @@
 import { logger, task, tasks, wait } from "@trigger.dev/sdk";
 import { addTagsBestEffort } from "./best-effort-tags";
+import { resolvePlatformConfiguration } from "./posting/resolve-platform-configuration";
 import { createClient } from "@supabase/supabase-js";
 import type {
   IndividualPostData,
@@ -495,10 +496,10 @@ export const processPost = task({
             throw new Error("Media failed to process, please check media URLs");
           }
 
-          const platformData = {
-            ...platformConfig?.provider_data,
-            ...accountConfig?.provider_data,
-          } as PlatformConfiguration;
+          const platformData = resolvePlatformConfiguration(
+            platformConfig?.provider_data,
+            accountConfig?.provider_data,
+          );
 
           const isStoryPlacement =
             (platformData as { placement?: string }).placement === "stories";
