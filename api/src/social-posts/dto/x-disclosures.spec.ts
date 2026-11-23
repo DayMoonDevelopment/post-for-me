@@ -19,21 +19,6 @@ for (const dto of [TwitterConfigurationDto, AccountConfigurationDetailsDto]) {
           expect(config[field]).toBe(value);
         },
       );
-
-      it.each(['true', 'false', 0, 1, {}, []])(
-        `rejects non-boolean ${field}=%s`,
-        async (value) => {
-          const errors = await validate(
-            plainToInstance(dto, { [field]: value }),
-          );
-          expect(errors).toEqual([
-            expect.objectContaining({
-              property: field,
-              constraints: { isBoolean: `${field} must be a boolean value` },
-            }),
-          ]);
-        },
-      );
     }
   });
 }

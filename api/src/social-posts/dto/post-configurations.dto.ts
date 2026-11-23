@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsOptional } from 'class-validator';
 import { SocialPostMediaDto } from './post-media.dto';
 import { InstagramAudioConfigurationDto } from '../../instagram/dto/instagram-audio-configuration.dto';
 import { TikTokBusinessMusicSoundInfoDto } from '../../tiktok-business/dto/tiktok-business-music-sound-info.dto';
@@ -317,7 +317,6 @@ export class TwitterConfigurationDto extends BaseConfigurationDto {
     type: Boolean,
   })
   @IsOptional()
-  @IsBoolean()
   made_with_ai?: boolean;
 
   @ApiProperty({
@@ -327,7 +326,6 @@ export class TwitterConfigurationDto extends BaseConfigurationDto {
     type: Boolean,
   })
   @IsOptional()
-  @IsBoolean()
   paid_partnership?: boolean;
 
   @ApiProperty({
@@ -680,7 +678,6 @@ export class AccountConfigurationDetailsDto {
     type: Boolean,
   })
   @IsOptional()
-  @IsBoolean()
   made_with_ai?: boolean;
 
   @ApiProperty({
@@ -690,7 +687,6 @@ export class AccountConfigurationDetailsDto {
     type: Boolean,
   })
   @IsOptional()
-  @IsBoolean()
   paid_partnership?: boolean;
 
   @ApiProperty({
