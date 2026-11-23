@@ -1,6 +1,8 @@
 import { PostClient } from "../post-client";
 import { google, youtube_v3 } from "googleapis";
 import { logger, tasks, wait } from "@trigger.dev/sdk";
+import { sanitizeMediaServerLog } from "../../media-server";
+import type { extractLiveVideoFrameTask } from "../../extract-live-video-frame";
 import type { generateYoutubeTimestampThumbnail } from "../../video-child-tasks";
 import type { uploadYoutubeThumbnail } from "../../upload-youtube-thumbnail";
 import type { uploadYoutubeVideo } from "../../upload-youtube-video";
@@ -207,7 +209,7 @@ export class YouTubePostClient extends PostClient {
         }
       } else if (medium.thumbnail_timestamp_ms != null) {
         try {
-          await this.#uploadThumbnailFromTimestamp(videoId, medium);
+          await this.#uploadThumbnailFromTimestamp(videoId, medium, postId);
         } catch (thumbnailError) {
           console.error("Failed to upload thumbnail from timestamp:", thumbnailError.message);
         }
@@ -283,8 +285,23 @@ export class YouTubePostClient extends PostClient {
     return sanitized.length === 0 ? "Untitled Video" : sanitized.slice(0, 100);
   }
 
-  async #uploadThumbnailFromTimestamp(videoId: string, medium: PostMedia): Promise<void> {
+  async #uploadThumbnailFromTimestamp(videoId: string, medium: PostMedia, postId: string): Promise<void> {
     if (medium.thumbnail_timestamp_ms == null) return;
+    if (medium.mediaProcessingBackend === "zenith" && medium.stored) {
+      if (medium.thumbnail_timestamp_ms < 0) {
+        logger.warn("Skipping YouTube thumbnail: negative timestamp", { mediumId: medium.id, atMs: medium.thumbnail_timestamp_ms });
+        return;
+      }
+      const frame = await tasks.triggerAndWait<typeof extractLiveVideoFrameTask>("extract-live-video-frame", {
+        postId, mediumId: medium.id, stored: medium.stored, atMs: Math.round(medium.thumbnail_timestamp_ms),
+      });
+      if (!frame.ok) {
+        const reason = (frame.error as { message?: unknown } | undefined)?.message;
+        throw new Error(`Failed to extract YouTube thumbnail frame from media: ${sanitizeMediaServerLog(typeof reason === "string" ? reason : "unknown")}`);
+      }
+      await this.#uploadThumbnail(videoId, frame.output.url, { thumbnailTimestampMs: medium.thumbnail_timestamp_ms });
+      return;
+    }
     const result = await tasks.triggerAndWait<typeof generateYoutubeTimestampThumbnail>(
       "generate-youtube-timestamp-thumbnail",
       { url: medium.url, timestampMs: medium.thumbnail_timestamp_ms, mediaId: medium.id, mediaProcessingBackend: medium.mediaProcessingBackend },
