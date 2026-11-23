@@ -55,12 +55,7 @@ export const transformLiveImageTask = task({
       instagramLimits, tiktokLimits,
       firstImage: options?.firstImage?.width && options.firstImage.height
         ? { width: options.firstImage.width, height: options.firstImage.height } : undefined,
-    }, execute, async () => {
-      const { url: legacyUrl } = await legacyTransform(source.url);
-      if (!legacyUrl) throw new Error("Invalid legacy animated image output");
-      // Re-localize the exception output so even subsequent callers get real stored references and metadata.
-      return execute("localize-animated-output", mediumId, { task: "media.localize", url: legacyUrl });
-    });
+    }, execute);
     if (result.media.kind !== "image") throw new Error("Invalid transformed image metadata");
     return { url: result.url, signedUrl: result.url, mimeType: result.contentType,
       width: result.media.width, height: result.media.height, stored: result };
