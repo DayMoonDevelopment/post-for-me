@@ -161,11 +161,7 @@ export class TwitterPostClient extends PostClient {
         characterLimit,
       );
 
-      // These create-post fields are documented by X but not yet in the SDK types.
-      const postPayload: SendTweetV2Params & {
-        made_with_ai?: boolean;
-        paid_partnership?: boolean;
-      } = {
+      const postPayload: SendTweetV2Params = {
         text: allowedCaption || " ",
       };
 
