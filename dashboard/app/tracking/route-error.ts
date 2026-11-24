@@ -31,9 +31,13 @@ export async function reportRouteError({
     $pathname: pathname,
     $referrer: "",
   };
-  console.error(
-    JSON.stringify({ event: "dashboard_route_error_shown", ...properties }),
-  );
+  // Classified loader failures are already logged server-side. Only unexpected
+  // rendering/navigation errors need an additional browser console diagnostic.
+  if (code === "UNEXPECTED_ERROR") {
+    console.error(
+      JSON.stringify({ event: "dashboard_route_error_shown", ...properties }),
+    );
+  }
   try {
     // Resolve after mount so the existing provider can initialize; reporting must
     // never break the fallback UI or introduce a second analytics client.

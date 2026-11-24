@@ -33,7 +33,30 @@ describe("browser route error reporting", () => {
       }),
     );
     expect(JSON.stringify(capture.mock.calls)).not.toContain("secret");
+    expect(console.error).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    "SESSION_EXPIRED",
+    "PROJECT_NOT_FOUND",
+    "ACCOUNTS_LOAD_FAILED",
+  ] as const)(
+    "does not repeat classified %s errors in the browser console",
+    async (code) => {
+      vi.stubGlobal("window", {
+        location: { origin: "https://app.postforme.dev" },
+      });
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      await reportRouteError({
+        error: {},
+        code,
+        referenceId: "ref",
+        pathname: "/team/project/accounts",
+      });
+      expect(console.error).not.toHaveBeenCalled();
+      expect(capture).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("does not break the fallback when analytics fails", async () => {
     vi.stubGlobal("window", {

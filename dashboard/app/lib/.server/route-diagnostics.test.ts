@@ -22,7 +22,7 @@ describe("route diagnostics", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("logs stage timings and shares a reference within a request", async () => {
+  it("keeps successful loads silent and shares a reference within a request", async () => {
     const input = args();
     const result = await observeRouteLoad(input, "accounts", (diagnostics) =>
       diagnostics.step(
@@ -32,25 +32,11 @@ describe("route diagnostics", () => {
       ),
     );
     expect(result).toBe("ok");
-    const records = vi
-      .mocked(console.info)
-      .mock.calls.map(([record]) => JSON.parse(record));
-    expect(records.map((record) => record.event)).toEqual([
-      "dashboard_route_started",
-      "dashboard_route_stage_started",
-      "dashboard_route_stage_completed",
-      "dashboard_route_completed",
-    ]);
-    expect(
-      records.every(
-        (record) => record.reference_id === getRequestReference(input.request),
-      ),
-    ).toBe(true);
-    expect(records[2]).toMatchObject({
-      stage: "accounts_query",
-      stage_duration_ms: expect.any(Number),
-    });
-    expect(JSON.stringify(records)).not.toContain("secret");
+    expect(getRequestReference(input.request)).toBe(
+      getRequestReference(input.request),
+    );
+    expect(console.info).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it("turns a thrown dependency error into a safe classified error", async () => {
@@ -99,7 +85,7 @@ describe("route diagnostics", () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 
-  it("records cancellation separately even when a dependency returns an error", async () => {
+  it("keeps cancellations silent even when a dependency returns an error", async () => {
     const controller = new AbortController();
     const input = args(controller.signal);
     await expect(
@@ -109,13 +95,9 @@ describe("route diagnostics", () => {
       }),
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(console.error).not.toHaveBeenCalled();
-    expect(
-      vi
-        .mocked(console.info)
-        .mock.calls.some(
-          ([record]) => JSON.parse(record).event === "dashboard_route_aborted",
-        ),
-    ).toBe(true);
+    reportServerError(new Error("cancelled"), input.request);
+    expect(console.info).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -144,8 +126,23 @@ describe("route diagnostics", () => {
           requireRouteUser(diagnostics, supabase),
         ),
       ).rejects.toMatchObject({ data: { code }, init: { status } });
+      expect(console.info).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalledTimes(status >= 500 ? 1 : 0);
     },
   );
+
+  it("keeps missing projects silent", async () => {
+    await expect(
+      observeRouteLoad(args(), "project", async (diagnostics) => {
+        diagnostics.fail("PROJECT_NOT_FOUND");
+      }),
+    ).rejects.toMatchObject({
+      data: { code: "PROJECT_NOT_FOUND" },
+      init: { status: 404 },
+    });
+    expect(console.info).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+  });
 
   it("reports uncaught server errors without messages or query strings", () => {
     const input = args();

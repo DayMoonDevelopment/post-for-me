@@ -26,17 +26,8 @@ export async function observeRouteLoad<T>(
   handler: (diagnostics: RouteDiagnostics) => Promise<T>,
 ): Promise<T> {
   const diagnostics = new RouteDiagnostics(args, route);
-  const onAbort = () => diagnostics.log("dashboard_route_aborted");
-  args.request.signal.addEventListener("abort", onAbort, { once: true });
-  diagnostics.log("dashboard_route_started");
   try {
-    const result = await handler(diagnostics);
-    diagnostics.log(
-      args.request.signal.aborted
-        ? "dashboard_route_aborted"
-        : "dashboard_route_completed",
-    );
-    return result;
+    return await handler(diagnostics);
   } catch (error) {
     if (args.request.signal.aborted) throw error;
     // Classified errors and redirects have already been handled; do not convert them.
@@ -50,8 +41,6 @@ export async function observeRouteLoad<T>(
       throw error;
     }
     return diagnostics.fail("UNEXPECTED_ERROR", error);
-  } finally {
-    args.request.signal.removeEventListener("abort", onAbort);
   }
 }
 
@@ -64,10 +53,10 @@ export class RouteDiagnostics {
     private route: string,
   ) {}
 
-  log(event: string, extra: Record<string, unknown> = {}) {
+  private logFailure(extra: Record<string, unknown>) {
     const { request, params } = this.args;
     const record = JSON.stringify({
-      event,
+      event: "dashboard_route_failed",
       reference_id: getRequestReference(request),
       route: this.route,
       pathname: new URL(request.url).pathname,
@@ -79,8 +68,7 @@ export class RouteDiagnostics {
       aborted: request.signal.aborted,
       ...extra,
     });
-    if (event === "dashboard_route_failed") console.error(record);
-    else console.info(record);
+    console.error(record);
   }
 
   async step<T>(
@@ -89,14 +77,8 @@ export class RouteDiagnostics {
     operation: () => PromiseLike<T>,
   ): Promise<T> {
     this.stage = stage;
-    this.log("dashboard_route_stage_started");
-    const startedAt = performance.now();
     try {
-      const result = await operation();
-      this.log("dashboard_route_stage_completed", {
-        stage_duration_ms: Math.round(performance.now() - startedAt),
-      });
-      return result;
+      return await operation();
     } catch (error) {
       if (this.args.request.signal.aborted) throw error;
       return this.fail(code, error);
@@ -105,19 +87,16 @@ export class RouteDiagnostics {
 
   fail(code: RouteErrorCode, cause?: unknown): never {
     if (this.args.request.signal.aborted) {
-      this.log("dashboard_route_aborted");
       throw (
         this.args.request.signal.reason ??
         new DOMException("Request aborted", "AbortError")
       );
     }
     const { status, message } = routeErrors[code];
-    this.log("dashboard_route_failed", {
-      code,
-      status,
-      message,
-      ...safeErrorDetails(cause),
-    });
+    // Missing sessions/projects are expected conditions, not application errors.
+    if (status >= 500) {
+      this.logFailure({ code, status, message, ...safeErrorDetails(cause) });
+    }
     throw data(
       { code, referenceId: getRequestReference(this.args.request) },
       {
@@ -152,11 +131,10 @@ export async function requireRouteUser(
 }
 
 export function reportServerError(error: unknown, request: Request) {
-  console[request.signal.aborted ? "info" : "error"](
+  if (request.signal.aborted) return;
+  console.error(
     JSON.stringify({
-      event: request.signal.aborted
-        ? "dashboard_request_aborted"
-        : "dashboard_server_error",
+      event: "dashboard_server_error",
       reference_id: getRequestReference(request),
       pathname: new URL(request.url).pathname,
       method: request.method,
