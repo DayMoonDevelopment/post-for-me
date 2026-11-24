@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   parseMediaServerResponse,
   mediaServerSubmission,
+  mediaServerPostCleanupSubmission,
   sanitizeMediaServerLog,
   type MediaServerJob,
 } from "./media-server";
@@ -19,6 +20,18 @@ const video = {
 const stored = (media: unknown = image) => ({
   fileId: "file-123", versionId: "version-456", path: "shadow/result.jpg",
   url: "https://media.example/result.jpg", contentType: "image/jpeg", size: 1234, media,
+});
+
+test("post cleanup targets the direct worker with no callback, path or lookup keys", () => {
+  expect(mediaServerPostCleanupSubmission("post-id", "request-id")).toEqual({
+    name: "media.trigger-delete-social-post-files",
+    data: { socialPostId: "post-id", requestId: "request-id" },
+    options: {
+      jobId: "media-trigger-delete-social-post-files/request-id",
+      attempts: 5, backoff: { type: "exponential", delay: 1000 },
+      removeOnComplete: { age: 10800 }, removeOnFail: { age: 10800 },
+    },
+  });
 });
 
 test("lookup keys belong to every interop envelope, not the wrapped media input", () => {
@@ -212,18 +225,30 @@ mock.module("bullmq", () => ({
     }
   },
 }));
-const { createMediaServerTransport, MEDIA_SERVER_INTEROP_LANE, mediaServerInteropJobs } = await import("./media-server.ts");
+const { createMediaServerTransport, enqueueMediaServerPostCleanup, MEDIA_SERVER_INTEROP_LANE, mediaServerInteropJobs } = await import("./media-server.ts");
 const transport = createMediaServerTransport(redisUrl);
 const handle = { jobId: "job-123", queue: "custom-queue", requestId: "request-456", path: "shadow/custom/result" };
 const localize = { task: "media.localize", url: "https://source.example/signed?token=secret" };
 const callback = { url: "https://trigger.example/callback/secret" };
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
-if (scenario === "routing") {
+if (scenario === "cleanup") {
+  await enqueueMediaServerPostCleanup(redisUrl, "post-id");
+  await enqueueMediaServerPostCleanup(redisUrl, "post-id");
+  expect(queues.map((queue) => queue.name)).toEqual(["trigger-interop", "trigger-interop"]);
+  for (const [name, data, options] of adds) {
+    expect(name).toBe("media.trigger-delete-social-post-files");
+    expect(data).toEqual({ socialPostId: "post-id", requestId: expect.any(String) });
+    expect(options.jobId).toBe("media-trigger-delete-social-post-files/" + data.requestId);
+    expect(options.attempts).toBe(5);
+  }
+  expect(adds[0][1].requestId).not.toBe(adds[1][1].requestId);
+} else if (scenario === "routing") {
   expect(MEDIA_SERVER_INTEROP_LANE).toBe("trigger-interop");
   expect(mediaServerInteropJobs).toEqual({
     "media.localize": "media.trigger-localize",
     "media.transform-image": "media.trigger-transform-image",
     "media.transform-video": "media.trigger-transform-video",
+    "media.extract-video-frame": "media.trigger-extract-video-frame",
   });
   const source = { fileId: "source-file", versionId: "source-version" };
   const jobs = [localize,
@@ -321,7 +346,7 @@ try {
 `;
 
 for (const scenario of [
-  "routing", "acknowledgement", "connect-error", "add-error", "blackhole-enqueue",
+  "cleanup", "routing", "acknowledgement", "connect-error", "add-error", "blackhole-enqueue",
 ]) {
   test(`media server transport: ${scenario}`, async () => {
     const child = Bun.spawn([process.execPath, "--eval", scenario.startsWith("blackhole-") ? networkHarness : harness], {
@@ -340,3 +365,27 @@ for (const scenario of [
     }
   }, 5000);
 }
+
+test("a frame job is submitted to its coordinator with the frame input and lookup key", () => {
+  const handle = { jobId: "job", requestId: "request", path: "publishing/run/request", queue: "trigger-interop" };
+  const output = { type: "image" as const, format: "jpeg" as const, quality: 90 };
+  const submission = mediaServerSubmission(handle, {
+    task: "media.extract-video-frame", source: { fileId: "file", versionId: "version" }, atMs: 1250, output, maxBytes: 2097152,
+  }, { url: "https://callback.example/token" }, [{ key: "social_post", refId: "post" }]);
+  expect(submission.name).toBe("media.trigger-extract-video-frame");
+  expect(submission.data).toEqual({
+    input: { source: { fileId: "file", versionId: "version" }, atMs: 1250, output, maxBytes: 2097152, requestId: "request", path: "publishing/run/request" },
+    callback: { url: "https://callback.example/token" },
+    lookupKeys: [{ key: "social_post", refId: "post" }],
+  });
+});
+
+test("parseMediaServerResponse accepts a frame image with no decision and rejects anything else", () => {
+  const frame = { ...stored(), source: { fileId: "video", versionId: "video-version" } };
+  expect<unknown>(parseMediaServerResponse(frame, "media.extract-video-frame")).toBe(frame);
+  expect(() => parseMediaServerResponse(stored(video), "media.extract-video-frame")).toThrow("Invalid extracted frame");
+  expect(() => parseMediaServerResponse(stored({ kind: "document", contentType: "application/pdf" }), "media.extract-video-frame"))
+    .toThrow("Invalid extracted frame");
+  expect(() => parseMediaServerResponse({ ...stored(), url: "" }, "media.extract-video-frame")).toThrow("Invalid stored media result");
+  expect(() => parseMediaServerResponse(stored({ ...image, width: 0 }), "media.extract-video-frame")).toThrow("Invalid image metadata");
+});

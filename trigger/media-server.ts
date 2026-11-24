@@ -1,4 +1,5 @@
 import { Queue } from "bullmq";
+import { randomUUID } from "node:crypto";
 import { Redis } from "ioredis";
 import type { StoredMedia } from "./media-recipes";
 
@@ -73,7 +74,8 @@ export type MediaServerJob =
     output: MediaServerVideoOutput;
     accept?: MediaServerVideoAccept;
     maxBytes?: number;
-  };
+  }
+  | { task: "media.extract-video-frame"; source: StoredSource; atMs: number; output: MediaServerImageOutput; maxBytes?: number };
 
 /** The BullMQ lane whose coordinators run the real task and complete a Trigger waitpoint token. */
 export const MEDIA_SERVER_INTEROP_LANE = "trigger-interop";
@@ -82,6 +84,7 @@ export const mediaServerInteropJobs = {
   "media.localize": "media.trigger-localize",
   "media.transform-image": "media.trigger-transform-image",
   "media.transform-video": "media.trigger-transform-video",
+  "media.extract-video-frame": "media.trigger-extract-video-frame",
 } as const;
 
 /** The URL media POSTs a task's outcome to; it completes the waitpoint token and is a secret. */
@@ -173,6 +176,29 @@ export function createMediaServerTransport(redisUrl: string): MediaServerTranspo
   };
 }
 
+/** Direct worker submission: deletion produces no media and needs no callback. */
+export function mediaServerPostCleanupSubmission(socialPostId: string, requestId: string) {
+  return {
+    name: "media.trigger-delete-social-post-files",
+    data: { socialPostId, requestId },
+    options: {
+      jobId: `media-trigger-delete-social-post-files/${requestId}`,
+      attempts: 5,
+      backoff: { type: "exponential", delay: 1000 },
+      removeOnComplete: { age: 3 * 60 * 60 },
+      removeOnFail: { age: 3 * 60 * 60 },
+    },
+  };
+}
+
+export async function enqueueMediaServerPostCleanup(redisUrl: string, socialPostId: string): Promise<void> {
+  // A new processing attempt may have created new files for the same post.
+  const { name, data, options } = mediaServerPostCleanupSubmission(socialPostId, randomUUID());
+  await withQueue(redisUrl, MEDIA_SERVER_INTEROP_LANE, async (queue) => {
+    await queue.add(name, data, options);
+  });
+}
+
 export function sanitizeMediaServerLog(value: unknown): unknown {
   if (typeof value === "string") {
     return value.replace(/(?:https?|rediss?):\/\/[^\s"'<>]+/gi, "[redacted URL]").slice(0, 4000);
@@ -225,7 +251,9 @@ export function parseMediaServerResponse(value: unknown, task: MediaServerJob["t
       }
     }
   } else if (media.kind !== "document" || !text(media.contentType)) throw new Error("Invalid media kind");
-  if (task !== "media.localize") {
+  if (task === "media.extract-video-frame") {
+    if (media.kind !== "image") throw new Error("Invalid extracted frame");
+  } else if (task !== "media.localize") {
     const image = task === "media.transform-image";
     if (media.kind !== (image ? "image" : "video") ||
       !(image ? ["unchanged", "transformed"] : ["unchanged", "copied", "encoded"]).includes(result.decision as string)) {

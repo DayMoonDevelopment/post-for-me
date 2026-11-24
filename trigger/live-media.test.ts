@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { createLiveMediaExecutor, normalizeLiveVideo, prepareLiveBlueskyVideo, transformLiveImage, ZenithWorkerError } from "./live-media";
+import { createLiveMediaExecutor, extractYoutubeThumbnailFrame, normalizeLiveVideo, prepareLiveBlueskyVideo, transformLiveImage, ZenithWorkerError } from "./live-media";
 import type { StoredMedia } from "./media-shadow-recipes";
 import type { MediaServerTransport, MediaServerJob, WaitpointApi } from "./media-server";
 import { LIVE_MEDIA_MAX_DURATION_SECONDS, LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS } from "./live-media-timeout";
@@ -195,4 +195,24 @@ test("Bluesky compression chains versions; skip avoids all transforms and keeps 
   expect(execute).not.toHaveBeenCalled();
   expect((await prepareLiveBlueskyVideo(source, "id", false, execute)).versionId).toBe("pass-2");
   expect(execute.mock.calls.map((call: any) => call[2].source.versionId)).toEqual(["source", "pass-1"]);
+});
+
+test("a YouTube thumbnail frame is requested within YouTube's limits, with the post's lookup key", async () => {
+  const lookupKeys = [{ key: "social_post", refId: "social-post-id" }];
+  const deps = executor({ ok: true, output: image("frame", 500_000) }, true, undefined, lookupKeys);
+  const frame = await extractYoutubeThumbnailFrame(video("stored-video"), "medium", 1250, deps.execute);
+  expect(frame.url).toBe("https://media.example/frame");
+  const [, job, , keys] = deps.enqueue.mock.calls[0];
+  if (job.task !== "media.extract-video-frame") throw new Error("Expected a frame job");
+  expect(job).toMatchObject({ source: { fileId: "file", versionId: "stored-video" }, atMs: 1250 });
+  expect(["jpeg", "png"]).toContain(job.output.format);
+  expect(job.output.resize?.fit).toBe("inside");
+  expect(Math.max(job.output.resize?.width ?? Infinity, job.output.resize?.height ?? Infinity)).toBeLessThanOrEqual(1280);
+  expect(job.maxBytes).toBeLessThanOrEqual(2097152);
+  expect(keys).toEqual(lookupKeys);
+});
+
+test("a failed frame extraction surfaces the worker error", async () => {
+  const deps = executor({ ok: false, error: { code: "TOO_LARGE", message: "over maxBytes" } });
+  await expect(extractYoutubeThumbnailFrame(video(), "medium", 0, deps.execute)).rejects.toThrow("over maxBytes");
 });

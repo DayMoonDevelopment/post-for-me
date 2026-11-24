@@ -25,10 +25,9 @@ payloads remain valid. Use the explicit backend field to pin an individual call;
 for medium-based payloads, put it on `medium`. Legacy workers and animation
 fallback calls are explicitly pinned to Trigger to prevent routing loops.
 
-YouTube timestamp-thumbnail extraction has no Zenith equivalent and explicitly
-stays on FFmpeg for either selection. Uploads, compatibility copies, and manual
-shadow diagnostics retain their existing behavior; shadow diagnostics do not
-participate in the production percentage rollout.
+Uploads, compatibility copies, and manual shadow diagnostics retain their
+existing behavior; shadow diagnostics do not participate in the production
+percentage rollout.
 
 At `0`, no production path needs Zenith/Redis configuration. R2, Sharp, and
 FFmpeg remain required for the legacy cohort and the capability exceptions.
@@ -86,6 +85,7 @@ on BullMQ's `trigger-interop` queue (`bull` prefix):
 | `media.localize` | `media.trigger-localize` |
 | `media.transform-image` | `media.trigger-transform-image` |
 | `media.transform-video` | `media.trigger-transform-video` |
+| `media.extract-video-frame` | `media.trigger-extract-video-frame` |
 
 Input is `{ input, callback: { url } }`, with the real task's input and callback
 URL. Zenith completes the token with `{ ok: true, output }` or
@@ -93,9 +93,11 @@ URL. Zenith completes the token with `{ ok: true, output }` or
 before use. Invalid envelopes/results, worker failures, failed enqueues, and
 token timeouts fail the child; they never count as processed media.
 
-Token timeouts cover queue wait plus execution: 30 minutes for video transforms,
-10 minutes otherwise. Waiting time does not consume the child's 600-second
-compute budget. Enqueue has three bounded attempts with the same deterministic
+Every token shares one deadline: `LIVE_MEDIA_MAX_DURATION_SECONDS` minus
+`LIVE_MEDIA_TIMEOUT_BUFFER_SECONDS` (1200 - 30 = 1170 seconds) from the start of
+each child run's executor, covering queue wait plus execution. Once it passes, no
+new token is created. Waiting time does not consume the child's `maxDuration` of
+1200 seconds. Enqueue has three bounded attempts with the same deterministic
 run/stage/medium ID and callback. Child run IDs isolate account destinations.
 BullMQ has five worker attempts with exponential backoff and three-hour job
 retention. Redis operations have 2.5-second timeouts and close their connections.
@@ -112,11 +114,22 @@ Requests and completed outputs log run/stage/medium/job IDs and stored versions.
 Transport exceptions are not logged verbatim. Timeout does not cancel Zenith
 work; it may finish after Trigger stops waiting.
 
+## YouTube timestamp thumbnails
+
+Supplied thumbnail URLs keep precedence. For a medium with
+`mediaProcessingBackend: "zenith"`, a stored video and `thumbnail_timestamp_ms`,
+the YouTube client runs the `extract-live-video-frame` child task, which runs
+`media.extract-video-frame` on the stored file/version at that time. The job's
+`output` and `maxBytes` state YouTube's limits (JPEG, long edge at most 1280 px so portrait frames stay at least 640 px wide, 2 MiB), and
+it carries the post's `social_post` lookup key, so the frame is deleted with the
+post's other media. The frame's URL goes to `upload-youtube-thumbnail`. The child
+run keeps its token wait apart from the client's `triggerAndWait` and processing polls.
+A failed extraction is logged and the post goes out without the custom thumbnail;
+it never falls back to `generate-youtube-timestamp-thumbnail`, which still serves
+the legacy cohort (and a Zenith medium with no stored reference).
+
 ## Explicit legacy exceptions
 
-- YouTube timestamp-thumbnail generation remains
-  `generate-youtube-timestamp-thumbnail` (FFmpeg). Supplied thumbnails retain
-  precedence and optional-thumbnail failures retain existing behavior.
 - When a Zenith image transform specifically reports **"Animated images are not
   supported"**, `transform-live-image` invokes the existing platform-specific
   legacy image task, explicitly pinned to Trigger. It then localizes that output
@@ -138,8 +151,20 @@ Run a staging publish covering image/carousel, video, supplied cover, skipped
 media, animation, and YouTube timestamp thumbnails before sustained traffic.
 
 Artifacts use `publishing/<child-run-ID>/<request-ID>` with Zenith-resolved
-extensions. No artifact deletion is performed; queue retention does not delete
-files. Source URLs must stay accessible for queueing/retries.
+extensions. After all account and story publishing finishes and the post's
+`processed` status is saved, Zenith-selected posts enqueue
+`media.trigger-delete-social-post-files` directly on `trigger-interop` with
+`{ socialPostId, requestId }`. This also applies to failed/partially successful
+posts. Trigger waits only for enqueue confirmation, not deletion; no callback or
+waitpoint is created. Enqueue failures are logged without changing posting results.
+The worker gets five attempts with exponential backoff. Each processing attempt
+uses a new request ID so reprocessed posts can clean up new files.
+
+Deletion removes every file tagged with the post's `social_post` lookup key,
+including intermediate transforms and thumbnails, even if another post also uses
+the file. It must never be scheduled per account. Legacy Trigger artifacts are
+unaffected. Queue retention alone does not delete files. Source URLs must stay
+accessible for queueing/retries.
 
 Native versions and encoding may differ between backends. Zenith image
 recipes flatten transparency to black. X's no-auto-orientation conversion keeps

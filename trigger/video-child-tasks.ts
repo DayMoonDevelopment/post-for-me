@@ -29,7 +29,7 @@ export const generateYoutubeTimestampThumbnail = task({
   id: "generate-youtube-timestamp-thumbnail",
   machine: "medium-1x",
   retry: { maxAttempts: 2, outOfMemory: { machine: "large-1x" } },
-  // Zenith has no frame-extraction job. This capability stays native for both backends.
+  // Legacy path only: posts on the Zenith path extract the frame with media.extract-video-frame.
   run: async ({ url, timestampMs, mediaId, mediaProcessingBackend }: MediaProcessingRouting & {
     url: string;
     timestampMs: number;

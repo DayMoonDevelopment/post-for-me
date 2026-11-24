@@ -151,6 +151,12 @@ export function blueskyVideoOutput(source: StoredMedia, attempt: number, duratio
   };
 }
 
+/** YouTube accepts thumbnails up to 2 MB, JPEG or PNG, at least 640 px wide; the long edge is capped, so portrait frames stay wide enough. */
+export const YOUTUBE_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
+export const YOUTUBE_THUMBNAIL_OUTPUT: MediaServerImageOutput = {
+  type: "image", format: "jpeg", quality: 90, resize: { width: 1280, height: 1280, fit: "inside" },
+};
+
 export type InstagramImageLimits = {
   minAspectRatio: number; maxAspectRatio: number; storiesMinAspectRatio: number; reelsMinAspectRatio: number; maxFileSize: number;
 };
