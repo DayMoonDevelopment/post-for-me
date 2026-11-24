@@ -16,6 +16,17 @@ PostHog SDK also auto-captures `$initial_referrer`, `$initial_utm_*`, `$initial_
 
 Two PostHog group types are defined: **`team`** (the billing entity, keyed by `teams.id`) and **`project`** (keyed by `projects.id`). A user acts on behalf of one project at a time; project-scoped events/pageviews attach both groups so they roll up to the team *and* the project. PostHog allows up to 5 group types — adding more (e.g. `social_account`) is possible but coordinate first.
 
+## Operational diagnostics (not conversion events)
+
+### `dashboard_route_error_shown`
+
+- Source: `dashboard/app/tracking/route-error.ts`, called by the project route error boundary.
+- Identity: existing browser PostHog user/session; no new identity or group types.
+- Groups: `team` and `project` from the current route when available.
+- Properties: approved error `code`, `reference_id`, pathname (no query string), team/project IDs, safe exception type/code and stack locations. Raw messages, causes, credentials and account records are excluded.
+- Deduplication: once per error per mounted boundary; `reference_id` correlates classified loader errors with server JSON logs. Browser-only failures receive a browser reference.
+- Best-effort diagnostics only; not backfilled or forwarded as an ad conversion.
+
 ## Lifecycle events
 
 ### `user_signed_up`

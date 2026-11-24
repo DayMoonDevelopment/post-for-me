@@ -14,6 +14,7 @@ PostHog / Meta / Google, this is where to look.
 | `google-ads-tag.tsx` | `gtag.js` loader. Env: `GOOGLE_ADS_TAG_ID`. |
 | `meta-pixel.tsx` | Meta Pixel `fbq` loader + `PageView` + `<noscript>` fallback. Env: `META_PIXEL_ID`. |
 | `attribution.ts` | Reads `pfm_attribution` + Meta's `_fbc`/`_fbp` cookies from `document.cookie`. |
+| `route-error.ts` | Best-effort `dashboard_route_error_shown` diagnostics from the project error boundary. Includes a support reference, safe error identifiers/stack locations and team/project groups; excludes raw exception messages and query strings. Not a conversion event. |
 
 ## Server-side (`.server/`)
 
