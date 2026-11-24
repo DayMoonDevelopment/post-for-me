@@ -16,15 +16,16 @@ import {
 import { DataGridColumnHeader } from "~/components/data-grid/data-grid-column-header";
 import { DataGridPagination } from "~/components/data-grid/data-grid-pagination";
 import { DataGridTable } from "~/components/data-grid/data-grid-table";
-import {
-  createFilter,
-  type Filter,
-  type FilterFieldConfig,
-  Filters,
-} from "~/components/filters";
 import { CirclePlusIcon } from "~/icons";
 import { Badge } from "~/ui/badge";
 import { Button } from "~/ui/button";
+import {
+  createFilterQuery,
+  createFilterRule,
+  type FilterField,
+  type FilterQuery,
+  Filters,
+} from "~/ui/filters";
 
 import { Section } from "./section";
 
@@ -90,9 +91,9 @@ const columns: ColumnDef<DataGridFeatures, Member>[] = [
   },
 ];
 
-const filterFields: FilterFieldConfig[] = [
+const filterFields: FilterField[] = [
   {
-    key: "status",
+    id: "status",
     label: "Status",
     type: "select",
     options: [
@@ -101,7 +102,7 @@ const filterFields: FilterFieldConfig[] = [
     ],
   },
   {
-    key: "role",
+    id: "role",
     label: "Role",
     type: "multiselect",
     options: [
@@ -116,9 +117,16 @@ export function DataGridDemo() {
   // Manual / "server" mode: pagination + sorting live in React state, and we
   // derive the visible page slice ourselves rather than letting the table model
   // do it — mirroring a loader-backed grid.
-  const [filters, setFilters] = useState<Filter[]>([
-    createFilter("status", "is", ["active"]),
-  ]);
+  const [filterQuery, setFilterQuery] = useState<FilterQuery>(() =>
+    createFilterQuery([
+      createFilterRule({
+        id: "status",
+        path: ["status"],
+        operator: "is",
+        value: "active",
+      }),
+    ]),
+  );
   const [sorting, setSorting] = useState<SortingState>([
     { id: "posts", desc: true },
   ]);
@@ -162,9 +170,10 @@ export function DataGridDemo() {
     <div className="space-y-8">
       <Section title="Filters">
         <Filters
-          filters={filters}
           fields={filterFields}
-          onChange={setFilters}
+          query={filterQuery}
+          onQueryChange={setFilterQuery}
+          variant="basic"
           size="sm"
           trigger={
             <Button variant="outline" size="sm">
