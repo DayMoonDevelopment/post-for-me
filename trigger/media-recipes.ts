@@ -169,7 +169,7 @@ export function platformImageRecipe(
   source: StoredMedia,
   options: { placement?: string; isFeed?: boolean; firstImage?: { width: number; height: number };
     instagramLimits?: InstagramImageLimits; tiktokLimits?: TikTokImageLimits },
-): { output: MediaServerImageOutput; maxBytes: number; initialQuality: number } | undefined {
+): { output: MediaServerImageOutput; maxBytes: number } | undefined {
   const media = source.media;
   if (media.kind !== "image") return undefined;
   let maxBytes: number;
@@ -220,6 +220,5 @@ export function platformImageRecipe(
   return {
     output: { type: "image", format: "jpeg", quality: initialQuality, autoOrient, background: "#000000", ...(resize ? { resize } : {}) },
     maxBytes,
-    initialQuality,
   };
 }

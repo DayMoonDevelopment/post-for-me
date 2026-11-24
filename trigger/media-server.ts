@@ -67,7 +67,7 @@ export type MediaServerVideoAccept = {
 type StoredSource = { fileId: string; versionId: string };
 export type MediaServerJob =
   | { task: "media.localize"; url: string }
-  | { task: "media.transform-image"; source: StoredSource; output: MediaServerImageOutput }
+  | { task: "media.transform-image"; source: StoredSource; output: MediaServerImageOutput; maxBytes?: number }
   | {
     task: "media.transform-video";
     source: StoredSource;
