@@ -1,0 +1,1113 @@
+{
+  "playground": {
+    "pageTitle": "Posting Playground",
+    "pageDescription": "Compose a post and preview it across every connected account.",
+    "accountsLabel": "Post to",
+    "selectAccounts": "Select accounts",
+    "removeAccount": "Remove {{name}}",
+    "mediaLabel": "Media",
+    "addMedia": "Add media",
+    "removeMedia": "Remove {{name}}",
+    "mediaEmpty": "Drag & drop or click to add media",
+    "mediaInfoLabel": "Media requirements",
+    "mediaInfo": "Images and videos, up to 200 MB each. JPG, PNG, GIF, WEBP, MP4, or MOV.",
+    "captionLabel": "Caption",
+    "captionPlaceholder": "Write a caption…",
+    "captionMaxCharacters_one": "Max {{count, number}} character",
+    "captionMaxCharacters_other": "Max {{count, number}} characters",
+    "platformOptionsLabel": "Platform options",
+    "previewLabel": "Preview",
+    "previewEmpty": "Select an account to preview your post.",
+    "scheduleTitle": "Schedule post",
+    "scheduleTimeLabel": "Time",
+    "scheduleClear": "Post now instead",
+    "postNow": "Post now",
+    "schedulePost": "Schedule post",
+    "saveDraft": "Save draft",
+    "errors": {
+      "subscription": "An active plan is required to publish. Set up billing to continue.",
+      "noAccounts": "Select at least one account to post to.",
+      "scheduleFuture": "Choose a schedule time in the future.",
+      "generic": "We couldn't publish your post. Please try again."
+    },
+    "unavailable": {
+      "subscription": {
+        "title": "An active plan is required",
+        "description": "Posts are composed and published through the Post for Me API. Set up billing for this team to start composing."
+      },
+      "error": {
+        "title": "The playground is unavailable",
+        "description": "We couldn't reach the API right now. Please try again shortly."
+      }
+    },
+    "searchAccounts": "Search accounts…",
+    "noAccountsFound": "No accounts found.",
+    "captionOverridePlaceholder": "Override the shared caption for this destination.",
+    "videoLabel": "Video"
+  },
+  "confirm": {
+    "typeToConfirm": "Type \"{{text}}\" to confirm"
+  },
+  "error": {
+    "title": "Something went wrong",
+    "errorTitle": "Something went wrong",
+    "genericDetails": "An unexpected error occurred. Please try again.",
+    "notFoundTitle": "Page not found",
+    "notFoundDetails": "The page you're looking for doesn't exist or has moved.",
+    "reload": "Reload page",
+    "home": "Go home",
+    "technicalDetails": "Technical details"
+  },
+  "login": {
+    "email": {
+      "heading": "Start posting in minutes, not weeks.",
+      "subheading": "Enter your email to get started",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "submit": "Get your code",
+      "submitPending": "Sending code…",
+      "createAccountHint": "New here? Entering your email creates your account."
+    },
+    "verify": {
+      "heading": "You're almost in",
+      "subheading": "Enter the six-digit code we sent to <strong>{{email}}</strong>",
+      "codeLabel": "One-time code",
+      "pending": "Verifying…",
+      "verified": "Verified",
+      "resendPending": "Sending a new code…",
+      "resendDone": "New code sent.",
+      "resendPrompt": "Didn't get it?",
+      "resend": "Resend code",
+      "useDifferentEmail": "Use a different email"
+    },
+    "errors": {
+      "invalidEmail": "Enter a valid email address.",
+      "invalidCode": "That code didn’t work. Try again.",
+      "generic": "Something went wrong. Try again."
+    },
+    "consent": "By continuing, you agree to our <terms>Terms of Service</terms> and <privacy>Privacy Policy</privacy>."
+  },
+  "onboarding": {
+    "title": "Welcome to Post For Me",
+    "finish": "Get started",
+    "welcome": {
+      "title": "Welcome to Post For Me",
+      "subtitle": "The easiest way to post to social media.",
+      "features": {
+        "saas": {
+          "title": "Build it into your SaaS",
+          "body": "Add social posting to your product with a single API."
+        },
+        "agent": {
+          "title": "Give your agent the power to post",
+          "body": "Let your AI agents publish and manage socials on their own."
+        },
+        "marketing": {
+          "title": "Automate your marketing",
+          "body": "Schedule and publish across every channel, hands-free."
+        }
+      }
+    },
+    "segments": {
+      "heading": "What are you building?",
+      "saas": {
+        "title": "Building a SaaS",
+        "description": "I'm adding social posting to my product."
+      },
+      "marketing": {
+        "title": "Automating marketing",
+        "description": "I'm scheduling content for brands or campaigns."
+      },
+      "personal": {
+        "title": "Managing my own accounts",
+        "description": "I'm posting to my own social profiles."
+      },
+      "agent": {
+        "title": "Building agent workflows",
+        "description": "My AI agents post and manage socials for me."
+      },
+      "other": {
+        "title": "Something else",
+        "description": "I have a different use case in mind."
+      }
+    },
+    "platforms": {
+      "heading": "Where do you want to post?",
+      "subheading": "You can change this at any time."
+    },
+    "volume": {
+      "heading": "How much do you plan to post?",
+      "subheading": "You can always start small and upgrade later.",
+      "options": {
+        "1000": {
+          "label": "Up to 1,000 / month"
+        },
+        "2500": {
+          "label": "Up to 2,500 / month"
+        },
+        "5000": {
+          "label": "Up to 5,000 / month"
+        },
+        "10000": {
+          "label": "Up to 10,000 / month"
+        },
+        "20000": {
+          "label": "Up to 20,000 / month"
+        },
+        "40000": {
+          "label": "Up to 40,000 / month"
+        },
+        "100000": {
+          "label": "Up to 100,000 / month"
+        },
+        "200000": {
+          "label": "Up to 200,000 / month"
+        }
+      }
+    },
+    "project": {
+      "nameHeading": "What should we call this project?",
+      "nameSubheading": "Let's get started",
+      "namePlaceholder": "My project",
+      "typeHeading": "What kind of project do you want to set up?",
+      "quickstart": {
+        "title": "Quickstart",
+        "description": "Fastest way to start posting. Use our shared app — connect accounts and post in seconds, no developer setup."
+      },
+      "whiteLabel": {
+        "title": "White label",
+        "description": "Most customized. Use your own developer apps so your brand shows in the connection flow."
+      },
+      "flexibilityTitle": "Add as many projects as you want",
+      "flexibilityDescription": "Start on Quickstart to explore, then add a White label project whenever you're ready."
+    },
+    "review": {
+      "heading": "Review your project",
+      "create": "Create your project",
+      "creating": "Creating your project…",
+      "platformsLabel": "Platforms",
+      "keysLabel": "Developer keys",
+      "keysDescription": "You can do this now or later in the project settings.",
+      "addKeys": "Add keys",
+      "keysAdded": "Keys added",
+      "incomplete": "Setup incomplete",
+      "editPlatformsHeading": "Edit platforms",
+      "noPlatforms": "No platforms selected yet.",
+      "keysHeading": "{{platform}} keys"
+    },
+    "keys": {
+      "subheading": "Enter the credentials from this platform's developer app.",
+      "appIdLabel": "App ID / Client ID",
+      "appSecretLabel": "App secret / Client secret",
+      "appIdPlaceholder": "App ID",
+      "appSecretPlaceholder": "App secret"
+    },
+    "billing": {
+      "heading": "Your project is ready",
+      "subheading": "Choose a plan to start posting.",
+      "cta": "Set up billing"
+    }
+  },
+  "setup": {
+    "billing": {
+      "title": "Set up billing",
+      "description": "Start a subscription so you can publish.",
+      "body": "We'll take you to Stripe to choose a plan and pay securely.",
+      "cta": "Set up billing",
+      "manage": "Manage billing",
+      "plans": {
+        "title": "Choose your plan",
+        "subtitle": "Everything you need to build and scale.",
+        "permo": "/mo",
+        "postsOption": "{{posts, number}} social posts",
+        "features": [
+          "White label projects (bring your own developer credentials)",
+          "Quickstart projects (use our developer credentials)",
+          "Unlimited social accounts",
+          "Read social account feeds",
+          "Analytics for social posts",
+          "Unlimited API Keys",
+          "Unlimited team members"
+        ],
+        "empty": "No billing plans are configured yet.",
+        "currentPlan": "My current plan",
+        "pricePerMonth": "{{amount, currency}}/mo"
+      }
+    },
+    "configureProject": {
+      "title": "Finish setting up your project",
+      "description": "Review your platforms and add any extra project configuration.",
+      "cta": "Save project setup",
+      "platforms": {
+        "label": "Platforms",
+        "description": "Review or update the platforms you'll post to.",
+        "placeholder": "Platform review & editing coming soon."
+      },
+      "callbackUrl": {
+        "label": "Callback URL",
+        "optional": "Optional",
+        "description": "Set an OAuth callback URL for your connection flow.",
+        "placeholder": "Callback URL configuration coming soon."
+      },
+      "credentials": {
+        "label": "Developer credentials",
+        "description": "White label projects post with your own app keys.",
+        "placeholder": "Per-platform credential entry coming soon."
+      }
+    },
+    "apiKey": {
+      "title": "Create your first API key",
+      "description": "Generate an API key so you can call the Post For Me API.",
+      "placeholder": "API key generation coming soon.",
+      "cta": "Create API key"
+    },
+    "connectAccount": {
+      "title": "Connect a social account",
+      "description": "Link the first account you want to publish to.",
+      "placeholder": "Account connection flow coming soon.",
+      "cta": "Done",
+      "trigger": "Connect account",
+      "modal": {
+        "title": "Connect a social account",
+        "description": "Pick a platform and set the connection options. Finish here, or use the code sample to run the same flow yourself.",
+        "platformLabel": "Platform",
+        "platformStatus": {
+          "incomplete": "Incomplete",
+          "unconfigured": "Not configured"
+        },
+        "recommended": "Recommended",
+        "optional": "optional",
+        "moreInfo": "More info",
+        "hint": {
+          "paragraphs": [
+            "This flow walks through everything the Post for Me API can do when connecting a social account, so you can see the full range in one place.",
+            "When you're building your own UI, you'll likely want some of these configurations pre-determined so your users see a simpler action.",
+            "To help you get started, we've crafted a set of drop-in UI components you can build from."
+          ],
+          "link": "Explore Post for Me UI →"
+        },
+        "instagram": {
+          "label": "Login method",
+          "options": {
+            "instagram": "Instagram",
+            "facebook": "Facebook"
+          },
+          "description": {
+            "instagram": "Sends the user to Instagram to log in and authorize the connection directly.",
+            "facebook": "Sends the user to Facebook, where they pick the linked Instagram account to connect."
+          }
+        },
+        "linkedin": {
+          "label": "Connection type",
+          "education": "This selects which LinkedIn API Post for Me uses — not the type of account you're connecting. Organization is recommended: it unlocks the most capabilities, including posting on behalf of users.",
+          "options": {
+            "organization": "Organization",
+            "personal": "Personal"
+          }
+        },
+        "tiktok": {
+          "label": "API",
+          "education": "TikTok offers two APIs. Business API is recommended — it connects and posts just like Standard, but adds expanded post analytics and looser rate limits. Despite the name it isn't limited to business accounts; it's simply the more advanced of the two.",
+          "options": {
+            "business": "Business API",
+            "standard": "Standard API"
+          }
+        },
+        "x": {
+          "label": "API version",
+          "education": "X offers two OAuth versions. OAuth 2.0 is recommended — it's the current standard and what new developer apps are issued, with access tokens that refresh automatically in the background. OAuth 1.0a is the legacy flow; its tokens never expire, so it's worth keeping only if you already have accounts connected through it.",
+          "options": {
+            "oauth2": "OAuth 2.0",
+            "oauth1": "OAuth 1.0a"
+          }
+        },
+        "bluesky": {
+          "education": "Use an app password, not your main Bluesky password. Create one in Bluesky → Settings → App Passwords.",
+          "handle": {
+            "label": "Handle",
+            "placeholder": "name.bsky.social"
+          },
+          "appPassword": {
+            "label": "App password",
+            "placeholder": "xxxx-xxxx-xxxx-xxxx"
+          }
+        },
+        "permissions": {
+          "label": "Permissions",
+          "required": "Select at least one permission.",
+          "posts": {
+            "label": "Posting",
+            "help": "Publish posts to this account."
+          },
+          "feeds": {
+            "label": "Feed & analytics",
+            "help": "Read the account's posts and metrics."
+          }
+        },
+        "externalId": {
+          "label": "External ID",
+          "help": "Your own identifier for this account. It's returned on the connected account so you can match it back to your user.",
+          "placeholder": "your-user-123"
+        },
+        "connect": "Connect account"
+      }
+    },
+    "firstPost": {
+      "title": "Publish your first post",
+      "description": "Send your first post and see it go live.",
+      "placeholder": "Post composer coming soon.",
+      "cta": "Create a post"
+    }
+  },
+  "codePanel": {
+    "language": "Language",
+    "copy": "Copy code"
+  },
+  "projectSettings": {
+    "pageTitle": "Project settings",
+    "pageDescription": "Configure how this project connects and publishes.",
+    "save": "Save",
+    "saved": "Saved",
+    "modalTitle": "Project setup",
+    "errors": {
+      "name": "Enter a project name.",
+      "callbackUrl": "Enter a valid URL, or leave it blank.",
+      "generic": "Something went wrong. Please try again.",
+      "platformUnavailable": "Post for Me doesn't have shared credentials for {{platform}} yet, so it can't be enabled on a Quickstart project. Use a White Label project with your own developer keys."
+    },
+    "details": {
+      "title": "Project details",
+      "description": "Your project's name and credential model.",
+      "nameLabel": "Project name",
+      "typeLabel": "Project type",
+      "typeReadonly": "The project type is set when the project is created and can't be changed."
+    },
+    "platforms": {
+      "title": "Platforms",
+      "quickstartHint": "Choose the platforms this project can post to. Quickstart uses Post for Me's shared credentials, so enabling a platform is all it takes.",
+      "whiteLabelHint": "Choose the platforms this project can post to, then add your own developer keys for each one.",
+      "enable": "Enable",
+      "disable": "Disable platform",
+      "disableConfirmTitle": "Disable {{platform}}?",
+      "disableConfirmBody": "This turns {{platform}} off and removes the developer keys you entered. New accounts won't be able to connect, accounts already connected will stop working, and any scheduled posts to {{platform}} will fail. You can set it up again later, but every account will need to reconnect.",
+      "disableQuickstartConfirmBody": "This turns {{platform}} off for this project. New accounts won't be able to connect, accounts already connected will stop working, and any scheduled posts to {{platform}} will fail. You can turn it back on later, but every account will need to reconnect.",
+      "noKeysTitle": "No additional setup required",
+      "noKeysBody": "{{platform}} is enabled and ready. Account owners sign in with their own handle and app password, so there's no developer app to register and nothing to configure here.",
+      "revealSecret": "Show secret",
+      "hideSecret": "Hide secret",
+      "state": {
+        "idle": "Not enabled",
+        "setup": "Needs developer keys",
+        "done": "Ready"
+      },
+      "configure": "Configure",
+      "configureTitle": "Configure {{platform}}",
+      "methodsLabel": "Connection methods",
+      "recommended": "Recommended",
+      "variants": {
+        "instagram": "Users sign in on Instagram itself. Works with any professional account and needs no linked Facebook Page — the shortest path for most people.",
+        "instagramWFacebook": "Users sign in on Facebook and pick a linked Instagram account. Requires a Facebook developer app and an account linked to a Page.",
+        "tiktokBusiness": "The same connection and posting experience as Standard, plus expanded post analytics and looser rate limits. Despite the name, it isn't restricted to business accounts.",
+        "tiktokStandard": "Where most projects start, and the more limited of the two: tighter rate limits and fewer analytics.",
+        "xOauth2": "X's current standard, and what new developer apps are issued. Posts text and media exactly like OAuth 1.0a; access tokens refresh in the background.",
+        "xOauth1": "The legacy flow. Posts the same, but its tokens never expire — so connections keep working without any refresh."
+      },
+      "sharedCredsTitle": "Ready to connect",
+      "sharedCredsBody": "{{platform}} is enabled and runs on Post for Me's shared credentials, so there's nothing else to set up here.",
+      "pendingTitle": "Nothing to set up",
+      "sharedCredsPendingBody": "{{platform}} runs on Post for Me's shared credentials, so enabling it is the only setup it needs.",
+      "noKeysPendingBody": "{{platform}} has no developer app to register — account owners sign in with their own handle and app password. Enabling it is the only setup it needs.",
+      "whichShouldIUse": "Which should I use?",
+      "recommendation": {
+        "instagram": [
+          {
+            "title": "Start with Instagram Login",
+            "body": "Users sign in on Instagram itself. There is no Facebook app to register and no Page to link, so it is the fastest route to a working connection — for you and for them."
+          },
+          {
+            "title": "Add Facebook Login to widen who can connect",
+            "body": "With both on, each user picks their own route — which helps people who run Instagram from a linked Facebook Page. It costs more setup on your side: a second developer app to register and configure, and those users need a Page already linked to their account."
+          }
+        ],
+        "tiktok": [
+          {
+            "title": "Start with the Business API",
+            "body": "It connects and posts exactly like the Standard API — nothing changes for your users — but you get expanded analytics on every post and far looser rate limits. The name is misleading: it isn't restricted to business accounts. Treat it as the advanced version of Standard rather than a different product."
+          },
+          {
+            "title": "Standard API is the more limited option",
+            "body": "It's the usual starting point and it posts perfectly well, but rate limits are tighter and there's much less analytics data to read back. Choose it only if Business API access isn't available to you."
+          }
+        ],
+        "x": [
+          {
+            "title": "Start with OAuth 2.0",
+            "body": "It's the current X standard and posts text and media exactly like OAuth 1.0a, so nothing changes for the people connecting. Access tokens are refreshed for you in the background."
+          },
+          {
+            "title": "OAuth 1.0a trades modern for durable",
+            "body": "Its tokens never expire, so a connection can't lapse and needs no refresh. Worth keeping on if you already have accounts connected through it."
+          },
+          {
+            "title": "Turning on both changes your API calls",
+            "body": "With both configured, createAuthURL must say which to use — pass connection_type as \"oauth1\" or \"oauth2\". Omitting it returns an error, so only enable both if your integration sets it."
+          }
+        ]
+      },
+      "methodsHelp": "You can change this at any time.",
+      "statusLabel": "Status",
+      "disableMethod": "Disable",
+      "disableMethodConfirmTitle": "Disable {{method}}?",
+      "disableMethodConfirmBody": "{{platform}} stays available through its other connection method, but {{method}} stops immediately. New accounts won't be able to connect this way, accounts already connected through {{method}} will stop working, and their scheduled posts will fail.",
+      "setUp": "Set up",
+      "moreActions": "More actions",
+      "appIdLabel": "App ID",
+      "appSecretLabel": "App secret",
+      "notAdded": "Not added",
+      "credentialsChangeTitle": "Replace the {{method}} developer app?",
+      "credentialsChangeBody": "Accounts connected with the current credentials will stop working and must reconnect before they can post again. Any scheduled posts from those accounts will fail until they do.",
+      "credentialsChangeConfirm": "Replace credentials"
+    },
+    "credentials": {
+      "title": "Developer credentials",
+      "description": "Your own app keys for each platform, so the connection flow shows your brand.",
+      "empty": "Select one or more platforms first to add developer keys.",
+      "noKeys": "Not added",
+      "summary": "{{added}} of {{total}} platforms keyed"
+    },
+    "callbackUrl": {
+      "title": "Callback URL",
+      "description": "Where the OAuth connection flow returns after a user authorizes.",
+      "label": "Callback URL",
+      "placeholder": "https://example.com/oauth/callback",
+      "hint": "Optional. Leave blank to use the default.",
+      "notSet": "Using the default",
+      "educationTitle": "No callback URL set",
+      "educationBody": "After someone authorizes an account, they'll land on Post for Me's default confirmation page. Set a callback URL to send them back to your own app instead."
+    },
+    "dangerZone": {
+      "title": "Danger zone",
+      "deleteDescription": "Permanently delete this project, its connected accounts, developer keys, and scheduled posts. This can't be undone.",
+      "deleteButton": "Delete project",
+      "confirmTitle": "Delete \"{{name}}\"?",
+      "confirmBody": "This permanently deletes the project and everything in it — connected accounts, developer keys, and scheduled posts. This can't be undone.",
+      "confirmStepTitle": "Are you sure?",
+      "confirmStepBody": "Deleting \"{{name}}\" is permanent and immediate — there's no recovery.",
+      "confirmLabel": "Type \"{{name}}\" to confirm",
+      "permanentlyDelete": "Permanently delete",
+      "deleting": "Deleting…"
+    }
+  },
+  "launchpad": {
+    "heading": "Let's get your project ready",
+    "subheading": "A few steps to make your project functionally useful.",
+    "checklist": {
+      "optional": "Optional",
+      "getStarted": "Get started",
+      "review": "Review"
+    },
+    "tour": {
+      "title": "Project setup",
+      "finish": "Finish",
+      "confirm": {
+        "title": "You're all set!",
+        "subtitle": "Your subscription is active.",
+        "body": "Let's finish getting your project ready to publish."
+      }
+    }
+  },
+  "socialAccounts": {
+    "pageTitle": "Social accounts",
+    "errors": {
+      "generic": "Something went wrong. Please try again.",
+      "subscription": "An active plan is required to manage social accounts. Set up billing to continue."
+    },
+    "unavailable": {
+      "subscription": {
+        "title": "An active plan is required",
+        "description": "Social accounts are managed through the Post for Me API. Set up billing for this team to view and manage connected accounts."
+      },
+      "error": {
+        "title": "Social accounts are unavailable",
+        "description": "We couldn't reach the API to load social accounts right now. Please try again shortly."
+      }
+    },
+    "columns": {
+      "identity": "Account",
+      "pfmId": "ID",
+      "platformId": "Platform ID",
+      "externalId": "External ID",
+      "connected": "Connected"
+    },
+    "status": {
+      "connected": "Connected",
+      "expired": "Expired",
+      "disconnected": "Disconnected"
+    },
+    "filters": {
+      "add": "Filter",
+      "platform": "Platform",
+      "status": "Status",
+      "username": "Username",
+      "externalId": "External ID",
+      "isAnyOf": "is any of",
+      "updating": "Updating results"
+    },
+    "grid": {
+      "empty": "No accounts match your filters."
+    },
+    "actions": {
+      "menu": "Account actions",
+      "view": "View",
+      "copyPfmId": "Copy ID",
+      "copyPlatformId": "Copy Platform ID",
+      "copyExternalId": "Copy External ID",
+      "copiedPfmId": "Social account ID copied to clipboard",
+      "copiedPlatformId": "Platform ID copied to clipboard",
+      "copiedExternalId": "External ID copied to clipboard",
+      "disconnect": "Disconnect"
+    },
+    "empty": {
+      "title": "No connected accounts yet",
+      "description": "Connect a social account to start scheduling and publishing posts for this project."
+    },
+    "disconnect": {
+      "title": "Disconnect this account?",
+      "description": "This clears the account's stored access and refresh tokens. The connection stays in your project, but you'll need to reconnect it before publishing again.",
+      "confirm": "Disconnect",
+      "cancel": "Keep connected"
+    },
+    "detail": {
+      "back": "All social accounts",
+      "statusLabel": "Status",
+      "tokensTitle": "Tokens",
+      "tokensDescription": "Access and refresh tokens for this connection. They stay hidden until you reveal or copy them.",
+      "accessToken": "Access token",
+      "refreshToken": "Refresh token",
+      "expiresLabel": "Expires",
+      "copyAccessToken": "Copy access token",
+      "copyRefreshToken": "Copy refresh token",
+      "copiedAccessToken": "Access token copied to clipboard",
+      "copiedRefreshToken": "Refresh token copied to clipboard",
+      "noToken": "None",
+      "noExpiry": "No expiry",
+      "postsTitle": "Posts",
+      "postsEmptyTitle": "No posts yet",
+      "postsEmpty": "Posts that include this account will show up here.",
+      "postNoCaption": "(No caption)",
+      "postStatus": {
+        "draft": "Draft",
+        "scheduled": "Scheduled",
+        "processing": "Processing",
+        "posted": "Posted",
+        "processed": "Processed"
+      },
+      "dangerTitle": "Danger zone",
+      "dangerDescription": "Disconnect to clear this account's stored tokens. The connection stays in your project, but you'll need to reconnect it before publishing again."
+    }
+  },
+  "socialPosts": {
+    "pageTitle": "Posts",
+    "unavailable": {
+      "subscription": {
+        "title": "An active plan is required",
+        "description": "Posts are managed through the Post for Me API. Set up billing for this team to view and manage posts."
+      },
+      "error": {
+        "title": "Posts are unavailable",
+        "description": "We couldn't reach the API to load posts right now. Please try again shortly."
+      }
+    },
+    "createPost": "Create a post",
+    "noCaption": "(No caption)",
+    "media": {
+      "hasMedia": "Has media",
+      "textOnly": "Text only"
+    },
+    "columns": {
+      "caption": "Caption",
+      "status": "Status",
+      "accounts": "Accounts",
+      "postAt": "Post at",
+      "pfmId": "ID",
+      "externalId": "External ID"
+    },
+    "status": {
+      "draft": "Draft",
+      "scheduled": "Scheduled",
+      "processing": "Processing",
+      "processed": "Processed"
+    },
+    "filters": {
+      "add": "Filter",
+      "platform": "Platform",
+      "status": "Status",
+      "selectedCount": "{{count}} selected",
+      "externalId": "External ID",
+      "socialAccountId": "Account ID",
+      "isAnyOf": "is any of",
+      "updating": "Updating results"
+    },
+    "grid": {
+      "empty": "No posts match your filters."
+    },
+    "actions": {
+      "copyPfmId": "Copy ID",
+      "copyExternalId": "Copy External ID"
+    },
+    "empty": {
+      "title": "No posts yet",
+      "description": "Posts you schedule or publish for this project will show up here."
+    },
+    "detail": {
+      "back": "All posts",
+      "title": "Post",
+      "createdAt": "Created",
+      "referencesTitle": "References",
+      "captionTitle": "Caption",
+      "mediaTitle": "Media",
+      "copyMediaUrl": "Copy media URL",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "processingNotice": "It may take a few minutes for the content to process and be visible on the account.",
+      "accountsTitle": "Accounts ({{count}})",
+      "customConfigTitle": "Custom configuration",
+      "customConfigShow": "Show custom configuration",
+      "customConfigHide": "Hide custom configuration",
+      "scopeTooltip": {
+        "platform": "Set for all {{platform}} accounts",
+        "account": "Set for this account only"
+      },
+      "resultsEmptyTitle": "No accounts targeted",
+      "resultsEmpty": "This post isn't targeting any social accounts.",
+      "viewDetails": "View details",
+      "table": {
+        "account": "Account",
+        "status": "Status",
+        "resultId": "Result ID",
+        "accountId": "Account ID",
+        "platformPostId": "Platform post ID",
+        "url": "URL"
+      },
+      "copyResultId": "Copy result ID",
+      "copyAccountId": "Copy account ID",
+      "copyProviderPostId": "Copy platform post ID",
+      "accountStatus": {
+        "pending": "Pending",
+        "success": "Posted",
+        "error": "Failed"
+      }
+    }
+  },
+  "socialPostResults": {
+    "back": "Back to post",
+    "title": "Post result",
+    "unavailable": {
+      "subscription": {
+        "title": "An active plan is required",
+        "description": "Post results are read through the Post for Me API. Set up billing for this team to view the outcome and resolved configuration for this post."
+      },
+      "error": {
+        "title": "Post results are unavailable",
+        "description": "We couldn't reach the API to load this post result right now. Please try again shortly."
+      }
+    },
+    "configurationTitle": "Resolved configuration",
+    "logsTitle": "Logs",
+    "logsEmpty": "No response data.",
+    "logsShowMore": "Show {{count}} more",
+    "rawTab": "Raw JSON",
+    "askLlm": "Ask LLM",
+    "askLlmCopied": "Prompt copied",
+    "askLlmPrompt": "I'm using Post For Me (https://www.postforme.dev), an API for scheduling and publishing posts to social media accounts across platforms. One of my posts failed to publish and I need help understanding the error and how to fix it.\n\nError:\n{{error}}\n\nLogs:\n{{logs}}\n\nPlease explain the most likely cause and the concrete steps to resolve it. Reference the Post For Me API docs (https://api.postforme.dev/docs) and resources (https://postforme.dev/resources) where relevant.",
+    "kind": {
+      "request": "Request",
+      "response": "Response"
+    },
+    "referencesTitle": "References",
+    "columns": {
+      "post": "Post",
+      "resultId": "Result ID",
+      "accountId": "Account ID",
+      "platformPostId": "Platform post ID",
+      "url": "URL",
+      "created": "Created"
+    },
+    "source": {
+      "global": "From the post (all accounts)",
+      "platform": "Set for all {{platform}} accounts",
+      "account": "Set for this account only"
+    }
+  },
+  "apiKeys": {
+    "pageTitle": "API keys",
+    "unnamed": "Unnamed key",
+    "columns": {
+      "name": "Name",
+      "reference": "Key",
+      "created": "Created",
+      "createdBy": "Created by"
+    },
+    "actions": {
+      "menu": "API key actions",
+      "rename": "Rename"
+    },
+    "empty": {
+      "title": "No API keys yet",
+      "description": "Create an API key to authenticate requests to the Post for Me API for this project."
+    },
+    "unavailable": {
+      "title": "API keys are unavailable",
+      "description": "The API keys service isn't reachable right now. Please try again shortly."
+    },
+    "errors": {
+      "generic": "Something went wrong. Please try again."
+    },
+    "create": {
+      "title": "Create API key",
+      "description": "Mint a new key to authenticate requests for this project.",
+      "submit": "Create API key",
+      "nameLabel": "Name (optional)",
+      "namePlaceholder": "e.g. Production server",
+      "nameHint": "A label to recognize this key later. You can rename it anytime.",
+      "errorTitle": "Couldn't create the key",
+      "createdTitle": "API key created",
+      "createdDescription": "Copy your key now and store it somewhere safe.",
+      "warningTitle": "Copy this key now",
+      "warningDescription": "This is the only time the full key is shown. You won't be able to see it again after closing this dialog.",
+      "secretLabel": "API key",
+      "copy": "Copy API key",
+      "copied": "API key copied to clipboard"
+    },
+    "rename": {
+      "title": "Rename API key",
+      "nameLabel": "Name",
+      "submit": "Save"
+    },
+    "delete": {
+      "title": "Delete this API key?",
+      "description": "Any request using this key will immediately stop working. This can't be undone.",
+      "confirm": "Delete key"
+    },
+    "grid": {
+      "empty": "No API keys yet"
+    }
+  },
+  "webhooks": {
+    "pageTitle": "Webhooks",
+    "create": "Create webhook",
+    "columns": {
+      "url": "Endpoint URL",
+      "eventTypes": "Events",
+      "created": "Created"
+    },
+    "actions": {
+      "menu": "Webhook actions"
+    },
+    "empty": {
+      "title": "No webhooks yet",
+      "description": "Create a webhook to receive event notifications when posts and accounts change in this project."
+    },
+    "unavailable": {
+      "subscription": {
+        "title": "An active plan is required",
+        "description": "Webhooks are managed through the Post for Me API. Set up billing for this team to create and manage webhooks."
+      },
+      "error": {
+        "title": "Webhooks are unavailable",
+        "description": "We couldn't reach the API to manage webhooks right now. Please try again shortly."
+      }
+    },
+    "delete": {
+      "title": "Delete this webhook?",
+      "description": "This stops all deliveries to this endpoint and removes its event history. This can't be undone.",
+      "confirm": "Delete webhook"
+    },
+    "errors": {
+      "generic": "Something went wrong. Please try again.",
+      "invalid": "Please check the endpoint URL and selected events, then try again.",
+      "subscription": "An active plan is required to manage webhooks. Set up billing to continue."
+    },
+    "form": {
+      "description": "Send a POST to your endpoint whenever a subscribed event happens.",
+      "copySecret": "Copy signing secret",
+      "copiedSecret": "Signing secret copied to clipboard",
+      "create": {
+        "title": "Create webhook",
+        "submit": "Create webhook"
+      },
+      "edit": {
+        "title": "Edit webhook",
+        "submit": "Save changes"
+      },
+      "created": {
+        "title": "Webhook created",
+        "description": "Use this signing secret to verify delivery signatures. You can find it again on the webhook's page."
+      },
+      "fields": {
+        "url": "Endpoint URL",
+        "eventTypes": "Events to send",
+        "selectAll": "Select all",
+        "secret": "Signing secret"
+      },
+      "errors": {
+        "title": "Couldn't save the webhook",
+        "url": "Enter a valid http(s) URL.",
+        "eventTypes": "Select at least one event."
+      }
+    },
+    "detail": {
+      "back": "← Back to webhooks",
+      "configTitle": "Configuration",
+      "url": "Endpoint URL",
+      "copyUrl": "Copy endpoint URL",
+      "eventTypes": "Subscribed events",
+      "secret": "Signing secret",
+      "secretHint": "Verify each delivery's signature against this secret.",
+      "dangerTitle": "Danger zone",
+      "dangerDescription": "Deleting a webhook stops all deliveries and removes its event history.",
+      "delete": "Delete webhook"
+    },
+    "events": {
+      "title": "Recent deliveries",
+      "columns": {
+        "type": "Event",
+        "status": "Status",
+        "created": "Received"
+      },
+      "status": {
+        "pending": "Pending",
+        "processing": "Processing",
+        "completed": "Completed",
+        "failed": "Failed"
+      },
+      "statusHint": {
+        "pending": "Queued for delivery.",
+        "processing": "Delivery in progress.",
+        "completed": "Delivered successfully.",
+        "failed": "Delivery failed."
+      },
+      "empty": {
+        "title": "No deliveries yet",
+        "description": "Events will appear here once this webhook starts receiving them."
+      }
+    },
+    "grid": {
+      "empty": "No webhooks yet"
+    }
+  },
+  "billing": {
+    "pageTitle": "Billing",
+    "pageDescription": "Subscription and usage for {{team}}.",
+    "currentPlan": "Current plan",
+    "manage": "Manage subscription",
+    "actions": {
+      "upgrade": "Upgrade plan"
+    },
+    "status": {
+      "active": "Active",
+      "trialing": "Trialing",
+      "past_due": "Payment issue",
+      "paused": "Paused",
+      "incomplete": "Incomplete",
+      "unpaid": "Unpaid",
+      "canceled": "Canceled"
+    },
+    "facts": {
+      "renewsOn": "Renews on",
+      "cancelsOn": "Cancels on",
+      "billingEmail": "Billing email",
+      "notSet": "Not set",
+      "legacy": "LEGACY"
+    },
+    "legacy": {
+      "payPerPost": "Pay per post",
+      "ratePerPost": "{{amount, currency}} per post",
+      "tierUpTo": "Up to {{to, number}} posts",
+      "tierRange": "{{from, number}} – {{to, number}} posts",
+      "tierFrom": "{{from, number}}+ posts",
+      "tierRate": "{{amount, currency}} each",
+      "tierFree": "Included",
+      "postsBilled": "posts billed this period",
+      "noCap": "No monthly cap",
+      "upsell": {
+        "title": "Upgrade to Pro",
+        "description": "You're on a legacy plan. To get the latest features and updates, upgrade your plan today.",
+        "cta": "Upgrade Plan"
+      }
+    },
+    "includes": {
+      "title": "Included with your plan",
+      "featuresTitle": "Plan features",
+      "quickstart": "Quickstart projects",
+      "quickstartNone": "Quickstart projects (not included)",
+      "whiteLabel": "White label projects",
+      "accountsUnlimited": "Unlimited social accounts",
+      "accountsCount": "{{count, number}} social accounts",
+      "feeds": "Social account feeds",
+      "analytics": "Post analytics"
+    },
+    "usage": {
+      "title": "Usage this period",
+      "postsOfLimit": "of {{limit, number}} posts",
+      "postsNoLimit": "posts published",
+      "approaching": "{{percent, number}}% of limit",
+      "overLimit": "Over limit",
+      "postsUsed": "{{count, number}}"
+    },
+    "invoice": {
+      "title": "Upcoming invoice",
+      "scheduled": "Scheduled for",
+      "date": "Date",
+      "card": "Card",
+      "total": "Total",
+      "upTo": "* up to {{limit, number}} posts",
+      "units": "* {{count, number}} posts",
+      "footer": "** Happy hacking **"
+    },
+    "empty": {
+      "title": "No active subscription",
+      "description": "Set up billing to start publishing and to track usage for this team.",
+      "cta": "Set up billing"
+    },
+    "confirm": {
+      "title": "Confirm your change",
+      "from": "Current",
+      "to": "New",
+      "noPlan": "No plan",
+      "today": "Charged today",
+      "thenOn": "Then on",
+      "then": "Then each period",
+      "submit": "Confirm upgrade",
+      "pending": "Confirming…"
+    }
+  },
+  "connectionResult": {
+    "successTitle_one": "Account connected",
+    "successTitle_other": "Accounts connected",
+    "successDescription_one": "You can now schedule and publish to your {{platform}} account.",
+    "successDescription_other": "You can now schedule and publish to these {{platform}} accounts.",
+    "failedTitle": "Connection failed",
+    "failedDescription": "We couldn't finish connecting your {{platform}} account.",
+    "partialTitle_one": "{{count}} account couldn't be connected",
+    "partialTitle_other": "{{count}} accounts couldn't be connected",
+    "partialDescription": "The rest connected successfully. You can try the others again.",
+    "errorTitle": "Something went wrong",
+    "errorFallback": "You can close this window and try connecting again.",
+    "openDashboard": "Open in Post for Me",
+    "providerFallback": "social"
+  },
+  "sidebar": {
+    "nav": {
+      "home": "Home",
+      "gettingStarted": "Getting started",
+      "debugSetupTour": "Setup tour (debug)",
+      "playground": "Posting Playground",
+      "accounts": "Accounts",
+      "posts": "Posts",
+      "projectSettings": "Project Settings",
+      "apiKeys": "API Keys",
+      "webhooks": "Webhooks",
+      "billing": "Billing & Usage"
+    },
+    "groups": {
+      "socialPosting": "Social Posting",
+      "setup": "Setup",
+      "projects": "Projects"
+    },
+    "switcher": {
+      "project": "Projects",
+      "team": "Teams",
+      "newProject": "New project",
+      "newTeam": "New team",
+      "moreProjects": "More projects",
+      "moreTeams": "More teams",
+      "billingUsage": "Billing & usage",
+      "teamSettings": "Team Settings"
+    },
+    "newProjectDialog": {
+      "title": "New project",
+      "description": "Name your project and choose its credential model.",
+      "nameLabel": "Project name",
+      "namePlaceholder": "Untitled Project",
+      "typeLabel": "Project type",
+      "create": "Create project"
+    },
+    "external": {
+      "apiDocs": "API Docs",
+      "discord": "Discord"
+    },
+    "user": {
+      "account": "Account",
+      "notifications": "Notifications",
+      "logout": "Log out",
+      "theme": {
+        "label": "Theme",
+        "light": "Light",
+        "dark": "Dark",
+        "system": "System"
+      }
+    }
+  },
+  "common": {
+    "back": "Back",
+    "close": "Close",
+    "copy": "Copy",
+    "copied": "Copied",
+    "loading": "Loading",
+    "previousSlide": "Previous slide",
+    "nextSlide": "Next slide",
+    "sidebar": "Sidebar",
+    "toggleSidebar": "Toggle Sidebar",
+    "commandPalette": "Command Palette",
+    "commandSearchPlaceholder": "Search for a command to run…",
+    "sidebarDescription": "Displays the mobile sidebar.",
+    "cancel": "Cancel",
+    "done": "Done",
+    "edit": "Edit",
+    "next": "Next",
+    "show": "Show",
+    "hide": "Hide",
+    "continue": "Continue",
+    "delete": "Delete",
+    "actions": "Actions"
+  },
+  "dataGrid": {
+    "sortAsc": "Asc",
+    "sortDesc": "Desc",
+    "pinLeft": "Pin to left",
+    "pinRight": "Pin to right",
+    "moveLeft": "Move to Left",
+    "moveRight": "Move to Right",
+    "columns": "Columns",
+    "selectRow": "Select row",
+    "selectAll": "Select all",
+    "dragToReorder": "Drag to reorder",
+    "dragToReorderRow": "Drag to reorder row"
+  },
+  "preview": {
+    "previousStory": "Previous story",
+    "nextStory": "Next story",
+    "actions": {
+      "like": "Like",
+      "share": "Share",
+      "comment": "Comment",
+      "verified": "Verified",
+      "repost": "Repost",
+      "save": "Save",
+      "more": "More",
+      "dislike": "Dislike",
+      "reply": "Reply",
+      "download": "Download",
+      "love": "Love",
+      "views": "Views",
+      "react": "React"
+    },
+    "platformsLabel": "Platforms",
+    "accountOverridesLabel": "Account overrides",
+    "mock": {
+      "timestamp": "2 hours ago",
+      "connectionDegree": "· 1st"
+    }
+  }
+}
