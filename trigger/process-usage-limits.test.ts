@@ -1,4 +1,13 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
+import { logger } from "@trigger.dev/sdk";
 import type Stripe from "stripe";
 
 // `triggerTeamNotification` calls `tasks.trigger("process-team-notification", ...)`,
@@ -336,6 +345,127 @@ describe("getEligibleSubscriptionPlan", () => {
     expect(result?.planInfo.productId).toBe("tier_1k");
     expect(result?.nextTier?.productId).toBe("tier_2_5k");
   });
+
+  test("returns null for an enterprise product and logs its actual product ID", async () => {
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [
+        makeSubscription({
+          items: {
+            data: [{ price: { product: "tier_enterprise_300k" } }],
+          } as any,
+        }),
+      ],
+    })) as any;
+    const info = spyOn(logger, "info").mockImplementation(() => {});
+
+    try {
+      expect(
+        await mod.getEligibleSubscriptionPlan({
+          teamId: "team_1",
+          stripeCustomerId: "cus_1",
+        }),
+      ).toBeNull();
+      expect(info).toHaveBeenCalledWith(
+        "Skipping usage-limit automation for subscription",
+        expect.objectContaining({
+          team_id: "team_1",
+          subscription_id: "sub_1",
+          product_ids: ["tier_enterprise_300k"],
+        }),
+      );
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  test("200K remains the highest self-serve tier with no next tier", async () => {
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [
+        makeSubscription({
+          items: {
+            data: [{ price: { product: "tier_200k" } }],
+          } as any,
+        }),
+      ],
+    })) as any;
+
+    const result = await mod.getEligibleSubscriptionPlan({
+      teamId: "team_1",
+      stripeCustomerId: "cus_1",
+    });
+
+    expect(result?.planInfo.postLimit).toBe(200000);
+    expect(result?.nextTier).toBeNull();
+  });
+});
+
+describe("enterprise exclusion and self-serve ceiling", () => {
+  for (const [productId, limit] of [
+    ["tier_enterprise_300k", 300000],
+    ["tier_200k", 200000],
+  ] as const) {
+    for (const percentage of [80, 90, 95, 100, 101]) {
+      test(`${productId} at ${percentage}% never schedules an upgrade or suggests enterprise`, async () => {
+        taskTriggerCalls.length = 0;
+        mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
+        mod.stripe.subscriptions.list = mock(async () => ({
+          data: [
+            makeSubscription({
+              items: {
+                data: [{ price: { product: productId } }],
+              } as any,
+            }),
+          ],
+        })) as any;
+        const create = mock(async () => ({}));
+        const update = mock(async () => ({}));
+        const release = mock(async () => ({}));
+        mod.stripe.subscriptionSchedules.create = create as any;
+        mod.stripe.subscriptionSchedules.update = update as any;
+        mod.stripe.subscriptionSchedules.release = release as any;
+        const error = spyOn(logger, "error").mockImplementation(() => {});
+
+        try {
+          const usageWindow = {
+            team_id: "team_1",
+            stripe_customer_id: "cus_1",
+            team_name: "Team One",
+            start_at: "2026-02-01T00:00:00Z",
+            end_at: "2026-03-01T00:00:00Z",
+            count: (limit * percentage) / 100,
+            limit,
+          };
+          if (percentage > 100) {
+            await mod.processExceededUsageWindow(usageWindow);
+          } else {
+            await mod.processWarningWindow(usageWindow);
+          }
+
+          // These processors catch errors; assert that a quiet failure isn't
+          // mistaken for a successful skip.
+          expect(error).not.toHaveBeenCalled();
+          expect(create).not.toHaveBeenCalled();
+          expect(update).not.toHaveBeenCalled();
+          expect(release).not.toHaveBeenCalled();
+          if (productId === "tier_enterprise_300k" || percentage > 100) {
+            expect(taskTriggerCalls).toHaveLength(0);
+          } else {
+            // Top-tier self-serve customers still get informational warnings,
+            // but must never be offered an enterprise upgrade.
+            expect(taskTriggerCalls).toHaveLength(1);
+            expect(taskTriggerCalls[0].payload.notification_type).toBe(
+              "usage_alert",
+            );
+            const metadata = taskTriggerCalls[0].payload.meta_data as any;
+            expect(metadata.tracking.suggested_plan_post_limit).toBeNull();
+            expect(metadata.data.loops.data.suggested_plan_price).toBeNull();
+          }
+        } finally {
+          error.mockRestore();
+        }
+      });
+    }
+  }
 });
 
 describe("usage notification records", () => {
@@ -889,6 +1019,49 @@ describe("processExceededUsageWindow (subscription_alert path)", () => {
       (taskTriggerCalls[0].payload.meta_data as any).tracking
         .new_plan_post_limit,
     ).toBe(20000);
+  });
+
+  test("escalation beyond all self-serve limits caps the target at 200K", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockExistingScheduleAtTier25k();
+    const { create, update } = mockScheduleCreation();
+    const retrieve = mock(async () => ({ default_price: "price_200k" }));
+    mod.stripe.products.retrieve = retrieve as any;
+
+    await mod.processExceededUsageWindow(
+      makeUsageWindow({ count: 350000 }) as any,
+    );
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(retrieve).toHaveBeenCalledWith("tier_200k");
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(taskTriggerCalls).toHaveLength(1);
+    expect(
+      (taskTriggerCalls[0].payload.meta_data as any).tracking.new_plan_post_limit,
+    ).toBe(200000);
+  });
+
+  test("an upgrade already scheduled to 200K never escalates beyond it", async () => {
+    mod.supabaseClient.from = fakeSupabaseFrom([]) as any;
+    mod.stripe.subscriptions.list = mock(async () => ({
+      data: [makeSubscription()],
+    })) as any;
+    mockExistingScheduleAtTier25k();
+    mod.stripe.prices.retrieve = mock(async () => ({
+      product: "tier_200k",
+    })) as any;
+    const { create, update } = mockScheduleCreation();
+
+    await mod.processExceededUsageWindow(
+      makeUsageWindow({ count: 350000 }) as any,
+    );
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(taskTriggerCalls).toHaveLength(0);
   });
 
   test("never-eligible team over 100%: no update, no email", async () => {
