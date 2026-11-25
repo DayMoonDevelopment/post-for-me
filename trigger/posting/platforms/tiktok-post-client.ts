@@ -1,4 +1,4 @@
-import { tasks, wait } from "@trigger.dev/sdk";
+import { logger, tasks, wait } from "@trigger.dev/sdk";
 import type { uploadTikTokVideo } from "../../upload-tiktok-video";
 import type { copyMediaToSupabase } from "../../copy-media-to-supabase";
 import { triggerImageTransform } from "../../trigger-image-transform";
@@ -354,6 +354,14 @@ export class TikTokPostClient extends PostClient {
       failReason = parsedStatusResponse.data.data.fail_reason;
       publicPostId = parsedStatusResponse.publicPostId || publicPostId;
       attempts++;
+
+      logger.info("TikTok publish status response", {
+        publishId,
+        status,
+        publicPostId,
+        attempt: attempts,
+        response: parsedStatusResponse.data,
+      });
 
       const waitingForPublicPostId =
         waitForPublicPostId &&

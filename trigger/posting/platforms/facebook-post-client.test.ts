@@ -330,9 +330,9 @@ describe("Facebook photo upload retries", () => {
     });
 
   for (const placement of ["feed", "stories", "carousel"] as const) {
-    test(`${placement}: retries explicit code 1 and uses caption`, async () => {
+    test(`${placement}: retries explicit rate limits and uses caption`, async () => {
       photoBehaviors = [() => {
-        throw makeGraphReadBackError({ code: 1, message: "Please reduce the amount of data" });
+        throw makeGraphReadBackError({ code: 4, message: "Too many calls" });
       }];
       const result = await publish(placement);
       expect(result.success).toBe(true);
@@ -346,7 +346,7 @@ describe("Facebook photo upload retries", () => {
       }
       const finalEdge = placement === "stories" ? "/photo_stories" : "/feed";
       expect(axiosPost.mock.calls.filter(([url]) => url.endsWith(finalEdge)))
-        .toHaveLength(placement === "feed" ? 0 : 1);
+        .toHaveLength(1);
       if (placement === "carousel") {
         expect(axiosPost.mock.calls.find(([url]) => url.endsWith("/feed"))?.[1].message)
           .toBe("private caption");
@@ -356,7 +356,7 @@ describe("Facebook photo upload retries", () => {
 
   test("exhausts three attempts, records sanitized diagnostics and both delays", async () => {
     photoBehaviors = Array.from({ length: 3 }, () => () => {
-      const error = makeGraphReadBackError({ code: 1, message: "Please reduce the amount of data", status: 500 });
+      const error = makeGraphReadBackError({ code: 4, message: "Too many calls", status: 400 });
       error.response.headers = {
         "x-fb-trace-id": "trace_1", "x-app-usage": "usage",
         "set-cookie": "private_cookie",
@@ -375,7 +375,7 @@ describe("Facebook photo upload retries", () => {
       mediaHostname: "cdn.example.com", captionLength: 15, tagCount: 0, hasLocation: false,
     });
     expect(details.responses[0].photoUpload).toMatchObject({
-      status: 500, code: 1, traceId: "trace_1", fbtraceId: "body_trace",
+      status: 400, code: 4, traceId: "trace_1", fbtraceId: "body_trace",
       appUsage: "usage", willRetry: true, retryDelaySeconds: 5,
     });
     expect(details.responses[2].photoUpload.willRetry).toBe(false);
@@ -386,7 +386,7 @@ describe("Facebook photo upload retries", () => {
   });
 
   for (const shape of ["throw", "body"] as const) {
-    for (const graphError of [{ code: 2 }, { code: 4 }, { code: 17 }, { code: 32 }, { code: 613 }, { code: 999, is_transient: true }]) {
+    for (const graphError of [{ code: 4 }, { code: 17 }, { code: 32 }, { code: 613 }]) {
       test(`retries ${shape} error ${JSON.stringify(graphError)}`, async () => {
         photoBehaviors = [() => {
           const data = { error: { ...graphError, message: "temporary failure" } };
@@ -405,17 +405,101 @@ describe("Facebook photo upload retries", () => {
     expect(waitFor).toHaveBeenCalledTimes(1);
   });
 
+  for (const placement of ["feed", "stories", "carousel"] as const) {
+    for (const shape of ["throw", "body"] as const) {
+      for (const graphError of [
+        { code: 1, error_subcode: 99 },
+        { code: 2 },
+        { code: 999, is_transient: true },
+      ]) {
+        test(`${placement}: does not retry ambiguous ${shape} error ${JSON.stringify(graphError)}`, async () => {
+          photoBehaviors = [() => {
+            const data = { error: { ...graphError, message: "Unknown error" } };
+            if (shape === "body") return { status: 200, data };
+            throw { response: { status: 500, data } };
+          }];
+          const result = await publish(placement);
+          expect(result.success).toBe(false);
+          expect(waitFor).not.toHaveBeenCalled();
+          expect(axiosPost).toHaveBeenCalledTimes(1);
+          expect((result.details as any).responses[0].photoUpload.willRetry).toBe(false);
+        });
+      }
+    }
+  }
+
+  for (const [status, code] of [[500, 4], [429, 1], [429, 2]]) {
+    test(`does not retry conflicting HTTP ${status} / code ${code}`, async () => {
+      photoBehaviors = [() => {
+        throw makeGraphReadBackError({ status, code, message: "ambiguous" });
+      }];
+      expect((await publish()).success).toBe(false);
+      expect(waitFor).not.toHaveBeenCalled();
+      expect(axiosPost).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  test("single photos upload unpublished before publishing the exact photo through feed", async () => {
+    const medium: PostMedia = {
+      id: "image_1", type: "image", url: "https://cdn.example.com/photo.png",
+      alt_text: "Accessible description",
+      tags: [{ platform: "facebook", type: "user", id: "user_1", x: 0.2, y: 0.3 }],
+    };
+    const original = structuredClone(medium);
+    photoBehaviors = [() => ({ data: { id: "uploaded_photo", post_id: "not_a_feed_success" } })];
+    const result = await makeClient().post({
+      postId: "post_1", account: makeAccount(), caption: "Photo caption",
+      media: [medium], platformConfig: { location: "place_1" },
+    });
+    expect(result.success).toBe(true);
+    expect(result.provider_post_id).toBe("carousel_post_1");
+    expect(axiosPost).toHaveBeenCalledTimes(2);
+    expect(axiosPost.mock.calls[0][0]).toEndWith("/page_1/photos");
+    expect(axiosPost.mock.calls[0][1]).toEqual({
+      url: medium.url, access_token: "token_1", published: false,
+      caption: "Photo caption", alt_text_custom: "Accessible description",
+      tags: [{ tag_uid: "user_1", x: 0.2, y: 0.3 }],
+    });
+    expect(axiosPost.mock.calls[1][0]).toEndWith("/page_1/feed");
+    expect(axiosPost.mock.calls[1][1]).toEqual({
+      message: "Photo caption", access_token: "token_1", published: true,
+      attached_media: [{ media_fbid: "uploaded_photo" }], place: "place_1",
+    });
+    expect(medium).toEqual(original);
+  });
+
+  test("does not publish a single photo when its upload response lacks an id", async () => {
+    photoBehaviors = [() => ({ data: { post_id: "not_a_photo_id" } })];
+    expect((await publish()).success).toBe(false);
+    expect(axiosPost).toHaveBeenCalledTimes(1);
+    expect(waitFor).not.toHaveBeenCalled();
+  });
+
+  for (const data of [{ error: { code: 1, error_subcode: 99, message: "Unknown error" } }, {}]) {
+    test(`feed response ${JSON.stringify(data)} does not treat an uploaded photo as published`, async () => {
+      axiosPost.mockImplementationOnce(async () => ({ data: { id: "uploaded_photo", post_id: "album_story" } }));
+      axiosPost.mockImplementationOnce(async () => ({ data } as any));
+      const result = await publish();
+      expect(result.success).toBe(false);
+      expect(result.provider_post_id).toBeUndefined();
+      expect(axiosPost).toHaveBeenCalledTimes(2);
+      expect(waitFor).not.toHaveBeenCalled();
+      expect((result.details as any).requests[1].publishPhotoPostRequest.photoId).toBe("uploaded_photo");
+      expect((result.details as any).responses[0].photoResponse.id).toBe("uploaded_photo");
+    });
+  }
+
   test("retains headers for HTTP-200 error bodies and records eventual success", async () => {
     photoBehaviors = [() => ({
       status: 200,
       headers: { "x-fb-request-id": "request_1", "x-page-usage": "page_usage" },
-      data: { error: { code: 1, message: "temporary" } },
+      data: { error: { code: 4, message: "Too many calls" } },
     })];
     const result = await publish();
     const details = result.details as any;
     expect(result.success).toBe(true);
     expect(details.responses[0].photoUpload).toMatchObject({
-      status: 200, code: 1, requestId: "request_1", pageUsage: "page_usage", outcome: "error",
+      status: 200, code: 4, requestId: "request_1", pageUsage: "page_usage", outcome: "error",
     });
     expect(details.responses[1]).toMatchObject({
       photoResponse: { id: "photo_1", post_id: "photo_post_1" },
@@ -423,7 +507,7 @@ describe("Facebook photo upload retries", () => {
     });
   });
 
-  for (const placement of ["stories", "carousel"] as const) {
+  for (const placement of ["feed", "stories", "carousel"] as const) {
     test(`${placement}: does not retry a failed final publish`, async () => {
       const finalEdge = placement === "stories" ? "/photo_stories" : "/feed";
       axiosPost.mockImplementationOnce(async () => ({ data: { id: "photo_1", post_id: "photo_post_1" } }));
@@ -433,9 +517,17 @@ describe("Facebook photo upload retries", () => {
       axiosPost.mockImplementationOnce(async () => {
         throw makeGraphReadBackError({ code: 1, message: "final publish failure" });
       });
-      expect((await publish(placement)).success).toBe(false);
+      const result = await publish(placement);
+      expect(result.success).toBe(false);
       expect(waitFor).not.toHaveBeenCalled();
       expect(axiosPost.mock.calls.filter(([url]) => url.endsWith(finalEdge))).toHaveLength(1);
+      expect(axiosPost.mock.calls.filter(([url]) => url.endsWith("/photos")))
+        .toHaveLength(placement === "carousel" ? 2 : 1);
+      if (placement === "feed") {
+        expect((result.details as any).responses).toContainEqual(expect.objectContaining({
+          publishPhotoPost: expect.objectContaining({ photoId: "photo_1", willRetry: false, code: 1 }),
+        }));
+      }
     });
   }
 
@@ -464,7 +556,7 @@ describe("Facebook photo upload retries", () => {
   test("carousel retries only its failed image and preserves caption opt-out", async () => {
     photoBehaviors = [
       () => ({ data: { id: "first_photo" } }),
-      () => { throw makeGraphReadBackError({ code: 1, message: "temporary" }); },
+      () => { throw makeGraphReadBackError({ code: 4, message: "Too many calls" }); },
       () => ({ data: { id: "second_photo" } }),
     ];
     expect((await publish("carousel", false)).success).toBe(true);

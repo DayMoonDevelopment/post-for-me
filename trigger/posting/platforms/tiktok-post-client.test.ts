@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { tasks, wait } from "@trigger.dev/sdk";
+import { logger, tasks, wait } from "@trigger.dev/sdk";
 import axios from "axios";
 import { TikTokPostClient } from "./tiktok-post-client";
 import { TikTokBusinessPostClient } from "./tiktok_business-post-client";
@@ -56,6 +56,8 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
           );
           const waitFor = spyOn(wait, "for").mockResolvedValue(undefined);
           waitFor.mockClear();
+          const logInfo = spyOn(logger, "info").mockImplementation(() => {});
+          logInfo.mockClear();
           let statusChecks = 0;
           const response = async (url: string) => {
             if (url.includes("/status/")) {
@@ -106,6 +108,26 @@ for (const Client of [TikTokPostClient, TikTokBusinessPostClient]) {
           });
 
           const isProcessing = status.startsWith("PROCESSING");
+          if (Client === TikTokPostClient) {
+            expect(logInfo).toHaveBeenCalledTimes(statusChecks);
+            expect(logInfo).toHaveBeenLastCalledWith("TikTok publish status response", {
+              publishId: "publish-id",
+              status,
+              publicPostId: "public-id",
+              attempt: statusChecks,
+              response: {
+                code: 0,
+                data: {
+                  status,
+                  fail_reason: "invalid_media",
+                  reason: "invalid_media",
+                  publicaly_available_post_id: ["public-id"],
+                  post_ids: ["public-id"],
+                },
+              },
+            });
+            expect(JSON.stringify(logInfo.mock.calls)).not.toContain("token");
+          }
           expect(result.success).toBe(
             !isProcessing && status !== "FAILED" && status !== "UNKNOWN" &&
               (isDraft || status !== "SEND_TO_USER_INBOX"),

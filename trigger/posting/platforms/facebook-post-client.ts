@@ -426,13 +426,14 @@ export class FacebookPostClient extends PostClient {
         const permanent = this.isTerminalAuthError(error) ||
           code === 10 || code === 100 || code === 324 ||
           (code >= 200 && code <= 299);
-        // A write can succeed even when Graph returns code 1. These bounded
-        // retries deliberately favor availability, not exactly-once publishing.
-        // Do not broaden this to network errors or generic 5xx responses.
-        const retryable = !permanent && (
-          code === 1 || code === 2 ||
+        // Unknown/service errors (including code 1/subcode 99), transient
+        // flags, timeouts and 5xx responses can follow a successful write.
+        // Only retry explicit rate-limit rejections, never ambiguous outcomes.
+        const ambiguous = code === 1 || code === 2 ||
+          (details.status !== undefined && details.status >= 500);
+        const retryable = !permanent && !ambiguous && (
           FacebookPostClient.RETRYABLE_RATE_LIMIT_CODES.has(code) ||
-          graphError?.is_transient === true || details.status === 429
+          details.status === 429
         );
         const willRetry = retryable && attempt < maxAttempts;
         const headers = responseHeaders ?? (error as any)?.response?.headers;
@@ -479,7 +480,7 @@ export class FacebookPostClient extends PostClient {
     const fileUrl = await this.getSignedUrlForFile(medium);
     const payload: FacebookPhotoPayload = {
       url: fileUrl,
-      published: true,
+      published: false,
       caption,
       access_token: account.access_token,
     };
@@ -496,10 +497,6 @@ export class FacebookPostClient extends PostClient {
         }));
     }
 
-    if (platformConfig?.location) {
-      payload.place = platformConfig.location;
-    }
-
     if (medium.alt_text) {
       payload.alt_text_custom = medium.alt_text;
     }
@@ -508,13 +505,62 @@ export class FacebookPostClient extends PostClient {
       account, medium, payload, placement: "feed",
     });
 
-    if (!photoResponse.post_id) {
-      logger.error("Facebook photo publish response missing post_id", {
-        photoResponse,
-      });
+    // Upload and feed publication are distinct operations. An album photo
+    // (or an upload response's post_id) is not proof of a published feed post.
+    if (!photoResponse.id) {
+      throw new Error("Facebook photo upload response missing id");
     }
 
-    return photoResponse.post_id || photoResponse.id;
+    const url = `${this.#baseUrl}/${account.social_provider_user_id}/feed`;
+    const body = {
+      message: caption,
+      attached_media: [{ media_fbid: photoResponse.id }],
+      published: true,
+      access_token: account.access_token,
+      ...(platformConfig?.location ? { place: platformConfig.location } : {}),
+    };
+    const metadata = {
+      url,
+      photoId: photoResponse.id,
+      mediaId: medium.id,
+      captionLength: caption.length,
+      hasLocation: Boolean(platformConfig?.location),
+    };
+    this.requests.push({ publishPhotoPostRequest: metadata });
+    const startedAt = Date.now();
+    let responseHeaders: Record<string, any> | undefined;
+    try {
+      // Deliberately no write retries: a failed response may still create a post.
+      const response = await axios.post(url, body);
+      responseHeaders = response.headers;
+      this.responses.push({ publishPhotoPostResponse: response.data });
+      if (response.data?.error) {
+        throw wrapResponseDataError(response.data, "Failed to publish photo post", response.status);
+      }
+      if (!response.data?.id) {
+        throw new Error("Facebook photo feed publish response missing id");
+      }
+      return response.data.id;
+    } catch (error) {
+      const details = extractPlatformError(error);
+      const graphError = (details.data as any)?.error;
+      const headers = responseHeaders ?? (error as any)?.response?.headers;
+      const diagnostics = {
+        ...metadata,
+        durationMs: Date.now() - startedAt,
+        status: details.status,
+        code: graphError?.code,
+        subcode: graphError?.error_subcode,
+        fbtraceId: graphError?.fbtrace_id,
+        traceId: headers?.["x-fb-trace-id"],
+        requestId: headers?.["x-fb-request-id"],
+        outcome: "error",
+        willRetry: false,
+      };
+      this.responses.push({ publishPhotoPost: diagnostics });
+      logger.warn("Facebook photo uploaded but feed publication was not confirmed", diagnostics);
+      throw error;
+    }
   }
 
   async #createCarouselPost({
