@@ -188,7 +188,8 @@ const retryTeamNotification = async (
 };
 
 // Keep in sync with dashboard/app/lib/.server/stripe.constants.ts — same env
-// vars, same shape, same filter.
+// vars, same shape, same filter for self-serve tiers only. Enterprise products
+// are deliberately excluded: managed by hand, never auto-upgraded or targets.
 const PRICING_TIERS = [
   {
     productId: STRIPE_PRICING_TIER_1K_PRODUCT_ID,
@@ -396,6 +397,11 @@ export const getEligibleSubscriptionPlan = async ({
       subscription_id: subscription.id,
       is_legacy: planInfo.isLegacy,
       post_limit: planInfo.postLimit,
+      product_ids: subscription.items.data.map((item) =>
+        typeof item.price.product === "string"
+          ? item.price.product
+          : item.price.product.id,
+      ),
     });
     return null;
   }
