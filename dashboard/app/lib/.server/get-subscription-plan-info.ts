@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import {
   STRIPE_API_PRODUCT_ID,
   PRICING_TIERS,
+  ENTERPRISE_TIERS,
   NEW_PRICING_TIER_PRODUCT_IDS,
 } from "./stripe.constants";
 
@@ -37,7 +38,9 @@ export function getSubscriptionPlanInfo(
   for (const item of subscription.items.data) {
     const productId = item.price.product as string;
     if (NEW_PRICING_TIER_PRODUCT_IDS.includes(productId)) {
-      const tier = PRICING_TIERS.find((t) => t.productId === productId);
+      const tier = [...PRICING_TIERS, ...ENTERPRISE_TIERS].find(
+        (t) => t.productId === productId,
+      );
       if (tier) {
         return {
           isLegacy: false,

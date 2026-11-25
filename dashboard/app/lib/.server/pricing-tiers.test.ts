@@ -1,8 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { getNextTier, resolveTargetTier } from "./pricing-tiers";
-import { PRICING_TIERS } from "./stripe.constants";
+import { ENTERPRISE_TIERS, PRICING_TIERS } from "./stripe.constants";
 import type { PlanInfo } from "./get-subscription-plan-info";
+
+vi.hoisted(() => {
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_pricing");
+  vi.stubEnv("STRIPE_API_PRODUCT_ID", "prod_legacy");
+  for (const tier of [
+    "1K",
+    "2_5K",
+    "5K",
+    "10K",
+    "20K",
+    "40K",
+    "100K",
+    "200K",
+  ]) {
+    vi.stubEnv(`STRIPE_PRICING_TIER_${tier}_PRODUCT_ID`, `prod_${tier}`);
+  }
+  vi.stubEnv(
+    "STRIPE_PRICING_TIER_ENTERPRISE_300K_PRODUCT_ID",
+    "prod_enterprise",
+  );
+});
+
+afterAll(() => vi.unstubAllEnvs());
 
 const tiers = [
   { productId: "prod_1k", name: "Pro", posts: 1000, price: 10 },
@@ -24,6 +47,21 @@ function planInfo(overrides: Partial<PlanInfo> = {}): PlanInfo {
 }
 
 describe("getNextTier", () => {
+  it("never upgrades an enterprise plan or offers enterprise above 200K", () => {
+    expect(ENTERPRISE_TIERS).toHaveLength(1);
+    expect(PRICING_TIERS).toHaveLength(8);
+    expect(
+      PRICING_TIERS.some((tier) => tier.productId === "prod_enterprise"),
+    ).toBe(false);
+    expect(getNextTier("prod_enterprise", PRICING_TIERS)).toBeNull();
+    expect(getNextTier("prod_200K", PRICING_TIERS)).toBeNull();
+    for (const tier of PRICING_TIERS) {
+      expect(getNextTier(tier.productId, PRICING_TIERS)?.productId).not.toBe(
+        "prod_enterprise",
+      );
+    }
+  });
+
   it("returns the tier immediately above the current one by posts", () => {
     expect(getNextTier("prod_1k", tiers)?.productId).toBe("prod_5k");
   });
@@ -47,6 +85,37 @@ describe("getNextTier", () => {
 });
 
 describe("resolveTargetTier", () => {
+  it("never accepts enterprise as a checkout target", () => {
+    for (const tierIndexRaw of [
+      String(PRICING_TIERS.length),
+      "prod_enterprise",
+    ]) {
+      expect(resolveTargetTier({ tierIndexRaw, planInfo: null }).ok).toBe(
+        false,
+      );
+    }
+    for (let index = 0; index < PRICING_TIERS.length; index++) {
+      const result = resolveTargetTier({
+        tierIndexRaw: String(index),
+        planInfo: null,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.tier.productId).not.toBe("prod_enterprise");
+    }
+  });
+
+  it("does not offer self-serve upgrades to an enterprise team", () => {
+    const enterprisePlan = planInfo({ isNewPricing: true, postLimit: 300000 });
+    for (let index = 0; index < PRICING_TIERS.length; index++) {
+      expect(
+        resolveTargetTier({
+          tierIndexRaw: String(index),
+          planInfo: enterprisePlan,
+        }).ok,
+      ).toBe(false);
+    }
+  });
+
   it("rejects a non-numeric tierIndex", () => {
     const result = resolveTargetTier({
       tierIndexRaw: "not-a-number",

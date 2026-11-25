@@ -23,6 +23,8 @@ export const STRIPE_PRICING_TIER_100K_PRODUCT_ID =
   process.env?.STRIPE_PRICING_TIER_100K_PRODUCT_ID || "";
 export const STRIPE_PRICING_TIER_200K_PRODUCT_ID =
   process.env?.STRIPE_PRICING_TIER_200K_PRODUCT_ID || "";
+export const STRIPE_PRICING_TIER_ENTERPRISE_300K_PRODUCT_ID =
+  process.env?.STRIPE_PRICING_TIER_ENTERPRISE_300K_PRODUCT_ID || "";
 
 // Array of all new pricing tier product IDs for easy checking
 export const NEW_PRICING_TIER_PRODUCT_IDS = [
@@ -34,9 +36,11 @@ export const NEW_PRICING_TIER_PRODUCT_IDS = [
   STRIPE_PRICING_TIER_40K_PRODUCT_ID,
   STRIPE_PRICING_TIER_100K_PRODUCT_ID,
   STRIPE_PRICING_TIER_200K_PRODUCT_ID,
+  STRIPE_PRICING_TIER_ENTERPRISE_300K_PRODUCT_ID,
 ].filter(Boolean); // Filter out empty strings
 
-// Pricing tier configuration
+// Self-serve pricing tier configuration. Enterprise plans must stay out of
+// checkout and automatic upgrades.
 // Keep in sync with trigger/process-usage-limits.ts — same env vars, same
 // shape, same filter.
 export const PRICING_TIERS = [
@@ -89,6 +93,17 @@ export const PRICING_TIERS = [
     price: 1000,
   },
 ].filter((tier) => tier.productId); // Filter out tiers without product IDs
+
+// Dashboard-only recognition for manually managed plans. Do not add these to
+// PRICING_TIERS or the trigger sibling's pricing configuration.
+export const ENTERPRISE_TIERS = [
+  {
+    productId: STRIPE_PRICING_TIER_ENTERPRISE_300K_PRODUCT_ID,
+    name: "Enterprise",
+    posts: 300000,
+    price: 1500,
+  },
+].filter((tier) => tier.productId);
 
 if (!STRIPE_SECRET_KEY || STRIPE_SECRET_KEY.trim() === "") {
   throw new Error("STRIPE_SECRET_KEY is not defined");
