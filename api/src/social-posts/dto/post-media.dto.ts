@@ -44,7 +44,8 @@ export class SocialPostMediaDto {
   url: string;
 
   @ApiProperty({
-    description: 'Public URL of the thumbnail for the media',
+    description:
+      'Public URL of the thumbnail for the media. Ignored for TikTok (`tiktok`), which only supports choosing a cover frame with `thumbnail_timestamp_ms`',
     nullable: true,
     required: false,
   })
