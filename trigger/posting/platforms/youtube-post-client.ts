@@ -200,20 +200,6 @@ export class YouTubePostClient extends PostClient {
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       console.log("Video uploaded. ID:", videoId, "URL:", videoUrl);
 
-      // An explicit image URL takes precedence over timestamp extraction.
-      if (medium.thumbnail_url) {
-        try {
-          await this.#uploadThumbnail(videoId, medium.thumbnail_url, { thumbnailUrl: medium.thumbnail_url });
-        } catch (thumbnailError) {
-          console.error("Failed to upload thumbnail:", thumbnailError.message);
-        }
-      } else if (medium.thumbnail_timestamp_ms != null) {
-        try {
-          await this.#uploadThumbnailFromTimestamp(videoId, medium, postId);
-        } catch (thumbnailError) {
-          console.error("Failed to upload thumbnail from timestamp:", thumbnailError.message);
-        }
-      }
       const processingResult = await this.#pollProcessingDetails(youtube, videoId);
       if (!processingResult.success) {
         return {
@@ -225,6 +211,15 @@ export class YouTubePostClient extends PostClient {
           error_message: processingResult.message,
           details: { warning, requests: this.requests, responses: this.responses },
         };
+      }
+
+      // YouTube accepts a thumbnail set while the video is still processing but
+      // does not keep it (notably for Shorts), so set it only after processing.
+      // A thumbnail failure never fails the post; it is reported as a warning.
+      const thumbnailError = await this.#applyThumbnail(videoId, medium, postId);
+      if (thumbnailError) {
+        const thumbnailWarning = `Custom thumbnail was not applied: ${thumbnailError}`;
+        warning = warning ? `${warning}; ${thumbnailWarning}` : thumbnailWarning;
       }
       return {
         success: true,
@@ -283,6 +278,22 @@ export class YouTubePostClient extends PostClient {
   #sanitizeYouTubeCaption(caption: string): string {
     const sanitized = caption.replace(/[<>]/g, "").replace(/\n/g, " ").trim();
     return sanitized.length === 0 ? "Untitled Video" : sanitized.slice(0, 100);
+  }
+
+  async #applyThumbnail(videoId: string, medium: PostMedia, postId: string): Promise<string | null> {
+    try {
+      // An explicit image URL takes precedence over timestamp extraction.
+      if (medium.thumbnail_url) {
+        await this.#uploadThumbnail(videoId, medium.thumbnail_url, { thumbnailUrl: medium.thumbnail_url });
+      } else if (medium.thumbnail_timestamp_ms != null) {
+        await this.#uploadThumbnailFromTimestamp(videoId, medium, postId);
+      }
+      return null;
+    } catch (thumbnailError) {
+      const message = thumbnailError instanceof Error ? thumbnailError.message : String(thumbnailError);
+      console.error("Failed to upload thumbnail:", message);
+      return message;
+    }
   }
 
   async #uploadThumbnailFromTimestamp(videoId: string, medium: PostMedia, postId: string): Promise<void> {

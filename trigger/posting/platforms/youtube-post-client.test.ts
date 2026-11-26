@@ -151,20 +151,22 @@ if (scenario === "processing-timeout") {
 if (scenario === "configured") expect(result.details.warning).toContain("truncated to 5000 bytes");
 expect(result.details.requests.some((r) => r.postRequest?.upload.chunkSizeBytes === 8 * 1024 * 1024)).toBe(true);
 const noThumbnail = ["none", "paid-true", "paid-false", "zenith-negative"].includes(scenario);
-expect(triggerAndWait).toHaveBeenCalledTimes(noThumbnail ? 1 : ["explicit", "child-error", "throw", "zenith-failed", "zenith-throw"].includes(scenario) ? 2 : 3);
+expect(triggerAndWait).toHaveBeenCalledTimes(noThumbnail || scenario === "processing-failed" ? 1 : ["explicit", "child-error", "throw", "zenith-failed", "zenith-throw"].includes(scenario) ? 2 : 3);
 expect(events.shift()).toBe("video-child");
-if (["processing-pending", "processing-timeout"].includes(scenario)) {
-  expect(events.slice(-polls)).toEqual(Array(polls).fill("poll"));
-  events.splice(events.length - polls + 1);
-}
-expect(events).toEqual(noThumbnail ? ["video", "poll"]
-  : scenario === "explicit" ? ["video", "upload-child", "download-thumbnail", "thumbnail", "poll"]
-  : ["child-error", "throw"].includes(scenario) ? ["video", "child", "poll"]
-  : ["zenith-failed", "zenith-throw"].includes(scenario) ? ["video", "frame-child", "poll"]
-  : scenario === "zenith" ? ["video", "frame-child", "upload-child", "download-thumbnail", "thumbnail", "poll"]
-  : ["upload-child-error", "upload-throw"].includes(scenario) ? ["video", "child", "upload-child", "poll"]
-  : scenario === "download-error" ? ["video", "child", "upload-child", "download-thumbnail", "poll"]
-  : ["video", "child", "upload-child", "download-thumbnail", "thumbnail", "poll"]);
+// The thumbnail is only set once every processing poll has finished.
+expect(events.slice(0, polls + 1)).toEqual(["video", ...Array(polls).fill("poll")]);
+events.splice(1, polls - 1);
+expect(events).toEqual(noThumbnail || scenario === "processing-failed" ? ["video", "poll"]
+  : scenario === "explicit" ? ["video", "poll", "upload-child", "download-thumbnail", "thumbnail"]
+  : ["child-error", "throw"].includes(scenario) ? ["video", "poll", "child"]
+  : ["zenith-failed", "zenith-throw"].includes(scenario) ? ["video", "poll", "frame-child"]
+  : scenario === "zenith" ? ["video", "poll", "frame-child", "upload-child", "download-thumbnail", "thumbnail"]
+  : ["upload-child-error", "upload-throw"].includes(scenario) ? ["video", "poll", "child", "upload-child"]
+  : scenario === "download-error" ? ["video", "poll", "child", "upload-child", "download-thumbnail"]
+  : ["video", "poll", "child", "upload-child", "download-thumbnail", "thumbnail"]);
+const thumbnailFailed = ["child-error", "throw", "download-error", "upload-error", "upload-child-error", "upload-throw", "zenith-failed", "zenith-throw"].includes(scenario);
+if (thumbnailFailed) expect(result.details.warning).toContain("Custom thumbnail was not applied");
+else if (scenario !== "configured") expect(result.details.warning).toBeNull();
 if (["success", "upload-error", "zenith"].includes(scenario)) {
   const request = result.details.requests.find((entry) => entry.thumbnailUploadRequest).thumbnailUploadRequest;
   expect(request.thumbnailTimestampMs).toBe(1250);
