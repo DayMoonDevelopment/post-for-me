@@ -132,8 +132,9 @@ export const SUBPROCESSOR_GROUPS: SubprocessorGroup[] = [
       {
         name: "Loops",
         website: "https://loops.so",
-        purpose: "Sign-in, invite, and transactional email",
-        data: "Email address, name, team name",
+        purpose:
+          "Product and transactional email (team invites, usage and billing alerts)",
+        data: "Email address, name, user ID, sign-up and last sign-in dates, team name",
         location: "United States",
       },
       {
