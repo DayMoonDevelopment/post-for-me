@@ -139,6 +139,7 @@ export function generateStaticSitemapUrls(): SitemapUrl[] {
     "/developers",
     "/privacy",
     "/terms",
+    "/subprocessors",
     "/compare",
     "/solutions",
     "/integrations",
