@@ -191,6 +191,10 @@ const getFooterSections = (resources: ResourcePreview[] = []) => [
         href: "/privacy",
       },
       {
+        title: "Subprocessors",
+        href: "/subprocessors",
+      },
+      {
         title: "Contact",
         href: "/contact",
       },
