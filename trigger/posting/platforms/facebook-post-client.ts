@@ -159,7 +159,11 @@ export class FacebookPostClient extends PostClient {
             }
             switch (platformConfig?.placement) {
               case "stories": {
-                platformId = await this.#publishVideoStory({ account, medium });
+                platformId = await this.#publishVideoStory({
+                  account,
+                  medium,
+                  platformConfig,
+                });
 
                 platformUrl = await this.#getStoryUrl({
                   platformId,
@@ -823,9 +827,11 @@ export class FacebookPostClient extends PostClient {
   async #publishVideoStory({
     account,
     medium,
+    platformConfig,
   }: {
     account: SocialAccount;
     medium: PostMedia;
+    platformConfig: FacebookConfiguration;
   }): Promise<string> {
     const uploadSessionResponse = await axios.post(
       `${this.#baseUrl}/${account.social_provider_user_id}/video_stories`,
@@ -913,6 +919,9 @@ export class FacebookPostClient extends PostClient {
         video_id: createdMediaId,
         upload_phase: "finish",
         access_token: account.access_token,
+        ...(platformConfig?.is_ai_generated != null
+          ? { is_ai_generated: platformConfig.is_ai_generated }
+          : {}),
       },
     );
 
@@ -1151,6 +1160,7 @@ export class FacebookPostClient extends PostClient {
       description: string;
       access_token: string;
       place?: string;
+      is_ai_generated?: boolean;
     } = {
       video_id: createdMediaId,
       upload_phase: "finish",
@@ -1161,6 +1171,10 @@ export class FacebookPostClient extends PostClient {
 
     if (platformConfig?.location) {
       reelBody.place = platformConfig.location;
+    }
+
+    if (platformConfig?.is_ai_generated != null) {
+      reelBody.is_ai_generated = platformConfig.is_ai_generated;
     }
 
     const reelResponse = await axios.post(

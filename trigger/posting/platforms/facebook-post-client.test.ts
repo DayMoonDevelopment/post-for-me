@@ -236,6 +236,82 @@ const publishVideo = (placement?: FacebookConfiguration["placement"]) =>
 const innerRetryWaits = () =>
   waitFor.mock.calls.filter(([opts]) => opts.seconds < 5);
 
+describe("Facebook AI disclosure", () => {
+  for (const placement of ["reels", "stories"] as const) {
+    for (const flag of [true, false, undefined] as const) {
+      test(`${placement}: is_ai_generated=${flag} is sent only at publish`, async () => {
+        const result = await makeClient().post({
+          postId: "post_1",
+          account: makeAccount(),
+          caption: "caption",
+          media: [makeVideoMedium()],
+          platformConfig: {
+            placement,
+            ...(flag === undefined ? {} : { is_ai_generated: flag }),
+          },
+        });
+
+        expect(result.success).toBe(true);
+        const edge = placement === "reels" ? "/video_reels" : "/video_stories";
+        const publishCalls = axiosPost.mock.calls.filter(
+          ([url, body]) => url.endsWith(edge) && body?.upload_phase === "finish",
+        );
+        expect(publishCalls).toHaveLength(1);
+        const payload = publishCalls[0][1];
+        if (flag === undefined) {
+          expect(payload).not.toHaveProperty("is_ai_generated");
+        } else {
+          expect(payload.is_ai_generated).toBe(flag);
+        }
+        for (const [, body] of axiosPost.mock.calls.filter(
+          (call) => call !== publishCalls[0],
+        )) {
+          if (body != null) expect(body).not.toHaveProperty("is_ai_generated");
+        }
+      });
+    }
+  }
+
+  for (const scenario of [
+    {
+      name: "timeline video",
+      placement: "timeline",
+      media: [makeVideoMedium()],
+    },
+    { name: "default video", media: [makeVideoMedium()] },
+    { name: "photo", media: [{ ...makeVideoMedium(), type: "image" }] },
+    {
+      name: "photo Story",
+      placement: "stories",
+      media: [{ ...makeVideoMedium(), type: "image" }],
+    },
+    {
+      name: "carousel",
+      media: [
+        { ...makeVideoMedium(), type: "image" },
+        { ...makeVideoMedium(), id: "media_2", type: "image" },
+      ],
+    },
+    { name: "text", media: [] },
+  ]) {
+    test(`${scenario.name}: ignores AI disclosure`, async () => {
+      const result = await makeClient().post({
+        postId: "post_1",
+        account: makeAccount(),
+        caption: "caption",
+        media: scenario.media,
+        platformConfig: { placement: scenario.placement, is_ai_generated: true },
+      });
+
+      expect(result.success).toBe(true);
+      expect(axiosPost.mock.calls.length).toBeGreaterThan(0);
+      for (const [, body] of axiosPost.mock.calls) {
+        if (body != null) expect(body).not.toHaveProperty("is_ai_generated");
+      }
+    });
+  }
+});
+
 describe("Facebook thumbnail child boundary", () => {
   for (const placement of [undefined, "reels", "stories"] as const) {
     for (const failure of [false, true, "throw"] as const) {

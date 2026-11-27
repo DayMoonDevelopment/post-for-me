@@ -522,6 +522,15 @@ export class YoutubeConfigurationDto extends BaseConfigurationDto {
 
 export class FacebookConfigurationDto extends BaseConfigurationDto {
   @ApiProperty({
+    description:
+      'Disclose AI-generated or AI-edited content on Facebook Reels and video Stories. Only applies to a single video with placement "reels" or "stories". Ignored for timeline videos, photos, photo Stories, carousels, and text posts. If omitted, no disclosure parameter is sent; Meta defaults to false.',
+    nullable: true,
+    required: false,
+    default: false,
+  })
+  is_ai_generated?: boolean;
+
+  @ApiProperty({
     description: 'Facebook post placement',
     enum: ['reels', 'stories', 'timeline'],
     nullable: true,
@@ -922,7 +931,8 @@ export class AccountConfigurationDetailsDto {
   is_draft?: boolean;
 
   @ApiProperty({
-    description: 'Flag content as AI generated on TikTok',
+    description:
+      'Flag content as AI generated on TikTok or Instagram, or disclose AI-generated or AI-edited content on Facebook Reels and video Stories. For Facebook, only applies to a single video with placement "reels" or "stories"; ignored for other post types.',
     nullable: true,
     required: false,
     default: false,
