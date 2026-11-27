@@ -1,65 +1,73 @@
 import { redirect } from "react-router";
 import { withSupabase } from "~/lib/.server/supabase";
+import { observeRouteLoad } from "~/lib/.server/route-diagnostics";
 
-export const loader = withSupabase(async function loader({
-  supabaseServiceRole,
-  params,
-}) {
-  const { projectId } = params;
+export const loader = withSupabase(async (args) =>
+  observeRouteLoad(args, "accounts_connect", async (diagnostics) => {
+    const { supabaseServiceRole, params } = args;
+    const { projectId } = params;
 
-  if (!projectId) {
-    throw redirect("/dashboard");
-  }
+    if (!projectId) {
+      throw redirect("/dashboard");
+    }
 
-  // Get existing app credentials for this project
-  const { data: credentials } = await supabaseServiceRole
-    .from("social_provider_app_credentials")
-    .select("provider, app_secret, app_id")
-    .eq("project_id", projectId);
+    // Get existing app credentials for this project
+    const { data: credentials, error } = await diagnostics.step(
+      "credentials_query",
+      "CREDENTIALS_LOAD_FAILED",
+      () =>
+        supabaseServiceRole
+          .from("social_provider_app_credentials")
+          .select("provider, app_secret, app_id")
+          .eq("project_id", projectId),
+    );
 
-  const enabledProviders = new Set(
-    credentials
-      ?.filter(
-        (cred) =>
-          cred.provider &&
-          cred.app_id &&
-          cred.app_secret &&
-          cred.app_id !== "" &&
-          cred.app_secret !== ""
-      )
-      ?.map((cred) => {
-        if (cred.provider === "instagram_w_facebook") {
-          return "instagram";
-        }
-        if (cred.provider === "x_oauth2") {
-          return "x";
-        }
-        return cred.provider;
-      }) || []
-  );
+    if (error) diagnostics.fail("CREDENTIALS_LOAD_FAILED", error);
 
-  // All available social providers
-  const allProviders = [
-    "facebook",
-    "instagram",
-    "x",
-    "tiktok",
-    "youtube",
-    "pinterest",
-    "linkedin",
-    "bluesky",
-    "threads",
-    "tiktok_business",
-  ] as const;
+    const enabledProviders = new Set(
+      credentials
+        ?.filter(
+          (cred) =>
+            cred.provider &&
+            cred.app_id &&
+            cred.app_secret &&
+            cred.app_id !== "" &&
+            cred.app_secret !== "",
+        )
+        ?.map((cred) => {
+          if (cred.provider === "instagram_w_facebook") {
+            return "instagram";
+          }
+          if (cred.provider === "x_oauth2") {
+            return "x";
+          }
+          return cred.provider;
+        }) || [],
+    );
 
-  const providers = allProviders.map((provider) => ({
-    id: provider,
-    name: getProviderDisplayName(provider),
-    enabled: provider === "bluesky" || enabledProviders.has(provider),
-  }));
+    // All available social providers
+    const allProviders = [
+      "facebook",
+      "instagram",
+      "x",
+      "tiktok",
+      "youtube",
+      "pinterest",
+      "linkedin",
+      "bluesky",
+      "threads",
+      "tiktok_business",
+    ] as const;
 
-  return { providers };
-});
+    const providers = allProviders.map((provider) => ({
+      id: provider,
+      name: getProviderDisplayName(provider),
+      enabled: provider === "bluesky" || enabledProviders.has(provider),
+    }));
+
+    return { providers };
+  }),
+);
 
 function getProviderDisplayName(provider: string): string {
   const displayNames: Record<string, string> = {
