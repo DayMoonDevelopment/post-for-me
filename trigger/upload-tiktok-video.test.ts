@@ -13,8 +13,10 @@ const delays = [];
 let inChild = false;
 let filePath;
 const events = [];
-const size = scenario === "empty" ? 0 : scenario === "too-many" ? 64 * 1024 * 1024 * 1000 + 1
-  : scenario === "multi" || scenario === "multi-upload-failure" ? 128 * 1024 * 1024 + 1 : scenario === "64mb" ? 64 * 1024 * 1024
+const maxChunkSize = 64 * 1000 * 1000;
+const size = scenario === "empty" ? 0 : scenario === "too-many" ? maxChunkSize * 1000 + 1
+  : scenario === "multi" || scenario === "multi-upload-failure" ? 128 * 1024 * 1024 + 1 : scenario === "64mb" ? maxChunkSize
+  : scenario === "over-64mb" ? 66259900
   : scenario === "5mb" ? 5 * 1024 * 1024 : 4;
 const mime = scenario === "quicktime" ? " Video/QuickTime; codecs=test " : scenario === "webm" ? "video/webm" : "application/octet-stream";
 const fetchMock = mock(async url => {
@@ -46,7 +48,8 @@ axios.post = mock(async (url, body, config) => {
   events.push("init");
   expect(url).toBe("https://open.tiktokapis.com/v2/post/publish/" + (draft ? "inbox/" : "") + "video/init/");
   expect(config.headers.Authorization).toBe("Bearer token");
-  const chunkSize = size > 64 * 1024 * 1024 ? Math.floor(size / Math.ceil(size / (64 * 1024 * 1024))) : size;
+  const chunkSize = size > maxChunkSize ? Math.floor(size / Math.ceil(size / maxChunkSize)) : size;
+  if (scenario === "over-64mb") expect(body.source_info).toEqual({ source: "FILE_UPLOAD", video_size: 66259900, chunk_size: 33129950, total_chunk_count: 2 });
   expect(body.source_info).toEqual({ source: "FILE_UPLOAD", video_size: size, chunk_size: chunkSize, total_chunk_count: Math.floor(size / chunkSize) });
   expect(body.post_info).toEqual(draft ? { title: "caption", video_cover_timestamp_ms: 125, is_aigc: true } : {
     title: "caption", video_cover_timestamp_ms: 125, privacy_level: "SELF_ONLY", disable_duet: true,
@@ -158,7 +161,7 @@ if (message) {
     expect(result.details.fail_reason).toBe("invalid_media");
   }
   expect(result.provider_post_id).toBe(draft && status !== "FAILED" && status !== "UNKNOWN" ? "publish-id" : "1234567890123456789");
-  const chunkSize = size > 64 * 1024 * 1024 ? Math.floor(size / 3) : size;
+  const chunkSize = size > maxChunkSize ? Math.floor(size / Math.ceil(size / maxChunkSize)) : size;
   const count = Math.floor(size / chunkSize);
   expect(chunks).toHaveLength(count);
   for (let i = 0; i < count; i++) {
@@ -175,7 +178,7 @@ expect(result.details.responses.filter(r => r.publishIdResponse)).toHaveLength(e
 for (const entry of [...result.details.requests, ...result.details.responses]) expect(typeof entry.timestamp).toBe("string");
 `;
 
-for (const scenario of ["small", "5mb", "64mb", "multi", "quicktime", "webm", "empty", "too-many", "missing-url", "download-failure", "init-failure", "upload-failure", "multi-upload-failure"]) {
+for (const scenario of ["small", "5mb", "64mb", "over-64mb", "multi", "quicktime", "webm", "empty", "too-many", "missing-url", "download-failure", "init-failure", "upload-failure", "multi-upload-failure"]) {
   for (const draft of [false, true]) {
     test(`TikTok video child boundary: ${scenario}, draft=${draft}`, async () => {
       const child = Bun.spawn([process.execPath, "--eval", harness], {

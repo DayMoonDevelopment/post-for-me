@@ -20,7 +20,7 @@ export class TikTokVideoUploader extends PostClient {
     }
 
     const minChunkSize = 5 * 1024 * 1024;
-    const maxChunkSize = 64 * 1024 * 1024;
+    const maxChunkSize = 64 * 1000 * 1000;
     if (size < minChunkSize) {
       return { chunkSize: size, totalChunkCount: 1 };
     }
