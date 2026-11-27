@@ -219,6 +219,8 @@ export interface YoutubeConfiguration {
 }
 
 export interface FacebookConfiguration {
+  /** AI disclosure for Reels and video Stories only. */
+  is_ai_generated?: boolean;
   caption?: string;
   placement?: string;
   media?: PostMedia[];
